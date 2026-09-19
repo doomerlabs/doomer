@@ -124,7 +124,26 @@ func (p *CodexProvider) Review(ctx context.Context, request Request) (Result, er
 	cmd.Stdout = &events
 	// Diagnostics can contain input or credentials. Do not expose or retain them.
 	cmd.Stderr = io.Discard
-	if err := cmd.Run(); err != nil {
+	observation := observeUsage(ctx, p.Name(), p.Model())
+	defer observation.finish()
+	runErr := cmd.Run()
+	result := Result{}
+	for _, line := range bytes.Split(events.Bytes(), []byte{'\n'}) {
+		var event struct {
+			Type  string `json:"type"`
+			Usage *struct {
+				Input  *int `json:"input_tokens"`
+				Output *int `json:"output_tokens"`
+			} `json:"usage"`
+		}
+		if json.Unmarshal(line, &event) == nil && event.Type == "turn.completed" && event.Usage != nil && event.Usage.Input != nil && event.Usage.Output != nil {
+			usage := Usage{InputTokens: *event.Usage.Input, OutputTokens: *event.Usage.Output}
+			observation.record("", &usage)
+			result.Usage.InputTokens += *event.Usage.Input
+			result.Usage.OutputTokens += *event.Usage.Output
+		}
+	}
+	if runErr != nil {
 		if ctx.Err() != nil {
 			return Result{}, ctx.Err()
 		}
@@ -152,20 +171,7 @@ func (p *CodexProvider) Review(ctx context.Context, request Request) (Result, er
 	if err := ValidateOutput(request.Schema, output); err != nil {
 		return Result{}, codexError("Codex response does not match the requested JSON schema")
 	}
-	result := Result{Output: output}
-	for _, line := range bytes.Split(events.Bytes(), []byte{'\n'}) {
-		var event struct {
-			Type  string `json:"type"`
-			Usage struct {
-				Input  int `json:"input_tokens"`
-				Output int `json:"output_tokens"`
-			} `json:"usage"`
-		}
-		if json.Unmarshal(line, &event) == nil && event.Type == "turn.completed" {
-			result.Usage.InputTokens += event.Usage.Input
-			result.Usage.OutputTokens += event.Usage.Output
-		}
-	}
+	result.Output = output
 	return result, nil
 }
 

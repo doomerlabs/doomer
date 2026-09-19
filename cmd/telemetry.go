@@ -12,6 +12,7 @@ import (
 	internaladversary "github.com/doomerlabs/doomer/internal/adversary"
 	"github.com/doomerlabs/doomer/internal/application"
 	"github.com/doomerlabs/doomer/internal/githubreview"
+	"github.com/doomerlabs/doomer/internal/modelreview"
 	"github.com/doomerlabs/doomer/internal/telemetry"
 	"github.com/doomerlabs/doomer/internal/version"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
@@ -183,11 +184,31 @@ func findRunEnvelope(envelopes []githubreview.NamedEnvelope, ref string, start i
 	return nil
 }
 
+type runUsageFinalizersKey struct{}
+type runUsageFinalizers struct{ pending []func() }
+
+// Finish after optional GitHub assessment/rewrite calls as well as review and
+// verification, so their tokens belong to the same review run.
+func withRunUsageFinalizers(ctx context.Context) (context.Context, func()) {
+	scope := &runUsageFinalizers{}
+	return context.WithValue(ctx, runUsageFinalizersKey{}, scope), func() {
+		for _, finish := range scope.pending {
+			finish()
+		}
+	}
+}
+
 // beginRunUsage creates the run before execution, then renews its lease until
 // finish or cancellation. Requests are bounded and best-effort like final telemetry.
 // A killed process cannot renew the lease; the server records it as incomplete.
 func beginRunUsage(ctx context.Context, app *application.App, apiURL, profile string, initial adversarylabs.RunUsageReport) func(adversarylabs.RunUsageReport) {
-	return beginRunUsageEvery(ctx, app, apiURL, profile, initial, 20*time.Second)
+	finish := beginRunUsageEvery(ctx, app, apiURL, profile, initial, 20*time.Second)
+	if scope, ok := ctx.Value(runUsageFinalizersKey{}).(*runUsageFinalizers); ok {
+		return func(report adversarylabs.RunUsageReport) {
+			scope.pending = append(scope.pending, func() { finish(report) })
+		}
+	}
+	return finish
 }
 
 func beginRunUsageEvery(ctx context.Context, app *application.App, apiURL, profile string, initial adversarylabs.RunUsageReport, interval time.Duration) func(adversarylabs.RunUsageReport) {
@@ -234,6 +255,15 @@ func beginRunUsageEvery(ctx context.Context, app *application.App, apiURL, profi
 	return func(report adversarylabs.RunUsageReport) {
 		once.Do(func() {
 			stop()
+			if records := modelreview.CollectedUsage(ctx); records != nil {
+				report.ModelUsage = make([]adversarylabs.RunModelUsage, 0, len(records))
+				for _, record := range records {
+					report.ModelUsage = append(report.ModelUsage, adversarylabs.RunModelUsage{
+						Provider: record.Provider, Model: record.Model,
+						InputTokens: record.InputTokens, OutputTokens: record.OutputTokens,
+					})
+				}
+			}
 			report.TraceID = initial.TraceID
 			report.Action = "finish"
 			report.DurationMS = time.Since(started).Milliseconds()

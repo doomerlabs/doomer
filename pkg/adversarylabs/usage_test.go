@@ -10,6 +10,7 @@ import (
 )
 
 func TestRecordUsagePostsAggregateOutcomes(t *testing.T) {
+	inputTokens, outputTokens := 123, 45
 	var payload map[string]any
 	client := Client{
 		BaseURL: "https://api.test",
@@ -32,6 +33,7 @@ func TestRecordUsagePostsAggregateOutcomes(t *testing.T) {
 	}
 
 	err := client.RecordUsage(context.Background(), "token", "run", "2026.8.26", RunUsageReport{
+		ModelUsage:  []RunModelUsage{{Provider: "openai", Model: "gpt-5.6-luna", InputTokens: &inputTokens, OutputTokens: &outputTokens}},
 		Adversaries: []string{"go/security"},
 		DurationMS:  1234,
 		GitRef:      "feature/run-targets",
@@ -46,6 +48,10 @@ func TestRecordUsagePostsAggregateOutcomes(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	usage := payload["model_usage"].([]any)[0].(map[string]any)
+	if usage["model"] != "gpt-5.6-luna" || usage["input_tokens"] != float64(123) || usage["output_tokens"] != float64(45) {
+		t.Fatalf("usage=%v", usage)
 	}
 	if payload["duration_ms"] != float64(1234) {
 		t.Fatalf("payload = %#v", payload)

@@ -322,6 +322,7 @@ func (c Client) NamespaceTrustRoot(ctx context.Context, token string) (namespace
 // identity. Finding text, repository identity, file paths, model inputs, and
 // flags other than explicit bounded telemetry tags must never be added.
 type RunUsageReport struct {
+	ModelUsage        []RunModelUsage           `json:"model_usage"`
 	Action            string                    `json:"action,omitempty"`
 	Outcome           string                    `json:"outcome,omitempty"`
 	Adversaries       []string                  `json:"adversaries"`
@@ -336,6 +337,15 @@ type RunUsageReport struct {
 	PullRequest       int                       `json:"pull_request,omitempty"`
 	TelemetryFile     string                    `json:"-"`
 	TelemetryDisabled bool                      `json:"-"`
+}
+
+// RunModelUsage records one provider request. Nil counts mean unavailable;
+// zero counts mean the provider explicitly reported zero usage.
+type RunModelUsage struct {
+	Provider     string `json:"provider"`
+	Model        string `json:"model"`
+	InputTokens  *int   `json:"input_tokens"`
+	OutputTokens *int   `json:"output_tokens"`
 }
 
 // RunUsagePhase records a fixed, privacy-safe orchestration phase. Names are
@@ -395,6 +405,7 @@ func (c Client) RecordUsage(ctx context.Context, token, eventType, cliVersion st
 		"git_ref":      report.GitRef,
 		"git_sha":      report.GitSHA,
 		"pull_request": report.PullRequest,
+		"model_usage":  report.ModelUsage,
 	}
 	path := "/v1/cli/usage"
 	if report.Action != "" {

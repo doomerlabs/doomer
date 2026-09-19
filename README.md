@@ -379,6 +379,14 @@ Doomer. The trace contains adversary identifiers, group identifiers,
 durations, statuses, and aggregate finding counts. It never contains source
 code, repository identity, file paths, prompts, or finding text.
 
+Final run reports also include the provider/model and input/output token counts
+for each model request, including structured retries, verification, and optional
+GitHub review assessment. The project runs table shows these totals with an
+estimated public list-price cost saved by the server when the run finishes.
+Historical costs retain their original rates. Missing usage or unavailable
+public prices are shown as unavailable, not zero. No model request/response
+content or credentials are included. Older servers safely ignore these fields.
+
 Attach short labels with repeatable `--tag key=value`. Benchmark harnesses
 should pass `--tag benchmark=true`; these traces are stored for comparison but
 hidden from normal project analytics by default. `--telemetry-file trace.jsonl`

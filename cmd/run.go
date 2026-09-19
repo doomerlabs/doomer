@@ -151,6 +151,11 @@ review base/head and optional posting context. Posting still requires
   doomer run https://github.com/owner/repo/pull/123 --github-review --github-dry-run`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			previousContext := cmd.Context()
+			runContext, finishUsage := withRunUsageFinalizers(modelreview.WithUsageCollector(previousContext))
+			cmd.SetContext(runContext)
+			defer cmd.SetContext(previousContext)
+			defer finishUsage()
 			format, err := commandFormat(cmd, opts.format, opts.json)
 			if err != nil {
 				return err
