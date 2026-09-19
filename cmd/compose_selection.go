@@ -159,6 +159,7 @@ func selectComposeRefs(ctx context.Context, app *application.App, opts *runOptio
 	if err != nil {
 		return plan, err
 	}
+	plan = limitComposeReviewers(plan, opts.composeMaxReviewers)
 	if !opts.composePlan {
 		for _, selection := range plan.Selections {
 			state := "Skipped"
@@ -204,4 +205,47 @@ func selectComposeRefs(ctx context.Context, app *application.App, opts *runOptio
 		}
 	}
 	return plan, nil
+}
+
+func limitComposeReviewers(plan application.ComposePlan, maximum int) application.ComposePlan {
+	if maximum < 1 || len(plan.Refs) <= maximum {
+		return plan
+	}
+	keep := make(map[int]struct{}, maximum)
+	for index, selection := range plan.Selections {
+		if selection.Selected && selection.Root {
+			keep[index] = struct{}{}
+		}
+	}
+	add := func(selective bool) {
+		for index, selection := range plan.Selections {
+			if len(keep) >= maximum {
+				return
+			}
+			if !selection.Selected || selection.Root {
+				continue
+			}
+			manifest, ok := plan.Manifests[selection.ResolvedReference]
+			if !ok || hasSelectiveCompositeScope(manifest) != selective {
+				continue
+			}
+			keep[index] = struct{}{}
+		}
+	}
+	add(true)
+	add(false)
+	plan.Refs = plan.Refs[:0]
+	for index := range plan.Selections {
+		selection := &plan.Selections[index]
+		if !selection.Selected {
+			continue
+		}
+		if _, ok := keep[index]; !ok {
+			selection.Selected = false
+			selection.Reason = fmt.Sprintf("composition reviewer budget limited this run to %d reviewers", maximum)
+			continue
+		}
+		plan.Refs = append(plan.Refs, selection.ResolvedReference)
+	}
+	return plan
 }

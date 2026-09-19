@@ -69,6 +69,7 @@ type runOptions struct {
 	repoIndex                string
 	composeConcurrency       int
 	composeRetries           int
+	composeMaxReviewers      int
 	composeBatchLines        int
 	composeBatchGroups       int
 	composeExhaustive        bool
@@ -242,6 +243,9 @@ review base/head and optional posting context. Posting still requires
 			if opts.composeRetries < 0 || opts.composeRetries > 5 {
 				return fmt.Errorf("--compose-retries must be between 0 and 5")
 			}
+			if opts.composeMaxReviewers < 1 {
+				return fmt.Errorf("--compose-max-reviewers must be at least 1")
+			}
 			if opts.composeBatchLines < 1 {
 				return fmt.Errorf("--compose-batch-lines must be at least 1")
 			}
@@ -348,7 +352,8 @@ review base/head and optional posting context. Posting still requires
 	cmd.Flags().StringVar(&opts.repoIndex, "repo-index", "graph", "local repository index: auto, off, force, graph, or graph-force")
 	cmd.Flags().IntVar(&opts.composeConcurrency, "compose-concurrency", 5, "maximum composed reviewers to run concurrently")
 	cmd.Flags().IntVar(&opts.composeRetries, "compose-retries", 2, "maximum retries for a transiently failed composed reviewer")
-	cmd.Flags().IntVar(&opts.composeBatchLines, "compose-batch-lines", 600, "approximate changed-line budget for each routed specialist batch")
+	cmd.Flags().IntVar(&opts.composeMaxReviewers, "compose-max-reviewers", 16, "maximum reviewers retained from a composition")
+	cmd.Flags().IntVar(&opts.composeBatchLines, "compose-batch-lines", 6000, "approximate changed-line budget for each routed specialist batch")
 	cmd.Flags().IntVar(&opts.composeBatchGroups, "compose-batch-groups", 0, "maximum independent change groups in each routed specialist batch (0 is unlimited)")
 	cmd.Flags().BoolVar(&opts.composeExhaustive, "compose-exhaustive", false, "run every composed reviewer against every review group")
 	cmd.Flags().BoolVar(&opts.composeRootFullOnly, "compose-root-full-only", true, "run the composition root only against the full change")
@@ -362,6 +367,7 @@ review base/head and optional posting context. Posting still requires
 	cmd.Flags().BoolVar(&opts.noCompose, "no-compose", false, "do not expand adversary.yaml uses composition; run only the named refs")
 	_ = cmd.Flags().MarkHidden("no-compose")
 	_ = cmd.Flags().MarkHidden("compose-exhaustive")
+	_ = cmd.Flags().MarkHidden("compose-max-reviewers")
 	_ = cmd.Flags().MarkHidden("compose-batch-groups")
 	_ = cmd.Flags().MarkHidden("compose-root-full-only")
 	_ = cmd.Flags().MarkHidden("compose-broad-full-only")

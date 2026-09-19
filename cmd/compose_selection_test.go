@@ -10,6 +10,7 @@ import (
 
 	"github.com/doomerlabs/doomer/internal/application"
 	"github.com/doomerlabs/doomer/pkg/detection"
+	"github.com/doomerlabs/doomer/pkg/manifest"
 	"github.com/doomerlabs/doomer/pkg/oci"
 	"github.com/doomerlabs/doomer/pkg/repository"
 )
@@ -17,6 +18,27 @@ import (
 type selectionTestRegistry struct {
 	application.OCIRegistry
 	batches [][]oci.Reference
+}
+
+func TestLimitComposeReviewersPrefersSelectivePackagesAndKeepsRoot(t *testing.T) {
+	plan := application.ComposePlan{Manifests: map[string]manifest.Manifest{}}
+	add := func(ref string, root bool, files ...string) {
+		plan.Refs = append(plan.Refs, ref)
+		plan.Selections = append(plan.Selections, application.ComposeSelection{Reference: ref, ResolvedReference: ref, Selected: true, Root: root})
+		plan.Manifests[ref] = manifest.Manifest{Name: ref, Detection: manifest.Detection{Files: files}}
+	}
+	add("root", true)
+	add("broad", false, "**/*")
+	add("go", false, "**/*.go")
+	add("typescript", false, "**/*.ts")
+
+	limited := limitComposeReviewers(plan, 3)
+	if got := strings.Join(limited.Refs, ","); got != "root,go,typescript" {
+		t.Fatalf("refs = %s", got)
+	}
+	if limited.Selections[1].Selected || !strings.Contains(limited.Selections[1].Reason, "3 reviewers") {
+		t.Fatalf("broad selection was not budgeted out: %+v", limited.Selections[1])
+	}
 }
 
 func (r *selectionTestRegistry) MetadataBatch(_ context.Context, refs []oci.Reference) map[string]oci.Metadata {
