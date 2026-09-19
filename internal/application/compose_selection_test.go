@@ -38,6 +38,9 @@ func TestPlanComposeFiltersMetadataWithoutPruningChildren(t *testing.T) {
 	if plan.Selections[1].Selected {
 		t.Fatal("python was selected")
 	}
+	if got := plan.Manifests["registry.test/go@sha256:pinned"].Name; got != "go" {
+		t.Fatalf("resolved manifest name = %q", got)
+	}
 }
 func TestPlanComposeExplicitRootOverridesGate(t *testing.T) {
 	plan, err := PlanCompose(context.Background(), []string{"python"}, func(_ context.Context, refs []string) (map[string]ComposeMetadata, error) {

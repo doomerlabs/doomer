@@ -181,6 +181,10 @@ boot();
 	if err != nil || !slices.ContainsFunc(importers.Items, func(edge V2Edge) bool { return edge.FromPath == "web/main.ts" }) {
 		t.Fatalf("importers=%#v err=%v", importers, err)
 	}
+	relations, err := graph.RelationsForChangedPaths([]string{"web/util.ts", "web/main.ts", "web/main.test.ts"})
+	if err != nil || !slices.Contains(relations["web/util.ts"], "web/main.ts") || !slices.Contains(relations["web/main.ts"], "web/main.test.ts") {
+		t.Fatalf("relations=%#v err=%v", relations, err)
+	}
 	tests, err := graph.RelatedTests("service/service.go", 0, "", 10)
 	if err != nil || len(tests.Items) != 1 || tests.Items[0].TestPath != "service/service_test.go" {
 		t.Fatalf("tests=%#v err=%v", tests, err)

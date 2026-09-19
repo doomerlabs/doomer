@@ -372,6 +372,100 @@ ORDER BY tl.id LIMIT ?`, cursorID, path, filepath.ToSlash(path), symbolID, symbo
 	return page, nil
 }
 
+// RelationsForChangedPaths returns import and test relationships whose two
+// endpoints are both in paths. It scans each relation table once so review
+// planning does not issue several SQLite queries for every changed file.
+func (g *V2Graph) RelationsForChangedPaths(paths []string) (map[string][]string, error) {
+	changed := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if path == "" {
+			continue
+		}
+		if err := validV2Path(path); err != nil {
+			return nil, err
+		}
+		changed[path] = struct{}{}
+	}
+	relations := make(map[string][]string, len(changed))
+	connect := func(left, right string) {
+		if left == right {
+			return
+		}
+		if _, ok := changed[left]; !ok {
+			return
+		}
+		if _, ok := changed[right]; !ok {
+			return
+		}
+		for _, existing := range relations[left] {
+			if existing == right {
+				return
+			}
+		}
+		relations[left] = append(relations[left], right)
+		relations[right] = append(relations[right], left)
+	}
+
+	modules := make(map[string][]string)
+	rows, err := g.db.Query("SELECT path,module FROM files")
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var path, module string
+		if err := rows.Scan(&path, &module); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		if _, ok := changed[path]; ok {
+			modules[module] = append(modules[module], path)
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	rows, err = g.db.Query(`SELECT ff.path,COALESCE(tf.path,''),COALESCE(tf.module,'')
+FROM edges e JOIN files ff ON ff.id=e.from_file_id LEFT JOIN files tf ON tf.id=e.to_file_id
+WHERE e.kind='imports' AND e.to_file_id IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var from, to, module string
+		if err := rows.Scan(&from, &to, &module); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		if _, ok := changed[from]; !ok {
+			continue
+		}
+		connect(from, to)
+		for _, target := range modules[module] {
+			connect(from, target)
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	rows, err = g.db.Query(`SELECT sf.path,tf.path
+FROM test_links tl JOIN files sf ON sf.id=tl.source_file_id JOIN files tf ON tf.id=tl.test_file_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var source, test string
+		if err := rows.Scan(&source, &test); err != nil {
+			return nil, err
+		}
+		connect(source, test)
+	}
+	return relations, rows.Err()
+}
+
 type v2Scanner interface{ Scan(...any) error }
 
 func scanV2Symbol(scanner v2Scanner) (*V2Symbol, error) {
