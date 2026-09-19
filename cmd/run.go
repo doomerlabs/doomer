@@ -23,6 +23,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/telemetry"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/detection"
+	"github.com/doomerlabs/doomer/pkg/manifest"
 	"github.com/doomerlabs/doomer/pkg/outcomecontext"
 	"github.com/spf13/cobra"
 )
@@ -33,6 +34,7 @@ type runOptions struct {
 	verificationOutput       string
 	verificationProvider     modelreview.Provider
 	composeSelections        []application.ComposeSelection
+	composeManifests         map[string]manifest.Manifest
 	composePlan              bool
 	path                     string
 	base                     string
@@ -703,6 +705,7 @@ func runAdversaries(
 		plan, err = selectComposeRefs(ctx, app, opts, refs, valueOf(apiURL), valueOf(profile), resultOut, progressOut)
 		expanded, voiceRoots = plan.Refs, plan.VoiceRoots
 		opts.composeSelections = plan.Selections
+		opts.composeManifests = plan.Manifests
 		for _, selection := range plan.Selections {
 			if selection.Root {
 				for i, ref := range entryRefs {

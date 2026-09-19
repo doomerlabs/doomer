@@ -88,6 +88,7 @@ func (p processRuntime) planCompositeReview(ctx context.Context, opts *runOption
 		}
 	}
 	plan.Phases = append(plan.Phases, runUsagePhase("build-review-graph", phaseStarted, time.Now()))
+	fmt.Fprintf(stderr, "Review planner: grouped %d changed regions in %s\n", len(regions), time.Since(phaseStarted).Round(time.Millisecond))
 
 	for i, grouped := range groups {
 		id := fmt.Sprintf("group-%03d", i+1)
@@ -104,6 +105,10 @@ func (p processRuntime) planCompositeReview(ctx context.Context, opts *runOption
 		files = internaladversary.OSRuntimeFiles{}
 	}
 	for _, ref := range refs {
+		if selected, ok := opts.composeManifests[ref]; ok {
+			plan.Manifests[ref] = selected
+			continue
+		}
 		resolved, resolveErr := internaladversary.ResolveReferenceWithRuntime(canonicalCatalogReference(ref), p.resolver, files)
 		if resolveErr != nil || resolved.Manifest == nil {
 			if resolveErr != nil {
@@ -114,6 +119,7 @@ func (p processRuntime) planCompositeReview(ctx context.Context, opts *runOption
 		plan.Manifests[ref] = *resolved.Manifest
 	}
 	plan.Phases = append(plan.Phases, runUsagePhase("resolve-reviewers", phaseStarted, time.Now()))
+	fmt.Fprintf(stderr, "Review planner: prepared %d reviewer manifests in %s\n", len(plan.Manifests), time.Since(phaseStarted).Round(time.Millisecond))
 	return plan, nil
 }
 
@@ -216,8 +222,11 @@ func groupReviewRegions(input []detection.ReviewRegion, relations map[string]map
 
 func changedFileRelations(graph *repoindex.V2Graph, files []detection.ChangedFile) map[string]map[string]struct{} {
 	changed := make(map[string]struct{}, len(files))
+	paths := make([]string, 0, len(files))
 	for _, file := range files {
-		changed[filepath.ToSlash(file.Path)] = struct{}{}
+		path := filepath.ToSlash(file.Path)
+		changed[path] = struct{}{}
+		paths = append(paths, path)
 	}
 	relations := make(map[string]map[string]struct{}, len(changed))
 	connect := func(a, b string) {
@@ -240,21 +249,13 @@ func changedFileRelations(graph *repoindex.V2Graph, files []detection.ChangedFil
 		relations[a][b] = struct{}{}
 		relations[b][a] = struct{}{}
 	}
-	for path := range changed {
-		if page, err := graph.ImportsOf(path, "", 1000); err == nil {
-			for _, edge := range page.Items {
-				connect(path, edge.ToPath)
-			}
-		}
-		if page, err := graph.ImportersOf(path, "", 1000); err == nil {
-			for _, edge := range page.Items {
-				connect(path, edge.FromPath)
-			}
-		}
-		if page, err := graph.RelatedTests(path, 0, "", 1000); err == nil {
-			for _, link := range page.Items {
-				connect(path, link.TestPath)
-			}
+	bulk, err := graph.RelationsForChangedPaths(paths)
+	if err != nil {
+		return relations
+	}
+	for path, related := range bulk {
+		for _, other := range related {
+			connect(path, other)
 		}
 	}
 	return relations

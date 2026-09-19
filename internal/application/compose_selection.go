@@ -28,16 +28,17 @@ type ComposeSelection struct {
 	Root              bool   `json:"root"`
 }
 type ComposePlan struct {
-	Complete   bool               `json:"complete"`
-	Refs       []string           `json:"adversaries"`
-	Selections []ComposeSelection `json:"selections"`
-	VoiceRoots []string           `json:"-"`
+	Complete   bool                         `json:"complete"`
+	Refs       []string                     `json:"adversaries"`
+	Selections []ComposeSelection           `json:"selections"`
+	VoiceRoots []string                     `json:"-"`
+	Manifests  map[string]manifest.Manifest `json:"-"`
 }
 
 // PlanCompose discovers the entire metadata graph before downloading runnable
 // packages. A filtered intermediate composite does not hide relevant children.
 func PlanCompose(ctx context.Context, roots []string, load ComposeMetadataFunc, scope *detection.Context) (ComposePlan, error) {
-	plan := ComposePlan{Complete: true, Refs: []string{}, Selections: []ComposeSelection{}}
+	plan := ComposePlan{Complete: true, Refs: []string{}, Selections: []ComposeSelection{}, Manifests: map[string]manifest.Manifest{}}
 	if load == nil {
 		return plan, fmt.Errorf("compose: metadata loader is required")
 	}
@@ -83,6 +84,9 @@ func PlanCompose(ctx context.Context, roots []string, load ComposeMetadataFunc, 
 			resolved := m.Reference
 			if resolved == "" {
 				resolved = n.ref
+			}
+			if m.Error == nil {
+				plan.Manifests[resolved] = m.Manifest
 			}
 			selection := ComposeSelection{Reference: n.ref, ResolvedReference: resolved, Root: rootSet[n.ref], Selected: true, MetadataAvailable: m.Error == nil}
 			switch {
