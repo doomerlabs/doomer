@@ -88,7 +88,7 @@ func TestCloudflareProviderBuildsAccountEndpointAndRequiresCredentials(t *testin
 	}
 }
 
-func TestCloudflareUnionAlphaUsesChatCompletions(t *testing.T) {
+func TestCloudflareParetoUsesChatCompletions(t *testing.T) {
 	var path, gatewayID string
 	var payload map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +102,7 @@ func TestCloudflareUnionAlphaUsesChatCompletions(t *testing.T) {
 	defer server.Close()
 
 	values := map[string]string{
-		ProviderEnv: "cloudflare", ModelEnv: "stealth/union-alpha",
+		ProviderEnv: "cloudflare", ModelEnv: "unbiased/pareto",
 		CloudflareKeyEnv: "cf-token", CloudflareAccountIDEnv: "account-id",
 		CloudflareBaseURLEnv: server.URL, CloudflareGatewayIDEnv: "benchmark",
 	}
@@ -124,7 +124,7 @@ func TestCloudflareUnionAlphaUsesChatCompletions(t *testing.T) {
 	if _, present := payload["reasoning_effort"]; present {
 		t.Fatalf("Union Alpha request sent model-dependent reasoning_effort: %#v", payload)
 	}
-	if payload["model"] != "stealth/union-alpha" || string(result.Output) != `{"decision":"approve"}` {
+	if payload["model"] != "unbiased/pareto" || string(result.Output) != `{"decision":"approve"}` {
 		t.Fatalf("payload=%#v result=%s", payload, result.Output)
 	}
 }

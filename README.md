@@ -316,14 +316,14 @@ doomer run adversarylabs/example \
   --model "openai/gpt-5.5"
 ```
 
-Cloudflare documents `stealth/union-alpha` on the Chat Completions endpoint.
-Doomer selects that endpoint automatically while retaining `cloudflare` as the
-recorded provider:
+Cloudflare documents Pareto, formerly `stealth/union-alpha`, on the Chat
+Completions endpoint. Doomer selects that endpoint automatically while
+retaining `cloudflare` as the recorded provider:
 
 ```sh
 doomer run review/code \
   --model-provider cloudflare \
-  --model "stealth/union-alpha"
+  --model "unbiased/pareto"
 ```
 
 `ADVERSARY_CLOUDFLARE_API_MODE` can explicitly select `responses`,

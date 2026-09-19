@@ -150,7 +150,7 @@ func ProviderFromConfig(config Config, lookup LookupEnv, client *http.Client) (P
 		apiMode := normalizedEnv(lookup, CloudflareAPIModeEnv)
 		if apiMode == "" || apiMode == "auto" {
 			apiMode = "responses"
-			if model == "stealth/union-alpha" {
+			if model == "stealth/union-alpha" || model == "unbiased/pareto" {
 				apiMode = "chat_completions"
 			}
 		}
