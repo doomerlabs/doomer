@@ -8,33 +8,37 @@ import (
 )
 
 const (
-	CodexReasoningEffortEnv       = "ADVERSARY_CODEX_REASONING_EFFORT"
-	ProviderEnv                   = "ADVERSARY_MODEL_PROVIDER"
-	ModelEnv                      = "ADVERSARY_MODEL"
-	OpenAIKeyEnv                  = "OPENAI_API_KEY"
-	OpenAIBaseURLEnv              = "ADVERSARY_OPENAI_BASE_URL"
-	OpenAIReasoningEffortEnv      = "ADVERSARY_OPENAI_REASONING_EFFORT"
-	OpenAIMaxOutputTokensEnv      = "ADVERSARY_OPENAI_MAX_OUTPUT_TOKENS"
-	CloudflareKeyEnv              = "CLOUDFLARE_API_TOKEN"
-	CloudflareAccountIDEnv        = "CLOUDFLARE_ACCOUNT_ID"
-	CloudflareBaseURLEnv          = "ADVERSARY_CLOUDFLARE_BASE_URL"
-	CloudflareGatewayIDEnv        = "ADVERSARY_CLOUDFLARE_GATEWAY_ID"
-	AnthropicKeyEnv               = "ANTHROPIC_API_KEY"
-	AnthropicBaseURLEnv           = "ADVERSARY_ANTHROPIC_BASE_URL"
-	FireworksKeyEnv               = "FIREWORKS_API_KEY"
-	FireworksBaseURLEnv           = "ADVERSARY_FIREWORKS_BASE_URL"
-	FireworksReasoningEffortEnv   = "ADVERSARY_FIREWORKS_REASONING_EFFORT"
-	FireworksResponseFormatEnv    = "ADVERSARY_FIREWORKS_RESPONSE_FORMAT"
-	FireworksStructuredRetriesEnv = "ADVERSARY_FIREWORKS_STRUCTURED_RETRIES"
-	CamelKeyEnv                   = "CAMEL_API_KEY"
-	CamelBaseURLEnv               = "ADVERSARY_CAMEL_BASE_URL"
-	CamelReasoningEffortEnv       = "ADVERSARY_CAMEL_REASONING_EFFORT"
-	CamelResponseFormatEnv        = "ADVERSARY_CAMEL_RESPONSE_FORMAT"
-	CamelStructuredRetriesEnv     = "ADVERSARY_CAMEL_STRUCTURED_RETRIES"
-	CamelRequestRetriesEnv        = "ADVERSARY_CAMEL_REQUEST_RETRIES"
-	CamelMaxConcurrencyEnv        = "ADVERSARY_CAMEL_MAX_CONCURRENCY"
-	ModelContentDiagnosticsEnv    = "ADVERSARY_MODEL_CONTENT_DIAGNOSTICS"
-	DisableKeepAlivesEnv          = "ADVERSARY_MODEL_DISABLE_KEEP_ALIVES"
+	CodexReasoningEffortEnv        = "ADVERSARY_CODEX_REASONING_EFFORT"
+	ProviderEnv                    = "ADVERSARY_MODEL_PROVIDER"
+	ModelEnv                       = "ADVERSARY_MODEL"
+	OpenAIKeyEnv                   = "OPENAI_API_KEY"
+	OpenAIBaseURLEnv               = "ADVERSARY_OPENAI_BASE_URL"
+	OpenAIReasoningEffortEnv       = "ADVERSARY_OPENAI_REASONING_EFFORT"
+	OpenAIMaxOutputTokensEnv       = "ADVERSARY_OPENAI_MAX_OUTPUT_TOKENS"
+	CloudflareKeyEnv               = "CLOUDFLARE_API_TOKEN"
+	CloudflareAccountIDEnv         = "CLOUDFLARE_ACCOUNT_ID"
+	CloudflareBaseURLEnv           = "ADVERSARY_CLOUDFLARE_BASE_URL"
+	CloudflareGatewayIDEnv         = "ADVERSARY_CLOUDFLARE_GATEWAY_ID"
+	CloudflareAPIModeEnv           = "ADVERSARY_CLOUDFLARE_API_MODE"
+	CloudflareResponseFormatEnv    = "ADVERSARY_CLOUDFLARE_RESPONSE_FORMAT"
+	CloudflareStructuredRetriesEnv = "ADVERSARY_CLOUDFLARE_STRUCTURED_RETRIES"
+	CloudflareRequestRetriesEnv    = "ADVERSARY_CLOUDFLARE_REQUEST_RETRIES"
+	AnthropicKeyEnv                = "ANTHROPIC_API_KEY"
+	AnthropicBaseURLEnv            = "ADVERSARY_ANTHROPIC_BASE_URL"
+	FireworksKeyEnv                = "FIREWORKS_API_KEY"
+	FireworksBaseURLEnv            = "ADVERSARY_FIREWORKS_BASE_URL"
+	FireworksReasoningEffortEnv    = "ADVERSARY_FIREWORKS_REASONING_EFFORT"
+	FireworksResponseFormatEnv     = "ADVERSARY_FIREWORKS_RESPONSE_FORMAT"
+	FireworksStructuredRetriesEnv  = "ADVERSARY_FIREWORKS_STRUCTURED_RETRIES"
+	CamelKeyEnv                    = "CAMEL_API_KEY"
+	CamelBaseURLEnv                = "ADVERSARY_CAMEL_BASE_URL"
+	CamelReasoningEffortEnv        = "ADVERSARY_CAMEL_REASONING_EFFORT"
+	CamelResponseFormatEnv         = "ADVERSARY_CAMEL_RESPONSE_FORMAT"
+	CamelStructuredRetriesEnv      = "ADVERSARY_CAMEL_STRUCTURED_RETRIES"
+	CamelRequestRetriesEnv         = "ADVERSARY_CAMEL_REQUEST_RETRIES"
+	CamelMaxConcurrencyEnv         = "ADVERSARY_CAMEL_MAX_CONCURRENCY"
+	ModelContentDiagnosticsEnv     = "ADVERSARY_MODEL_CONTENT_DIAGNOSTICS"
+	DisableKeepAlivesEnv           = "ADVERSARY_MODEL_DISABLE_KEEP_ALIVES"
 )
 
 type LookupEnv func(string) (string, bool)
@@ -143,13 +147,33 @@ func ProviderFromConfig(config Config, lookup LookupEnv, client *http.Client) (P
 		if gatewayID := normalizedEnv(lookup, CloudflareGatewayIDEnv); gatewayID != "" {
 			headers["cf-aig-gateway-id"] = gatewayID
 		}
-		return &OpenAIProvider{
-			ProviderName: "cloudflare",
-			APIKey:       cloudflareKey,
-			ModelID:      model,
-			BaseURL:      strings.TrimRight(baseURL, "/"),
-			Headers:      headers,
-			Client:       client,
+		apiMode := normalizedEnv(lookup, CloudflareAPIModeEnv)
+		if apiMode == "" || apiMode == "auto" {
+			apiMode = "responses"
+			if model == "stealth/union-alpha" {
+				apiMode = "chat_completions"
+			}
+		}
+		if apiMode != "responses" && apiMode != "chat_completions" {
+			return nil, fmt.Errorf("%s must be responses, chat_completions, or auto", CloudflareAPIModeEnv)
+		}
+		responseFormat, err := responseFormatFromEnvironment(lookup, CloudflareResponseFormatEnv, "json_object")
+		if err != nil {
+			return nil, err
+		}
+		structuredRetries, err := boundedIntegerFromEnvironmentWithDefault(lookup, CloudflareStructuredRetriesEnv, 2, 0, 3)
+		if err != nil {
+			return nil, err
+		}
+		requestRetries, err := boundedIntegerFromEnvironmentWithDefault(lookup, CloudflareRequestRetriesEnv, 8, 0, 20)
+		if err != nil {
+			return nil, err
+		}
+		return &CloudflareProvider{
+			APIKey: cloudflareKey, ModelID: model, BaseURL: strings.TrimRight(baseURL, "/"),
+			Headers: headers, Client: client, APIMode: apiMode, ResponseFormat: responseFormat,
+			StructuredOutputRetries: structuredRetries, RequestRetries: requestRetries,
+			IncludeContentDiagnostics: envEnabled(lookup, ModelContentDiagnosticsEnv),
 		}, nil
 	case "anthropic":
 		if anthropicKey == "" {

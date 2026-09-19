@@ -70,6 +70,10 @@ func (p *CamelProvider) Review(ctx context.Context, request Request) (Result, er
 }
 
 func reviewChatCompletions(ctx context.Context, providerName, apiKey, modelID, baseURL string, client *http.Client, reasoningEffort, responseFormat string, structuredOutputRetries, requestRetries int, includeContentDiagnostics bool, request Request, gate *camelGate) (Result, error) {
+	return reviewChatCompletionsConfigured(ctx, providerName, apiKey, modelID, baseURL, client, reasoningEffort, responseFormat, structuredOutputRetries, requestRetries, includeContentDiagnostics, request, gate, nil, true)
+}
+
+func reviewChatCompletionsConfigured(ctx context.Context, providerName, apiKey, modelID, baseURL string, client *http.Client, reasoningEffort, responseFormat string, structuredOutputRetries, requestRetries int, includeContentDiagnostics bool, request Request, gate *camelGate, extraHeaders map[string]string, defaultReasoning bool) (Result, error) {
 	observation := observeUsage(ctx, providerName, modelID)
 	defer observation.finish()
 	var schema any
@@ -93,11 +97,13 @@ func reviewChatCompletions(ctx context.Context, providerName, apiKey, modelID, b
 			})
 		}
 		payload := map[string]any{
-			"model":            modelID,
-			"max_tokens":       request.Budget.MaximumOutputTokens,
-			"reasoning_effort": chatCompletionsReasoningEffort(reasoningEffort, request.Budget.MaximumOutputTokens),
-			"messages":         attemptMessages,
-			"response_format":  chatCompletionsResponseFormat(responseFormat, schema),
+			"model":           modelID,
+			"max_tokens":      request.Budget.MaximumOutputTokens,
+			"messages":        attemptMessages,
+			"response_format": chatCompletionsResponseFormat(responseFormat, schema),
+		}
+		if reasoningEffort != "" || defaultReasoning {
+			payload["reasoning_effort"] = chatCompletionsReasoningEffort(reasoningEffort, request.Budget.MaximumOutputTokens)
 		}
 		var data []byte
 		var status int
@@ -109,9 +115,13 @@ func reviewChatCompletions(ctx context.Context, providerName, apiKey, modelID, b
 					return Result{}, err
 				}
 			}
-			data, status, responseHeaders, err = postJSONWithHeaders(ctx, client, baseURL+"/v1/chat/completions", map[string]string{
+			headers := map[string]string{
 				"authorization": "Bearer " + apiKey,
-			}, payload)
+			}
+			for name, value := range extraHeaders {
+				headers[name] = value
+			}
+			data, status, responseHeaders, err = postJSONWithHeaders(ctx, client, baseURL+"/v1/chat/completions", headers, payload)
 			retryable := err != nil || status == http.StatusTooManyRequests || status >= 500
 			delay := providerRetryDelay(requestAttempt, responseHeaders)
 			if gate != nil {
