@@ -302,6 +302,7 @@ func requestDecision(ctx context.Context, working Candidate, previous *Decision,
 			err = json.Unmarshal(result.Output, &decision)
 		}
 		if err == nil {
+			decision = normalizeCitationRanges(decision, working)
 			err = validateDecision(decision, working)
 		}
 		if err != nil {
@@ -316,6 +317,49 @@ func requestDecision(ctx context.Context, working Candidate, previous *Decision,
 	}
 	return Decision{}, calls, failed(FailureInvalidDecision, fmt.Sprintf("%s (structural correction attempts exhausted)", validationError))
 }
+
+// A model can copy the ID of one supplied chunk while citing an absolute line
+// from another chunk of the same file. Repair that mechanical mismatch only
+// when the original ID identifies the file and exactly one supplied chunk on
+// the same side contains the cited line. Ambiguous or invented citations still
+// fail validation.
+func normalizeCitationRanges(d Decision, c Candidate) Decision {
+	d.Evidence = append([]Citation(nil), d.Evidence...)
+	sources := append(append([]Source(nil), c.Sources...), c.RetrievedSources...)
+	for i, citation := range d.Evidence {
+		var origin *Source
+		for j := range sources {
+			s := &sources[j]
+			if s.ID != citation.SourceID {
+				continue
+			}
+			origin = s
+			if s.Unavailable == "" && citation.Line >= s.StartLine && citation.Line < s.StartLine+lineCount(s.Content) {
+				origin = nil
+			}
+			break
+		}
+		if origin == nil {
+			continue
+		}
+		match := ""
+		for _, s := range sources {
+			if s.Path != origin.Path || s.Side != origin.Side || s.Unavailable != "" || citation.Line < s.StartLine || citation.Line >= s.StartLine+lineCount(s.Content) {
+				continue
+			}
+			if match != "" {
+				match = ""
+				break
+			}
+			match = s.ID
+		}
+		if match != "" {
+			d.Evidence[i].SourceID = match
+		}
+	}
+	return d
+}
+
 func validateDecision(d Decision, c Candidate) error {
 	if d.CandidateID != c.ID {
 		return fmt.Errorf("candidate ID does not match")

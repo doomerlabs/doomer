@@ -238,6 +238,44 @@ func TestKeptFindingRequiresChangedLineCitation(t *testing.T) {
 		t.Fatalf("off-diff rejection should remain valid: %v", err)
 	}
 }
+
+func TestCitationRangeNormalizationIsSameFileAndUnambiguous(t *testing.T) {
+	first := Source{Path: "changed.go", Side: "head", StartLine: 1, Content: "one\ntwo\n"}
+	first.ID = sourceID(first)
+	second := Source{Path: "changed.go", Side: "head", StartLine: 20, Content: "twenty\ntwenty-one\n"}
+	second.ID = sourceID(second)
+	candidate := Candidate{
+		ID: "one", Reviewer: "reviewer", Finding: review.Finding{ID: "finding", Summary: "claim"},
+		ChangedRegions: []detection.ReviewRegion{{Path: "changed.go", StartLine: 20, EndLine: 20}},
+		Sources:        []Source{first, second},
+	}
+	d := Decision{CandidateID: "one", Status: "keep", Confidence: "high", Reason: "The changed line establishes the defect.", Evidence: []Citation{{SourceID: first.ID, Line: 20}}, Requests: []ReadRequest{}}
+	normalized := normalizeCitationRanges(d, candidate)
+	if normalized.Evidence[0].SourceID != second.ID {
+		t.Fatalf("citation was not remapped to the supplied range: %+v", normalized.Evidence)
+	}
+	if err := validateDecision(normalized, candidate); err != nil {
+		t.Fatalf("normalized citation rejected: %v", err)
+	}
+
+	ambiguous := second
+	ambiguous.ID = "duplicate-range"
+	candidate.Sources = append(candidate.Sources, ambiguous)
+	normalized = normalizeCitationRanges(d, candidate)
+	if normalized.Evidence[0].SourceID != first.ID {
+		t.Fatalf("ambiguous citation was guessed: %+v", normalized.Evidence)
+	}
+	if err := validateDecision(normalized, candidate); err == nil {
+		t.Fatal("ambiguous citation unexpectedly validated")
+	}
+
+	invented := d
+	invented.Evidence[0].SourceID = "invented"
+	if got := normalizeCitationRanges(invented, candidate); got.Evidence[0].SourceID != "invented" {
+		t.Fatal("invented source ID was repaired")
+	}
+}
+
 func TestStructuralCorrectionPreservesRetrievalBudgetAndReplay(t *testing.T) {
 	snapshot := fixture("one", "peer")
 	extra := source("callee.go", "func apply(ids []ID) {}\n")
