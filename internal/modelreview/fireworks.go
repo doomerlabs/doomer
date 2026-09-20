@@ -38,10 +38,11 @@ type CamelProvider struct {
 }
 
 type chatCompletionsResponse struct {
+	Model   string                  `json:"model"`
 	Choices []chatCompletionsChoice `json:"choices"`
-	Usage   struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
+	Usage   *struct {
+		PromptTokens     *int `json:"prompt_tokens"`
+		CompletionTokens *int `json:"completion_tokens"`
 	} `json:"usage"`
 }
 
@@ -69,6 +70,8 @@ func (p *CamelProvider) Review(ctx context.Context, request Request) (Result, er
 }
 
 func reviewChatCompletions(ctx context.Context, providerName, apiKey, modelID, baseURL string, client *http.Client, reasoningEffort, responseFormat string, structuredOutputRetries, requestRetries int, includeContentDiagnostics bool, request Request, gate *camelGate) (Result, error) {
+	observation := observeUsage(ctx, providerName, modelID)
+	defer observation.finish()
 	var schema any
 	if err := json.Unmarshal(request.Schema, &schema); err != nil {
 		return Result{}, fmt.Errorf("decode model schema: %w", err)
@@ -81,6 +84,7 @@ func reviewChatCompletions(ctx context.Context, providerName, apiKey, modelID, b
 	var lastSchemaError error
 	usage := Usage{}
 	for attempt := 0; attempt <= structuredOutputRetries; attempt++ {
+		observation.pending = true
 		attemptMessages := messages
 		if attempt > 0 {
 			attemptMessages = append(append([]map[string]any{}, messages...), map[string]any{
@@ -143,8 +147,14 @@ func reviewChatCompletions(ctx context.Context, providerName, apiKey, modelID, b
 		if err := json.Unmarshal(data, &response); err != nil {
 			return Result{}, fmt.Errorf("decode %s response: %w", providerName, err)
 		}
-		usage.InputTokens += response.Usage.PromptTokens
-		usage.OutputTokens += response.Usage.CompletionTokens
+		if response.Usage != nil && response.Usage.PromptTokens != nil && response.Usage.CompletionTokens != nil {
+			attemptUsage := Usage{InputTokens: *response.Usage.PromptTokens, OutputTokens: *response.Usage.CompletionTokens}
+			observation.record(response.Model, &attemptUsage)
+			usage.InputTokens += attemptUsage.InputTokens
+			usage.OutputTokens += attemptUsage.OutputTokens
+		} else {
+			observation.record(response.Model, nil)
+		}
 		lastSchemaError = nil
 		for _, choice := range response.Choices {
 			if output, ok := compatibleStructuredOutput(choice.Message.Content); ok {

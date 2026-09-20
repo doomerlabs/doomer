@@ -18,6 +18,8 @@ func (p *AnthropicProvider) Name() string  { return "anthropic" }
 func (p *AnthropicProvider) Model() string { return p.ModelID }
 
 func (p *AnthropicProvider) Review(ctx context.Context, request Request) (Result, error) {
+	observation := observeUsage(ctx, p.Name(), p.Model())
+	defer observation.finish()
 	var schema any
 	if err := json.Unmarshal(request.Schema, &schema); err != nil {
 		return Result{}, fmt.Errorf("decode model schema: %w", err)
@@ -49,24 +51,34 @@ func (p *AnthropicProvider) Review(ctx context.Context, request Request) (Result
 		return Result{}, providerHTTPError(p.Name(), status, data)
 	}
 	var response struct {
+		Model   string `json:"model"`
 		Content []struct {
 			Type  string          `json:"type"`
 			Name  string          `json:"name"`
 			Input json.RawMessage `json:"input"`
 		} `json:"content"`
-		Usage struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
+		Usage *struct {
+			InputTokens              *int `json:"input_tokens"`
+			CacheReadInputTokens     int  `json:"cache_read_input_tokens"`
+			CacheCreationInputTokens int  `json:"cache_creation_input_tokens"`
+			OutputTokens             *int `json:"output_tokens"`
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return Result{}, fmt.Errorf("decode anthropic response: %w", err)
 	}
+	var usage Usage
+	if response.Usage != nil && response.Usage.InputTokens != nil && response.Usage.OutputTokens != nil {
+		usage = Usage{InputTokens: *response.Usage.InputTokens + response.Usage.CacheReadInputTokens + response.Usage.CacheCreationInputTokens, OutputTokens: *response.Usage.OutputTokens}
+		observation.record(response.Model, &usage)
+	} else {
+		observation.record(response.Model, nil)
+	}
 	for _, content := range response.Content {
 		if content.Type == "tool_use" && content.Name == "submit_review" && json.Valid(content.Input) {
 			return Result{
 				Output: content.Input,
-				Usage:  Usage{InputTokens: response.Usage.InputTokens, OutputTokens: response.Usage.OutputTokens},
+				Usage:  usage,
 			}, nil
 		}
 	}

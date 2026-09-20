@@ -40,5 +40,6 @@ jobs:
           include-summary: false
           model: auto
           auth-mode: oidc
-          registry-namespace: adversarylabs
+          registry-host: registry.doomer.ai
+          registry-namespace: doomer
           timeout-minutes: 18

@@ -27,6 +27,8 @@ func (p *OpenAIProvider) Name() string {
 func (p *OpenAIProvider) Model() string { return p.ModelID }
 
 func (p *OpenAIProvider) Review(ctx context.Context, request Request) (Result, error) {
+	observation := observeUsage(ctx, p.Name(), p.Model())
+	defer observation.finish()
 	var schema any
 	if err := json.Unmarshal(request.Schema, &schema); err != nil {
 		return Result{}, fmt.Errorf("decode model schema: %w", err)
@@ -64,6 +66,7 @@ func (p *OpenAIProvider) Review(ctx context.Context, request Request) (Result, e
 		return Result{}, providerHTTPError(p.Name(), status, data)
 	}
 	var response struct {
+		Model             string `json:"model"`
 		Status            string `json:"status"`
 		IncompleteDetails struct {
 			Reason string `json:"reason"`
@@ -74,13 +77,20 @@ func (p *OpenAIProvider) Review(ctx context.Context, request Request) (Result, e
 				Text string `json:"text"`
 			} `json:"content"`
 		} `json:"output"`
-		Usage struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
+		Usage *struct {
+			InputTokens  *int `json:"input_tokens"`
+			OutputTokens *int `json:"output_tokens"`
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return Result{}, fmt.Errorf("decode %s response: %w", p.Name(), err)
+	}
+	var usage Usage
+	if response.Usage != nil && response.Usage.InputTokens != nil && response.Usage.OutputTokens != nil {
+		usage = Usage{InputTokens: *response.Usage.InputTokens, OutputTokens: *response.Usage.OutputTokens}
+		observation.record(response.Model, &usage)
+	} else {
+		observation.record(response.Model, nil)
 	}
 	if response.Status == "incomplete" {
 		code := p.Name() + "_incomplete_output"
@@ -101,7 +111,7 @@ func (p *OpenAIProvider) Review(ctx context.Context, request Request) (Result, e
 			if content.Type == "output_text" && json.Valid([]byte(content.Text)) {
 				return Result{
 					Output: json.RawMessage(content.Text),
-					Usage:  Usage{InputTokens: response.Usage.InputTokens, OutputTokens: response.Usage.OutputTokens},
+					Usage:  usage,
 				}, nil
 			}
 		}
