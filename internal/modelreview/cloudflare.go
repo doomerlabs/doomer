@@ -16,6 +16,7 @@ type CloudflareProvider struct {
 	Headers                   map[string]string
 	Client                    *http.Client
 	APIMode                   string
+	ReasoningEffort           string
 	ResponseFormat            string
 	StructuredOutputRetries   int
 	RequestRetries            int
@@ -27,7 +28,7 @@ func (p *CloudflareProvider) Name() string  { return "cloudflare" }
 func (p *CloudflareProvider) Model() string { return p.ModelID }
 
 func (p *CloudflareProvider) Review(ctx context.Context, request Request) (Result, error) {
-	if p.MaxOutputTokens > 0 && request.Budget.MaximumOutputTokens > p.MaxOutputTokens {
+	if p.MaxOutputTokens > 0 {
 		request.Budget.MaximumOutputTokens = p.MaxOutputTokens
 	}
 	if p.APIMode == "chat_completions" {
@@ -40,5 +41,6 @@ func (p *CloudflareProvider) Review(ctx context.Context, request Request) (Resul
 	return (&OpenAIProvider{
 		ProviderName: p.Name(), APIKey: p.APIKey, ModelID: p.ModelID,
 		BaseURL: p.BaseURL, Headers: p.Headers, Client: p.Client,
+		ReasoningEffort: p.ReasoningEffort,
 	}).Review(ctx, request)
 }

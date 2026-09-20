@@ -24,12 +24,14 @@ func TestCloudflareProviderUsesResponsesAPIAndGateway(t *testing.T) {
 	defer server.Close()
 
 	values := map[string]string{
-		ProviderEnv:            "cloudflare",
-		ModelEnv:               "openai/gpt-5.5",
-		CloudflareKeyEnv:       "cf-token",
-		CloudflareAccountIDEnv: "account-id",
-		CloudflareBaseURLEnv:   server.URL,
-		CloudflareGatewayIDEnv: "review-gateway",
+		ProviderEnv:                  "cloudflare",
+		ModelEnv:                     "openai/gpt-5.5",
+		CloudflareKeyEnv:             "cf-token",
+		CloudflareAccountIDEnv:       "account-id",
+		CloudflareBaseURLEnv:         server.URL,
+		CloudflareGatewayIDEnv:       "review-gateway",
+		CloudflareReasoningEffortEnv: "medium",
+		CloudflareMaxOutputTokensEnv: "16384",
 	}
 	provider, err := ProviderFromEnvironment(func(key string) (string, bool) {
 		value, ok := values[key]
@@ -50,6 +52,9 @@ func TestCloudflareProviderUsesResponsesAPIAndGateway(t *testing.T) {
 	}
 	if payload["model"] != "openai/gpt-5.5" || string(result.Output) != `{"decision":"approve"}` {
 		t.Fatalf("payload=%#v result=%s", payload, result.Output)
+	}
+	if payload["max_output_tokens"] != float64(16384) || payload["reasoning"].(map[string]any)["effort"] != "medium" {
+		t.Fatalf("responses settings = %#v", payload)
 	}
 }
 

@@ -20,6 +20,7 @@ const (
 	CloudflareBaseURLEnv           = "ADVERSARY_CLOUDFLARE_BASE_URL"
 	CloudflareGatewayIDEnv         = "ADVERSARY_CLOUDFLARE_GATEWAY_ID"
 	CloudflareAPIModeEnv           = "ADVERSARY_CLOUDFLARE_API_MODE"
+	CloudflareReasoningEffortEnv   = "ADVERSARY_CLOUDFLARE_REASONING_EFFORT"
 	CloudflareResponseFormatEnv    = "ADVERSARY_CLOUDFLARE_RESPONSE_FORMAT"
 	CloudflareStructuredRetriesEnv = "ADVERSARY_CLOUDFLARE_STRUCTURED_RETRIES"
 	CloudflareRequestRetriesEnv    = "ADVERSARY_CLOUDFLARE_REQUEST_RETRIES"
@@ -158,6 +159,10 @@ func ProviderFromConfig(config Config, lookup LookupEnv, client *http.Client) (P
 		if apiMode != "responses" && apiMode != "chat_completions" {
 			return nil, fmt.Errorf("%s must be responses, chat_completions, or auto", CloudflareAPIModeEnv)
 		}
+		reasoningEffort, err := reasoningEffortFromEnvironment(lookup, CloudflareReasoningEffortEnv)
+		if err != nil {
+			return nil, err
+		}
 		responseFormat, err := responseFormatFromEnvironment(lookup, CloudflareResponseFormatEnv, "json_object")
 		if err != nil {
 			return nil, err
@@ -177,6 +182,7 @@ func ProviderFromConfig(config Config, lookup LookupEnv, client *http.Client) (P
 		return &CloudflareProvider{
 			APIKey: cloudflareKey, ModelID: model, BaseURL: strings.TrimRight(baseURL, "/"),
 			Headers: headers, Client: client, APIMode: apiMode, ResponseFormat: responseFormat,
+			ReasoningEffort:         reasoningEffort,
 			StructuredOutputRetries: structuredRetries, RequestRetries: requestRetries,
 			MaxOutputTokens:           maxOutputTokens,
 			IncludeContentDiagnostics: envEnabled(lookup, ModelContentDiagnosticsEnv),
