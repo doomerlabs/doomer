@@ -294,7 +294,7 @@ func runComposedAdversaries(
 	if verificationErr != nil {
 		return verificationErr
 	}
-	if hardErr != nil && completedReviews == 0 {
+	if hardErr != nil && (completedReviews == 0 || opts.requireComplete) {
 		return hardErr
 	}
 	if len(aggregate.Result.Findings) > 0 {

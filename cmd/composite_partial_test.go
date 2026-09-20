@@ -16,9 +16,9 @@ import (
 
 func TestCompositeIsolatesFailedReviewers(t *testing.T) {
 	for _, tc := range []struct {
-		name                                                               string
-		empty, skipped, allFailed, incomplete, verify, cancel, badArtifact bool
-		exit, count                                                        int
+		name                                                                                string
+		empty, skipped, allFailed, incomplete, verify, cancel, badArtifact, requireComplete bool
+		exit, count                                                                         int
 	}{
 		{name: "verified-peer-survives", verify: true, exit: 1, count: 1},
 		{name: "unverified-peer-survives", exit: 1, count: 1},
@@ -28,6 +28,7 @@ func TestCompositeIsolatesFailedReviewers(t *testing.T) {
 		{name: "incomplete-child-propagates", incomplete: true, exit: 1, count: 1},
 		{name: "cancellation-is-fatal", cancel: true, exit: 130},
 		{name: "artifact-failure-is-fatal", verify: true, badArtifact: true, exit: 2, count: 1},
+		{name: "required-complete-is-fatal", requireComplete: true, exit: 2, count: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var out, progress bytes.Buffer
@@ -64,7 +65,7 @@ func TestCompositeIsolatesFailedReviewers(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			opts := &runOptions{noTelemetry: true, composeConcurrency: 1, format: "json", verifyFindings: tc.verify, verificationProvider: verificationProvider{}, verificationRuntime: verificationFixtureRuntime{collector: verificationCollector(t)}}
+			opts := &runOptions{noTelemetry: true, composeConcurrency: 1, format: "json", verifyFindings: tc.verify, verificationProvider: verificationProvider{}, verificationRuntime: verificationFixtureRuntime{collector: verificationCollector(t)}, requireComplete: tc.requireComplete}
 			if tc.badArtifact {
 				opts.verificationOutput = t.TempDir()
 			}
