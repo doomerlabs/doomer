@@ -19,6 +19,7 @@ type CloudflareProvider struct {
 	ResponseFormat            string
 	StructuredOutputRetries   int
 	RequestRetries            int
+	MaxOutputTokens           int
 	IncludeContentDiagnostics bool
 }
 
@@ -26,6 +27,9 @@ func (p *CloudflareProvider) Name() string  { return "cloudflare" }
 func (p *CloudflareProvider) Model() string { return p.ModelID }
 
 func (p *CloudflareProvider) Review(ctx context.Context, request Request) (Result, error) {
+	if p.MaxOutputTokens > 0 && request.Budget.MaximumOutputTokens > p.MaxOutputTokens {
+		request.Budget.MaximumOutputTokens = p.MaxOutputTokens
+	}
 	if p.APIMode == "chat_completions" {
 		return reviewChatCompletionsConfigured(
 			ctx, p.Name(), p.APIKey, p.ModelID, p.BaseURL, p.Client, "",

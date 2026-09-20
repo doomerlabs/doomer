@@ -105,6 +105,7 @@ func TestCloudflareParetoUsesChatCompletions(t *testing.T) {
 		ProviderEnv: "cloudflare", ModelEnv: "unbiased/pareto",
 		CloudflareKeyEnv: "cf-token", CloudflareAccountIDEnv: "account-id",
 		CloudflareBaseURLEnv: server.URL, CloudflareGatewayIDEnv: "benchmark",
+		CloudflareMaxOutputTokensEnv: "1024",
 	}
 	provider, err := ProviderFromEnvironment(func(key string) (string, bool) {
 		value, ok := values[key]
@@ -126,6 +127,9 @@ func TestCloudflareParetoUsesChatCompletions(t *testing.T) {
 	}
 	if payload["model"] != "unbiased/pareto" || string(result.Output) != `{"decision":"approve"}` {
 		t.Fatalf("payload=%#v result=%s", payload, result.Output)
+	}
+	if payload["max_tokens"] != float64(1024) {
+		t.Fatalf("max_tokens = %#v, want 1024", payload["max_tokens"])
 	}
 }
 

@@ -23,6 +23,7 @@ const (
 	CloudflareResponseFormatEnv    = "ADVERSARY_CLOUDFLARE_RESPONSE_FORMAT"
 	CloudflareStructuredRetriesEnv = "ADVERSARY_CLOUDFLARE_STRUCTURED_RETRIES"
 	CloudflareRequestRetriesEnv    = "ADVERSARY_CLOUDFLARE_REQUEST_RETRIES"
+	CloudflareMaxOutputTokensEnv   = "ADVERSARY_CLOUDFLARE_MAX_OUTPUT_TOKENS"
 	AnthropicKeyEnv                = "ANTHROPIC_API_KEY"
 	AnthropicBaseURLEnv            = "ADVERSARY_ANTHROPIC_BASE_URL"
 	FireworksKeyEnv                = "FIREWORKS_API_KEY"
@@ -169,10 +170,15 @@ func ProviderFromConfig(config Config, lookup LookupEnv, client *http.Client) (P
 		if err != nil {
 			return nil, err
 		}
+		maxOutputTokens, err := boundedIntegerFromEnvironmentWithDefault(lookup, CloudflareMaxOutputTokensEnv, 0, 0, 128_000)
+		if err != nil {
+			return nil, err
+		}
 		return &CloudflareProvider{
 			APIKey: cloudflareKey, ModelID: model, BaseURL: strings.TrimRight(baseURL, "/"),
 			Headers: headers, Client: client, APIMode: apiMode, ResponseFormat: responseFormat,
 			StructuredOutputRetries: structuredRetries, RequestRetries: requestRetries,
+			MaxOutputTokens:           maxOutputTokens,
 			IncludeContentDiagnostics: envEnabled(lookup, ModelContentDiagnosticsEnv),
 		}, nil
 	case "anthropic":
