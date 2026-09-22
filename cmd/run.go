@@ -75,6 +75,7 @@ type runOptions struct {
 	composeExhaustive        bool
 	composeRootFullOnly      bool
 	composeBroadFullOnly     bool
+	requireComplete          bool
 	composeFullReviewers     []string
 	tagValues                []string
 	telemetryTags            map[string]string
@@ -363,6 +364,7 @@ review base/head and optional posting context. Posting still requires
 	cmd.Flags().BoolVar(&opts.composeExhaustive, "compose-exhaustive", false, "run every composed reviewer against every review group")
 	cmd.Flags().BoolVar(&opts.composeRootFullOnly, "compose-root-full-only", true, "run the composition root only against the full change")
 	cmd.Flags().BoolVar(&opts.composeBroadFullOnly, "compose-broad-full-only", true, "run composed reviewers without selective file scope only against the full change")
+	cmd.Flags().BoolVar(&opts.requireComplete, "require-complete-composition", false, "fail when any composed reviewer does not complete")
 	cmd.Flags().StringSliceVar(&opts.composeFullReviewers, "compose-full-reviewer", nil, "run a composed reviewer once against the full change (repeatable)")
 	cmd.Flags().StringArrayVar(&opts.tagValues, "tag", nil, "attach a telemetry tag as key=value (repeatable; use benchmark=true for benchmark runs)")
 	cmd.Flags().StringVar(&opts.telemetryFile, "telemetry-file", "", "append OpenTelemetry JSON traces to this file")

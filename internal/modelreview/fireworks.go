@@ -70,6 +70,10 @@ func (p *CamelProvider) Review(ctx context.Context, request Request) (Result, er
 }
 
 func reviewChatCompletions(ctx context.Context, providerName, apiKey, modelID, baseURL string, client *http.Client, reasoningEffort, responseFormat string, structuredOutputRetries, requestRetries int, includeContentDiagnostics bool, request Request, gate *camelGate) (Result, error) {
+	return reviewChatCompletionsConfigured(ctx, providerName, apiKey, modelID, baseURL, client, reasoningEffort, responseFormat, structuredOutputRetries, requestRetries, includeContentDiagnostics, request, gate, nil, true)
+}
+
+func reviewChatCompletionsConfigured(ctx context.Context, providerName, apiKey, modelID, baseURL string, client *http.Client, reasoningEffort, responseFormat string, structuredOutputRetries, requestRetries int, includeContentDiagnostics bool, request Request, gate *camelGate, extraHeaders map[string]string, defaultReasoning bool) (Result, error) {
 	observation := observeUsage(ctx, providerName, modelID)
 	defer observation.finish()
 	var schema any
@@ -87,17 +91,25 @@ func reviewChatCompletions(ctx context.Context, providerName, apiKey, modelID, b
 		observation.pending = true
 		attemptMessages := messages
 		if attempt > 0 {
-			attemptMessages = append(append([]map[string]any{}, messages...), map[string]any{
+			attemptMessages = append([]map[string]any{}, messages...)
+			if content := firstChatCompletionsContent(lastResponse.Choices); content != "" {
+				attemptMessages = append(attemptMessages, map[string]any{
+					"role": "assistant", "content": boundedContentPreview(content, 16<<10),
+				})
+			}
+			attemptMessages = append(attemptMessages, map[string]any{
 				"role":    "user",
-				"content": "The previous response did not contain valid structured output. Return only one JSON value matching the supplied schema, with no prose or markdown.",
+				"content": structuredOutputCorrection(lastResponse.Choices, lastSchemaError),
 			})
 		}
 		payload := map[string]any{
-			"model":            modelID,
-			"max_tokens":       request.Budget.MaximumOutputTokens,
-			"reasoning_effort": chatCompletionsReasoningEffort(reasoningEffort, request.Budget.MaximumOutputTokens),
-			"messages":         attemptMessages,
-			"response_format":  chatCompletionsResponseFormat(responseFormat, schema),
+			"model":           modelID,
+			"max_tokens":      request.Budget.MaximumOutputTokens,
+			"messages":        attemptMessages,
+			"response_format": chatCompletionsResponseFormat(responseFormat, schema),
+		}
+		if reasoningEffort != "" || defaultReasoning {
+			payload["reasoning_effort"] = chatCompletionsReasoningEffort(reasoningEffort, request.Budget.MaximumOutputTokens)
 		}
 		var data []byte
 		var status int
@@ -109,9 +121,13 @@ func reviewChatCompletions(ctx context.Context, providerName, apiKey, modelID, b
 					return Result{}, err
 				}
 			}
-			data, status, responseHeaders, err = postJSONWithHeaders(ctx, client, baseURL+"/v1/chat/completions", map[string]string{
+			headers := map[string]string{
 				"authorization": "Bearer " + apiKey,
-			}, payload)
+			}
+			for name, value := range extraHeaders {
+				headers[name] = value
+			}
+			data, status, responseHeaders, err = postJSONWithHeaders(ctx, client, baseURL+"/v1/chat/completions", headers, payload)
 			retryable := err != nil || status == http.StatusTooManyRequests || status >= 500
 			delay := providerRetryDelay(requestAttempt, responseHeaders)
 			if gate != nil {
@@ -157,7 +173,7 @@ func reviewChatCompletions(ctx context.Context, providerName, apiKey, modelID, b
 		}
 		lastSchemaError = nil
 		for _, choice := range response.Choices {
-			if output, ok := compatibleStructuredOutput(choice.Message.Content); ok {
+			for _, output := range compatibleStructuredOutputs(choice.Message.Content) {
 				if err := ValidateOutput(request.Schema, output); err == nil {
 					return Result{Output: output, Usage: usage}, nil
 				} else {
@@ -172,6 +188,9 @@ func reviewChatCompletions(ctx context.Context, providerName, apiKey, modelID, b
 	if lastSchemaError != nil {
 		code = providerName + "_invalid_output"
 		message = fmt.Sprintf("%s structured output failed schema validation after retries: %v", providerName, lastSchemaError)
+		if diagnostics := chatCompletionsChoiceDiagnostics(lastResponse.Choices, includeContentDiagnostics); diagnostics != "" {
+			message += " (" + diagnostics + ")"
+		}
 	}
 	return Result{}, &ProviderError{
 		Code:    code,
@@ -231,6 +250,14 @@ func chatCompletionsReasoningEffort(reasoningEffort string, maximumOutputTokens 
 }
 
 func chatCompletionsMissingOutputMessage(providerName string, choices []chatCompletionsChoice, includeContent bool) string {
+	diagnostics := chatCompletionsChoiceDiagnostics(choices, includeContent)
+	if diagnostics == "" {
+		return providerName + " response did not contain structured output (choices=0)"
+	}
+	return providerName + " response did not contain structured output (" + diagnostics + ")"
+}
+
+func chatCompletionsChoiceDiagnostics(choices []chatCompletionsChoice, includeContent bool) string {
 	details := make([]string, 0, len(choices))
 	for index, choice := range choices {
 		detail := fmt.Sprintf(
@@ -245,10 +272,7 @@ func chatCompletionsMissingOutputMessage(providerName string, choices []chatComp
 		}
 		details = append(details, detail)
 	}
-	if len(details) == 0 {
-		return providerName + " response did not contain structured output (choices=0)"
-	}
-	return providerName + " response did not contain structured output (" + strings.Join(details, "; ") + ")"
+	return strings.Join(details, "; ")
 }
 
 func (p *FireworksProvider) responseFormat(schema any) map[string]any {
@@ -275,9 +299,26 @@ func boundedContentPreview(content string, maximumBytes int) string {
 // transport boundary. The broker still validates the extracted value against
 // the requested schema before returning it to the adversary.
 func compatibleStructuredOutput(content string) (json.RawMessage, bool) {
+	outputs := compatibleStructuredOutputs(content)
+	if len(outputs) == 0 {
+		return nil, false
+	}
+	return outputs[0], true
+}
+
+func compatibleStructuredOutputs(content string) []json.RawMessage {
 	trimmed := strings.TrimSpace(content)
+	outputs := make([]json.RawMessage, 0, 2)
+	seen := map[string]bool{}
+	appendOutput := func(output json.RawMessage) {
+		key := string(output)
+		if !seen[key] {
+			seen[key] = true
+			outputs = append(outputs, append(json.RawMessage(nil), output...))
+		}
+	}
 	if json.Valid([]byte(trimmed)) {
-		return json.RawMessage(trimmed), true
+		appendOutput(json.RawMessage(trimmed))
 	}
 	newline := strings.IndexByte(trimmed, '\n')
 	if newline >= 0 && strings.HasSuffix(trimmed, "```") {
@@ -285,7 +326,7 @@ func compatibleStructuredOutput(content string) (json.RawMessage, bool) {
 		if opener == "```" || strings.EqualFold(opener, "```json") {
 			body := strings.TrimSpace(strings.TrimSuffix(trimmed[newline+1:], "```"))
 			if json.Valid([]byte(body)) {
-				return json.RawMessage(body), true
+				appendOutput(json.RawMessage(body))
 			}
 		}
 	}
@@ -297,10 +338,33 @@ func compatibleStructuredOutput(content string) (json.RawMessage, bool) {
 		decoder := json.NewDecoder(strings.NewReader(trimmed[index:]))
 		var output json.RawMessage
 		if err := decoder.Decode(&output); err == nil && json.Valid(output) {
-			return output, true
+			appendOutput(output)
 		}
 	}
-	return nil, false
+	return outputs
+}
+
+func firstChatCompletionsContent(choices []chatCompletionsChoice) string {
+	for _, choice := range choices {
+		if strings.TrimSpace(choice.Message.Content) != "" {
+			return choice.Message.Content
+		}
+	}
+	return ""
+}
+
+func structuredOutputCorrection(choices []chatCompletionsChoice, schemaError error) string {
+	message := "The previous response did not contain valid structured output. Return only one concise JSON value matching the supplied schema, with no prose or markdown."
+	if schemaError != nil {
+		message += " The previous JSON failed validation: " + boundedContentPreview(schemaError.Error(), 2<<10)
+	}
+	for _, choice := range choices {
+		if choice.FinishReason == "length" {
+			message += " The previous response reached the output limit; shorten descriptions and omit all content not required by the schema."
+			break
+		}
+	}
+	return message
 }
 
 func defaultChatCompletionsReasoningEffort(maximumOutputTokens int) string {

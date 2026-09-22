@@ -666,7 +666,8 @@ func TestFireworksProviderRetriesMissingStructuredOutputWithCorrection(t *testin
 		t.Fatalf("usage = %#v", result.Usage)
 	}
 	messages := lastPayload["messages"].([]any)
-	if len(messages) != 3 || !strings.Contains(messages[2].(map[string]any)["content"].(string), "only one JSON value") {
+	if len(messages) != 4 || messages[2].(map[string]any)["role"] != "assistant" ||
+		!strings.Contains(messages[3].(map[string]any)["content"].(string), "only one concise JSON value") {
 		t.Fatalf("retry messages = %#v", messages)
 	}
 }
@@ -706,8 +707,12 @@ func TestCamelProviderRetriesTransientHTTPFailureInPlace(t *testing.T) {
 
 func TestFireworksProviderRetriesStructuredOutputOutsideSchema(t *testing.T) {
 	requests := 0
+	var lastPayload map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		requests++
+		if err := json.NewDecoder(request.Body).Decode(&lastPayload); err != nil {
+			t.Fatal(err)
+		}
 		content := `{"wrong":true}`
 		if requests == 2 {
 			content = `{"decision":"approve"}`
@@ -733,6 +738,51 @@ func TestFireworksProviderRetriesStructuredOutputOutsideSchema(t *testing.T) {
 	}
 	if requests != 2 || string(result.Output) != `{"decision":"approve"}` {
 		t.Fatalf("requests=%d output=%s", requests, result.Output)
+	}
+	messages := lastPayload["messages"].([]any)
+	correction := messages[len(messages)-1].(map[string]any)["content"].(string)
+	if !strings.Contains(correction, "failed validation") || !strings.Contains(correction, "decision") {
+		t.Fatalf("schema correction = %q", correction)
+	}
+}
+
+func TestFireworksProviderSelectsLaterSchemaValidJSONValue(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		_ = json.NewEncoder(response).Encode(map[string]any{
+			"choices": []any{map[string]any{
+				"finish_reason": "stop",
+				"message":       map[string]any{"content": "Draft metadata: {\"wrong\":true}\nFinal: {\"decision\":\"approve\"}"},
+			}},
+		})
+	}))
+	defer server.Close()
+	provider := &FireworksProvider{APIKey: "secret", ModelID: "reviewer", BaseURL: server.URL, Client: server.Client()}
+	result, err := provider.Review(context.Background(), validRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(result.Output) != `{"decision":"approve"}` {
+		t.Fatalf("output = %s", result.Output)
+	}
+}
+
+func TestFireworksProviderIncludesContentDiagnosticForSchemaFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		_ = json.NewEncoder(response).Encode(map[string]any{
+			"choices": []any{map[string]any{
+				"finish_reason": "stop",
+				"message":       map[string]any{"content": `{"wrong":true}`},
+			}},
+		})
+	}))
+	defer server.Close()
+	provider := &FireworksProvider{
+		APIKey: "secret", ModelID: "reviewer", BaseURL: server.URL, Client: server.Client(),
+		IncludeContentDiagnostics: true,
+	}
+	_, err := provider.Review(context.Background(), validRequest)
+	if err == nil || !strings.Contains(err.Error(), `content_preview=`) || !strings.Contains(err.Error(), `wrong`) {
+		t.Fatalf("schema diagnostic = %q", err)
 	}
 }
 

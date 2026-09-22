@@ -11,6 +11,12 @@ import (
 )
 
 func TestRetryableComposedRunFailure(t *testing.T) {
+	if retryableComposedRunFailure(context.Background(), errors.New("ModelReviewError: Model output failed adversary validation after 3 attempts: context deadline exceeded"), "") {
+		t.Fatal("SDK-exhausted semantic validation must not restart the entire adversary")
+	}
+	if retryableComposedRunFailure(context.Background(), errors.New("model_validation_failed: HTTP 503 in validator feedback"), "") {
+		t.Fatal("typed semantic validation failure must override transient-looking feedback")
+	}
 	if retryableComposedRunFailure(context.Background(), errors.New("host execution failed"), "Camel capacity retry budget exhausted: camel model request failed (HTTP 429): Cost pacing queue is full; retry later") {
 		t.Fatal("capacity exhaustion must not replay the whole specialist")
 	}

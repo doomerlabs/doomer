@@ -316,6 +316,19 @@ doomer run adversarylabs/example \
   --model "openai/gpt-5.5"
 ```
 
+Cloudflare documents Pareto, formerly `stealth/union-alpha`, on the Chat
+Completions endpoint. Doomer selects that endpoint automatically while
+retaining `cloudflare` as the recorded provider:
+
+```sh
+doomer run review/code \
+  --model-provider cloudflare \
+  --model "unbiased/pareto"
+```
+
+`ADVERSARY_CLOUDFLARE_API_MODE` can explicitly select `responses`,
+`chat_completions`, or `auto` for other models.
+
 camelStream is a first-class OpenAI-compatible provider and uses Camel's own
 credential namespace:
 

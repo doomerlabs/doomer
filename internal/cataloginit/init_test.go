@@ -266,8 +266,8 @@ func TestUpgradeRaisesOlderSDKWithoutReplacingPackageMetadata(t *testing.T) {
 	}
 	oldLock := strings.ReplaceAll(string(templateLock), "{{name}}", "operability")
 	oldLock = strings.ReplaceAll(oldLock, `"version": "something"`, `"version": "0.0.1"`)
-	oldLock = strings.ReplaceAll(oldLock, "0.1.32", "0.1.23")
-	oldLock = strings.ReplaceAll(oldLock, "fUXop08OXOyDYFaYJSh4boZ64DITA4720oYk15i1XJFMo5jtq0QmPXkLmCn+cCqrIxE7mQrnOrx74/ET6bRvkQ==", "old-integrity")
+	oldLock = strings.ReplaceAll(oldLock, "0.1.33", "0.1.23")
+	oldLock = strings.ReplaceAll(oldLock, "bwrLPUc5up6eP3183RTX3aUrEubZwA6sgJC+knDMk8+pfomWqoXOAdrT0lHyNwejD1Fc93ssfXP5DmbA3LfObA==", "old-integrity")
 	oldPackage := `{
   "name": "operability",
   "adversarylabsCatalogRuntime": 1,
@@ -295,21 +295,21 @@ func TestUpgradeRaisesOlderSDKWithoutReplacingPackageMetadata(t *testing.T) {
 	}
 	packageJSON, _ := os.ReadFile(filepath.Join(dir, "package.json"))
 	packageLock, _ := os.ReadFile(filepath.Join(dir, "package-lock.json"))
-	expectedPackage := strings.Replace(oldPackage, "^0.1.23", "^0.1.32", 1)
+	expectedPackage := strings.Replace(oldPackage, "^0.1.23", "^0.1.33", 1)
 	if string(packageJSON) != expectedPackage {
 		t.Fatalf("package.json formatting changed:\n%s", packageJSON)
 	}
-	expectedLock := strings.ReplaceAll(oldLock, "0.1.23", "0.1.32")
-	expectedLock = strings.Replace(expectedLock, "old-integrity", "fUXop08OXOyDYFaYJSh4boZ64DITA4720oYk15i1XJFMo5jtq0QmPXkLmCn+cCqrIxE7mQrnOrx74/ET6bRvkQ==", 1)
+	expectedLock := strings.ReplaceAll(oldLock, "0.1.23", "0.1.33")
+	expectedLock = strings.Replace(expectedLock, "old-integrity", "bwrLPUc5up6eP3183RTX3aUrEubZwA6sgJC+knDMk8+pfomWqoXOAdrT0lHyNwejD1Fc93ssfXP5DmbA3LfObA==", 1)
 	if string(packageLock) != expectedLock {
 		t.Fatal("package-lock.json formatting or unrelated metadata changed")
 	}
-	for _, required := range []string{`"catalogOwned": true`, `"other": "1.2.3"`, `"@adversarylabs/sdk": "^0.1.32"`} {
+	for _, required := range []string{`"catalogOwned": true`, `"other": "1.2.3"`, `"@adversarylabs/sdk": "^0.1.33"`} {
 		if !strings.Contains(string(packageJSON), required) {
 			t.Fatalf("package.json missing %s: %s", required, packageJSON)
 		}
 	}
-	for _, required := range []string{`"@adversarylabs/sdk": "^0.1.32"`, `"version": "0.1.32"`, "ppoM1NLRRABGjUZtoI150/2PL/nFEkBFZ0pe5UeB2bhU0soQrbah6U4171/F4gfpKwcT+99LtI5H1WcWpjgglQ=="} {
+	for _, required := range []string{`"@adversarylabs/sdk": "^0.1.33"`, `"version": "0.1.33"`, "bwrLPUc5up6eP3183RTX3aUrEubZwA6sgJC+knDMk8+pfomWqoXOAdrT0lHyNwejD1Fc93ssfXP5DmbA3LfObA=="} {
 		if !strings.Contains(string(packageLock), required) {
 			t.Fatalf("package-lock.json missing %s", required)
 		}
@@ -321,7 +321,7 @@ func TestUpgradeCanPinSDKCommitForPremergeValidation(t *testing.T) {
 	dir := filepath.Join(root, "adversaries", "operability")
 	dependency := "https://github.com/doomerlabs/doomer-sdk-typescript/archive/abc123.tar.gz"
 	lockTemplate := filepath.Join(t.TempDir(), "package-lock.json")
-	if err := os.WriteFile(lockTemplate, []byte(`{"packages":{"":{"dependencies":{"@adversarylabs/sdk":"`+dependency+`"}},"node_modules/@adversarylabs/sdk":{"version":"0.1.32","resolved":"`+dependency+`","integrity":"sha512-test"}}}`), 0o644); err != nil {
+	if err := os.WriteFile(lockTemplate, []byte(`{"packages":{"":{"dependencies":{"@adversarylabs/sdk":"`+dependency+`"}},"node_modules/@adversarylabs/sdk":{"version":"0.1.33","resolved":"`+dependency+`","integrity":"sha512-test"}}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv(sdkDependencyOverrideEnv, dependency)
@@ -329,8 +329,8 @@ func TestUpgradeCanPinSDKCommitForPremergeValidation(t *testing.T) {
 	for path, content := range map[string]string{
 		"README.md":         "# Operability\n",
 		"adversary.yaml":    "name: private/operability\n",
-		"package.json":      `{"adversarylabsCatalogRuntime":1,"dependencies":{"@adversarylabs/sdk":"^0.1.32"}}`,
-		"package-lock.json": `{"packages":{"":{"dependencies":{"@adversarylabs/sdk":"^0.1.32"}},"node_modules/@adversarylabs/sdk":{"version":"0.1.32","resolved":"registry","integrity":"old"}}}`,
+		"package.json":      `{"adversarylabsCatalogRuntime":1,"dependencies":{"@adversarylabs/sdk":"^0.1.33"}}`,
+		"package-lock.json": `{"packages":{"":{"dependencies":{"@adversarylabs/sdk":"^0.1.33"}},"node_modules/@adversarylabs/sdk":{"version":"0.1.33","resolved":"registry","integrity":"old"}}}`,
 	} {
 		full := filepath.Join(dir, path)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {

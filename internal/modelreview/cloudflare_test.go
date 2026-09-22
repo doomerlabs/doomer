@@ -24,12 +24,14 @@ func TestCloudflareProviderUsesResponsesAPIAndGateway(t *testing.T) {
 	defer server.Close()
 
 	values := map[string]string{
-		ProviderEnv:            "cloudflare",
-		ModelEnv:               "openai/gpt-5.5",
-		CloudflareKeyEnv:       "cf-token",
-		CloudflareAccountIDEnv: "account-id",
-		CloudflareBaseURLEnv:   server.URL,
-		CloudflareGatewayIDEnv: "review-gateway",
+		ProviderEnv:                  "cloudflare",
+		ModelEnv:                     "openai/gpt-5.5",
+		CloudflareKeyEnv:             "cf-token",
+		CloudflareAccountIDEnv:       "account-id",
+		CloudflareBaseURLEnv:         server.URL,
+		CloudflareGatewayIDEnv:       "review-gateway",
+		CloudflareReasoningEffortEnv: "medium",
+		CloudflareMaxOutputTokensEnv: "16384",
 	}
 	provider, err := ProviderFromEnvironment(func(key string) (string, bool) {
 		value, ok := values[key]
@@ -51,6 +53,9 @@ func TestCloudflareProviderUsesResponsesAPIAndGateway(t *testing.T) {
 	if payload["model"] != "openai/gpt-5.5" || string(result.Output) != `{"decision":"approve"}` {
 		t.Fatalf("payload=%#v result=%s", payload, result.Output)
 	}
+	if payload["max_output_tokens"] != float64(16384) || payload["reasoning"].(map[string]any)["effort"] != "medium" {
+		t.Fatalf("responses settings = %#v", payload)
+	}
 }
 
 func TestCloudflareProviderBuildsAccountEndpointAndRequiresCredentials(t *testing.T) {
@@ -69,7 +74,7 @@ func TestCloudflareProviderBuildsAccountEndpointAndRequiresCredentials(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloudflare, ok := provider.(*OpenAIProvider)
+	cloudflare, ok := provider.(*CloudflareProvider)
 	if !ok || cloudflare.Name() != "cloudflare" || cloudflare.BaseURL != "https://api.cloudflare.com/client/v4/accounts/account-id/ai" {
 		t.Fatalf("provider = %#v", provider)
 	}
@@ -85,6 +90,51 @@ func TestCloudflareProviderBuildsAccountEndpointAndRequiresCredentials(t *testin
 				t.Fatalf("error = %v", err)
 			}
 		})
+	}
+}
+
+func TestCloudflareParetoUsesChatCompletions(t *testing.T) {
+	var path, gatewayID string
+	var payload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		gatewayID = r.Header.Get("cf-aig-gateway-id")
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"decision\":\"approve\"}"},"finish_reason":"stop"}]}`))
+	}))
+	defer server.Close()
+
+	values := map[string]string{
+		ProviderEnv: "cloudflare", ModelEnv: "unbiased/pareto",
+		CloudflareKeyEnv: "cf-token", CloudflareAccountIDEnv: "account-id",
+		CloudflareBaseURLEnv: server.URL, CloudflareGatewayIDEnv: "benchmark",
+		CloudflareMaxOutputTokensEnv: "1024",
+	}
+	provider, err := ProviderFromEnvironment(func(key string) (string, bool) {
+		value, ok := values[key]
+		return value, ok
+	}, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := provider.Review(context.Background(), validRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cloudflare, ok := provider.(*CloudflareProvider)
+	if !ok || cloudflare.APIMode != "chat_completions" || path != "/v1/chat/completions" || gatewayID != "benchmark" {
+		t.Fatalf("provider=%#v path=%q gateway=%q", provider, path, gatewayID)
+	}
+	if _, present := payload["reasoning_effort"]; present {
+		t.Fatalf("Union Alpha request sent model-dependent reasoning_effort: %#v", payload)
+	}
+	if payload["model"] != "unbiased/pareto" || string(result.Output) != `{"decision":"approve"}` {
+		t.Fatalf("payload=%#v result=%s", payload, result.Output)
+	}
+	if payload["max_tokens"] != float64(1024) {
+		t.Fatalf("max_tokens = %#v, want 1024", payload["max_tokens"])
 	}
 }
 
