@@ -19,7 +19,7 @@ for workflow in .depot/workflows/*.yml; do
   done < <(grep -E '^[[:space:]]*uses:' "$workflow" || true)
 done
 
-grep -Fq 'No license stanza' Formula/doomer.rb.tmpl || fail 'formula license decision missing'
+grep -Fq 'license "Apache-2.0"' Formula/doomer.rb.tmpl || fail 'formula license declaration missing'
 grep -Fq 'source-code adversaries' Formula/doomer.rb.tmpl || fail 'formula description drift'
 grep -Fq '__INSTALLED_BINARY__ version' Formula/doomer.rb.tmpl || fail 'formula smoke test drift'
 # shellcheck disable=SC2016 # The function variables are intentional literals.

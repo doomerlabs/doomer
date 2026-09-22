@@ -21,8 +21,7 @@ make build VERSION=dev
 Release archives, checksums, and SPDX SBOMs are on the corresponding GitHub
 Release. Verify checksums before installation and review the current provenance
 limitation in [the release guide](docs/release.md).
-Because the project has not selected a license, source publication grants no
-reuse rights; see [the license decision](docs/license-decision.md).
+The project is licensed under the [Apache License 2.0](LICENSE).
 
 `go install github.com/doomerlabs/doomer@<commit-or-tag>` is supported for
 source installation, but the Go tool does not apply release `-ldflags`, so the
