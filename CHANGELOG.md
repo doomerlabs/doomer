@@ -11,6 +11,9 @@ existing one.
 
 ## Unreleased
 
+- TypeScript adversaries now receive SDK `0.1.33`, including bounded semantic
+  validation regeneration. Exhausted semantic validation never restarts an
+  entire composed reviewer.
 - `adversary run` now defaults to the `review/code` composition. The generalist
   reviews the full change while manifest-matched specialists run concurrently
   on scoped changed files with repository-graph context.

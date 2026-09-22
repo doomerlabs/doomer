@@ -312,6 +312,13 @@ func retryableComposedRunFailure(ctx context.Context, err error, stderr string) 
 		return false
 	}
 	text := strings.ToLower(err.Error() + "\n" + stderr)
+	// Semantic validation retries are owned by the SDK and rerun only the final
+	// model generation with the already-retrieved evidence. Once that bounded
+	// loop is exhausted, never replay the whole adversary—even if the validator's
+	// feedback happens to mention a normally transient marker such as a timeout.
+	if strings.Contains(text, "model_validation_failed") || strings.Contains(text, "failed adversary validation") {
+		return false
+	}
 	// The broker has already waited/retried this exact capacity-rejected
 	// request. Replaying the entire specialist would redo successful rounds.
 	if strings.Contains(text, "camel capacity retry budget exhausted") {
