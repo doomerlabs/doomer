@@ -1,9 +1,7 @@
 # Contributing
 
-Before contributing, note that no project license has been selected. Opening a
-pull request does not by itself establish contribution licensing; maintainers
-must resolve [the license decision](docs/license-decision.md) before accepting
-external contributions that require a license grant.
+By contributing, you agree that your contributions will be licensed under the
+project's [Apache License 2.0](LICENSE).
 
 Use a focused branch and include regression tests, documentation for user-facing
 changes, rollback notes for migrations, and audit IDs when applicable. Run:
