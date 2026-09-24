@@ -285,6 +285,11 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 		Provider: opts.modelProvider,
 		Model:    opts.model,
 	}, githubapi.LookupEnv, nil)
+	if providerErr == nil {
+		githubreview.DeduplicateComments(ctx, &plan, provider)
+	} else {
+		githubreview.DeduplicateComments(ctx, &plan, nil)
+	}
 	if providerErr == nil && provider != nil {
 		if threadsLoaded {
 			githubreview.Reconcile(ctx, &plan, threads, viewer, provider)
