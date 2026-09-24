@@ -29,13 +29,34 @@ func resolveAddressedThreads(ctx context.Context, plan CommentPlan, opts PostOpt
 	for _, finding := range plan.Skipped {
 		current[reviewFindingKey{sanitizeMarker(finding.Adversary), sanitizeMarker(finding.FindingID)}] = true
 	}
+	for _, finding := range plan.Carried {
+		current[reviewFindingKey{sanitizeMarker(finding.Adversary), sanitizeMarker(finding.FindingID)}] = true
+	}
+	carriedThreads := make(map[string]bool, len(plan.Carried))
+	for _, finding := range plan.Carried {
+		carriedThreads[finding.ThreadID] = true
+	}
 
-	threads, err := listOwnedReviewThreads(ctx, opts)
-	if err != nil {
-		return 0, mapGitHubErr("list review threads", err)
+	var threads []ownedReviewThread
+	if opts.ThreadsLoaded {
+		for _, thread := range opts.Threads {
+			if len(thread.Comments) == 0 || !strings.EqualFold(thread.Comments[0].Author, opts.Viewer) {
+				continue
+			}
+			threads = append(threads, ownedReviewThread{id: thread.ID, body: thread.Comments[0].Body})
+		}
+	} else {
+		var err error
+		threads, err = listOwnedReviewThreads(ctx, opts)
+		if err != nil {
+			return 0, mapGitHubErr("list review threads", err)
+		}
 	}
 	resolved := 0
 	for _, thread := range threads {
+		if carriedThreads[thread.id] {
+			continue
+		}
 		key, ok := reviewMarkerKey(thread.body)
 		if !ok || !reviewed[key.adversary] || current[key] {
 			continue

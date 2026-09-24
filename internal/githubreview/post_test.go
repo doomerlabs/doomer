@@ -18,6 +18,37 @@ func TestPostDryRunNoop(t *testing.T) {
 	}
 }
 
+func TestPostReplyOnlyDoesNotCreateReview(t *testing.T) {
+	var reviewCreated bool
+	var replyBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+		switch {
+		case strings.Contains(payload.Query, "addPullRequestReviewThreadReply"):
+			input := payload.Variables["input"].(map[string]any)
+			replyBody = input["body"].(string)
+			_, _ = w.Write([]byte(`{"data":{"addPullRequestReviewThreadReply":{"comment":{"id":"C1"}}}}`))
+		case strings.Contains(payload.Query, "addPullRequestReview"):
+			reviewCreated = true
+			w.WriteHeader(http.StatusBadRequest)
+		default:
+			_, _ = w.Write([]byte(`{"data":{"repository":{"pullRequest":{"id":"PR1","headRefOid":"abc"}}}}`))
+		}
+	}))
+	defer server.Close()
+	client := githubapi.NewClient("token")
+	client.HTTP = server.Client()
+	client.GQLURL = server.URL
+	result, err := Post(context.Background(), CommentPlan{HeadSHA: "abc", Replies: []ThreadReply{{ThreadID: "T1", Comment: PlannedComment{Adversary: "review/code", FindingID: "f1", Summary: "The write lacks authorization.", Recommendation: "Call authorize first."}}}}, PostOptions{Client: client, Owner: "o", Repo: "r", Number: 1})
+	if err != nil || result.Replied != 1 || reviewCreated || !strings.Contains(replyBody, "Suggested fix: Call authorize first.") || !strings.Contains(replyBody, "adversary-review:v2") {
+		t.Fatalf("result=%+v err=%v reviewCreated=%v replyBody=%q", result, err, reviewCreated, replyBody)
+	}
+}
+
 func TestPostReviewBasisOnly(t *testing.T) {
 	var addInput map[string]any
 	filesCalls := 0

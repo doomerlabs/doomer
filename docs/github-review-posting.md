@@ -97,6 +97,26 @@ Inline threads require the evidence `file` + `line` to sit on the PR **diff**
 (REST PR file patches). Lines not on a hunk are demoted to the review body.
 There is no nearest-line guessing.
 
+## Existing PR discussions
+
+Before posting, the CLI reads open GitHub review threads on the PR, including
+outdated threads. A finding already covered by an open Doomer thread is carried
+forward without another comment. When a human started the matching thread,
+Doomer replies there once with its verified finding and suggested fix. Later
+runs recognize that reply and stay quiet. Resolved threads are not reused.
+
+Matching requires the same file and a concrete matching defect. Existing
+finding IDs and comment text provide strong hints; ambiguous matches use the
+configured model. A missing model or uncertain comparison leaves the finding
+new. If GitHub thread history cannot be read completely, live posting fails
+instead of risking duplicate comments. An unauthenticated dry run cannot check
+existing discussions.
+
+The plan file lists `carried` findings and proposed human-thread `replies`
+separately from new `comments`. The aggregate review summary covers only new
+comments; a run with only carried findings creates no new review. A new commit
+between analysis and posting aborts the posting attempt.
+
 ## Exit codes
 
 Hard posting failures (auth/network/mutation) map to exit class **4**, even when

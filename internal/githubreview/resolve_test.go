@@ -71,6 +71,29 @@ func TestReviewMarkerKeySupportsFeedbackMarkerVersions(t *testing.T) {
 	}
 }
 
+func TestResolveAddressedDoesNotResolveCarriedThreadWithChangedFindingID(t *testing.T) {
+	var mutations int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mutations++
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+	client := githubapi.NewClient("token")
+	client.HTTP = server.Client()
+	client.GQLURL = server.URL
+	plan := CommentPlan{
+		ReviewedAdversaries: []string{"review/code"},
+		Carried:             []CarriedFinding{{Adversary: "review/code", FindingID: "new-id", ThreadID: "T-old"}},
+	}
+	count, err := resolveAddressedThreads(context.Background(), plan, PostOptions{
+		Client: client, ThreadsLoaded: true, Viewer: "doomer[bot]",
+		Threads: []ReviewThread{{ID: "T-old", Comments: []ReviewThreadComment{{Body: "<!-- adversary-review:v1 adversary=review/code finding=old-id loc=a.go:1 -->", Author: "doomer[bot]"}}}},
+	})
+	if err != nil || count != 0 || mutations != 0 {
+		t.Fatalf("count=%d err=%v mutations=%d", count, err, mutations)
+	}
+}
+
 func TestReviewMarkerKeyNormalizesMarkerValues(t *testing.T) {
 	key, ok := reviewMarkerKey("body <!-- adversary-review:v2 adversary=review%2Fcode%01 finding=finding+with+spaces%02 loc=a.go%3A2 -->")
 	if !ok || key != (reviewFindingKey{adversary: "review/code", finding: "finding with spaces"}) {
