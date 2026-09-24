@@ -1,6 +1,9 @@
 package githubreview
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // VoiceExampleBankHeading is the section train apply / package voice stubs use
 // for few-shot maintainer quotes. Must stay aligned with train/results voice bank.
@@ -35,6 +38,18 @@ then treat the blockquotes under it as **style few-shots**:
 4. Re-ground every claim in the finding evidence in the JSON input.
 5. If the example bank is empty or missing, follow core voice only.
 
+## Rules for every voice
+
+Change presentation only. Preserve the finding, severity, confidence, and
+recommended action. Do not add a defect, stronger causal claim, or fix that
+the finding evidence does not support. Be definitive when the evidence proves
+the finding. When context is missing, state the observed risk and what
+information would resolve it. Never manufacture certainty to sound direct.
+Lead with the finding, use one idea per comment, and omit greetings, closers,
+personal attacks, forced jokes, slang, and fake enthusiasm. Prefer a statement
+when the finding and fix are clear; a question is allowed when information is
+actually needed.
+
 ## JSON input fields
 
 - findingId, adversary, severity, confidence, title
@@ -53,6 +68,17 @@ func HasVoiceExampleBank(voiceMarkdown string) bool {
 // BuildRewritePrompt wraps package/CLI voice markdown with explicit rewrite
 // instructions so agent/voice.md example banks are used when generating comments.
 func BuildRewritePrompt(voiceMarkdown string) string {
+	return BuildRewritePromptWithStyle(voiceMarkdown, CommentStyle{})
+}
+
+// BuildRewritePromptWithStyle applies product controls after the package voice
+// document so every entry package shares the same final presentation policy.
+func BuildRewritePromptWithStyle(voiceMarkdown string, style CommentStyle) string {
+	var err error
+	style, err = style.Normalize()
+	if err != nil {
+		style, _ = (CommentStyle{}).Normalize()
+	}
 	voice := strings.TrimSpace(voiceMarkdown)
 	if voice == "" {
 		voice = strings.TrimSpace(DefaultVoicePrompt)
@@ -63,6 +89,25 @@ func BuildRewritePrompt(voiceMarkdown string) string {
 	b.WriteString(voice)
 	if !strings.HasSuffix(voice, "\n") {
 		b.WriteByte('\n')
+	}
+	b.WriteString("\n## Product comment settings (override conflicting package style rules)\n\n")
+	fmt.Fprintf(&b, "Tone: %s. ", style.Tone)
+	switch style.Tone {
+	case "neutral":
+		b.WriteString("Use plain professional language without a persona or impatience. ")
+	case "coaching":
+		b.WriteString("Use a warm, collegial phrasing without praise, pep talk, or hedging a clear finding. ")
+	default:
+		b.WriteString("Use direct, precise, evidence-based language that assumes competence. No irritation or hostility. ")
+	}
+	fmt.Fprintf(&b, "Conciseness: %s. ", style.Conciseness)
+	switch style.Conciseness {
+	case "standard":
+		b.WriteString("Use one or two short sentences; include impact when it helps explain the fix.\n")
+	case "explanatory":
+		b.WriteString("Use up to three short sentences; include the mechanism or consequence when supported by evidence.\n")
+	default:
+		b.WriteString("Aim for one line; use a second short sentence only when the fix is unclear.\n")
 	}
 	return b.String()
 }

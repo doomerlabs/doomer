@@ -55,6 +55,12 @@ read-only history authentication described below.
 
 ## Comment voice
 
+Use `--github-comment-tone` (`direct`, `neutral`, `coaching`) and
+`--github-comment-conciseness` (`terse`, `standard`, `explanatory`) to control
+wording independently. Defaults are `direct` and `terse`; the matching
+`DOOMER_COMMENT_TONE` and `DOOMER_COMMENT_CONCISENESS` environment variables
+configure runners, with flags taking precedence.
+
 When `--github-review` is set, comment bodies use a **product voice**: core rules
 and optional example few-shots from the package, applied by LLM rewrite when a
 model provider is configured.

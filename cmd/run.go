@@ -95,6 +95,8 @@ type runOptions struct {
 	githubIncludeSummary   bool
 	githubResolveAddressed bool
 	githubMinSeverity      string
+	githubCommentTone      string
+	githubCommentConcise   string
 	githubAPIURL           string
 	githubRESTURL          string
 	githubRunFailures      []string
@@ -188,11 +190,16 @@ review base/head and optional posting context. Posting still requires
 				return fmt.Errorf("--github-review cannot be combined with --shell")
 			}
 			if !opts.githubReview {
-				if opts.githubDryRun || opts.githubPlanFile != "" || opts.githubSubmit || cmd.Flags().Changed("github-include-summary") || cmd.Flags().Changed("github-resolve-addressed") || opts.githubMinSeverity != "" {
+				if opts.githubDryRun || opts.githubPlanFile != "" || opts.githubSubmit || cmd.Flags().Changed("github-include-summary") || cmd.Flags().Changed("github-resolve-addressed") || opts.githubMinSeverity != "" || cmd.Flags().Changed("github-comment-tone") || cmd.Flags().Changed("github-comment-conciseness") {
 					return fmt.Errorf("GitHub review flags require --github-review")
 				}
 				if cmd.Flags().Changed("github-pr") || cmd.Flags().Changed("github-repo") {
 					return fmt.Errorf("--github-pr/--github-repo require --github-review (or pass a PR URL for analysis)")
+				}
+			}
+			if opts.githubReview {
+				if _, err := (githubreview.CommentStyle{Tone: opts.githubCommentTone, Conciseness: opts.githubCommentConcise}).Normalize(); err != nil {
+					return err
 				}
 			}
 			// PR URL alone does not require --github-review; pr/repo flags without review only OK with URL path.
@@ -389,6 +396,8 @@ review base/head and optional posting context. Posting still requires
 	cmd.Flags().BoolVar(&opts.githubIncludeSummary, "github-include-summary", true, "include the inferred review basis and aggregate assessment/opinion in the review body")
 	cmd.Flags().BoolVar(&opts.githubResolveAddressed, "github-resolve-addressed", true, "resolve prior Adversary review threads whose findings are absent after a successful rerun")
 	cmd.Flags().StringVar(&opts.githubMinSeverity, "github-min-severity", "", "only plan/post findings at this severity or higher")
+	cmd.Flags().StringVar(&opts.githubCommentTone, "github-comment-tone", githubReviewEnv("DOOMER_COMMENT_TONE"), "PR comment tone: direct (default), neutral, or coaching")
+	cmd.Flags().StringVar(&opts.githubCommentConcise, "github-comment-conciseness", githubReviewEnv("DOOMER_COMMENT_CONCISENESS"), "PR comment length: terse (default), standard, or explanatory")
 	cmd.Flags().StringVar(&opts.githubAPIURL, "github-api-url", "", "GraphQL endpoint override (default https://api.github.com/graphql)")
 	cmd.Flags().StringVar(&opts.githubRESTURL, "github-rest-url", "", "REST API base override (default https://api.github.com)")
 

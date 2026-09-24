@@ -24,6 +24,8 @@ type VoiceInfo struct {
 	Source      string `json:"source"` // cli_default | package | repo
 	Path        string `json:"path,omitempty"`
 	ExampleBank bool   `json:"exampleBank,omitempty"` // voice file has train gold few-shots
+	Tone        string `json:"tone,omitempty"`
+	Conciseness string `json:"conciseness,omitempty"`
 }
 
 // PlannedComment is one finding projected for a PR review thread or body.

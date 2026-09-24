@@ -27,6 +27,23 @@ doomer run ./my-adversary --path ./app \
    with a prompt built from the resolved voice document.
 3. On rewrite failure or missing credentials, the **template** body is kept.
 
+The default is `direct` tone with `terse` length. Set either control on a run:
+
+```sh
+doomer run ./my-adversary --path ./app --github-review \
+  --github-comment-tone neutral --github-comment-conciseness standard
+```
+
+Accepted tones are `direct`, `neutral`, and `coaching`. Accepted lengths are
+`terse` (one line when possible), `standard` (one or two short sentences), and
+`explanatory` (up to three short sentences). For CLI environment configuration,
+set `DOOMER_COMMENT_TONE` and `DOOMER_COMMENT_CONCISENESS`; explicit flags take
+precedence. Hosted reviews invoke this CLI rewrite path, but the hosted worker
+does not yet expose the controls in product settings. They affect wording only: the
+finding, severity, confidence, and recommendation remain grounded in the
+original evidence. When the evidence is incomplete, the comment states the
+observed risk and the missing context rather than asserting a defect.
+
 Without `--github-review`, voice files are unused for posting (findings still
 print to the terminal / JSON as usual).
 
@@ -75,7 +92,7 @@ Edit this for product tone:
 
 - Lead with the issue; mechanism over attitude
 - Confidence honesty; no invented files/APIs
-- Length targets (often ~2–6 short sentences)
+- Length targets; product conciseness overrides a conflicting package target
 - Hard bans (corporate padding, praise sandwiches, etc. for a Torvalds-style pack)
 
 ### Example bank (style few-shots)
@@ -135,8 +152,28 @@ finding → template body
 ```
 
 The rewrite task preamble tells the model to treat the example bank as few-shot
-style only. JSON input includes severity, title, template body, path/line, and
+style only. The product tone and conciseness rules are appended after package
+voice rules and win when length or persona instructions conflict. JSON input
+includes severity, title, template body, path/line, and
 `exampleBankHint` (preferred subsection: Ship / OK, Design, Defects, or Nits).
+
+The ten issue examples live in `internal/githubreview/testdata/voice_goldens.json`.
+They are wording targets, not permission to infer a defect from a question:
+the corresponding code evidence must establish each claim. The fixture rubric
+is documented beside them and requires 5/5 for every locked target. The shared
+prompt tests check that every tone and length combination keeps the evidence
+guardrail. These offline checks do not establish whether a model output is
+accurate on a real diff. For an evidence-backed model check, set
+`DOOMER_VOICE_EVAL_PROVIDER` and `DOOMER_VOICE_EVAL_MODEL` plus the provider's
+normal credentials, then run:
+
+```sh
+go test ./internal/githubreview -run TestVoiceGoldensWithModelJudge -count=1
+```
+
+The live judge requires at least 4/5
+on every documented dimension for every fixture; see
+`internal/githubreview/testdata/voice_rubric.md`.
 
 **Model flags** (shared with analysis when configured):
 

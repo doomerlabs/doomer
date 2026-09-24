@@ -32,6 +32,7 @@ type EnhanceOptions struct {
 	Provider modelreview.Provider
 	// VoicePrompt is the resolved CLI default or VOICE.md text.
 	VoicePrompt string
+	Style       CommentStyle
 	// MaxComments caps how many findings are sent to the model (0 = 20).
 	MaxComments int
 	// Timeout per finding (0 = 30s).
@@ -56,7 +57,7 @@ func EnhanceBodies(ctx context.Context, plan *CommentPlan, opts EnhanceOptions) 
 	}
 	schema := json.RawMessage(bodyOutputSchema)
 	// Always wrap package/CLI voice so Example maintainer comments banks are used.
-	prompt := BuildRewritePrompt(opts.VoicePrompt)
+	prompt := BuildRewritePromptWithStyle(opts.VoicePrompt, opts.Style)
 	enhanced := 0
 	for i := range plan.Comments {
 		if enhanced >= max {
