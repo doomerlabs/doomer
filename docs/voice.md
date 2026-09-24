@@ -27,23 +27,27 @@ doomer run ./my-adversary --path ./app \
    with a prompt built from the resolved voice document.
 3. On rewrite failure or missing credentials, the **template** body is kept.
 
-The default is `direct` tone with `terse` length. Set either control on a run:
+The default is `direct` tone with `terse` length, `medium` politeness, and `high` formality. Set the controls on a run:
 
 ```sh
 doomer run ./my-adversary --path ./app --github-review \
-  --github-comment-tone neutral --github-comment-conciseness standard
+  --github-comment-tone neutral --github-comment-conciseness standard \
+  --github-comment-politeness low --github-comment-formality medium
 ```
 
 Accepted tones are `direct`, `neutral`, and `coaching`. Accepted lengths are
 `terse` (one line when possible), `standard` (one or two short sentences), and
 `explanatory` (up to three short sentences). For CLI environment configuration,
-set `DOOMER_COMMENT_TONE` and `DOOMER_COMMENT_CONCISENESS`; explicit flags take
+set `DOOMER_COMMENT_TONE`, `DOOMER_COMMENT_CONCISENESS`,
+`DOOMER_COMMENT_POLITENESS`, and `DOOMER_COMMENT_FORMALITY`; explicit flags take
 precedence. Hosted reviews invoke this CLI rewrite path; the hosted app passes
 its project voice settings through the same flags when running a compatible CLI.
 They affect wording only: the
 finding, severity, confidence, and recommendation remain grounded in the
 original evidence. When the evidence is incomplete, the comment states the
 observed risk and the missing context rather than asserting a defect.
+Low politeness is blunt about code, never personal. Low formality can use
+occasional mild swearing, never slurs or abuse.
 
 Without `--github-review`, voice files are unused for posting (findings still
 print to the terminal / JSON as usual).

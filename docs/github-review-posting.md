@@ -57,9 +57,12 @@ read-only history authentication described below.
 
 Use `--github-comment-tone` (`direct`, `neutral`, `coaching`) and
 `--github-comment-conciseness` (`terse`, `standard`, `explanatory`) to control
-wording independently. Defaults are `direct` and `terse`; the matching
-`DOOMER_COMMENT_TONE` and `DOOMER_COMMENT_CONCISENESS` environment variables
-configure runners, with flags taking precedence.
+wording independently. `--github-comment-politeness` and
+`--github-comment-formality` each accept `low`, `medium`, or `high`.
+Defaults are `direct`, `terse`, `medium` politeness, and `high` formality;
+matching `DOOMER_COMMENT_*` environment variables configure runners, with
+flags taking precedence. Low politeness is blunt about code, never personal;
+low formality may include occasional mild swearing, never abuse.
 
 When `--github-review` is set, comment bodies use a **product voice**: core rules
 and optional example few-shots from the package, applied by LLM rewrite when a

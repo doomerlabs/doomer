@@ -34,7 +34,7 @@ func TestStyleChangesPromptWithoutChangingFindingInput(t *testing.T) {
 
 func TestCommentStyleSettings(t *testing.T) {
 	def, err := (CommentStyle{}).Normalize()
-	if err != nil || def.Tone != "direct" || def.Conciseness != "terse" {
+	if err != nil || def.Tone != "direct" || def.Conciseness != "terse" || def.Politeness != "medium" || def.Formality != "high" {
 		t.Fatalf("default = %+v, %v", def, err)
 	}
 	for _, tone := range []string{"direct", "neutral", "coaching"} {
@@ -51,9 +51,21 @@ func TestCommentStyleSettings(t *testing.T) {
 			}
 		}
 	}
-	for _, style := range []CommentStyle{{Tone: "hostile"}, {Conciseness: "essay"}} {
+	for _, style := range []CommentStyle{{Tone: "hostile"}, {Conciseness: "essay"}, {Politeness: "rude"}, {Formality: "profane"}} {
 		if _, err := style.Normalize(); err == nil {
 			t.Fatalf("accepted invalid style %+v", style)
+		}
+	}
+	for _, politeness := range []string{"low", "medium", "high"} {
+		for _, formality := range []string{"low", "medium", "high"} {
+			style, err := (CommentStyle{Politeness: politeness, Formality: formality}).Normalize()
+			if err != nil {
+				t.Fatal(err)
+			}
+			prompt := BuildRewritePromptWithStyle("", style)
+			if !strings.Contains(prompt, "Politeness: "+politeness) || !strings.Contains(prompt, "Formality: "+formality) {
+				t.Fatalf("missing manner in prompt: %s", prompt)
+			}
 		}
 	}
 }

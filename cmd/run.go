@@ -86,20 +86,22 @@ type runOptions struct {
 	outcomeContext           *outcomecontext.Context
 
 	// GitHub review (opt-in posting / plan).
-	githubReview           bool
-	githubDryRun           bool
-	githubPlanFile         string
-	githubPR               int
-	githubRepo             string
-	githubSubmit           bool
-	githubIncludeSummary   bool
-	githubResolveAddressed bool
-	githubMinSeverity      string
-	githubCommentTone      string
-	githubCommentConcise   string
-	githubAPIURL           string
-	githubRESTURL          string
-	githubRunFailures      []string
+	githubReview            bool
+	githubDryRun            bool
+	githubPlanFile          string
+	githubPR                int
+	githubRepo              string
+	githubSubmit            bool
+	githubIncludeSummary    bool
+	githubResolveAddressed  bool
+	githubMinSeverity       string
+	githubCommentTone       string
+	githubCommentConcise    string
+	githubCommentPoliteness string
+	githubCommentFormality  string
+	githubAPIURL            string
+	githubRESTURL           string
+	githubRunFailures       []string
 
 	// Filled by peel/resolve.
 	prURL                *githubapi.PRRef
@@ -190,7 +192,7 @@ review base/head and optional posting context. Posting still requires
 				return fmt.Errorf("--github-review cannot be combined with --shell")
 			}
 			if !opts.githubReview {
-				if opts.githubDryRun || opts.githubPlanFile != "" || opts.githubSubmit || cmd.Flags().Changed("github-include-summary") || cmd.Flags().Changed("github-resolve-addressed") || opts.githubMinSeverity != "" || cmd.Flags().Changed("github-comment-tone") || cmd.Flags().Changed("github-comment-conciseness") {
+				if opts.githubDryRun || opts.githubPlanFile != "" || opts.githubSubmit || cmd.Flags().Changed("github-include-summary") || cmd.Flags().Changed("github-resolve-addressed") || opts.githubMinSeverity != "" || cmd.Flags().Changed("github-comment-tone") || cmd.Flags().Changed("github-comment-conciseness") || cmd.Flags().Changed("github-comment-politeness") || cmd.Flags().Changed("github-comment-formality") {
 					return fmt.Errorf("GitHub review flags require --github-review")
 				}
 				if cmd.Flags().Changed("github-pr") || cmd.Flags().Changed("github-repo") {
@@ -198,7 +200,7 @@ review base/head and optional posting context. Posting still requires
 				}
 			}
 			if opts.githubReview {
-				if _, err := (githubreview.CommentStyle{Tone: opts.githubCommentTone, Conciseness: opts.githubCommentConcise}).Normalize(); err != nil {
+				if _, err := (githubreview.CommentStyle{Tone: opts.githubCommentTone, Conciseness: opts.githubCommentConcise, Politeness: opts.githubCommentPoliteness, Formality: opts.githubCommentFormality}).Normalize(); err != nil {
 					return err
 				}
 			}
@@ -398,6 +400,8 @@ review base/head and optional posting context. Posting still requires
 	cmd.Flags().StringVar(&opts.githubMinSeverity, "github-min-severity", "", "only plan/post findings at this severity or higher")
 	cmd.Flags().StringVar(&opts.githubCommentTone, "github-comment-tone", githubReviewEnv("DOOMER_COMMENT_TONE"), "PR comment tone: direct (default), neutral, or coaching")
 	cmd.Flags().StringVar(&opts.githubCommentConcise, "github-comment-conciseness", githubReviewEnv("DOOMER_COMMENT_CONCISENESS"), "PR comment length: terse (default), standard, or explanatory")
+	cmd.Flags().StringVar(&opts.githubCommentPoliteness, "github-comment-politeness", githubReviewEnv("DOOMER_COMMENT_POLITENESS"), "PR comment politeness: low, medium (default), or high")
+	cmd.Flags().StringVar(&opts.githubCommentFormality, "github-comment-formality", githubReviewEnv("DOOMER_COMMENT_FORMALITY"), "PR comment formality: low, medium, or high (default)")
 	cmd.Flags().StringVar(&opts.githubAPIURL, "github-api-url", "", "GraphQL endpoint override (default https://api.github.com/graphql)")
 	cmd.Flags().StringVar(&opts.githubRESTURL, "github-rest-url", "", "REST API base override (default https://api.github.com)")
 

@@ -26,6 +26,8 @@ type VoiceInfo struct {
 	ExampleBank bool   `json:"exampleBank,omitempty"` // voice file has train gold few-shots
 	Tone        string `json:"tone,omitempty"`
 	Conciseness string `json:"conciseness,omitempty"`
+	Politeness  string `json:"politeness,omitempty"`
+	Formality   string `json:"formality,omitempty"`
 }
 
 // PlannedComment is one finding projected for a PR review thread or body.

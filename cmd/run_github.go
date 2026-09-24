@@ -217,11 +217,12 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 	voiceRoots := append([]string{}, opts.adversaryPackageRoots...)
 	voiceRoots = append(voiceRoots, opts.path)
 	voicePrompt, voiceInfo := githubreview.ResolveVoice(voiceRoots...)
-	style, err := (githubreview.CommentStyle{Tone: opts.githubCommentTone, Conciseness: opts.githubCommentConcise}).Normalize()
+	style, err := (githubreview.CommentStyle{Tone: opts.githubCommentTone, Conciseness: opts.githubCommentConcise, Politeness: opts.githubCommentPoliteness, Formality: opts.githubCommentFormality}).Normalize()
 	if err != nil {
 		return err
 	}
 	voiceInfo.Tone, voiceInfo.Conciseness = style.Tone, style.Conciseness
+	voiceInfo.Politeness, voiceInfo.Formality = style.Politeness, style.Formality
 
 	plan := githubreview.ProjectFindings(envelopes, githubreview.ProjectOptions{
 		Repository:  owner + "/" + repo,

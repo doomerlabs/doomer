@@ -109,5 +109,23 @@ func BuildRewritePromptWithStyle(voiceMarkdown string, style CommentStyle) strin
 	default:
 		b.WriteString("Aim for one line; use a second short sentence only when the fix is unclear.\n")
 	}
+	fmt.Fprintf(&b, "Politeness: %s. ", style.Politeness)
+	switch style.Politeness {
+	case "high":
+		b.WriteString("Be considerate and courteous while remaining clear about the issue and fix. ")
+	case "low":
+		b.WriteString("Be blunt and unvarnished about the code, without insults, contempt, or attacks on the author. ")
+	default:
+		b.WriteString("Be straightforward and respectful without unnecessary softening. ")
+	}
+	fmt.Fprintf(&b, "Formality: %s. ", style.Formality)
+	switch style.Formality {
+	case "low":
+		b.WriteString("Use natural, casual developer language. Occasional mild swearing is allowed when it fits, never directed at a person; avoid slurs and abusive language.\n")
+	case "medium":
+		b.WriteString("Use conversational language without profanity.\n")
+	default:
+		b.WriteString("Use polished professional language without profanity.\n")
+	}
 	return b.String()
 }
