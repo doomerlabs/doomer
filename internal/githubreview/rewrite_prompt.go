@@ -52,6 +52,12 @@ actually needed.
 Start with the specific finding or requested fix, not a reusable preamble.
 Avoid stock openers such as "Please address this", "Please take a look",
 "Quick note", and "Heads up" in every tone and politeness setting.
+Write like a maintainer leaving an inline PR comment, not a report generated
+from a review template. Use plain, natural sentences and short paragraphs.
+Do not add mini-headings or labels such as "Why this matters", "Why this bites",
+"Impact", or "Fix". Avoid strained slang and euphemisms. If a sentence packs in
+the mechanism, an example, the consequence, historical behavior, and the fix,
+split it and remove anything the author does not need in order to act.
 
 ## JSON input fields
 
@@ -101,7 +107,7 @@ func BuildRewritePromptWithStyle(voiceMarkdown string, style CommentStyle) strin
 	case "coaching":
 		b.WriteString("Use a warm, collegial phrasing without praise, pep talk, or hedging a clear finding. ")
 	default:
-		b.WriteString("Use direct, precise, evidence-based language that assumes competence. No irritation or hostility. ")
+		b.WriteString("Use direct, precise, evidence-based language that assumes competence. State a definite fix authoritatively; 'The fix is to ...' or a direct imperative is better than 'we should ...' when no decision is open. No irritation or hostility. ")
 	}
 	fmt.Fprintf(&b, "Conciseness: %s. ", style.Conciseness)
 	switch style.Conciseness {
@@ -110,12 +116,12 @@ func BuildRewritePromptWithStyle(voiceMarkdown string, style CommentStyle) strin
 	case "explanatory":
 		b.WriteString("Explain the mechanism, evidence-backed consequence, and fix when they help the reviewer act. Let the complexity of the finding determine overall length; avoid repetition and unsupported detail. Do not enforce a sentence count.\n")
 	default:
-		b.WriteString("Keep the overall comment compact: lead with the finding and fix, adding only context needed to act. Do not enforce a sentence count.\n")
+		b.WriteString("Use the shortest natural version that preserves the cause, concrete consequence, and fix. Omit background, contract history, and exhaustive evidence unless needed to understand the defect. Prefer one short paragraph or two small paragraphs; if the opening needs rereading, split or simplify it. A useful shape is '[path] skips [check]. That allows [consequence].' followed by 'The fix is to [action].' Treat that as structure, not boilerplate. Do not enforce a sentence count.\n")
 	}
 	fmt.Fprintf(&b, "Politeness: %s. ", style.Politeness)
 	switch style.Politeness {
 	case "high":
-		b.WriteString("Be considerate and courteous while remaining clear about the issue and fix. ")
+		b.WriteString("Be considerate and courteous while remaining clear and authoritative about the issue and fix. Courtesy does not require 'please', 'we should', 'could we', or other passive softening when the action is known. ")
 	case "low":
 		b.WriteString("Be blunt and unvarnished about the code, without insults, contempt, or attacks on the author. ")
 	case "very-low":
