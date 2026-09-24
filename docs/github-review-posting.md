@@ -40,6 +40,20 @@ doomer run https://github.com/owner/repo/pull/123 --github-review --github-submi
 
 Posting is **never** enabled solely because a PR URL was passed.
 
+## Finding classification in plans
+
+Planned comments retain each finding's `tags` and JSON `metadata`. Hosted review
+consumers can use these fields to apply project policy before posting; the
+comment body remains a presentation of the finding. A deprecation finding
+should carry the `deprecation` tag and a stable `ruleId` or
+`metadata.deprecation.key` shared across reviewers of the same feature. To
+qualify for an impending-only policy, it also needs
+`metadata.deprecation.impending: true` and a nonempty
+`metadata.deprecation.evidence` describing the approaching removal or upgrade.
+An already broken use should be reported as a current defect, with
+`metadata.deprecation.currentFailure: true` if it also carries deprecation
+metadata.
+
 ## Review-posting auth
 
 `doomer run --github-review` resolves an explicit environment token in this

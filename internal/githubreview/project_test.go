@@ -18,7 +18,7 @@ func TestProjectFindingsOnlyAndMinSeverity(t *testing.T) {
 			Positives:    []review.Note{{Key: "p", Summary: "good"}},
 			Observations: []review.Note{{Key: "o", Summary: "obs"}},
 			Findings: []review.Finding{
-				{ID: "f-high", RuleID: "cli/high", Title: "High issue", Category: "c", Severity: "high", Confidence: "high", Summary: "S high", Evidence: []review.Evidence{{File: "a.go", Line: &line}}, Recommendation: "fix"},
+				{ID: "f-high", RuleID: "cli/high", Title: "High issue", Category: "c", Severity: "high", Confidence: "high", Summary: "S high", Evidence: []review.Evidence{{File: "a.go", Line: &line}}, Recommendation: "fix", Tags: []string{"deprecation"}, Metadata: json.RawMessage(`{"deprecation":{"key":"cli/high","impending":true,"evidence":"Removal in next pinned version"}}`)},
 				{ID: "f-low", Title: "Low issue", Category: "c", Severity: "low", Confidence: "high", Summary: "S low", Evidence: []review.Evidence{{File: "b.go", Line: &line}}},
 			},
 			Suppressed: review.Suppressed{},
@@ -37,6 +37,10 @@ func TestProjectFindingsOnlyAndMinSeverity(t *testing.T) {
 	if len(plan.Comments) != 1 || plan.Comments[0].FindingID != "f-high" {
 		t.Fatalf("comments %#v", plan.Comments)
 	}
+	if len(plan.Comments[0].Tags) != 1 || plan.Comments[0].Tags[0] != "deprecation" ||
+		!json.Valid(plan.Comments[0].Metadata) {
+		t.Fatalf("finding classification was not retained: %#v", plan.Comments[0])
+	}
 	if len(plan.Skipped) != 1 || plan.Skipped[0].Reason != "below_min_severity" {
 		t.Fatalf("skipped %#v", plan.Skipped)
 	}
@@ -54,6 +58,9 @@ func TestProjectFindingsOnlyAndMinSeverity(t *testing.T) {
 		t.Fatalf("marker=%+v ok=%v err=%v", marker, ok, err)
 	}
 	raw, _ := json.Marshal(plan)
+	if !strings.Contains(string(raw), `"impending":true`) {
+		t.Fatal("deprecation evidence missing from serialized review plan")
+	}
 	if strings.Contains(string(raw), "f-sup") {
 		t.Fatal("suppressed leaked into plan json")
 	}
