@@ -58,7 +58,8 @@ read-only history authentication described below.
 Use `--github-comment-tone` (`direct`, `neutral`, `coaching`) and
 `--github-comment-conciseness` (`terse`, `standard`, `explanatory`) to control
 wording independently. `--github-comment-politeness` and
-`--github-comment-formality` each accept `low`, `medium`, or `high`.
+`--github-comment-formality` accept `low`, `medium`, or `high`; politeness also
+accepts `very-low` for sharp, evidence-backed criticism of the PR without attacks on its author.
 Defaults are `direct`, `terse`, `medium` politeness, and `high` formality;
 matching `DOOMER_COMMENT_*` environment variables configure runners, with
 flags taking precedence. Low politeness is blunt about code, never personal;

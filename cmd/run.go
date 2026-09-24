@@ -400,7 +400,7 @@ review base/head and optional posting context. Posting still requires
 	cmd.Flags().StringVar(&opts.githubMinSeverity, "github-min-severity", "", "only plan/post findings at this severity or higher")
 	cmd.Flags().StringVar(&opts.githubCommentTone, "github-comment-tone", githubReviewEnv("DOOMER_COMMENT_TONE"), "PR comment tone: direct (default), neutral, or coaching")
 	cmd.Flags().StringVar(&opts.githubCommentConcise, "github-comment-conciseness", githubReviewEnv("DOOMER_COMMENT_CONCISENESS"), "PR comment length: terse (default), standard, or explanatory")
-	cmd.Flags().StringVar(&opts.githubCommentPoliteness, "github-comment-politeness", githubReviewEnv("DOOMER_COMMENT_POLITENESS"), "PR comment politeness: low, medium (default), or high")
+	cmd.Flags().StringVar(&opts.githubCommentPoliteness, "github-comment-politeness", githubReviewEnv("DOOMER_COMMENT_POLITENESS"), "PR comment politeness: very-low, low, medium (default), or high")
 	cmd.Flags().StringVar(&opts.githubCommentFormality, "github-comment-formality", githubReviewEnv("DOOMER_COMMENT_FORMALITY"), "PR comment formality: low, medium, or high (default)")
 	cmd.Flags().StringVar(&opts.githubAPIURL, "github-api-url", "", "GraphQL endpoint override (default https://api.github.com/graphql)")
 	cmd.Flags().StringVar(&opts.githubRESTURL, "github-rest-url", "", "REST API base override (default https://api.github.com)")

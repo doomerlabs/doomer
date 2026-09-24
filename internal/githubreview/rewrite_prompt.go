@@ -115,6 +115,8 @@ func BuildRewritePromptWithStyle(voiceMarkdown string, style CommentStyle) strin
 		b.WriteString("Be considerate and courteous while remaining clear about the issue and fix. ")
 	case "low":
 		b.WriteString("Be blunt and unvarnished about the code, without insults, contempt, or attacks on the author. ")
+	case "very-low":
+		b.WriteString("Be cuttingly direct about the code and PR: lead with the defect or consequence, omit niceties and hedging, and give an imperative fix. Criticize the PR sharply when the evidence warrants it, including saying it should not merge as-is for a blocking issue. Never attack or ridicule the author or imply they are incompetent; no slurs or personal abuse. ")
 	default:
 		b.WriteString("Be straightforward and respectful without unnecessary softening. ")
 	}

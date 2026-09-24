@@ -48,6 +48,9 @@ original evidence. When the evidence is incomplete, the comment states the
 observed risk and the missing context rather than asserting a defect.
 Low politeness is blunt about code, never personal. Low formality can use
 occasional mild swearing, never slurs or abuse.
+`very-low` politeness goes further: it leads with the defect and an imperative
+fix, skipping niceties. It can sharply criticize the PR and say not to merge
+as-is when the evidence supports a blocking issue; it never attacks the author.
 
 Without `--github-review`, voice files are unused for posting (findings still
 print to the terminal / JSON as usual).

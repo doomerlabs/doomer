@@ -35,9 +35,9 @@ func (s CommentStyle) Normalize() (CommentStyle, error) {
 		return s, fmt.Errorf("comment conciseness must be terse, standard, or explanatory (got %q)", s.Conciseness)
 	}
 	switch s.Politeness {
-	case "low", "medium", "high":
+	case "very-low", "low", "medium", "high":
 	default:
-		return s, fmt.Errorf("comment politeness must be low, medium, or high (got %q)", s.Politeness)
+		return s, fmt.Errorf("comment politeness must be very-low, low, medium, or high (got %q)", s.Politeness)
 	}
 	switch s.Formality {
 	case "low", "medium", "high":

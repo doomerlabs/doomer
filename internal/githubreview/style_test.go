@@ -56,7 +56,7 @@ func TestCommentStyleSettings(t *testing.T) {
 			t.Fatalf("accepted invalid style %+v", style)
 		}
 	}
-	for _, politeness := range []string{"low", "medium", "high"} {
+	for _, politeness := range []string{"very-low", "low", "medium", "high"} {
 		for _, formality := range []string{"low", "medium", "high"} {
 			style, err := (CommentStyle{Politeness: politeness, Formality: formality}).Normalize()
 			if err != nil {
@@ -66,6 +66,12 @@ func TestCommentStyleSettings(t *testing.T) {
 			if !strings.Contains(prompt, "Politeness: "+politeness) || !strings.Contains(prompt, "Formality: "+formality) {
 				t.Fatalf("missing manner in prompt: %s", prompt)
 			}
+		}
+	}
+	cutting := BuildRewritePromptWithStyle("", CommentStyle{Politeness: "very-low"})
+	for _, boundary := range []string{"imperative fix", "Criticize the PR sharply", "Never attack or ridicule the author", "blocking issue"} {
+		if !strings.Contains(cutting, boundary) {
+			t.Fatalf("cutting style missing boundary %q", boundary)
 		}
 	}
 }
