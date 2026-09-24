@@ -38,8 +38,9 @@ Accepted tones are `direct`, `neutral`, and `coaching`. Accepted lengths are
 `terse` (one line when possible), `standard` (one or two short sentences), and
 `explanatory` (up to three short sentences). For CLI environment configuration,
 set `DOOMER_COMMENT_TONE` and `DOOMER_COMMENT_CONCISENESS`; explicit flags take
-precedence. Hosted reviews invoke this CLI rewrite path, but the hosted worker
-does not yet expose the controls in product settings. They affect wording only: the
+precedence. Hosted reviews invoke this CLI rewrite path; the hosted app passes
+its project voice settings through the same flags when running a compatible CLI.
+They affect wording only: the
 finding, severity, confidence, and recommendation remain grounded in the
 original evidence. When the evidence is incomplete, the comment states the
 observed risk and the missing context rather than asserting a defect.
