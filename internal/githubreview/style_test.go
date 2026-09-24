@@ -44,7 +44,7 @@ func TestCommentStyleSettings(t *testing.T) {
 				t.Fatal(err)
 			}
 			prompt := BuildRewritePromptWithStyle("# Custom voice\n\nBe verbose.", style)
-			for _, want := range []string{"Tone: " + tone, "Conciseness: " + length, "Preserve the finding, severity, confidence", "Never manufacture certainty", "override conflicting package style rules"} {
+			for _, want := range []string{"Tone: " + tone, "Conciseness: " + length, "Preserve the finding, severity, confidence", "Never manufacture certainty", "not a reusable preamble", "override conflicting package style rules"} {
 				if !strings.Contains(prompt, want) {
 					t.Fatalf("%s/%s: missing %q", tone, length, want)
 				}

@@ -49,6 +49,9 @@ Lead with the finding, use one idea per comment, and omit greetings, closers,
 personal attacks, forced jokes, slang, and fake enthusiasm. Prefer a statement
 when the finding and fix are clear; a question is allowed when information is
 actually needed.
+Start with the specific finding or requested fix, not a reusable preamble.
+Avoid stock openers such as "Please address this", "Please take a look",
+"Quick note", and "Heads up" in every tone and politeness setting.
 
 ## JSON input fields
 
