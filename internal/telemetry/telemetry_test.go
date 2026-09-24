@@ -144,3 +144,23 @@ func TestSanitizeCatalogShapedLocalProject(t *testing.T) {
 		t.Fatalf("got %q want ci/gitlab-ci", got)
 	}
 }
+
+func TestSanitizeLocallyBuiltAdversaryName(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		want  string
+	}{
+		{"acme/security-review", "acme/security-review"},
+		{"local/torvalds-adversary", "local/torvalds-adversary"},
+		{"reviewer", "reviewer"},
+		{"../private/reviewer", ""},
+		{`C:\\Users\\alice\\reviewer`, ""},
+		{"acme/review/extra/segment", "acme/review/extra/segment"},
+		{"Acme/security-review", ""},
+		{"acme/review with spaces", ""},
+	} {
+		if got := SanitizeLocallyBuiltAdversaryName(tc.input); got != tc.want {
+			t.Errorf("SanitizeLocallyBuiltAdversaryName(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
