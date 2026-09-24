@@ -27,6 +27,11 @@ doomer run ./my-adversary --path ./app \
    with a prompt built from the resolved voice document.
 3. On rewrite failure or missing credentials, the **template** body is kept.
 
+For `terse`, the rewrite is limited to 85 words. The CLI asks the model to
+rewrite once more if it exceeds that limit. If the second attempt still runs
+long, the original finding template is kept so the review does not silently
+drop technical evidence.
+
 The default is `direct` tone with `terse` length, `medium` politeness, and `high` formality. Set the controls on a run:
 
 ```sh
