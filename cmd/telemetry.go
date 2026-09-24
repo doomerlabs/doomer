@@ -97,7 +97,11 @@ func reportRunUsage(ctx context.Context, app *application.App, report adversaryl
 	report.Adversaries = selection
 	sanitizedResults := make([]adversarylabs.RunUsageAdversaryResult, 0, len(report.Results))
 	for _, result := range report.Results {
-		result.Adversary = telemetry.SanitizeAdversaryRef(result.Adversary)
+		if result.LocallyBuilt {
+			result.Adversary = telemetry.SanitizeLocallyBuiltAdversaryName(result.Adversary)
+		} else {
+			result.Adversary = telemetry.SanitizeAdversaryRef(result.Adversary)
+		}
 		if result.Adversary == "" {
 			continue
 		}
@@ -140,6 +144,12 @@ func runUsageResult(ref string, runErr error, elapsed time.Duration, envelope *r
 	}
 	if envelope == nil {
 		return result
+	}
+	if telemetry.IsLocallyBuiltAdversaryRef(ref) {
+		if name := telemetry.SanitizeLocallyBuiltAdversaryName(envelope.Result.Adversary.Name); name != "" {
+			result.Adversary = name
+			result.LocallyBuilt = true
+		}
 	}
 	// The runner emits a protocol-valid envelope when an invoked adversary opts
 	// out because the resolved review scope does not match. Preserve that

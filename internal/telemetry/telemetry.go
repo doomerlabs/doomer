@@ -8,6 +8,7 @@ package telemetry
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -27,6 +28,8 @@ var officialCatalogDomains = map[string]struct{}{
 
 // pathExists is injected in tests.
 var pathExists = defaultPathExists
+
+var localAdversaryName = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?(?:/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)*$`)
 
 func defaultPathExists(path string) bool {
 	_, err := os.Stat(path)
@@ -183,6 +186,26 @@ func SanitizeAdversaryRef(value string) string {
 	}
 
 	return "other"
+}
+
+// IsLocallyBuiltAdversaryRef reports whether a run reference points at an
+// on-disk adversary project rather than an installed catalog artifact.
+func IsLocallyBuiltAdversaryRef(value string) bool {
+	return isLocalAdversaryProject(strings.TrimSpace(value))
+}
+
+// SanitizeLocallyBuiltAdversaryName preserves a manifest name without ever
+// accepting a filesystem path. Local package names are useful in the user's
+// own reporting, but remain explicitly marked as locally built.
+func SanitizeLocallyBuiltAdversaryName(value string) string {
+	name := strings.TrimSpace(value)
+	if name == "" || len(name) > MaxIDLength || strings.Contains(name, `\`) {
+		return ""
+	}
+	if !localAdversaryName.MatchString(name) {
+		return ""
+	}
+	return name
 }
 
 // isLocalAdversaryProject reports whether ref is an on-disk adversary project

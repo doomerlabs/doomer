@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -84,6 +86,20 @@ func TestRunUsageResultContainsOnlyAggregateSeverities(t *testing.T) {
 func TestRunUsageResultReflectsFailure(t *testing.T) {
 	if got := runUsageResult("go/security", errors.New("boom"), time.Second, nil).Status; got != "failed" {
 		t.Fatalf("failed status = %q", got)
+	}
+}
+
+func TestRunUsageResultNamesLocallyBuiltAdversary(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "adversary.yaml"), []byte("name: acme/security-review\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	envelope := review.RunEnvelope{Result: review.ReviewResult{
+		Adversary: review.ReviewAdversary{Name: "acme/security-review"},
+	}}
+	got := runUsageResult(dir, nil, time.Second, &envelope)
+	if got.Adversary != "acme/security-review" || !got.LocallyBuilt {
+		t.Fatalf("result = %#v", got)
 	}
 }
 

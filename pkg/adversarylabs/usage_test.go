@@ -40,9 +40,10 @@ func TestRecordUsagePostsAggregateOutcomes(t *testing.T) {
 		GitSHA:      strings.Repeat("a", 40),
 		PullRequest: 213,
 		Results: []RunUsageAdversaryResult{{
-			Adversary: "go/security",
-			Status:    "findings",
-			HighCount: 2,
+			Adversary:    "go/security",
+			LocallyBuilt: true,
+			Status:       "findings",
+			HighCount:    2,
 		}},
 		Phases: []RunUsagePhase{{Name: "execute-reviews", Status: "completed", StartedAtUnixNano: "1", EndedAtUnixNano: "2"}},
 	})
@@ -61,6 +62,10 @@ func TestRecordUsagePostsAggregateOutcomes(t *testing.T) {
 	}
 	if phases, ok := payload["phases"].([]any); !ok || len(phases) != 1 {
 		t.Fatalf("phases = %#v", payload["phases"])
+	}
+	results := payload["results"].([]any)
+	if locallyBuilt, _ := results[0].(map[string]any)["locally_built"].(bool); !locallyBuilt {
+		t.Fatalf("results = %#v", results)
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {

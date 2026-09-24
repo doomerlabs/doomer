@@ -359,6 +359,7 @@ type RunUsagePhase struct {
 
 type RunUsageAdversaryResult struct {
 	Adversary         string `json:"adversary"`
+	LocallyBuilt      bool   `json:"locally_built,omitempty"`
 	Status            string `json:"status,omitempty"`
 	DurationMS        int64  `json:"duration_ms,omitempty"`
 	CriticalCount     int    `json:"critical_count,omitempty"`
