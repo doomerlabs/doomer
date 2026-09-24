@@ -77,6 +77,20 @@ func TestCommentStyleSettings(t *testing.T) {
 			t.Fatalf("cutting style missing boundary %q", boundary)
 		}
 	}
+	human := BuildRewritePromptWithStyle("", CommentStyle{
+		Tone: "direct", Conciseness: "terse", Politeness: "high", Formality: "high",
+	})
+	for _, want := range []string{
+		"maintainer leaving an inline PR comment",
+		`Do not add mini-headings or labels such as "Why this matters", "Why this bites"`,
+		"The fix is to ...",
+		"if the opening needs rereading, split or simplify it",
+		"Courtesy does not require 'please', 'we should', 'could we'",
+	} {
+		if !strings.Contains(human, want) {
+			t.Fatalf("direct/terse/high/high style missing human-comment guidance %q", want)
+		}
+	}
 }
 
 func TestVoiceGoldensAreShortDirectStatements(t *testing.T) {
