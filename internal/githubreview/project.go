@@ -181,6 +181,8 @@ func projectOne(adversary, packageName, packageVersion, headSHA string, f review
 		Severity:        f.Severity,
 		Confidence:      f.Confidence,
 		Title:           f.Title,
+		Tags:            append([]string(nil), f.Tags...),
+		Metadata:        append(json.RawMessage(nil), f.Metadata...),
 		Summary:         f.Summary,
 		Recommendation:  f.Recommendation,
 		Body:            body,

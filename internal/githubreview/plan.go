@@ -1,6 +1,10 @@
 package githubreview
 
-import "github.com/doomerlabs/doomer/pkg/review"
+import (
+	"encoding/json"
+
+	"github.com/doomerlabs/doomer/pkg/review"
+)
 
 // CommentPlan is a derived, comment-ready projection of review findings.
 type CommentPlan struct {
@@ -34,22 +38,24 @@ type VoiceInfo struct {
 
 // PlannedComment is one finding projected for a PR review thread or body.
 type PlannedComment struct {
-	FindingID       string `json:"findingId"`
-	RuleID          string `json:"ruleId,omitempty"`
-	Adversary       string `json:"adversary"`
-	Package         string `json:"package,omitempty"`
-	PackageVersion  string `json:"packageVersion,omitempty"`
-	HeadSHA         string `json:"headSha,omitempty"`
-	Severity        string `json:"severity"`
-	Confidence      string `json:"confidence"`
-	Title           string `json:"title"`
-	Summary         string `json:"-"`
-	Recommendation  string `json:"-"`
-	Body            string `json:"body"`
-	BodySource      string `json:"bodySource"` // llm | template
-	Anchor          Anchor `json:"anchor"`
-	Placement       string `json:"placement"` // inline | review_body | unplaceable
-	PlacementReason string `json:"placementReason,omitempty"`
+	FindingID       string          `json:"findingId"`
+	RuleID          string          `json:"ruleId,omitempty"`
+	Adversary       string          `json:"adversary"`
+	Package         string          `json:"package,omitempty"`
+	PackageVersion  string          `json:"packageVersion,omitempty"`
+	HeadSHA         string          `json:"headSha,omitempty"`
+	Severity        string          `json:"severity"`
+	Confidence      string          `json:"confidence"`
+	Title           string          `json:"title"`
+	Tags            []string        `json:"tags,omitempty"`
+	Metadata        json.RawMessage `json:"metadata,omitempty"`
+	Summary         string          `json:"-"`
+	Recommendation  string          `json:"-"`
+	Body            string          `json:"body"`
+	BodySource      string          `json:"bodySource"` // llm | template
+	Anchor          Anchor          `json:"anchor"`
+	Placement       string          `json:"placement"` // inline | review_body | unplaceable
+	PlacementReason string          `json:"placementReason,omitempty"`
 }
 
 // CarriedFinding has a current finding already represented by an open thread.
