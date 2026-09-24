@@ -103,11 +103,11 @@ func BuildRewritePromptWithStyle(voiceMarkdown string, style CommentStyle) strin
 	fmt.Fprintf(&b, "Conciseness: %s. ", style.Conciseness)
 	switch style.Conciseness {
 	case "standard":
-		b.WriteString("Use one or two short sentences; include impact when it helps explain the fix.\n")
+		b.WriteString("Use enough space to state the finding, its impact when useful, and an actionable fix. Keep the overall comment focused; do not enforce a sentence count.\n")
 	case "explanatory":
-		b.WriteString("Use up to three short sentences; include the mechanism or consequence when supported by evidence.\n")
+		b.WriteString("Explain the mechanism, evidence-backed consequence, and fix when they help the reviewer act. Let the complexity of the finding determine overall length; avoid repetition and unsupported detail. Do not enforce a sentence count.\n")
 	default:
-		b.WriteString("Aim for one line; use a second short sentence only when the fix is unclear.\n")
+		b.WriteString("Keep the overall comment compact: lead with the finding and fix, adding only context needed to act. Do not enforce a sentence count.\n")
 	}
 	fmt.Fprintf(&b, "Politeness: %s. ", style.Politeness)
 	switch style.Politeness {

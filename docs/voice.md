@@ -36,8 +36,9 @@ doomer run ./my-adversary --path ./app --github-review \
 ```
 
 Accepted tones are `direct`, `neutral`, and `coaching`. Accepted lengths are
-`terse` (one line when possible), `standard` (one or two short sentences), and
-`explanatory` (up to three short sentences). For CLI environment configuration,
+`terse` (essentials only), `standard` (enough context to act), and
+`explanatory` (mechanism and impact when useful). Length controls overall depth,
+not the number of sentences. For CLI environment configuration,
 set `DOOMER_COMMENT_TONE`, `DOOMER_COMMENT_CONCISENESS`,
 `DOOMER_COMMENT_POLITENESS`, and `DOOMER_COMMENT_FORMALITY`; explicit flags take
 precedence. Hosted reviews invoke this CLI rewrite path; the hosted app passes

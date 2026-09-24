@@ -15,7 +15,7 @@ const voiceJudgeSchema = `{"type":"object","additionalProperties":false,"require
 
 const voiceJudgePrompt = `Judge one generated PR comment against the supplied evidence and locked target.
 Score each dimension 1 (poor) to 5 (excellent):
-- concise: one short line when possible, at most two short sentences;
+- concise: as short as the evidence and actionable fix allow, without unnecessary detail or a sentence limit;
 - direct: leads with an observed finding, no filler or unsupported certainty;
 - actionable: gives a concrete correction when evidence supports one;
 - statement: uses a statement rather than a question when the finding and fix are clear;

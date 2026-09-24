@@ -49,6 +49,9 @@ func TestCommentStyleSettings(t *testing.T) {
 					t.Fatalf("%s/%s: missing %q", tone, length, want)
 				}
 			}
+			if !strings.Contains(strings.ToLower(prompt), "do not enforce a sentence count") || strings.Contains(prompt, "short sentences") || strings.Contains(prompt, "one line") {
+				t.Fatalf("%s/%s: length instruction imposes a sentence or line count", tone, length)
+			}
 		}
 	}
 	for _, style := range []CommentStyle{{Tone: "hostile"}, {Conciseness: "essay"}, {Politeness: "rude"}, {Formality: "profane"}} {
