@@ -161,7 +161,7 @@ func Reconcile(ctx context.Context, plan *CommentPlan, threads []ReviewThread, v
 		}
 		replied := false
 		for _, thread := range matched {
-			plan.Carried = append(plan.Carried, CarriedFinding{Adversary: comment.Adversary, FindingID: comment.FindingID, ThreadID: thread.ID})
+			plan.Carried = append(plan.Carried, CarriedFinding{Adversary: comment.Adversary, FindingID: comment.FindingID, ThreadID: thread.ID, comment: comment})
 			if replied || isDoomerThread(*thread, viewer) || hasDoomerReply(*thread, viewer) || hasPlannedReply(plan.Replies, thread.ID) {
 				continue
 			}
@@ -179,7 +179,8 @@ func Reconcile(ctx context.Context, plan *CommentPlan, threads []ReviewThread, v
 	}
 }
 
-// RefreshCarried checks that every thread used for suppression is still open.
+// RefreshCarried restores findings whose matching threads have all closed.
+// Incomplete thread history is rejected by ListReviewThreads before this call.
 // A reply added by another run makes our planned reply unnecessary.
 func RefreshCarried(plan *CommentPlan, threads []ReviewThread, viewer string) error {
 	if plan == nil {
@@ -189,14 +190,39 @@ func RefreshCarried(plan *CommentPlan, threads []ReviewThread, viewer string) er
 	for _, thread := range threads {
 		byID[thread.ID] = thread
 	}
+	redo := make(map[reviewFindingKey]PlannedComment)
+	var redoOrder []reviewFindingKey
 	for _, carried := range plan.Carried {
-		if _, ok := byID[carried.ThreadID]; !ok {
-			return fmt.Errorf("review thread %s changed during reconciliation; rerun the review", carried.ThreadID)
+		if _, ok := byID[carried.ThreadID]; ok {
+			continue
+		}
+		if carried.comment.FindingID == "" {
+			return fmt.Errorf("review thread %s closed, but its finding cannot be restored", carried.ThreadID)
+		}
+		key := reviewFindingKey{carried.Adversary, carried.FindingID}
+		if _, exists := redo[key]; !exists {
+			redoOrder = append(redoOrder, key)
+		}
+		redo[key] = carried.comment
+	}
+	retained := plan.Carried[:0]
+	for _, carried := range plan.Carried {
+		if _, needsRedo := redo[reviewFindingKey{carried.Adversary, carried.FindingID}]; !needsRedo {
+			retained = append(retained, carried)
 		}
 	}
+	plan.Carried = retained
+	for _, key := range redoOrder {
+		plan.Comments = append(plan.Comments, redo[key])
+	}
+	plan.Summary.Comments = len(plan.Comments)
 	replies := plan.Replies[:0]
 	for _, reply := range plan.Replies {
-		if !hasDoomerReply(byID[reply.ThreadID], viewer) {
+		if _, needsRedo := redo[reviewFindingKey{reply.Comment.Adversary, reply.Comment.FindingID}]; needsRedo {
+			continue
+		}
+		thread, ok := byID[reply.ThreadID]
+		if ok && !hasDoomerReply(thread, viewer) {
 			replies = append(replies, reply)
 		}
 	}

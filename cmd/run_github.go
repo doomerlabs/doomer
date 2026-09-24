@@ -250,6 +250,7 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 			plan.ReviewBasis = basis
 		}
 	}
+	initialReviewBasis := plan.ReviewBasis
 
 	token := githubapi.TokenFromEnv()
 	client := githubapi.NewClient(token)
@@ -288,12 +289,6 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 		if threadsLoaded {
 			githubreview.Reconcile(ctx, &plan, threads, viewer, provider)
 		}
-		githubreview.EnhanceBodies(ctx, &plan, githubreview.EnhanceOptions{
-			Provider:    provider,
-			VoicePrompt: voicePrompt,
-			Style:       style,
-		})
-		githubreview.EnhanceSummary(ctx, &plan, githubreview.EnhanceOptions{Provider: provider})
 	} else if threadsLoaded {
 		githubreview.Reconcile(ctx, &plan, threads, viewer, nil)
 	}
@@ -305,8 +300,13 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 			}
 			return &application.Error{Operation: "github-review", Kind: "network", Err: fmt.Errorf("refresh review threads: %w", err)}
 		}
+		beforeRefresh := len(plan.Comments)
 		if err := githubreview.RefreshCarried(&plan, freshThreads, freshViewer); err != nil {
 			return &application.Error{Operation: "github-review", Kind: "network", Err: err}
+		}
+		if len(plan.Comments) > beforeRefresh && opts.githubIncludeSummary {
+			plan.ReviewBody = githubreview.TemplateSummary(plan.Comments)
+			plan.ReviewBasis = initialReviewBasis
 		}
 		if providerErr == nil {
 			githubreview.Reconcile(ctx, &plan, freshThreads, freshViewer, provider)
@@ -314,6 +314,14 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 			githubreview.Reconcile(ctx, &plan, freshThreads, freshViewer, nil)
 		}
 		viewer, threads = freshViewer, freshThreads
+	}
+	if providerErr == nil && provider != nil {
+		githubreview.EnhanceBodies(ctx, &plan, githubreview.EnhanceOptions{
+			Provider:    provider,
+			VoicePrompt: voicePrompt,
+			Style:       style,
+		})
+		githubreview.EnhanceSummary(ctx, &plan, githubreview.EnhanceOptions{Provider: provider})
 	}
 	// Execution status is host-authored, not model-rewritten or suppressed by
 	// --github-include-summary=false. Findings still use normal inline placement.

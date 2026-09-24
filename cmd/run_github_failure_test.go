@@ -164,6 +164,62 @@ func TestMaybeGitHubReviewPostsPartialStatusAndKeepsInlineFindings(t *testing.T)
 	}
 }
 
+func TestMaybeGitHubReviewPostsFindingWhenCarriedThreadCloses(t *testing.T) {
+	t.Setenv("ADVERSARY_GITHUB_TOKEN", "test-token")
+	const summary = "The new write path skips authorization before saving the record."
+	reads := 0
+	var submitted map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/files") {
+			fmt.Fprint(w, `[{"filename":"a.go","patch":"@@ -1,1 +1,2 @@\n keep\n+added\n"}]`)
+			return
+		}
+		var payload struct {
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Error(err)
+			return
+		}
+		switch {
+		case strings.Contains(payload.Query, "reviewThreads"):
+			reads++
+			if reads == 1 {
+				fmt.Fprintf(w, `{"data":{"viewer":{"login":"doomer[bot]"},"repository":{"pullRequest":{"id":"PR_1","reviewThreads":{"nodes":[{"id":"T1","path":"a.go","line":2,"isResolved":false,"comments":{"nodes":[{"body":%q,"author":{"login":"maintainer"}}],"pageInfo":{"hasNextPage":false}}}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`, summary)
+			} else {
+				fmt.Fprint(w, `{"data":{"viewer":{"login":"doomer[bot]"},"repository":{"pullRequest":{"id":"PR_1","reviewThreads":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`)
+			}
+		case strings.Contains(payload.Query, "pullRequest(number"):
+			fmt.Fprint(w, `{"data":{"repository":{"pullRequest":{"id":"PR_1","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}}`)
+		case strings.Contains(payload.Query, "addPullRequestReview"):
+			submitted, _ = payload.Variables["input"].(map[string]any)
+			fmt.Fprint(w, `{"data":{"addPullRequestReview":{"pullRequestReview":{"id":"RV_1","state":"PENDING"}}}}`)
+		case strings.Contains(payload.Query, "submitPullRequestReview"):
+			fmt.Fprint(w, `{"data":{"submitPullRequestReview":{"pullRequestReview":{"id":"RV_1","state":"COMMENTED"}}}}`)
+		default:
+			t.Errorf("unexpected query: %s", payload.Query)
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}))
+	defer srv.Close()
+	line := 2
+	envelopes := []githubreview.NamedEnvelope{{Adversary: "review/code", Envelope: review.RunEnvelope{ProtocolVersion: 1, Result: review.ReviewResult{
+		Adversary: review.ReviewAdversary{Name: "review/code"},
+		Findings: []review.Finding{{ID: "f", Title: "Missing authorization", Category: "correctness", Severity: "high", Confidence: "high", Summary: summary,
+			Evidence: []review.Evidence{{File: "a.go", Line: &line}}}},
+	}}}}
+	opts := &runOptions{path: t.TempDir(), githubReview: true, githubRepo: "o/r", githubPR: 1, githubSubmit: true,
+		githubIncludeSummary: true, githubAPIURL: srv.URL, githubRESTURL: srv.URL, modelProvider: "disabled-for-test"}
+	if err := maybeGitHubReview(context.Background(), nil, opts, envelopes, "", "", io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	threads, _ := submitted["threads"].([]any)
+	if reads != 2 || len(threads) != 1 {
+		t.Fatalf("resolved thread prevented new finding: reads=%d review=%#v", reads, submitted)
+	}
+}
+
 func TestRunFailuresRetainDiagnosticsAndExecutionExit(t *testing.T) {
 	for _, mode := range []string{"single", "multi", "composed"} {
 		t.Run(mode, func(t *testing.T) {

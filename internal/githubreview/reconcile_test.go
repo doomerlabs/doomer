@@ -146,8 +146,44 @@ func TestRefreshCarriedDropsReplyAlreadyPostedByAnotherRun(t *testing.T) {
 	if err := RefreshCarried(&plan, []ReviewThread{thread}, "doomer[bot]"); err != nil || len(plan.Replies) != 0 {
 		t.Fatalf("replies = %+v err=%v", plan.Replies, err)
 	}
-	if err := RefreshCarried(&plan, nil, "doomer[bot]"); err == nil {
-		t.Fatal("missing carried thread was accepted")
+	if err := RefreshCarried(&plan, nil, "doomer[bot]"); err != nil || len(plan.Carried) != 0 || len(plan.Comments) != 1 {
+		t.Fatalf("closed thread did not restore finding: plan=%+v err=%v", plan, err)
+	}
+}
+
+func TestRefreshCarriedRestoresFindingWhenThreadCloses(t *testing.T) {
+	plan := findingPlan()
+	thread := ReviewThread{ID: "T1", Path: "src/write.go", Comments: []ReviewThreadComment{{Body: plan.Comments[0].Summary, Author: "maintainer"}}}
+	Reconcile(context.Background(), &plan, []ReviewThread{thread}, "doomer[bot]", nil)
+	if len(plan.Comments) != 0 || len(plan.Carried) != 1 || len(plan.Replies) != 1 {
+		t.Fatalf("expected carried finding and reply: %+v", plan)
+	}
+	if err := RefreshCarried(&plan, nil, "doomer[bot]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Comments) != 1 || len(plan.Carried) != 0 || len(plan.Replies) != 0 {
+		t.Fatalf("closed thread left finding suppressed or reply planned: %+v", plan)
+	}
+	Reconcile(context.Background(), &plan, nil, "doomer[bot]", nil)
+	if len(plan.Comments) != 1 || plan.Summary.Comments != 1 {
+		t.Fatalf("fresh reconciliation lost finding: %+v", plan)
+	}
+}
+
+func TestRefreshCarriedKeepsFindingCarriedByAnotherOpenThread(t *testing.T) {
+	plan := findingPlan()
+	claim := plan.Comments[0].Summary
+	threads := []ReviewThread{
+		{ID: "closed", Path: "src/write.go", Comments: []ReviewThreadComment{{Body: claim, Author: "maintainer"}}},
+		{ID: "open", Path: "src/write.go", Comments: []ReviewThreadComment{{Body: claim, Author: "reviewer"}}},
+	}
+	Reconcile(context.Background(), &plan, threads, "doomer[bot]", nil)
+	if err := RefreshCarried(&plan, threads[1:], "doomer[bot]"); err != nil {
+		t.Fatal(err)
+	}
+	Reconcile(context.Background(), &plan, threads[1:], "doomer[bot]", nil)
+	if len(plan.Comments) != 0 || len(plan.Carried) != 1 || plan.Carried[0].ThreadID != "open" || len(plan.Replies) != 1 || plan.Replies[0].ThreadID != "open" {
+		t.Fatalf("finding should remain carried by open thread: %+v", plan)
 	}
 }
 

@@ -57,6 +57,7 @@ type CarriedFinding struct {
 	Adversary string `json:"adversary"`
 	FindingID string `json:"findingId"`
 	ThreadID  string `json:"threadId"`
+	comment   PlannedComment
 }
 
 // ThreadReply adds a finding to a human-started discussion once.
