@@ -58,6 +58,10 @@ func EnhanceBodies(ctx context.Context, plan *CommentPlan, opts EnhanceOptions) 
 	schema := json.RawMessage(bodyOutputSchema)
 	// Always wrap package/CLI voice so Example maintainer comments banks are used.
 	prompt := BuildRewritePromptWithStyle(opts.VoicePrompt, opts.Style)
+	style, err := opts.Style.Normalize()
+	if err != nil {
+		style, _ = (CommentStyle{}).Normalize()
+	}
 	enhanced := 0
 	for i := range plan.Comments {
 		if enhanced >= max {
@@ -71,10 +75,43 @@ func EnhanceBodies(ctx context.Context, plan *CommentPlan, opts EnhanceOptions) 
 		if err != nil || strings.TrimSpace(body) == "" {
 			continue
 		}
+		if !matchesCommentStyle(body, style, *c) {
+			corrected, retryErr := rewriteOne(ctx, opts.Provider, prompt+voiceRetryInstruction, *c, schema, timeout)
+			if retryErr == nil && matchesCommentStyle(corrected, style, *c) {
+				body = corrected
+			} else {
+				// Keep the finding intact if the provider cannot produce a short rewrite.
+				// A clipped comment can silently remove the consequence or fix.
+				continue
+			}
+		}
 		c.Body = EnsurePlannedMarker(body, *c)
 		c.BodySource = "llm"
 		enhanced++
 	}
+}
+
+const terseMaxWords = 85
+
+const voiceRetryInstruction = `
+
+## Required correction
+The previous attempt did not meet the selected comment voice. Rewrite from the finding input again. For terse, use no more than 85 words. Keep the specific defect, its consequence if needed, and the action. Remove call-chain narration, stock transitions, repeated explanation, and any unsupported closing merge verdict. Return only the comment body.
+`
+
+func matchesCommentStyle(body string, style CommentStyle, finding PlannedComment) bool {
+	if strings.TrimSpace(body) == "" || style.Conciseness == "terse" && len(strings.Fields(body)) > terseMaxWords {
+		return false
+	}
+	lower := strings.ToLower(body)
+	if style.Tone == "direct" && strings.Contains(lower, "the fix is to ") {
+		return false
+	}
+	if !strings.Contains(strings.ToLower(finding.Body), "merge") &&
+		(strings.Contains(lower, "shouldn't merge") || strings.Contains(lower, "should not merge")) {
+		return false
+	}
+	return true
 }
 
 // EnhanceSummary replaces the deterministic findings-only summary with one

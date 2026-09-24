@@ -58,6 +58,9 @@ Do not add mini-headings or labels such as "Why this matters", "Why this bites",
 "Impact", or "Fix". Avoid strained slang and euphemisms. If a sentence packs in
 the mechanism, an example, the consequence, historical behavior, and the fix,
 split it and remove anything the author does not need in order to act.
+Do not narrate the full call chain when naming the failure and its consequence
+is enough. Do not restate the same defect in a second paragraph. Omit a closing
+merge verdict unless the finding explicitly calls for blocking the merge.
 
 ## JSON input fields
 
@@ -107,7 +110,7 @@ func BuildRewritePromptWithStyle(voiceMarkdown string, style CommentStyle) strin
 	case "coaching":
 		b.WriteString("Use a warm, collegial phrasing without praise, pep talk, or hedging a clear finding. ")
 	default:
-		b.WriteString("Use direct, precise, evidence-based language that assumes competence. State a definite fix authoritatively; 'The fix is to ...' or a direct imperative is better than 'we should ...' when no decision is open. No irritation or hostility. ")
+		b.WriteString("Use direct, precise, evidence-based language that assumes competence. Lead with the broken behavior, then give a concrete action. Use an imperative when the fix is clear. Avoid stock transitions such as 'The fix is to ...' and do not repeat the finding as a concluding opinion. No irritation or hostility. ")
 	}
 	fmt.Fprintf(&b, "Conciseness: %s. ", style.Conciseness)
 	switch style.Conciseness {
@@ -116,7 +119,7 @@ func BuildRewritePromptWithStyle(voiceMarkdown string, style CommentStyle) strin
 	case "explanatory":
 		b.WriteString("Explain the mechanism, evidence-backed consequence, and fix when they help the reviewer act. Let the complexity of the finding determine overall length; avoid repetition and unsupported detail. Do not enforce a sentence count.\n")
 	default:
-		b.WriteString("Use the shortest natural version that preserves the cause, concrete consequence, and fix. Omit background, contract history, and exhaustive evidence unless needed to understand the defect. Prefer one short paragraph or two small paragraphs; if the opening needs rereading, split or simplify it. A useful shape is '[path] skips [check]. That allows [consequence].' followed by 'The fix is to [action].' Treat that as structure, not boilerplate. Do not enforce a sentence count.\n")
+		b.WriteString("Use no more than 85 words. Preserve the specific defect, its concrete consequence when needed, and the fix. Cut background, repeated code paths, contract history, and exhaustive evidence. Prefer one short paragraph. If the issue needs more space to remain accurate, prioritize the finding and action; never pad with a merge verdict. Do not enforce a sentence count.\n")
 	}
 	fmt.Fprintf(&b, "Politeness: %s. ", style.Politeness)
 	switch style.Politeness {
@@ -125,7 +128,7 @@ func BuildRewritePromptWithStyle(voiceMarkdown string, style CommentStyle) strin
 	case "low":
 		b.WriteString("Be blunt and unvarnished about the code, without insults, contempt, or attacks on the author. ")
 	case "very-low":
-		b.WriteString("Be cuttingly direct about the code and PR: lead with the defect or consequence, omit niceties and hedging, and give an imperative fix. Start with the specific issue, not a recurring catchphrase or stock opener. Criticize the PR sharply when the evidence warrants it, including saying it should not merge as-is for a blocking issue. Never attack or ridicule the author or imply they are incompetent; no slurs or personal abuse. ")
+		b.WriteString("Be cuttingly direct about the code and PR: lead with the defect or consequence, omit niceties and hedging, and give an imperative fix. Start with the specific issue, not a recurring catchphrase or stock opener. Criticize the PR sharply when the evidence warrants it, but give a merge verdict only when the finding explicitly recommends blocking it. Never attack or ridicule the author or imply they are incompetent; no slurs or personal abuse. ")
 	default:
 		b.WriteString("Be straightforward and respectful without unnecessary softening. ")
 	}

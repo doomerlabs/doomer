@@ -15,6 +15,7 @@ type fakeProvider struct {
 	model string
 	// bodies maps finding id -> rewrite body (JSON object without outer schema wrap handled by Review)
 	bodies      map[string]string
+	responses   []string
 	summaryBody string
 	calls       int
 	fail        bool
@@ -52,8 +53,46 @@ func (f *fakeProvider) Review(_ context.Context, req modelreview.Request) (model
 	if !ok {
 		body = "Rewritten: " + in.FindingID
 	}
+	if len(f.responses) >= f.calls {
+		body = f.responses[f.calls-1]
+	}
 	out, _ := json.Marshal(map[string]string{"body": body})
 	return modelreview.Result{Output: out}, nil
+}
+
+func TestTerseCommentRetriesAnOverlongRewrite(t *testing.T) {
+	long := strings.Repeat("This repeats the same review finding without helping the author act. ", 12)
+	provider := &fakeProvider{responses: []string{long, "A resolved carried thread aborts the review. Treat its missing ID as resolved and post the finding again."}}
+	plan := CommentPlan{Comments: []PlannedComment{{FindingID: "f1", Body: "template", BodySource: "template", Placement: "inline"}}}
+	EnhanceBodies(context.Background(), &plan, EnhanceOptions{Provider: provider, VoicePrompt: DefaultVoicePrompt, Style: CommentStyle{Conciseness: "terse"}})
+	if provider.calls != 2 || plan.Comments[0].BodySource != "llm" || !strings.Contains(plan.Comments[0].Body, "Treat its missing ID") {
+		t.Fatalf("calls=%d comment=%+v", provider.calls, plan.Comments[0])
+	}
+	if !strings.Contains(provider.requests[1].Prompt, "Required correction") {
+		t.Fatal("retry did not ask for a shorter comment")
+	}
+}
+
+func TestTerseCommentRejectsRepeatedOverlongRewrite(t *testing.T) {
+	long := strings.Repeat("This repeats the same review finding without helping the author act. ", 12)
+	provider := &fakeProvider{responses: []string{long, long}}
+	plan := CommentPlan{Comments: []PlannedComment{{FindingID: "f1", Body: "template", BodySource: "template", Placement: "inline"}}}
+	EnhanceBodies(context.Background(), &plan, EnhanceOptions{Provider: provider, VoicePrompt: DefaultVoicePrompt, Style: CommentStyle{Conciseness: "terse"}})
+	if provider.calls != 2 || plan.Comments[0].Body != "template" || plan.Comments[0].BodySource != "template" {
+		t.Fatalf("calls=%d comment=%+v", provider.calls, plan.Comments[0])
+	}
+}
+
+func TestDirectCommentRetriesStockConclusion(t *testing.T) {
+	provider := &fakeProvider{responses: []string{
+		"The fix is to drop the carried entry. As-is this shouldn't merge.",
+		"A resolved carried thread aborts the review. Drop the carried entry and post the finding again.",
+	}}
+	plan := CommentPlan{Comments: []PlannedComment{{FindingID: "f1", Body: "A resolved thread aborts the review.", BodySource: "template", Placement: "inline"}}}
+	EnhanceBodies(context.Background(), &plan, EnhanceOptions{Provider: provider, VoicePrompt: DefaultVoicePrompt, Style: CommentStyle{Tone: "direct", Conciseness: "terse"}})
+	if provider.calls != 2 || !strings.Contains(plan.Comments[0].Body, "Drop the carried entry") {
+		t.Fatalf("calls=%d comment=%+v", provider.calls, plan.Comments[0])
+	}
 }
 
 func TestEnhanceSummarySynthesizesActualFindings(t *testing.T) {

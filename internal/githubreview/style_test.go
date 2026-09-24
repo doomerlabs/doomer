@@ -72,7 +72,7 @@ func TestCommentStyleSettings(t *testing.T) {
 		}
 	}
 	cutting := BuildRewritePromptWithStyle("", CommentStyle{Politeness: "very-low"})
-	for _, boundary := range []string{"imperative fix", "not a recurring catchphrase", "Criticize the PR sharply", "Never attack or ridicule the author", "blocking issue"} {
+	for _, boundary := range []string{"imperative fix", "not a recurring catchphrase", "Criticize the PR sharply", "Never attack or ridicule the author", "only when the finding explicitly recommends blocking"} {
 		if !strings.Contains(cutting, boundary) {
 			t.Fatalf("cutting style missing boundary %q", boundary)
 		}
@@ -83,8 +83,9 @@ func TestCommentStyleSettings(t *testing.T) {
 	for _, want := range []string{
 		"maintainer leaving an inline PR comment",
 		`Do not add mini-headings or labels such as "Why this matters", "Why this bites"`,
-		"The fix is to ...",
-		"if the opening needs rereading, split or simplify it",
+		"Avoid stock transitions such as 'The fix is to ...'",
+		"Use no more than 85 words",
+		"Do not restate the same defect",
 		"Courtesy does not require 'please', 'we should', 'could we'",
 	} {
 		if !strings.Contains(human, want) {
