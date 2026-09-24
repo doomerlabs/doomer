@@ -72,7 +72,7 @@ func TestCommentStyleSettings(t *testing.T) {
 		}
 	}
 	cutting := BuildRewritePromptWithStyle("", CommentStyle{Politeness: "very-low"})
-	for _, boundary := range []string{"imperative fix", "Criticize the PR sharply", "Never attack or ridicule the author", "blocking issue"} {
+	for _, boundary := range []string{"imperative fix", "not a recurring catchphrase", "Criticize the PR sharply", "Never attack or ridicule the author", "blocking issue"} {
 		if !strings.Contains(cutting, boundary) {
 			t.Fatalf("cutting style missing boundary %q", boundary)
 		}
