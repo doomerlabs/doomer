@@ -184,6 +184,16 @@ func (o *runOptions) githubRepoOwner() (owner, repo string) {
 	return parts[0], parts[1]
 }
 
+func reviewCancellation(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return nil
+}
+
 func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptions, envelopes []githubreview.NamedEnvelope, apiURL, profile string, progress io.Writer) error {
 	if !opts.githubReview {
 		return nil
@@ -259,6 +269,9 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 		var err error
 		viewer, threads, err = githubreview.ListReviewThreads(ctx, client, owner, repo, opts.githubPR)
 		if err != nil {
+			if cancellation := reviewCancellation(ctx, err); cancellation != nil {
+				return cancellation
+			}
 			return &application.Error{Operation: "github-review", Kind: "network", Err: fmt.Errorf("list review threads: %w", err)}
 		}
 		threadsLoaded = true
@@ -273,7 +286,7 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 	}, githubapi.LookupEnv, nil)
 	if providerErr == nil && provider != nil {
 		if threadsLoaded {
-			githubreview.Reconcile(ctx, &plan, threads, provider)
+			githubreview.Reconcile(ctx, &plan, threads, viewer, provider)
 		}
 		githubreview.EnhanceBodies(ctx, &plan, githubreview.EnhanceOptions{
 			Provider:    provider,
@@ -282,20 +295,23 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 		})
 		githubreview.EnhanceSummary(ctx, &plan, githubreview.EnhanceOptions{Provider: provider})
 	} else if threadsLoaded {
-		githubreview.Reconcile(ctx, &plan, threads, nil)
+		githubreview.Reconcile(ctx, &plan, threads, viewer, nil)
 	}
 	if threadsLoaded && !opts.githubDryRun {
 		freshViewer, freshThreads, err := githubreview.ListReviewThreads(ctx, client, owner, repo, opts.githubPR)
 		if err != nil {
+			if cancellation := reviewCancellation(ctx, err); cancellation != nil {
+				return cancellation
+			}
 			return &application.Error{Operation: "github-review", Kind: "network", Err: fmt.Errorf("refresh review threads: %w", err)}
 		}
-		if err := githubreview.RefreshCarried(&plan, freshThreads); err != nil {
+		if err := githubreview.RefreshCarried(&plan, freshThreads, freshViewer); err != nil {
 			return &application.Error{Operation: "github-review", Kind: "network", Err: err}
 		}
 		if providerErr == nil {
-			githubreview.Reconcile(ctx, &plan, freshThreads, provider)
+			githubreview.Reconcile(ctx, &plan, freshThreads, freshViewer, provider)
 		} else {
-			githubreview.Reconcile(ctx, &plan, freshThreads, nil)
+			githubreview.Reconcile(ctx, &plan, freshThreads, freshViewer, nil)
 		}
 		viewer, threads = freshViewer, freshThreads
 	}

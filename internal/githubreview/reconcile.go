@@ -128,7 +128,7 @@ const matchPrompt = `Determine whether a verified new code-review finding and an
 // Reconcile removes findings already discussed and schedules one reply to a
 // human-started thread. The model is optional; without it only strict textual
 // matches are accepted. A model failure never suppresses a finding.
-func Reconcile(ctx context.Context, plan *CommentPlan, threads []ReviewThread, provider modelreview.Provider) {
+func Reconcile(ctx context.Context, plan *CommentPlan, threads []ReviewThread, viewer string, provider modelreview.Provider) {
 	if plan == nil || len(plan.Comments) == 0 {
 		return
 	}
@@ -150,7 +150,7 @@ func Reconcile(ctx context.Context, plan *CommentPlan, threads []ReviewThread, p
 					modelBudget--
 				}
 			}
-			if sameDiscussion(ctx, comment, *thread, candidateProvider) {
+			if sameDiscussion(ctx, comment, *thread, viewer, candidateProvider) {
 				matched = append(matched, thread)
 			}
 			modelCandidates++
@@ -162,7 +162,7 @@ func Reconcile(ctx context.Context, plan *CommentPlan, threads []ReviewThread, p
 		replied := false
 		for _, thread := range matched {
 			plan.Carried = append(plan.Carried, CarriedFinding{Adversary: comment.Adversary, FindingID: comment.FindingID, ThreadID: thread.ID})
-			if replied || isDoomerThread(*thread) || hasDoomerReply(*thread) || hasPlannedReply(plan.Replies, thread.ID) {
+			if replied || isDoomerThread(*thread, viewer) || hasDoomerReply(*thread, viewer) || hasPlannedReply(plan.Replies, thread.ID) {
 				continue
 			}
 			plan.Replies = append(plan.Replies, ThreadReply{ThreadID: thread.ID, Comment: comment})
@@ -181,7 +181,7 @@ func Reconcile(ctx context.Context, plan *CommentPlan, threads []ReviewThread, p
 
 // RefreshCarried checks that every thread used for suppression is still open.
 // A reply added by another run makes our planned reply unnecessary.
-func RefreshCarried(plan *CommentPlan, threads []ReviewThread) error {
+func RefreshCarried(plan *CommentPlan, threads []ReviewThread, viewer string) error {
 	if plan == nil {
 		return nil
 	}
@@ -196,7 +196,7 @@ func RefreshCarried(plan *CommentPlan, threads []ReviewThread) error {
 	}
 	replies := plan.Replies[:0]
 	for _, reply := range plan.Replies {
-		if !hasDoomerReply(byID[reply.ThreadID]) {
+		if !hasDoomerReply(byID[reply.ThreadID], viewer) {
 			replies = append(replies, reply)
 		}
 	}
@@ -213,26 +213,33 @@ func hasPlannedReply(replies []ThreadReply, threadID string) bool {
 	return false
 }
 
-func isDoomerThread(thread ReviewThread) bool {
+func isDoomerThread(thread ReviewThread, viewer string) bool {
 	if len(thread.Comments) == 0 {
 		return false
 	}
-	return strings.Contains(thread.Comments[0].Body, "<!-- adversary-review:v")
+	return authoredByViewer(thread.Comments[0], viewer) && strings.Contains(thread.Comments[0].Body, "<!-- adversary-review:v")
 }
 
-func hasDoomerReply(thread ReviewThread) bool {
+func hasDoomerReply(thread ReviewThread, viewer string) bool {
 	for _, comment := range thread.Comments[1:] {
-		if strings.Contains(comment.Body, "<!-- adversary-review:v") {
+		if authoredByViewer(comment, viewer) && strings.Contains(comment.Body, "<!-- adversary-review:v") {
 			return true
 		}
 	}
 	return false
 }
 
-func sameDiscussion(ctx context.Context, finding PlannedComment, thread ReviewThread, provider modelreview.Provider) bool {
+func authoredByViewer(comment ReviewThreadComment, viewer string) bool {
+	return viewer != "" && strings.EqualFold(comment.Author, viewer)
+}
+
+func sameDiscussion(ctx context.Context, finding PlannedComment, thread ReviewThread, viewer string, provider modelreview.Provider) bool {
 	root := thread.Comments[0]
 	claim := normalizedClaim(finding.Summary)
 	for _, previous := range thread.Comments {
+		if !authoredByViewer(previous, viewer) {
+			continue
+		}
 		marker, marked, err := ParseMarker(previous.Body)
 		if !marked || err != nil {
 			continue
@@ -262,11 +269,11 @@ func sameDiscussion(ctx context.Context, finding PlannedComment, thread ReviewTh
 		if len(replies) == 5 {
 			break
 		}
-		replies = append(replies, truncateRunesForMatch(reply.Body, 1000))
+		replies = append(replies, truncateRunesForMatch(stripReviewMarker(reply.Body), 1000))
 	}
 	input, err := json.Marshal(map[string]any{
 		"newFinding": map[string]any{"title": finding.Title, "summary": finding.Summary, "recommendation": finding.Recommendation, "ruleId": finding.RuleID, "path": finding.Anchor.Path, "line": finding.Anchor.Line},
-		"openThread": map[string]any{"path": thread.Path, "line": thread.Line, "root": truncateRunesForMatch(root.Body, 4000), "replies": replies},
+		"openThread": map[string]any{"path": thread.Path, "line": thread.Line, "root": truncateRunesForMatch(stripReviewMarker(root.Body), 4000), "replies": replies},
 	})
 	if err != nil {
 		return false

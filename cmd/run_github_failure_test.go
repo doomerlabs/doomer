@@ -35,6 +35,20 @@ func TestGitHubRunFailureExcludesSuccessFindingsAndCancellation(t *testing.T) {
 	}
 }
 
+func TestMaybeGitHubReviewPropagatesCanceledThreadRead(t *testing.T) {
+	t.Setenv("ADVERSARY_GITHUB_TOKEN", "test-token")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	opts := &runOptions{githubReview: true, githubRepo: "o/r", githubPR: 1, githubAPIURL: "http://127.0.0.1:1"}
+	err := maybeGitHubReview(ctx, nil, opts, nil, "", "", io.Discard)
+	if err != context.Canceled {
+		t.Fatalf("cancellation was wrapped as a network failure: %v", err)
+	}
+	if got := reviewCancellation(context.Background(), fmt.Errorf("read: %w", context.DeadlineExceeded)); !errors.Is(got, context.DeadlineExceeded) {
+		t.Fatalf("deadline was not propagated: %v", got)
+	}
+}
+
 func TestGitHubRunFailureRedactsBeforeTruncationAndEscapesMarkup(t *testing.T) {
 	t.Setenv("CAMEL_API_KEY", "secret-camel-token")
 	t.Setenv("GITHUB_TOKEN", "secret-github-token")

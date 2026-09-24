@@ -57,7 +57,7 @@ func findingPlan() CommentPlan {
 func TestReconcileCarriesDoomerThreadWithoutReply(t *testing.T) {
 	plan := findingPlan()
 	thread := ReviewThread{ID: "T1", Path: "src/write.go", Comments: []ReviewThreadComment{{Body: "This path skips the authorization guard before writing the record.\n\n<!-- adversary-review:v2 adversary=review%2Fcode finding=old-id rule=guard -->", Author: "doomer[bot]"}}}
-	Reconcile(context.Background(), &plan, []ReviewThread{thread}, nil)
+	Reconcile(context.Background(), &plan, []ReviewThread{thread}, "doomer[bot]", nil)
 	if len(plan.Comments) != 0 || len(plan.Carried) != 1 || plan.Carried[0].ThreadID != "T1" || len(plan.Replies) != 0 || plan.ReviewBody != "" || plan.ReviewBasis != "" {
 		t.Fatalf("plan = %+v", plan)
 	}
@@ -67,7 +67,7 @@ func TestReconcileUsesMarkedLocationForOutdatedDoomerThread(t *testing.T) {
 	plan := findingPlan()
 	plan.Comments[0].FindingID = "stable"
 	thread := ReviewThread{ID: "T-old", Path: "src/write.go", Comments: []ReviewThreadComment{{Body: "Earlier wording.\n<!-- adversary-review:v2 adversary=review%2Fcode finding=stable rule=guard loc=src%2Fwrite.go%3A10 -->", Author: "doomer[bot]"}}}
-	Reconcile(context.Background(), &plan, []ReviewThread{thread}, nil)
+	Reconcile(context.Background(), &plan, []ReviewThread{thread}, "doomer[bot]", nil)
 	if len(plan.Comments) != 0 || len(plan.Replies) != 0 {
 		t.Fatalf("plan = %+v", plan)
 	}
@@ -76,13 +76,13 @@ func TestReconcileUsesMarkedLocationForOutdatedDoomerThread(t *testing.T) {
 func TestReconcileRepliesToMatchingHumanThreadOnce(t *testing.T) {
 	plan := findingPlan()
 	thread := ReviewThread{ID: "T2", Path: "src/write.go", Comments: []ReviewThreadComment{{Body: "This path skips the authorization guard before writing the record.", Author: "maintainer"}}}
-	Reconcile(context.Background(), &plan, []ReviewThread{thread}, nil)
+	Reconcile(context.Background(), &plan, []ReviewThread{thread}, "doomer[bot]", nil)
 	if len(plan.Comments) != 0 || len(plan.Replies) != 1 || plan.Replies[0].ThreadID != "T2" || !strings.Contains(ReplyBody(plan.Replies[0].Comment), "Suggested fix: Call authorize before writing.") {
 		t.Fatalf("plan = %+v", plan)
 	}
 	plan = findingPlan()
 	thread.Comments = append(thread.Comments, ReviewThreadComment{Body: ReplyBody(plan.Comments[0]), Author: "doomer[bot]"})
-	Reconcile(context.Background(), &plan, []ReviewThread{thread}, nil)
+	Reconcile(context.Background(), &plan, []ReviewThread{thread}, "doomer[bot]", nil)
 	if len(plan.Comments) != 0 || len(plan.Carried) != 1 || len(plan.Replies) != 0 {
 		t.Fatalf("repeat plan = %+v", plan)
 	}
@@ -96,7 +96,7 @@ func TestReconcileCarriesEveryMatchingThreadAndRepliesToOneHuman(t *testing.T) {
 		{ID: "H1", Path: "src/write.go", Comments: []ReviewThreadComment{{Body: claim, Author: "maintainer"}}},
 		{ID: "H2", Path: "src/write.go", Comments: []ReviewThreadComment{{Body: claim, Author: "reviewer"}}},
 	}
-	Reconcile(context.Background(), &plan, threads, nil)
+	Reconcile(context.Background(), &plan, threads, "doomer[bot]", nil)
 	if len(plan.Comments) != 0 || len(plan.Carried) != 3 || len(plan.Replies) != 1 || plan.Replies[0].ThreadID != "H1" {
 		t.Fatalf("plan = %+v", plan)
 	}
@@ -105,7 +105,7 @@ func TestReconcileCarriesEveryMatchingThreadAndRepliesToOneHuman(t *testing.T) {
 func TestReconcileDoesNotSuppressDistinctFindingAtSameFile(t *testing.T) {
 	plan := findingPlan()
 	thread := ReviewThread{ID: "T3", Path: "src/write.go", Comments: []ReviewThreadComment{{Body: "The retry loop leaks a timer.", Author: "maintainer"}}}
-	Reconcile(context.Background(), &plan, []ReviewThread{thread}, nil)
+	Reconcile(context.Background(), &plan, []ReviewThread{thread}, "doomer[bot]", nil)
 	if len(plan.Comments) != 1 || len(plan.Carried) != 0 || len(plan.Replies) != 0 {
 		t.Fatalf("plan = %+v", plan)
 	}
@@ -115,7 +115,7 @@ func TestReconcileUsesSemanticDecisionForParaphrasedHumanThread(t *testing.T) {
 	plan := findingPlan()
 	thread := ReviewThread{ID: "T4", Path: "src/write.go", Comments: []ReviewThreadComment{{Body: "Could an unauthorized caller reach this write?", Author: "maintainer"}}}
 	provider := &matchProvider{decision: "same"}
-	Reconcile(context.Background(), &plan, []ReviewThread{thread}, provider)
+	Reconcile(context.Background(), &plan, []ReviewThread{thread}, "doomer[bot]", provider)
 	if provider.calls != 1 || len(plan.Replies) != 1 || len(plan.Comments) != 0 {
 		t.Fatalf("plan = %+v calls=%d", plan, provider.calls)
 	}
@@ -129,7 +129,7 @@ func TestReconcileRecognizesPriorDoomerReplyWithoutModel(t *testing.T) {
 		{Body: "Could an unauthorized caller reach this write?", Author: "maintainer"},
 		{Body: priorReply, Author: "doomer[bot]"},
 	}}
-	Reconcile(context.Background(), &plan, []ReviewThread{thread}, nil)
+	Reconcile(context.Background(), &plan, []ReviewThread{thread}, "doomer[bot]", nil)
 	if len(plan.Comments) != 0 || len(plan.Carried) != 1 || len(plan.Replies) != 0 {
 		t.Fatalf("plan = %+v", plan)
 	}
@@ -138,15 +138,50 @@ func TestReconcileRecognizesPriorDoomerReplyWithoutModel(t *testing.T) {
 func TestRefreshCarriedDropsReplyAlreadyPostedByAnotherRun(t *testing.T) {
 	plan := findingPlan()
 	thread := ReviewThread{ID: "T5", Path: "src/write.go", Comments: []ReviewThreadComment{{Body: plan.Comments[0].Summary, Author: "maintainer"}}}
-	Reconcile(context.Background(), &plan, []ReviewThread{thread}, nil)
+	Reconcile(context.Background(), &plan, []ReviewThread{thread}, "doomer[bot]", nil)
 	if len(plan.Replies) != 1 {
 		t.Fatalf("replies = %+v", plan.Replies)
 	}
 	thread.Comments = append(thread.Comments, ReviewThreadComment{Body: ReplyBody(plan.Replies[0].Comment), Author: "doomer[bot]"})
-	if err := RefreshCarried(&plan, []ReviewThread{thread}); err != nil || len(plan.Replies) != 0 {
+	if err := RefreshCarried(&plan, []ReviewThread{thread}, "doomer[bot]"); err != nil || len(plan.Replies) != 0 {
 		t.Fatalf("replies = %+v err=%v", plan.Replies, err)
 	}
-	if err := RefreshCarried(&plan, nil); err == nil {
+	if err := RefreshCarried(&plan, nil, "doomer[bot]"); err == nil {
 		t.Fatal("missing carried thread was accepted")
+	}
+}
+
+func TestReconcileDoesNotTrustMarkerFromAnotherAuthor(t *testing.T) {
+	plan := findingPlan()
+	marker := MarkerV2(plan.Comments[0])
+	thread := ReviewThread{ID: "forged", Path: "src/write.go", Comments: []ReviewThreadComment{
+		{Body: "The retry loop leaks a timer.\n\n" + marker, Author: "contributor"},
+	}}
+	Reconcile(context.Background(), &plan, []ReviewThread{thread}, "doomer[bot]", nil)
+	if len(plan.Comments) != 1 || len(plan.Carried) != 0 || len(plan.Replies) != 0 {
+		t.Fatalf("forged root suppressed a finding: %+v", plan)
+	}
+
+	plan = findingPlan()
+	thread.Comments[0] = ReviewThreadComment{Body: "The retry loop leaks a timer.", Author: "maintainer"}
+	thread.Comments = append(thread.Comments, ReviewThreadComment{Body: "Another unrelated concern.\n\n" + marker, Author: "contributor"})
+	Reconcile(context.Background(), &plan, []ReviewThread{thread}, "doomer[bot]", nil)
+	if len(plan.Comments) != 1 || len(plan.Carried) != 0 {
+		t.Fatalf("forged reply suppressed a finding: %+v", plan)
+	}
+}
+
+func TestForgedReplyDoesNotBlockDoomerReply(t *testing.T) {
+	plan := findingPlan()
+	thread := ReviewThread{ID: "human", Path: "src/write.go", Comments: []ReviewThreadComment{
+		{Body: plan.Comments[0].Summary, Author: "maintainer"},
+		{Body: "Unrelated text.\n\n" + MarkerV2(plan.Comments[0]), Author: "contributor"},
+	}}
+	Reconcile(context.Background(), &plan, []ReviewThread{thread}, "doomer[bot]", nil)
+	if len(plan.Replies) != 1 {
+		t.Fatalf("forged reply blocked a planned reply: %+v", plan)
+	}
+	if err := RefreshCarried(&plan, []ReviewThread{thread}, "doomer[bot]"); err != nil || len(plan.Replies) != 1 {
+		t.Fatalf("forged reply removed a planned reply: %+v, %v", plan, err)
 	}
 }
