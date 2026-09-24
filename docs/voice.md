@@ -27,6 +27,32 @@ doomer run ./my-adversary --path ./app \
    with a prompt built from the resolved voice document.
 3. On rewrite failure or missing credentials, the **template** body is kept.
 
+The default is `direct` tone with `terse` length, `medium` politeness, and `high` formality. Set the controls on a run:
+
+```sh
+doomer run ./my-adversary --path ./app --github-review \
+  --github-comment-tone neutral --github-comment-conciseness standard \
+  --github-comment-politeness low --github-comment-formality medium
+```
+
+Accepted tones are `direct`, `neutral`, and `coaching`. Accepted lengths are
+`terse` (essentials only), `standard` (enough context to act), and
+`explanatory` (mechanism and impact when useful). Length controls overall depth,
+not the number of sentences. For CLI environment configuration,
+set `DOOMER_COMMENT_TONE`, `DOOMER_COMMENT_CONCISENESS`,
+`DOOMER_COMMENT_POLITENESS`, and `DOOMER_COMMENT_FORMALITY`; explicit flags take
+precedence. Hosted reviews invoke this CLI rewrite path; the hosted app passes
+its project voice settings through the same flags when running a compatible CLI.
+They affect wording only: the
+finding, severity, confidence, and recommendation remain grounded in the
+original evidence. When the evidence is incomplete, the comment states the
+observed risk and the missing context rather than asserting a defect.
+Low politeness is blunt about code, never personal. Low formality can use
+occasional mild swearing, never slurs or abuse.
+`very-low` politeness goes further: it leads with the defect and an imperative
+fix, skipping niceties. It can sharply criticize the PR and say not to merge
+as-is when the evidence supports a blocking issue; it never attacks the author.
+
 Without `--github-review`, voice files are unused for posting (findings still
 print to the terminal / JSON as usual).
 
@@ -75,7 +101,7 @@ Edit this for product tone:
 
 - Lead with the issue; mechanism over attitude
 - Confidence honesty; no invented files/APIs
-- Length targets (often ~2–6 short sentences)
+- Length targets; product conciseness overrides a conflicting package target
 - Hard bans (corporate padding, praise sandwiches, etc. for a Torvalds-style pack)
 
 ### Example bank (style few-shots)
@@ -135,8 +161,28 @@ finding → template body
 ```
 
 The rewrite task preamble tells the model to treat the example bank as few-shot
-style only. JSON input includes severity, title, template body, path/line, and
+style only. The product tone and conciseness rules are appended after package
+voice rules and win when length or persona instructions conflict. JSON input
+includes severity, title, template body, path/line, and
 `exampleBankHint` (preferred subsection: Ship / OK, Design, Defects, or Nits).
+
+The ten issue examples live in `internal/githubreview/testdata/voice_goldens.json`.
+They are wording targets, not permission to infer a defect from a question:
+the corresponding code evidence must establish each claim. The fixture rubric
+is documented beside them and requires 5/5 for every locked target. The shared
+prompt tests check that every tone and length combination keeps the evidence
+guardrail. These offline checks do not establish whether a model output is
+accurate on a real diff. For an evidence-backed model check, set
+`DOOMER_VOICE_EVAL_PROVIDER` and `DOOMER_VOICE_EVAL_MODEL` plus the provider's
+normal credentials, then run:
+
+```sh
+go test ./internal/githubreview -run TestVoiceGoldensWithModelJudge -count=1
+```
+
+The live judge requires at least 4/5
+on every documented dimension for every fixture; see
+`internal/githubreview/testdata/voice_rubric.md`.
 
 **Model flags** (shared with analysis when configured):
 

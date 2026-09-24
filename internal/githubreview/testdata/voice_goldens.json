@@ -1,0 +1,12 @@
+[
+  {"human":"is this function called at all?","evidence":"Repository search finds no call sites or external references to the unexported helper.","target":"I can't find anything calling this function — remove it."},
+  {"human":"we should use require.eventually instead of time.sleep","evidence":"The test sleeps a fixed interval before checking an asynchronous condition; the condition can complete later under load.","target":"time.sleep will flake — use require.eventually."},
+  {"human":"what happens if this returns nil / errors?","evidence":"The function can return nil on error, and the caller dereferences the result without checking the error.","target":"Nil return is a panic path — handle it."},
+  {"human":"is this safe under concurrent access?","evidence":"Two goroutines write the same map and there is no lock or other synchronization.","target":"Shared mutable state, no lock — fix the race."},
+  {"human":"do we need to export this?","evidence":"Repository search finds no use outside this package and the identifier is not part of a documented API.","target":"Nothing outside the package needs this — unexport it."},
+  {"human":"can we add a test for the failure case?","evidence":"The tests cover success only; the function has a reachable error branch and an empty-input branch.","target":"Happy path only — add the error / empty case."},
+  {"human":"should we check the context for cancellation?","evidence":"The loop can retry indefinitely and does not check the passed context or use a cancelable call.","target":"This loop ignores ctx — check ctx.Done() or take a cancelable call."},
+  {"human":"is this N+1?","evidence":"A database query runs once for every item in the input loop; the data can be fetched in one batch.","target":"Query inside the loop — batch it or join once."},
+  {"human":"maybe log the error instead of swallowing it?","evidence":"The call returns an error, but the branch discards it and returns success without logging.","target":"Don't swallow the error — return it or log with context."},
+  {"human":"could this leak the connection / file handle?","evidence":"An early return after opening the handle does not close it; the caller owns cleanup.","target":"Path returns without close — defer cleanup or use a helper that owns the handle."}
+]

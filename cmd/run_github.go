@@ -20,6 +20,11 @@ import (
 	"github.com/doomerlabs/doomer/pkg/review"
 )
 
+func githubReviewEnv(name string) string {
+	value, _ := githubapi.LookupEnv(name)
+	return strings.TrimSpace(value)
+}
+
 // peelPRURL extracts at most one GitHub PR URL from args; remaining are adversary refs.
 func peelPRURL(args []string) (pr *githubapi.PRRef, rest []string, err error) {
 	var urls []string
@@ -212,6 +217,12 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 	voiceRoots := append([]string{}, opts.adversaryPackageRoots...)
 	voiceRoots = append(voiceRoots, opts.path)
 	voicePrompt, voiceInfo := githubreview.ResolveVoice(voiceRoots...)
+	style, err := (githubreview.CommentStyle{Tone: opts.githubCommentTone, Conciseness: opts.githubCommentConcise, Politeness: opts.githubCommentPoliteness, Formality: opts.githubCommentFormality}).Normalize()
+	if err != nil {
+		return err
+	}
+	voiceInfo.Tone, voiceInfo.Conciseness = style.Tone, style.Conciseness
+	voiceInfo.Politeness, voiceInfo.Formality = style.Politeness, style.Formality
 
 	plan := githubreview.ProjectFindings(envelopes, githubreview.ProjectOptions{
 		Repository:  owner + "/" + repo,
@@ -240,6 +251,7 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 		githubreview.EnhanceBodies(ctx, &plan, githubreview.EnhanceOptions{
 			Provider:    provider,
 			VoicePrompt: voicePrompt,
+			Style:       style,
 		})
 		githubreview.EnhanceSummary(ctx, &plan, githubreview.EnhanceOptions{Provider: provider})
 	}

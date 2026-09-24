@@ -18,6 +18,7 @@ type fakeProvider struct {
 	summaryBody string
 	calls       int
 	fail        bool
+	requests    []modelreview.Request
 }
 
 func (f *fakeProvider) Name() string  { return f.name }
@@ -25,6 +26,7 @@ func (f *fakeProvider) Model() string { return f.model }
 
 func (f *fakeProvider) Review(_ context.Context, req modelreview.Request) (modelreview.Result, error) {
 	f.calls++
+	f.requests = append(f.requests, req)
 	if f.fail {
 		return modelreview.Result{}, &modelreview.ProviderError{Code: "fail", Message: "provider down"}
 	}
