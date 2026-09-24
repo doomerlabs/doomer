@@ -241,19 +241,63 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 		}
 	}
 
+	token := githubapi.TokenFromEnv()
+	client := githubapi.NewClient(token)
+	if opts.githubRESTURL != "" {
+		client.RESTBase = opts.githubRESTURL
+	}
+	if opts.githubAPIURL != "" {
+		client.GQLURL = opts.githubAPIURL
+	}
+	if token == "" && !opts.githubDryRun {
+		return &application.Error{Operation: "github-review", Kind: "auth", Err: fmt.Errorf("GitHub token required: set ADVERSARY_GITHUB_TOKEN, GITHUB_TOKEN, or GH_TOKEN")}
+	}
+	var threads []githubreview.ReviewThread
+	var viewer string
+	threadsLoaded := false
+	if token != "" {
+		var err error
+		viewer, threads, err = githubreview.ListReviewThreads(ctx, client, owner, repo, opts.githubPR)
+		if err != nil {
+			return &application.Error{Operation: "github-review", Kind: "network", Err: fmt.Errorf("list review threads: %w", err)}
+		}
+		threadsLoaded = true
+	}
+
 	// Default voice rewrite: try model provider; template remains on failure/missing creds.
 	// BuildRewritePrompt (inside EnhanceBodies) wraps agent/voice.md so Example maintainer
 	// comments banks are used as few-shot style when generating comment text.
-	if provider, err := modelreview.ProviderFromConfig(modelreview.Config{
+	provider, providerErr := modelreview.ProviderFromConfig(modelreview.Config{
 		Provider: opts.modelProvider,
 		Model:    opts.model,
-	}, githubapi.LookupEnv, nil); err == nil && provider != nil {
+	}, githubapi.LookupEnv, nil)
+	if providerErr == nil && provider != nil {
+		if threadsLoaded {
+			githubreview.Reconcile(ctx, &plan, threads, provider)
+		}
 		githubreview.EnhanceBodies(ctx, &plan, githubreview.EnhanceOptions{
 			Provider:    provider,
 			VoicePrompt: voicePrompt,
 			Style:       style,
 		})
 		githubreview.EnhanceSummary(ctx, &plan, githubreview.EnhanceOptions{Provider: provider})
+	} else if threadsLoaded {
+		githubreview.Reconcile(ctx, &plan, threads, nil)
+	}
+	if threadsLoaded && !opts.githubDryRun {
+		freshViewer, freshThreads, err := githubreview.ListReviewThreads(ctx, client, owner, repo, opts.githubPR)
+		if err != nil {
+			return &application.Error{Operation: "github-review", Kind: "network", Err: fmt.Errorf("refresh review threads: %w", err)}
+		}
+		if err := githubreview.RefreshCarried(&plan, freshThreads); err != nil {
+			return &application.Error{Operation: "github-review", Kind: "network", Err: err}
+		}
+		if providerErr == nil {
+			githubreview.Reconcile(ctx, &plan, freshThreads, provider)
+		} else {
+			githubreview.Reconcile(ctx, &plan, freshThreads, nil)
+		}
+		viewer, threads = freshViewer, freshThreads
 	}
 	// Execution status is host-authored, not model-rewritten or suppressed by
 	// --github-include-summary=false. Findings still use normal inline placement.
@@ -275,15 +319,6 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 	}
 	logVoiceSource(progress, voiceInfo)
 
-	token := githubapi.TokenFromEnv()
-	client := githubapi.NewClient(token)
-	if opts.githubRESTURL != "" {
-		client.RESTBase = opts.githubRESTURL
-	}
-	if opts.githubAPIURL != "" {
-		client.GQLURL = opts.githubAPIURL
-	}
-
 	if opts.githubDryRun {
 		if token != "" {
 			files, err := client.ListPullRequestFiles(ctx, owner, repo, opts.githubPR)
@@ -301,8 +336,8 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 		} else {
 			githubreview.MarkDiffNotFetched(&plan)
 		}
-		fmt.Fprintf(progress, "GitHub review dry-run: %d comment(s) planned (%d inline, %d body, %d skipped)\n",
-			plan.Summary.Comments, plan.Summary.Inline, plan.Summary.ReviewBody, plan.Summary.Skipped)
+		fmt.Fprintf(progress, "GitHub review dry-run: %d new comment(s), %d human-thread reply(s), %d already discussed (%d inline, %d body, %d skipped)\n",
+			plan.Summary.Comments, len(plan.Replies), len(plan.Carried), plan.Summary.Inline, plan.Summary.ReviewBody, plan.Summary.Skipped)
 		// Voice source already logged once above (shared with non-dry-run path).
 		if opts.githubPlanFile != "" {
 			if err := githubreview.WritePlanFile(opts.githubPlanFile, plan); err != nil {
@@ -313,9 +348,6 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 		return nil
 	}
 
-	if token == "" {
-		return &application.Error{Operation: "github-review", Kind: "auth", Err: fmt.Errorf("GitHub token required: set ADVERSARY_GITHUB_TOKEN, GITHUB_TOKEN, or GH_TOKEN")}
-	}
 	if opts.githubPlanFile != "" {
 		if files, err := client.ListPullRequestFiles(ctx, owner, repo, opts.githubPR); err == nil {
 			head := opts.resolvedHeadSHA
@@ -338,6 +370,9 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 		Number:           opts.githubPR,
 		Submit:           opts.githubSubmit,
 		ResolveAddressed: opts.githubResolveAddressed && len(opts.githubRunFailures) == 0,
+		Threads:          threads,
+		Viewer:           viewer,
+		ThreadsLoaded:    threadsLoaded,
 		Progress: func(s string) {
 			fmt.Fprintln(progress, s)
 		},

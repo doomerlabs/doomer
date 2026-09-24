@@ -23,6 +23,7 @@ func TestGitHubReviewWatchSameHeadRerun(t *testing.T) {
 	for _, registrationFails := range []bool{false, true} {
 		t.Run(fmt.Sprintf("registrationFails=%v", registrationFails), func(t *testing.T) {
 			created, submitted := 0, 0
+			var postedBodies []string
 			var watches []adversarylabs.ReviewWatch
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path == "/v1/reviews/watches" {
@@ -50,14 +51,30 @@ func TestGitHubReviewWatchSameHeadRerun(t *testing.T) {
 					fmt.Fprint(w, `[{"filename":".depot/workflows/pr.yml","patch":"@@ -1,1 +1,2 @@\n keep\n+added\n"}]`)
 					return
 				}
-				var payload struct{ Query string }
+				var payload struct {
+					Query     string         `json:"query"`
+					Variables map[string]any `json:"variables"`
+				}
 				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 					t.Error(err)
 				}
 				switch {
+				case strings.Contains(payload.Query, "reviewThreads"):
+					var nodes []map[string]any
+					for i, body := range postedBodies {
+						nodes = append(nodes, map[string]any{
+							"id": fmt.Sprintf("T_%d", i), "path": ".depot/workflows/pr.yml", "line": 2, "isResolved": false,
+							"comments": map[string]any{"nodes": []map[string]any{{"body": body, "author": map[string]any{"login": "doomer[bot]"}}}},
+						})
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"viewer": map[string]any{"login": "doomer[bot]"}, "repository": map[string]any{"pullRequest": map[string]any{"id": "PR_1", "reviewThreads": map[string]any{"nodes": nodes, "pageInfo": map[string]any{"hasNextPage": false}}}}}})
 				case strings.Contains(payload.Query, "pullRequest(number"):
 					fmt.Fprintf(w, `{"data":{"repository":{"pullRequest":{"id":"PR_1","headRefOid":%q}}}}`, head)
 				case strings.Contains(payload.Query, "addPullRequestReview"):
+					input := payload.Variables["input"].(map[string]any)
+					for _, thread := range input["threads"].([]any) {
+						postedBodies = append(postedBodies, thread.(map[string]any)["body"].(string))
+					}
 					created++
 					fmt.Fprintf(w, `{"data":{"addPullRequestReview":{"pullRequestReview":{"id":"RV_%d","state":"PENDING"}}}}`, created)
 				case strings.Contains(payload.Query, "submitPullRequestReview"):
@@ -95,11 +112,11 @@ func TestGitHubReviewWatchSameHeadRerun(t *testing.T) {
 				if err := maybeGitHubReview(context.Background(), app, opts, envelopes, srv.URL, "default", &progress); err != nil {
 					t.Fatalf("published review became a failure: %v", err)
 				}
-				if len(opts.githubRunFailures) != 0 || created != run || submitted != run || len(watches) != run {
+				if len(opts.githubRunFailures) != 0 || created != 1 || submitted != 1 || len(watches) != 1 {
 					t.Fatalf("registration caused a package failure or duplicate publication: created=%d submitted=%d watches=%d failures=%v", created, submitted, len(watches), opts.githubRunFailures)
 				}
-				watch := watches[run-1]
-				if watch.ReviewNodeID != fmt.Sprintf("RV_%d", run) || watch.HeadSHA != head || len(watch.Comments) != 2 || watch.Repository != "acme/platform" || watch.PullRequest != 185 {
+				watch := watches[0]
+				if watch.ReviewNodeID != "RV_1" || watch.HeadSHA != head || len(watch.Comments) != 2 || watch.Repository != "acme/platform" || watch.PullRequest != 185 {
 					t.Fatalf("wrong review registered: %#v", watch)
 				}
 				for i, comment := range watch.Comments {
@@ -115,7 +132,7 @@ func TestGitHubReviewWatchSameHeadRerun(t *testing.T) {
 						t.Errorf("missing diagnostic %q in %s", want, log)
 					}
 				}
-			} else if strings.Count(log, "Feedback watch registered for 2 review comment(s).") != 2 {
+			} else if strings.Count(log, "Feedback watch registered for 2 review comment(s).") != 1 {
 				t.Errorf("missing registration successes: %s", log)
 			}
 			if strings.Contains(log, "ci-secret") || strings.Contains(log, "github-secret") {

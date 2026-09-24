@@ -23,6 +23,9 @@ type PostOptions struct {
 	Submit           bool // submit as COMMENT after create
 	DryRun           bool
 	ResolveAddressed bool
+	Threads          []ReviewThread
+	Viewer           string
+	ThreadsLoaded    bool
 	Progress         func(string) // optional stderr messages
 }
 
@@ -34,6 +37,7 @@ type PostResult struct {
 	Posted         int
 	BodyOnly       int
 	PostedComments []PlannedComment
+	Replied        int
 	Resolved       int
 }
 
@@ -51,7 +55,7 @@ func Post(ctx context.Context, plan CommentPlan, opts PostOptions) (*PostResult,
 	nothingToPost := len(plan.Comments) == 0 &&
 		strings.TrimSpace(plan.ReviewBody) == "" &&
 		strings.TrimSpace(plan.ReviewBasis) == ""
-	if nothingToPost && !opts.ResolveAddressed {
+	if nothingToPost && len(plan.Replies) == 0 && !opts.ResolveAddressed {
 		if opts.Progress != nil {
 			opts.Progress("GitHub review: nothing to post")
 		}
@@ -82,7 +86,17 @@ query($owner:String!,$name:String!,$number:Int!){
 	if prID == "" || headOID == "" {
 		return nil, &application.Error{Operation: "github-review", Kind: "network", Err: fmt.Errorf("pull request not found")}
 	}
+	if plan.HeadSHA != "" && plan.HeadSHA != headOID {
+		return nil, &application.Error{Operation: "github-review", Kind: "network", Err: fmt.Errorf("pull request head changed during review; rerun against the latest commit")}
+	}
 	if nothingToPost {
+		replied, err := postThreadReplies(ctx, plan.Replies, opts)
+		if err != nil {
+			return &PostResult{Replied: replied}, err
+		}
+		if !opts.ResolveAddressed {
+			return &PostResult{Replied: replied}, nil
+		}
 		resolved, err := resolveAddressedThreads(ctx, plan, opts)
 		if err != nil {
 			return nil, err
@@ -90,7 +104,7 @@ query($owner:String!,$name:String!,$number:Int!){
 		if opts.Progress != nil {
 			opts.Progress(fmt.Sprintf("GitHub review: nothing to post; resolved %d addressed comment(s)", resolved))
 		}
-		return &PostResult{Resolved: resolved}, nil
+		return &PostResult{Resolved: resolved, Replied: replied}, nil
 	}
 
 	// Body-only reviews do not need changed-file placement.
@@ -244,6 +258,10 @@ mutation($input:SubmitPullRequestReviewInput!){
 	if opts.Progress != nil && res.ReviewURL != "" {
 		opts.Progress("GitHub review: " + res.ReviewURL + " (" + res.State + ")")
 	}
+	res.Replied, err = postThreadReplies(ctx, plan.Replies, opts)
+	if err != nil {
+		return res, err
+	}
 	if opts.ResolveAddressed {
 		resolved, err := resolveAddressedThreads(ctx, plan, opts)
 		if err != nil {
@@ -255,6 +273,37 @@ mutation($input:SubmitPullRequestReviewInput!){
 		}
 	}
 	return res, nil
+}
+
+func postThreadReplies(ctx context.Context, replies []ThreadReply, opts PostOptions) (int, error) {
+	posted := 0
+	for _, reply := range replies {
+		var result struct {
+			AddPullRequestReviewThreadReply struct {
+				Comment struct {
+					ID string `json:"id"`
+				} `json:"comment"`
+			} `json:"addPullRequestReviewThreadReply"`
+		}
+		err := opts.Client.GraphQL(ctx, `
+mutation($input:AddPullRequestReviewThreadReplyInput!){
+  addPullRequestReviewThreadReply(input:$input){ comment{ id } }
+}`, map[string]any{"input": map[string]any{
+			"pullRequestReviewThreadId": reply.ThreadID,
+			"body":                      ReplyBody(reply.Comment),
+		}}, &result)
+		if err != nil {
+			return posted, mapGitHubErr("reply to review thread", err)
+		}
+		if result.AddPullRequestReviewThreadReply.Comment.ID == "" {
+			return posted, &application.Error{Operation: "reply to review thread", Kind: "network", Err: fmt.Errorf("GitHub returned no reply comment")}
+		}
+		posted++
+	}
+	if posted > 0 && opts.Progress != nil {
+		opts.Progress(fmt.Sprintf("GitHub review: replied to %d human thread(s)", posted))
+	}
+	return posted, nil
 }
 
 func escapeMarkdownText(value string) string {

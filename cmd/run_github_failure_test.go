@@ -85,6 +85,8 @@ func TestMaybeGitHubReviewPostsPartialStatusAndKeepsInlineFindings(t *testing.T)
 					return
 				}
 				switch {
+				case strings.Contains(payload.Query, "reviewThreads"):
+					fmt.Fprint(w, `{"data":{"viewer":{"login":"doomer[bot]"},"repository":{"pullRequest":{"id":"PR_1","reviewThreads":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`)
 				case strings.Contains(payload.Query, "pullRequest(number"):
 					fmt.Fprint(w, `{"data":{"repository":{"pullRequest":{"id":"PR_1","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}}`)
 				case strings.Contains(payload.Query, "addPullRequestReview"):

@@ -14,6 +14,8 @@ type CommentPlan struct {
 	Voice               VoiceInfo        `json:"voice"`
 	Comments            []PlannedComment `json:"comments"`
 	Skipped             []SkippedFinding `json:"skipped,omitempty"`
+	Carried             []CarriedFinding `json:"carried,omitempty"`
+	Replies             []ThreadReply    `json:"replies,omitempty"`
 	ReviewBody          string           `json:"reviewBody,omitempty"`
 	ReviewBasis         string           `json:"reviewBasis,omitempty"`
 	Summary             PlanSummary      `json:"summary"`
@@ -41,11 +43,26 @@ type PlannedComment struct {
 	Severity        string `json:"severity"`
 	Confidence      string `json:"confidence"`
 	Title           string `json:"title"`
+	Summary         string `json:"-"`
+	Recommendation  string `json:"-"`
 	Body            string `json:"body"`
 	BodySource      string `json:"bodySource"` // llm | template
 	Anchor          Anchor `json:"anchor"`
 	Placement       string `json:"placement"` // inline | review_body | unplaceable
 	PlacementReason string `json:"placementReason,omitempty"`
+}
+
+// CarriedFinding has a current finding already represented by an open thread.
+type CarriedFinding struct {
+	Adversary string `json:"adversary"`
+	FindingID string `json:"findingId"`
+	ThreadID  string `json:"threadId"`
+}
+
+// ThreadReply adds a finding to a human-started discussion once.
+type ThreadReply struct {
+	ThreadID string         `json:"threadId"`
+	Comment  PlannedComment `json:"comment"`
 }
 
 // Anchor is the primary evidence location.
