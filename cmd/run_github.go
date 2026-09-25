@@ -327,13 +327,13 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 			Style:       style,
 			OnFailure: func(failure githubreview.CommentRewriteFailure) {
 				if progress != nil {
-					fmt.Fprintf(progress, "comment rewrite fallback: finding=%q reason=%q retry=%q\n", failure.FindingID, redactCommentRewriteDiagnostic(failure.Reason), redactCommentRewriteDiagnostic(failure.Retry))
+					fmt.Fprintf(progress, "comment rewrite fallback: finding=%q reason=%q retry=%q\n", failure.FindingID, redactGitHubDiagnostic(failure.Reason), redactGitHubDiagnostic(failure.Retry))
 				}
 			},
 		})
 		githubreview.EnhanceSummary(ctx, &plan, githubreview.EnhanceOptions{Provider: provider})
 	} else if providerErr != nil && progress != nil && len(plan.Comments) > 0 {
-		fmt.Fprintf(progress, "comment rewrite fallback: provider unavailable: %q\n", redactCommentRewriteDiagnostic(providerErr.Error()))
+		fmt.Fprintf(progress, "comment rewrite fallback: provider unavailable: %q\n", redactGitHubDiagnostic(providerErr.Error()))
 	}
 	// Execution status is host-authored, not model-rewritten or suppressed by
 	// --github-include-summary=false. Findings still use normal inline placement.
@@ -420,17 +420,19 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 	return nil
 }
 
-func redactCommentRewriteDiagnostic(reason string) string {
+// redactGitHubDiagnostic removes known credentials before diagnostics are logged
+// or included in a pull request review.
+func redactGitHubDiagnostic(value string) string {
 	for _, key := range []string{
 		modelreview.OpenAIKeyEnv, modelreview.AnthropicKeyEnv,
 		modelreview.FireworksKeyEnv, modelreview.CamelKeyEnv, modelreview.CloudflareKeyEnv,
 		"ADVERSARY_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN", "ADVERSARY_TOKEN",
 	} {
 		if secret, ok := githubapi.LookupEnv(key); ok && secret != "" {
-			reason = strings.ReplaceAll(reason, secret, "[redacted]")
+			value = strings.ReplaceAll(value, secret, "[redacted]")
 		}
 	}
-	return reason
+	return value
 }
 
 func loadGitHubReviewFeedback(ctx context.Context, app *application.App, opts *runOptions, apiURL, profile string, progress io.Writer) {
@@ -516,18 +518,9 @@ func (o *runOptions) recordGitHubRunFailure(ref, scope string, err error, stderr
 	if scope != "" {
 		label += " [" + scope + "]"
 	}
-	// Child errors can contain request diagnostics. Redact known credentials
-	// before truncation so even a key straddling the limit cannot leak to a PR.
-	for _, key := range []string{
-		modelreview.OpenAIKeyEnv, modelreview.AnthropicKeyEnv,
-		modelreview.FireworksKeyEnv, modelreview.CamelKeyEnv, modelreview.CloudflareKeyEnv,
-		"ADVERSARY_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN", "ADVERSARY_TOKEN",
-	} {
-		if secret, ok := githubapi.LookupEnv(key); ok && secret != "" {
-			message = strings.ReplaceAll(message, secret, "[redacted]")
-			label = strings.ReplaceAll(label, secret, "[redacted]")
-		}
-	}
+	// Redact before truncation so a key straddling the limit cannot leak to a PR.
+	message = redactGitHubDiagnostic(message)
+	label = redactGitHubDiagnostic(label)
 	label = html.EscapeString(truncateRunes(strings.Join(strings.Fields(label), " "), 160))
 	message = html.EscapeString(truncateRunes(strings.Join(strings.Fields(message), " "), 500))
 	o.githubRunFailures = append(o.githubRunFailures, "- <code>"+label+"</code>: <code>"+message+"</code>")

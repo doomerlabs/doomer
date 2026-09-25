@@ -41,7 +41,7 @@ func TestPeelPRURL(t *testing.T) {
 
 func TestCommentRewriteDiagnosticRedactsProviderKey(t *testing.T) {
 	t.Setenv(modelreview.FireworksKeyEnv, "test-secret-key")
-	got := redactCommentRewriteDiagnostic("fireworks rejected test-secret-key")
+	got := redactGitHubDiagnostic("fireworks rejected test-secret-key")
 	if strings.Contains(got, "test-secret-key") || !strings.Contains(got, "[redacted]") {
 		t.Fatalf("diagnostic leaked credential: %q", got)
 	}
