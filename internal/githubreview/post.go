@@ -153,12 +153,8 @@ query($owner:String!,$name:String!,$number:Int!){
 			inline++
 			continue
 		}
-		// review_body or overflow
-		loc := c.Anchor.Path
-		if c.Anchor.Line != nil {
-			loc = fmt.Sprintf("%s:%d", c.Anchor.Path, *c.Anchor.Line)
-		}
-		bodySections = append(bodySections, fmt.Sprintf("### %s — %s\n\n%s\n\n_%s_", c.Severity, c.Title, c.Body, loc))
+		// review_body or overflow: use the same visible text as an inline comment.
+		bodySections = append(bodySections, strings.TrimSpace(c.Body))
 	}
 
 	reviewBodyContent := strings.Join(bodySections, "\n\n---\n\n")
@@ -199,11 +195,11 @@ mutation($input:AddPullRequestReviewInput!){
 			delete(input, "threads")
 			postedComments = nil
 			// Fold threads into body.
-			fallbackBody := reviewBodyContent
+			fallbackSections := append([]string(nil), bodySections...)
 			for _, th := range threads {
-				fallbackBody += fmt.Sprintf("\n\n**%s**\n\n%v\n", th["path"], th["body"])
+				fallbackSections = append(fallbackSections, strings.TrimSpace(th["body"].(string)))
 			}
-			fallbackBody = strings.TrimSpace(fallbackBody) + "\n\n<!-- adversary-review:v1 batch -->\n"
+			fallbackBody := strings.Join(fallbackSections, "\n\n---\n\n") + "\n\n<!-- adversary-review:v1 batch -->\n"
 			input["body"] = fallbackBody
 			err = opts.Client.GraphQL(ctx, `
 mutation($input:AddPullRequestReviewInput!){
