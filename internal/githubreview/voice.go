@@ -93,17 +93,19 @@ func ResolveVoice(roots ...string) (prompt string, info VoiceInfo) {
 func TemplateBody(adversary string, f review.Finding, pathStr string, line *int) string {
 	lead := strings.TrimSpace(f.Title)
 	if lead == "" || len(strings.Fields(lead)) <= 2 || len(strings.Fields(lead)) > 40 {
-		lead = strings.TrimSpace(f.Summary)
+		if summary := strings.TrimSpace(f.Summary); summary != "" {
+			lead = summary
+		}
 	}
-	if len(strings.Fields(lead)) > 40 {
-		lead = strings.TrimSpace(f.Title)
+	if words := strings.Fields(lead); len(words) > 40 {
+		lead = strings.Join(words[:40], " ")
 	}
 	lead = sentence(lead)
 	action := strings.TrimSpace(f.Recommendation)
 	if before, _, ok := strings.Cut(action, ": "); ok && len(strings.Fields(action)) > 40 && len(strings.Fields(before)) <= 20 {
 		action = before
 	}
-	if len(strings.Fields(lead))+len(strings.Fields(action)) > 60 {
+	if len(strings.Fields(lead))+len(strings.Fields(action)) > 50 {
 		action = ""
 	}
 	body := lead

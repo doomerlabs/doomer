@@ -61,6 +61,31 @@ func TestTemplateBodyMarker(t *testing.T) {
 	}
 }
 
+func TestTemplateBodyClipsLongLead(t *testing.T) {
+	for _, tc := range []struct {
+		name, summary, wantStart string
+	}{
+		{name: "long summary", summary: strings.Repeat("summary ", 80), wantStart: "summary"},
+		{name: "missing summary", wantStart: "title"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := TemplateBody("go-cli", review.Finding{
+				ID:             "id1",
+				Title:          strings.Repeat("title ", 80),
+				Summary:        tc.summary,
+				Recommendation: strings.Repeat("fix ", 20),
+			}, "f.go", nil)
+			visible := strings.TrimSpace(stripReviewMarker(body))
+			if words := len(strings.Fields(visible)); words > 50 {
+				t.Fatalf("fallback has %d words: %q", words, visible)
+			}
+			if !strings.HasPrefix(visible, tc.wantStart) {
+				t.Fatalf("fallback used wrong lead: %q", visible)
+			}
+		})
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
