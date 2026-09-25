@@ -43,10 +43,21 @@ func TestResolveVoiceDefaultAndOverride(t *testing.T) {
 func TestTemplateBodyMarker(t *testing.T) {
 	line := 2
 	body := TemplateBody("go-cli", review.Finding{
-		ID: "id1", Title: "T", Severity: "high", Summary: "sum", Recommendation: "rec",
+		ID: "id1", Title: "Stuck work blocks new submissions", Severity: "high",
+		Summary:        strings.Repeat("The full diagnostic history is long. ", 30),
+		Recommendation: "Reset stale generating rows: either use a timeout or add a periodic reaper with detailed handling for every worker path, accounting for missing builders, cleared directories, worker restarts, retry state, terminal failures, and old queue entries so every possible transition is covered before a later submission is accepted.",
 	}, "f.go", &line)
 	if !strings.Contains(body, "adversary-review:v1") || !strings.Contains(body, "f.go:2") {
 		t.Fatal(body)
+	}
+	visible := strings.TrimSpace(stripReviewMarker(body))
+	if visible != "Stuck work blocks new submissions. Reset stale generating rows." {
+		t.Fatalf("fallback is not a short comment: %q", visible)
+	}
+	for _, unwanted := range []string{"high", "go-cli", "Where:", "Recommendation:", "f.go"} {
+		if strings.Contains(visible, unwanted) {
+			t.Fatalf("fallback leaked %q: %q", unwanted, visible)
+		}
 	}
 }
 

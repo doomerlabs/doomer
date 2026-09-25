@@ -119,30 +119,14 @@ func TemplateSummary(comments []PlannedComment) string {
 	if len(comments) == 0 {
 		return ""
 	}
-	counts := map[string]int{}
-	for _, comment := range comments {
-		counts[strings.ToLower(strings.TrimSpace(comment.Severity))]++
-	}
-	var countBits []string
-	for _, severity := range []string{"critical", "high", "medium", "low", "info"} {
-		if count := counts[severity]; count > 0 {
-			countBits = append(countBits, fmt.Sprintf("%d %s", count, severity))
-		}
-	}
 	var body strings.Builder
-	fmt.Fprintf(&body, "Adversary found %d actionable issue", len(comments))
+	fmt.Fprintf(&body, "Found %d actionable issue", len(comments))
 	if len(comments) != 1 {
 		body.WriteString("s")
 	}
-	if len(countBits) > 0 {
-		fmt.Fprintf(&body, " (%s)", strings.Join(countBits, ", "))
-	}
 	body.WriteString(":\n")
 	for _, comment := range comments {
-		fmt.Fprintf(&body, "\n- **%s** %s", strings.ToLower(comment.Severity), comment.Title)
-		if comment.Adversary != "" {
-			fmt.Fprintf(&body, " — `%s`", comment.Adversary)
-		}
+		fmt.Fprintf(&body, "\n- %s", comment.Title)
 	}
 	return body.String()
 }

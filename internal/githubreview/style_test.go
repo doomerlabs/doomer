@@ -44,7 +44,7 @@ func TestCommentStyleSettings(t *testing.T) {
 				t.Fatal(err)
 			}
 			prompt := BuildRewritePromptWithStyle("# Custom voice\n\nBe verbose.", style)
-			for _, want := range []string{"Tone: " + tone, "Conciseness: " + length, "Preserve the finding, severity, confidence", "Never manufacture certainty", "not a reusable preamble", "override conflicting package style rules"} {
+			for _, want := range []string{"Tone: " + tone, "Conciseness: " + length, "Preserve the finding's meaning, urgency, confidence", "Never manufacture certainty", "not a reusable preamble", "override conflicting package style rules"} {
 				if !strings.Contains(prompt, want) {
 					t.Fatalf("%s/%s: missing %q", tone, length, want)
 				}
@@ -84,7 +84,7 @@ func TestCommentStyleSettings(t *testing.T) {
 		"maintainer leaving an inline PR comment",
 		`Do not add mini-headings or labels such as "Why this matters", "Why this bites"`,
 		"Avoid stock transitions such as 'The fix is to ...'",
-		"Use no more than 85 words",
+		"Use no more than 50 words",
 		"Do not restate the same defect",
 		"Courtesy does not require 'please', 'we should', 'could we'",
 	} {

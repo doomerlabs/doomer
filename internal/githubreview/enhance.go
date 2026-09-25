@@ -91,12 +91,12 @@ func EnhanceBodies(ctx context.Context, plan *CommentPlan, opts EnhanceOptions) 
 	}
 }
 
-const terseMaxWords = 85
+const terseMaxWords = 50
 
 const voiceRetryInstruction = `
 
 ## Required correction
-The previous attempt did not meet the selected comment voice. Rewrite from the finding input again. For terse, use no more than 85 words. Keep the specific defect, its consequence if needed, and the action. Remove call-chain narration, stock transitions, repeated explanation, and any unsupported closing merge verdict. Return only the comment body.
+The previous attempt did not meet the selected comment voice. Rewrite from the finding input again. For terse, use no more than 50 words. Keep the specific defect, its consequence if needed, and the action. Remove severity labels, package names, commit SHAs, headings, call-chain narration, repeated explanation, and any unsupported closing merge verdict. Return only the comment body.
 `
 
 func matchesCommentStyle(body string, style CommentStyle, finding PlannedComment) bool {
@@ -104,6 +104,13 @@ func matchesCommentStyle(body string, style CommentStyle, finding PlannedComment
 		return false
 	}
 	lower := strings.ToLower(body)
+	if strings.Contains(body, "### ") || strings.Contains(lower, "**where:**") || strings.Contains(lower, "**recommendation:**") ||
+		strings.Contains(lower, "[medium]") || strings.Contains(lower, "[high]") || strings.Contains(lower, "[low]") ||
+		strings.Contains(lower, "[critical]") || strings.Contains(lower, "[info]") ||
+		finding.Adversary != "" && strings.Contains(body, finding.Adversary) ||
+		finding.HeadSHA != "" && strings.Contains(body, finding.HeadSHA) {
+		return false
+	}
 	if style.Tone == "direct" && strings.Contains(lower, "the fix is to ") {
 		return false
 	}
@@ -173,14 +180,13 @@ func rewriteOne(
 
 	input, err := json.Marshal(map[string]any{
 		"findingId":    c.FindingID,
-		"adversary":    c.Adversary,
 		"severity":     c.Severity,
 		"confidence":   c.Confidence,
 		"title":        c.Title,
 		"path":         c.Anchor.Path,
 		"line":         c.Anchor.Line,
 		"endLine":      c.Anchor.EndLine,
-		"templateBody": c.Body,
+		"templateBody": strings.TrimSpace(stripReviewMarker(c.Body)),
 		// Hints for picking a few-shot subsection under the example bank.
 		"exampleBankHint": exampleBankHint(c.Severity, c.Title, c.Body),
 	})
