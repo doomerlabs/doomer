@@ -2,7 +2,6 @@ package githubreview
 
 import (
 	_ "embed"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,32 +89,38 @@ func ResolveVoice(roots ...string) (prompt string, info VoiceInfo) {
 	return prompt, info
 }
 
-// TemplateBody builds a deterministic offline comment body.
+// TemplateBody builds a short deterministic fallback when a voice rewrite fails.
 func TemplateBody(adversary string, f review.Finding, pathStr string, line *int) string {
-	var b strings.Builder
-	title := strings.TrimSpace(f.Title)
-	if adversary != "" {
-		fmt.Fprintf(&b, "### [%s] %s — %s\n\n", f.Severity, adversary, title)
-	} else {
-		fmt.Fprintf(&b, "### %s — %s\n\n", f.Severity, title)
-	}
-	if s := strings.TrimSpace(f.Summary); s != "" {
-		b.WriteString(s)
-		b.WriteString("\n\n")
-	}
-	if pathStr != "" {
-		if line != nil {
-			fmt.Fprintf(&b, "**Where:** `%s:%d`\n\n", pathStr, *line)
-		} else {
-			fmt.Fprintf(&b, "**Where:** `%s`\n\n", pathStr)
+	lead := strings.TrimSpace(f.Title)
+	if lead == "" || len(strings.Fields(lead)) <= 2 || len(strings.Fields(lead)) > 40 {
+		if summary := strings.TrimSpace(f.Summary); summary != "" {
+			lead = summary
 		}
 	}
-	if r := strings.TrimSpace(f.Recommendation); r != "" {
-		fmt.Fprintf(&b, "**Recommendation:** %s\n\n", r)
+	if words := strings.Fields(lead); len(words) > 40 {
+		lead = strings.Join(words[:40], " ")
 	}
-	b.WriteString(Marker(adversary, f.ID, pathStr, line))
-	b.WriteByte('\n')
-	return b.String()
+	lead = sentence(lead)
+	action := strings.TrimSpace(f.Recommendation)
+	if before, _, ok := strings.Cut(action, ": "); ok && len(strings.Fields(action)) > 40 && len(strings.Fields(before)) <= 20 {
+		action = before
+	}
+	if len(strings.Fields(lead))+len(strings.Fields(action)) > 50 {
+		action = ""
+	}
+	body := lead
+	if action != "" && !strings.EqualFold(strings.TrimRight(lead, ".!?"), strings.TrimRight(action, ".!?")) {
+		body += " " + sentence(action)
+	}
+	return strings.TrimSpace(body) + "\n\n" + Marker(adversary, f.ID, pathStr, line) + "\n"
+}
+
+func sentence(text string) string {
+	text = strings.Join(strings.Fields(text), " ")
+	if text != "" && !strings.ContainsAny(text[len(text)-1:], ".!?") {
+		text += "."
+	}
+	return text
 }
 
 // EnsureMarker appends marker if missing.

@@ -149,3 +149,13 @@ func TestProjectFindingsDoesNotSummarizeCleanAdversaries(t *testing.T) {
 		t.Fatalf("clean result created review content: %#v", plan)
 	}
 }
+
+func TestTemplateSummaryOmitsReviewMetadata(t *testing.T) {
+	body := TemplateSummary([]PlannedComment{{
+		Title: "Stale generating rows block submissions", Severity: "medium",
+		Adversary: "registry.doomer.ai/library/review/code@sha256:abc",
+	}})
+	if body != "Found 1 actionable issue:\n\n- Stale generating rows block submissions" {
+		t.Fatalf("summary contains review metadata: %q", body)
+	}
+}

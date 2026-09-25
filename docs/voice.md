@@ -27,10 +27,12 @@ doomer run ./my-adversary --path ./app \
    with a prompt built from the resolved voice document.
 3. On rewrite failure or missing credentials, the **template** body is kept.
 
-For `terse`, the rewrite is limited to 85 words. The CLI asks the model to
+For `terse`, the rewrite is limited to 50 words. The CLI asks the model to
 rewrite once more if it exceeds that limit. If the second attempt still runs
-long, the original finding template is kept so the review does not silently
-drop technical evidence.
+long, a short finding template is kept. GitHub shows the code location, so
+visible comments omit severity labels, adversary and package names, commit
+SHAs, and repeated location headings. Tracking metadata remains in a hidden
+HTML comment for review thread reconciliation and feedback.
 
 The default is `direct` tone with `terse` length, `medium` politeness, and `high` formality. Set the controls on a run:
 

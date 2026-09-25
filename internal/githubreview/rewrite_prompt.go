@@ -40,7 +40,7 @@ then treat the blockquotes under it as **style few-shots**:
 
 ## Rules for every voice
 
-Change presentation only. Preserve the finding, severity, confidence, and
+Change presentation only. Preserve the finding's meaning, urgency, confidence, and
 recommended action. Do not add a defect, stronger causal claim, or fix that
 the finding evidence does not support. Be definitive when the evidence proves
 the finding. When context is missing, state the observed risk and what
@@ -54,6 +54,8 @@ Avoid stock openers such as "Please address this", "Please take a look",
 "Quick note", and "Heads up" in every tone and politeness setting.
 Write like a maintainer leaving an inline PR comment, not a report generated
 from a review template. Use plain, natural sentences and short paragraphs.
+Do not print severity or confidence labels, adversary or package names, commit
+SHAs, or a location header. GitHub already shows the comment's code location.
 Do not add mini-headings or labels such as "Why this matters", "Why this bites",
 "Impact", or "Fix". Avoid strained slang and euphemisms. If a sentence packs in
 the mechanism, an example, the consequence, historical behavior, and the fix,
@@ -64,7 +66,7 @@ merge verdict unless the finding explicitly calls for blocking the merge.
 
 ## JSON input fields
 
-- findingId, adversary, severity, confidence, title
+- findingId, severity, confidence, title
 - path, line, endLine (anchor)
 - templateBody (deterministic draft to rewrite)
 - exampleBankHint (preferred example-bank subsection: Ship / OK, Design / technical judgment, Defects / correctness, or Nits / style)
@@ -119,7 +121,7 @@ func BuildRewritePromptWithStyle(voiceMarkdown string, style CommentStyle) strin
 	case "explanatory":
 		b.WriteString("Explain the mechanism, evidence-backed consequence, and fix when they help the reviewer act. Let the complexity of the finding determine overall length; avoid repetition and unsupported detail. Do not enforce a sentence count.\n")
 	default:
-		b.WriteString("Use no more than 85 words. Preserve the specific defect, its concrete consequence when needed, and the fix. Cut background, repeated code paths, contract history, and exhaustive evidence. Prefer one short paragraph. If the issue needs more space to remain accurate, prioritize the finding and action; never pad with a merge verdict. Do not enforce a sentence count.\n")
+		b.WriteString("Use no more than 50 words. Preserve the specific defect, its concrete consequence when needed, and the fix. Cut background, repeated code paths, contract history, and exhaustive evidence. Prefer one short paragraph. If the issue needs more space to remain accurate, prioritize the finding and action; never pad with a merge verdict. Do not enforce a sentence count.\n")
 	}
 	fmt.Fprintf(&b, "Politeness: %s. ", style.Politeness)
 	switch style.Politeness {

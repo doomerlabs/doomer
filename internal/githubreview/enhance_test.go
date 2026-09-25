@@ -95,6 +95,31 @@ func TestDirectCommentRetriesStockConclusion(t *testing.T) {
 	}
 }
 
+func TestTerseCommentRejectsVisibleReviewMetadata(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	adversary := "registry.doomer.ai/library/review/code@sha256:" + sha
+	provider := &fakeProvider{responses: []string{
+		"### [medium] " + adversary + " — Stuck work blocks submissions",
+		"Stale generating rows block new submissions after builder loss. Reset them after the download timeout.",
+	}}
+	plan := CommentPlan{Comments: []PlannedComment{{
+		FindingID: "f1", Adversary: adversary, HeadSHA: sha, Severity: "medium",
+		Body:       "Stuck work blocks submissions.\n\n<!-- adversary-review:v2 adversary=secret head=" + sha + " -->",
+		BodySource: "template", Placement: "inline",
+	}}}
+	EnhanceBodies(context.Background(), &plan, EnhanceOptions{Provider: provider, VoicePrompt: DefaultVoicePrompt, Style: CommentStyle{Conciseness: "terse"}})
+	if provider.calls != 2 || plan.Comments[0].BodySource != "llm" {
+		t.Fatalf("metadata rewrite was not retried: calls=%d comment=%+v", provider.calls, plan.Comments[0])
+	}
+	if strings.Contains(string(provider.requests[0].Input), sha) || strings.Contains(string(provider.requests[0].Input), adversary) {
+		t.Fatalf("rewrite input leaked provenance: %s", provider.requests[0].Input)
+	}
+	visible := stripReviewMarker(plan.Comments[0].Body)
+	if strings.Contains(visible, "medium") || strings.Contains(visible, adversary) || strings.Contains(visible, sha) {
+		t.Fatalf("visible comment leaked metadata: %q", visible)
+	}
+}
+
 func TestEnhanceSummarySynthesizesActualFindings(t *testing.T) {
 	plan := CommentPlan{
 		ReviewBody: "deterministic fallback",

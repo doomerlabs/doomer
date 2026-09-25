@@ -268,6 +268,74 @@ func TestPostInlineOnlyReviewOmitsBody(t *testing.T) {
 	}
 }
 
+func TestPostFoldedCommentsKeepOnlyCommentText(t *testing.T) {
+	for _, tc := range []struct {
+		name, path    string
+		rejectThreads bool
+	}{
+		{name: "review body placement", path: "other.go"},
+		{name: "API fallback", path: "a.go", rejectThreads: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var addInput map[string]any
+			addCalls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/files") {
+					_, _ = w.Write([]byte(`[{"filename":"a.go","patch":"@@ -1,1 +1,2 @@\n keep\n+added\n"}]`))
+					return
+				}
+				var payload struct {
+					Query     string         `json:"query"`
+					Variables map[string]any `json:"variables"`
+				}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				switch {
+				case strings.Contains(payload.Query, "pullRequest(number"):
+					_, _ = w.Write([]byte(`{"data":{"repository":{"pullRequest":{"id":"PR_1","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}}`))
+				case strings.Contains(payload.Query, "addPullRequestReview"):
+					addCalls++
+					addInput, _ = payload.Variables["input"].(map[string]any)
+					if tc.rejectThreads && addCalls == 1 {
+						_, _ = w.Write([]byte(`{"errors":[{"message":"Field 'threads' is not defined"}]}`))
+						return
+					}
+					_, _ = w.Write([]byte(`{"data":{"addPullRequestReview":{"pullRequestReview":{"id":"RV_1","state":"PENDING"}}}}`))
+				default:
+					w.WriteHeader(http.StatusBadRequest)
+				}
+			}))
+			defer server.Close()
+
+			client := githubapi.NewClient("tok")
+			client.HTTP = server.Client()
+			client.RESTBase = server.URL
+			client.GQLURL = server.URL + "/"
+			line := 2
+			comment := "Fix the stale row.\n\n<!-- adversary-review:v1 adversary=review%2Fcode finding=f loc=a.go:2 -->"
+			_, err := Post(context.Background(), CommentPlan{Comments: []PlannedComment{{
+				FindingID: "f", Title: "Stale row", Severity: "high", Body: comment,
+				Placement: "inline", Anchor: Anchor{Path: tc.path, Line: &line},
+			}}}, PostOptions{Client: client, Owner: "o", Repo: "r", Number: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, _ := addInput["body"].(string)
+			if !strings.Contains(body, comment) || !strings.Contains(body, "adversary-review:v1 batch") {
+				t.Fatalf("comment or marker missing from review body: %q", body)
+			}
+			visible := stripReviewMarker(body)
+			for _, unwanted := range []string{"high", "Stale row", "**a.go**", "_a.go:2_"} {
+				if strings.Contains(visible, unwanted) {
+					t.Fatalf("review body leaked %q: %q", unwanted, body)
+				}
+			}
+			if tc.rejectThreads && addCalls != 2 {
+				t.Fatalf("expected fallback review attempt, got %d calls", addCalls)
+			}
+		})
+	}
+}
+
 func TestWritePlanFile(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/plan.json"
