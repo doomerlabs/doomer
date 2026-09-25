@@ -325,8 +325,15 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 			Provider:    provider,
 			VoicePrompt: voicePrompt,
 			Style:       style,
+			OnFailure: func(failure githubreview.CommentRewriteFailure) {
+				if progress != nil {
+					fmt.Fprintf(progress, "comment rewrite fallback: finding=%q reason=%q retry=%q\n", failure.FindingID, redactCommentRewriteDiagnostic(failure.Reason), redactCommentRewriteDiagnostic(failure.Retry))
+				}
+			},
 		})
 		githubreview.EnhanceSummary(ctx, &plan, githubreview.EnhanceOptions{Provider: provider})
+	} else if providerErr != nil && progress != nil && len(plan.Comments) > 0 {
+		fmt.Fprintf(progress, "comment rewrite fallback: provider unavailable: %q\n", redactCommentRewriteDiagnostic(providerErr.Error()))
 	}
 	// Execution status is host-authored, not model-rewritten or suppressed by
 	// --github-include-summary=false. Findings still use normal inline placement.
@@ -411,6 +418,19 @@ func maybeGitHubReview(ctx context.Context, app *application.App, opts *runOptio
 	}
 	registerGitHubReviewWatch(ctx, app, opts, apiURL, profile, result, progress)
 	return nil
+}
+
+func redactCommentRewriteDiagnostic(reason string) string {
+	for _, key := range []string{
+		modelreview.OpenAIKeyEnv, modelreview.AnthropicKeyEnv,
+		modelreview.FireworksKeyEnv, modelreview.CamelKeyEnv, modelreview.CloudflareKeyEnv,
+		"ADVERSARY_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN", "ADVERSARY_TOKEN",
+	} {
+		if secret, ok := githubapi.LookupEnv(key); ok && secret != "" {
+			reason = strings.ReplaceAll(reason, secret, "[redacted]")
+		}
+	}
+	return reason
 }
 
 func loadGitHubReviewFeedback(ctx context.Context, app *application.App, opts *runOptions, apiURL, profile string, progress io.Writer) {

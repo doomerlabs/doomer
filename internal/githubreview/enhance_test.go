@@ -77,9 +77,13 @@ func TestTerseCommentRejectsRepeatedOverlongRewrite(t *testing.T) {
 	long := strings.Repeat("This repeats the same review finding without helping the author act. ", 12)
 	provider := &fakeProvider{responses: []string{long, long}}
 	plan := CommentPlan{Comments: []PlannedComment{{FindingID: "f1", Body: "template", BodySource: "template", Placement: "inline"}}}
-	EnhanceBodies(context.Background(), &plan, EnhanceOptions{Provider: provider, VoicePrompt: DefaultVoicePrompt, Style: CommentStyle{Conciseness: "terse"}})
+	var failures []CommentRewriteFailure
+	EnhanceBodies(context.Background(), &plan, EnhanceOptions{Provider: provider, VoicePrompt: DefaultVoicePrompt, Style: CommentStyle{Conciseness: "terse"}, OnFailure: func(f CommentRewriteFailure) { failures = append(failures, f) }})
 	if provider.calls != 2 || plan.Comments[0].Body != "template" || plan.Comments[0].BodySource != "template" {
 		t.Fatalf("calls=%d comment=%+v", provider.calls, plan.Comments[0])
+	}
+	if len(failures) != 1 || failures[0].FindingID != "f1" || !strings.Contains(failures[0].Reason, "exceeds 50 words") || !strings.Contains(failures[0].Retry, "exceeds 50 words") {
+		t.Fatalf("failure reasons: %+v", failures)
 	}
 }
 
@@ -196,9 +200,11 @@ func TestEnhanceBodiesFallsBackOnProviderFailure(t *testing.T) {
 	plan := ProjectFindings([]NamedEnvelope{{Adversary: "x", Envelope: env}}, ProjectOptions{})
 	before := plan.Comments[0].Body
 	fp := &fakeProvider{fail: true, bodies: map[string]string{}}
+	var failures []CommentRewriteFailure
 	EnhanceBodies(context.Background(), &plan, EnhanceOptions{
 		Provider:    fp,
 		VoicePrompt: DefaultVoicePrompt,
+		OnFailure:   func(f CommentRewriteFailure) { failures = append(failures, f) },
 	})
 	if plan.Comments[0].BodySource != "template" {
 		t.Fatalf("%s", plan.Comments[0].BodySource)
@@ -206,15 +212,22 @@ func TestEnhanceBodiesFallsBackOnProviderFailure(t *testing.T) {
 	if plan.Comments[0].Body != before {
 		t.Fatal("template body should be preserved")
 	}
+	if len(failures) != 1 || failures[0].FindingID != "f1" || failures[0].Reason != "provider down" || failures[0].Retry != "" {
+		t.Fatalf("failure reasons: %+v", failures)
+	}
 }
 
 func TestEnhanceBodiesNoopWithoutProvider(t *testing.T) {
 	plan := CommentPlan{Comments: []PlannedComment{{
 		FindingID: "f", Body: "template", BodySource: "template", Placement: "inline",
 	}}}
-	EnhanceBodies(context.Background(), &plan, EnhanceOptions{VoicePrompt: DefaultVoicePrompt})
+	var failures []CommentRewriteFailure
+	EnhanceBodies(context.Background(), &plan, EnhanceOptions{VoicePrompt: DefaultVoicePrompt, OnFailure: func(f CommentRewriteFailure) { failures = append(failures, f) }})
 	if plan.Comments[0].BodySource != "template" {
 		t.Fatal(plan.Comments[0].BodySource)
+	}
+	if len(failures) != 1 || failures[0].Reason != "model provider unavailable" {
+		t.Fatalf("failure reasons: %+v", failures)
 	}
 }
 
