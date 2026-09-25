@@ -25,7 +25,8 @@ const summaryPrompt = `You write the aggregate summary for an automated pull-req
 Synthesize only the supplied findings into a concise, actionable summary. Lead with the
 highest-priority remediation, group overlapping findings, and mention meaningful risk.
 Do not report clean checks, repeat "merge as-is" opinions, praise the repository, or add
-generic process advice. Use at most 150 words. Return JSON matching the supplied schema.`
+generic process advice. Do not print severity labels, adversary or package names,
+or commit SHAs. Use at most 150 words. Return JSON matching the supplied schema.`
 
 // EnhanceOptions controls LLM comment rewrite.
 type EnhanceOptions struct {
