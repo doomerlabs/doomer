@@ -31,6 +31,8 @@ or commit SHAs. Use at most 150 words. Return JSON matching the supplied schema.
 // EnhanceOptions controls LLM comment rewrite.
 type EnhanceOptions struct {
 	Provider modelreview.Provider
+	// OnFailure receives the reasons a planned comment kept its template.
+	OnFailure func(CommentRewriteFailure)
 	// VoicePrompt is the resolved CLI default or VOICE.md text.
 	VoicePrompt string
 	Style       CommentStyle
@@ -40,12 +42,30 @@ type EnhanceOptions struct {
 	Timeout time.Duration
 }
 
+type CommentRewriteFailure struct {
+	FindingID string
+	Reason    string
+	Retry     string
+}
+
 // EnhanceBodies rewrites planned comment bodies via the model provider.
 // On missing provider, empty prompt, or per-finding failure, leaves template body
 // and bodySource "template". Successful rewrites set bodySource "llm" and append
 // the tracking marker.
 func EnhanceBodies(ctx context.Context, plan *CommentPlan, opts EnhanceOptions) {
-	if plan == nil || opts.Provider == nil || strings.TrimSpace(opts.VoicePrompt) == "" {
+	if plan == nil || ctx.Err() != nil {
+		return
+	}
+	if opts.Provider == nil || strings.TrimSpace(opts.VoicePrompt) == "" {
+		reason := "model provider unavailable"
+		if opts.Provider != nil {
+			reason = "comment voice prompt is empty"
+		}
+		for _, comment := range plan.Comments {
+			if comment.Placement != "unplaceable" {
+				reportCommentRewriteFailure(opts.OnFailure, comment, reason, "")
+			}
+		}
 		return
 	}
 	max := opts.MaxComments
@@ -65,30 +85,56 @@ func EnhanceBodies(ctx context.Context, plan *CommentPlan, opts EnhanceOptions) 
 	}
 	enhanced := 0
 	for i := range plan.Comments {
+		if ctx.Err() != nil {
+			return
+		}
 		if enhanced >= max {
-			break
+			if plan.Comments[i].Placement != "unplaceable" {
+				reportCommentRewriteFailure(opts.OnFailure, plan.Comments[i], fmt.Sprintf("comment rewrite limit reached (%d successful rewrites)", max), "")
+			}
+			continue
 		}
 		c := &plan.Comments[i]
 		if c.Placement == "unplaceable" {
 			continue
 		}
 		body, err := rewriteOne(ctx, opts.Provider, prompt, *c, schema, timeout)
-		if err != nil || strings.TrimSpace(body) == "" {
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			reportCommentRewriteFailure(opts.OnFailure, *c, err.Error(), "")
 			continue
 		}
-		if !matchesCommentStyle(body, style, *c) {
+		if reason := commentStyleFailure(body, style, *c); reason != "" {
 			corrected, retryErr := rewriteOne(ctx, opts.Provider, prompt+voiceRetryInstruction, *c, schema, timeout)
-			if retryErr == nil && matchesCommentStyle(corrected, style, *c) {
+			if ctx.Err() != nil {
+				return
+			}
+			if retryErr == nil && commentStyleFailure(corrected, style, *c) == "" {
 				body = corrected
 			} else {
 				// Keep the finding intact if the provider cannot produce a short rewrite.
 				// A clipped comment can silently remove the consequence or fix.
+				retryReason := ""
+				if retryErr != nil {
+					retryReason = retryErr.Error()
+				} else {
+					retryReason = commentStyleFailure(corrected, style, *c)
+				}
+				reportCommentRewriteFailure(opts.OnFailure, *c, reason, retryReason)
 				continue
 			}
 		}
 		c.Body = EnsurePlannedMarker(body, *c)
 		c.BodySource = "llm"
 		enhanced++
+	}
+}
+
+func reportCommentRewriteFailure(report func(CommentRewriteFailure), comment PlannedComment, reason, retry string) {
+	if report != nil {
+		report(CommentRewriteFailure{FindingID: comment.FindingID, Reason: reason, Retry: retry})
 	}
 }
 
@@ -101,25 +147,36 @@ The previous attempt did not meet the selected comment voice. Rewrite from the f
 `
 
 func matchesCommentStyle(body string, style CommentStyle, finding PlannedComment) bool {
-	if strings.TrimSpace(body) == "" || style.Conciseness == "terse" && len(strings.Fields(body)) > terseMaxWords {
-		return false
+	return commentStyleFailure(body, style, finding) == ""
+}
+
+func commentStyleFailure(body string, style CommentStyle, finding PlannedComment) string {
+	if strings.TrimSpace(body) == "" {
+		return "empty rewrite body"
+	}
+	if style.Conciseness == "terse" && len(strings.Fields(body)) > terseMaxWords {
+		return fmt.Sprintf("terse comment exceeds %d words (got %d)", terseMaxWords, len(strings.Fields(body)))
 	}
 	lower := strings.ToLower(body)
-	if strings.Contains(body, "### ") || strings.Contains(lower, "**where:**") || strings.Contains(lower, "**recommendation:**") ||
-		strings.Contains(lower, "[medium]") || strings.Contains(lower, "[high]") || strings.Contains(lower, "[low]") ||
-		strings.Contains(lower, "[critical]") || strings.Contains(lower, "[info]") ||
-		finding.Adversary != "" && strings.Contains(body, finding.Adversary) ||
-		finding.HeadSHA != "" && strings.Contains(body, finding.HeadSHA) {
-		return false
+	for _, banned := range []string{"### ", "**where:**", "**recommendation:**", "[medium]", "[high]", "[low]", "[critical]", "[info]"} {
+		if strings.Contains(lower, banned) {
+			return fmt.Sprintf("rewrite contains banned review formatting %q", banned)
+		}
+	}
+	if finding.Adversary != "" && strings.Contains(body, finding.Adversary) {
+		return "rewrite contains the adversary package name"
+	}
+	if finding.HeadSHA != "" && strings.Contains(body, finding.HeadSHA) {
+		return "rewrite contains the reviewed commit SHA"
 	}
 	if style.Tone == "direct" && strings.Contains(lower, "the fix is to ") {
-		return false
+		return "direct comment contains banned phrase: the fix is to"
 	}
 	if !strings.Contains(strings.ToLower(finding.Body), "merge") &&
 		(strings.Contains(lower, "shouldn't merge") || strings.Contains(lower, "should not merge")) {
-		return false
+		return "rewrite added an unsupported merge verdict"
 	}
-	return true
+	return ""
 }
 
 // EnhanceSummary replaces the deterministic findings-only summary with one
