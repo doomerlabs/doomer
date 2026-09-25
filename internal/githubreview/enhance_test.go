@@ -3,6 +3,7 @@ package githubreview
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -19,15 +20,21 @@ type fakeProvider struct {
 	summaryBody string
 	calls       int
 	fail        bool
+	onReview    func(context.Context, int) error
 	requests    []modelreview.Request
 }
 
 func (f *fakeProvider) Name() string  { return f.name }
 func (f *fakeProvider) Model() string { return f.model }
 
-func (f *fakeProvider) Review(_ context.Context, req modelreview.Request) (modelreview.Result, error) {
+func (f *fakeProvider) Review(ctx context.Context, req modelreview.Request) (modelreview.Result, error) {
 	f.calls++
 	f.requests = append(f.requests, req)
+	if f.onReview != nil {
+		if err := f.onReview(ctx, f.calls); err != nil {
+			return modelreview.Result{}, err
+		}
+	}
 	if f.fail {
 		return modelreview.Result{}, &modelreview.ProviderError{Code: "fail", Message: "provider down"}
 	}
@@ -214,6 +221,45 @@ func TestEnhanceBodiesFallsBackOnProviderFailure(t *testing.T) {
 	}
 	if len(failures) != 1 || failures[0].FindingID != "f1" || failures[0].Reason != "provider down" || failures[0].Retry != "" {
 		t.Fatalf("failure reasons: %+v", failures)
+	}
+}
+
+func TestEnhanceBodiesStopsWithoutReportingCanceledRewrite(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	provider := &fakeProvider{onReview: func(ctx context.Context, _ int) error {
+		cancel()
+		return fmt.Errorf("provider stopped: %w", ctx.Err())
+	}}
+	plan := CommentPlan{Comments: []PlannedComment{
+		{FindingID: "first", Body: "template one", BodySource: "template", Placement: "inline"},
+		{FindingID: "second", Body: "template two", BodySource: "template", Placement: "inline"},
+	}}
+	var failures []CommentRewriteFailure
+	EnhanceBodies(ctx, &plan, EnhanceOptions{Provider: provider, VoicePrompt: DefaultVoicePrompt, OnFailure: func(f CommentRewriteFailure) { failures = append(failures, f) }})
+	if provider.calls != 1 || len(failures) != 0 || plan.Comments[0].Body != "template one" || plan.Comments[1].Body != "template two" {
+		t.Fatalf("calls=%d failures=%+v comments=%+v", provider.calls, failures, plan.Comments)
+	}
+}
+
+func TestEnhanceBodiesStopsWithoutReportingCanceledRetry(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	provider := &fakeProvider{
+		responses: []string{strings.Repeat("Too many words in this rewrite. ", 20)},
+		onReview: func(ctx context.Context, call int) error {
+			if call == 2 {
+				cancel()
+				return fmt.Errorf("retry stopped: %w", ctx.Err())
+			}
+			return nil
+		},
+	}
+	plan := CommentPlan{Comments: []PlannedComment{{FindingID: "first", Body: "template", BodySource: "template", Placement: "inline"}}}
+	var failures []CommentRewriteFailure
+	EnhanceBodies(ctx, &plan, EnhanceOptions{Provider: provider, VoicePrompt: DefaultVoicePrompt, Style: CommentStyle{Conciseness: "terse"}, OnFailure: func(f CommentRewriteFailure) { failures = append(failures, f) }})
+	if provider.calls != 2 || len(failures) != 0 || plan.Comments[0].Body != "template" {
+		t.Fatalf("calls=%d failures=%+v comment=%+v", provider.calls, failures, plan.Comments[0])
 	}
 }
 

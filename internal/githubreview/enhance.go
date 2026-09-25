@@ -53,7 +53,7 @@ type CommentRewriteFailure struct {
 // and bodySource "template". Successful rewrites set bodySource "llm" and append
 // the tracking marker.
 func EnhanceBodies(ctx context.Context, plan *CommentPlan, opts EnhanceOptions) {
-	if plan == nil {
+	if plan == nil || ctx.Err() != nil {
 		return
 	}
 	if opts.Provider == nil || strings.TrimSpace(opts.VoicePrompt) == "" {
@@ -85,6 +85,9 @@ func EnhanceBodies(ctx context.Context, plan *CommentPlan, opts EnhanceOptions) 
 	}
 	enhanced := 0
 	for i := range plan.Comments {
+		if ctx.Err() != nil {
+			return
+		}
 		if enhanced >= max {
 			if plan.Comments[i].Placement != "unplaceable" {
 				reportCommentRewriteFailure(opts.OnFailure, plan.Comments[i], fmt.Sprintf("comment rewrite limit reached (%d successful rewrites)", max), "")
@@ -96,12 +99,18 @@ func EnhanceBodies(ctx context.Context, plan *CommentPlan, opts EnhanceOptions) 
 			continue
 		}
 		body, err := rewriteOne(ctx, opts.Provider, prompt, *c, schema, timeout)
+		if ctx.Err() != nil {
+			return
+		}
 		if err != nil {
 			reportCommentRewriteFailure(opts.OnFailure, *c, err.Error(), "")
 			continue
 		}
 		if reason := commentStyleFailure(body, style, *c); reason != "" {
 			corrected, retryErr := rewriteOne(ctx, opts.Provider, prompt+voiceRetryInstruction, *c, schema, timeout)
+			if ctx.Err() != nil {
+				return
+			}
 			if retryErr == nil && commentStyleFailure(corrected, style, *c) == "" {
 				body = corrected
 			} else {
