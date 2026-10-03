@@ -1,0 +1,4 @@
+/bin/
+/doomer
+*.test
+.DS_Store
