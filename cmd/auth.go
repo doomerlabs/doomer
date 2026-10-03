@@ -8,9 +8,9 @@ import (
 )
 
 type loginOptions struct {
-	ci                                          bool
-	name, emailAddress, registryNamespace, team string
-	passwordStdin, tokenStdin, device           bool
+	ci                                    bool
+	name, emailAddress, registryNamespace string
+	passwordStdin, tokenStdin, device     bool
 }
 type logoutOptions struct{ localOnly bool }
 
@@ -34,13 +34,13 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 			stdin, clock, browserAuth, tty := cmd.InOrStdin(), deps.Clock, deps.BrowserAuth, deps.TTY
 			store := deps.Auth
 			var err error
-			if _, _, err := store.ExactAuthE(adversarylabs.AuthKey(valueOf(apiURL), valueOf(profile))); err != nil {
+			if _, _, err := store.ExactAuthE(adversarylabs.AuthKey(valueOf(apiURL), loginCredentialProfile(opts.tokenStdin, valueOf(profile)))); err != nil {
 				return err
 			}
 			client := deps.API.New(valueOf(apiURL))
 			var token adversarylabs.TokenResponse
 			if opts.tokenStdin {
-				if opts.emailAddress != "" || opts.passwordStdin || opts.device || opts.ci || opts.team != "" {
+				if opts.emailAddress != "" || opts.passwordStdin || opts.device || opts.ci {
 					return fmt.Errorf("--token-stdin cannot be combined with password, device, or CI login options")
 				}
 				value, readErr := readSecretLine(stdin, "token")
@@ -74,7 +74,6 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 					Password:     password,
 					Name:         opts.name,
 					CI:           opts.ci,
-					Team:         opts.team,
 				})
 				if err != nil {
 					return err
@@ -91,12 +90,12 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 				if opts.registryNamespace != "" {
 					return fmt.Errorf("--registry-namespace requires --token-stdin")
 				}
-				token, err = browserAuth.Login(cmd.Context(), application.BrowserAuthRequest{Client: client, Name: opts.name, Team: opts.team, CI: opts.ci, Output: cmd.OutOrStdout()})
+				token, err = browserAuth.Login(cmd.Context(), application.BrowserAuthRequest{Client: client, Name: opts.name, CI: opts.ci, Output: cmd.OutOrStdout()})
 				if err != nil {
 					return err
 				}
 			}
-			if err := store.SetAuth(adversarylabs.AuthKey(valueOf(apiURL), valueOf(profile)), adversarylabs.Auth{
+			if err := store.SetAuth(adversarylabs.AuthKey(valueOf(apiURL), loginCredentialProfile(opts.tokenStdin, valueOf(profile))), adversarylabs.Auth{
 				Token:             token.Token,
 				ClientID:          token.ClientID,
 				ExpiresAt:         token.ExpiresAt,
@@ -119,7 +118,6 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 	cmd.Flags().BoolVar(&opts.passwordStdin, "password-stdin", false, "read the password from standard input")
 	cmd.Flags().BoolVar(&opts.tokenStdin, "token-stdin", false, "read a service account or short-lived CI token from standard input")
 	cmd.Flags().StringVar(&opts.registryNamespace, "registry-namespace", "", "registry namespace for a service account or CI token")
-	cmd.Flags().StringVar(&opts.team, "team", "", "team slug to use for browser, password, or device login")
 	return cmd
 }
 
@@ -138,6 +136,13 @@ func newLogoutCommand(app *application.App, apiURL, profile *string) *cobra.Comm
 			auth, ok, err := store.StoredAuthE(key)
 			if err != nil {
 				return err
+			}
+			if !ok && valueOf(profile) != "default" {
+				key = adversarylabs.AuthKey(valueOf(apiURL), "default")
+				auth, ok, err = store.StoredAuthE(key)
+				if err != nil {
+					return err
+				}
 			}
 			if !ok && key == adversarylabs.AuthKey(adversarylabs.DefaultAPIURL, "default") { // exact legacy migration fallback
 				auth, ok, err = store.StoredAuthE(deps.RegistryHost)
@@ -165,4 +170,13 @@ func newLogoutCommand(app *application.App, apiURL, profile *string) *cobra.Comm
 	}
 	cmd.Flags().BoolVar(&opts.localOnly, "local-only", false, "remove local credentials without contacting Doomer")
 	return cmd
+}
+
+// Imported service credentials remain profile-specific; personal login belongs
+// to the account at this API endpoint and is shared by its project profiles.
+func loginCredentialProfile(imported bool, profile string) string {
+	if imported {
+		return profile
+	}
+	return "default"
 }

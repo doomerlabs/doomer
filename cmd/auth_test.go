@@ -79,7 +79,7 @@ func TestPasswordLoginAndRevocationFailurePreservesCredentials(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 				t.Error(err)
 			}
-			if input.EmailAddress != "user@example.com" || input.Password != "secret" || input.Team != "team" {
+			if input.EmailAddress != "user@example.com" || input.Password != "secret" || input.Team != "" {
 				t.Errorf("wrong password payload: email=%q team=%q", input.EmailAddress, input.Team)
 			}
 			_, _ = w.Write([]byte(`{"token":"test-token","client_id":"client"}`))
@@ -100,13 +100,13 @@ func TestPasswordLoginAndRevocationFailurePreservesCredentials(t *testing.T) {
 	}))
 	defer server.Close()
 	args := []string{"--api-url", server.URL, "--profile", "work"}
-	if out, err := execute(t, "secret\n", append(args, "login", "--email-address", "user@example.com", "--password-stdin", "--team", "team")...); err != nil || strings.Contains(out, "test-token") {
+	if out, err := execute(t, "secret\n", append(args, "login", "--email-address", "user@example.com", "--password-stdin")...); err != nil || strings.Contains(out, "test-token") {
 		t.Fatalf("password login: %q %v", out, err)
 	}
 	if _, err := execute(t, "", append(args, "logout")...); err == nil || strings.Contains(err.Error(), "test-token") {
 		t.Fatalf("revocation failure: %v", err)
 	}
-	key := adversarylabs.AuthKey(server.URL, "work")
+	key := adversarylabs.AuthKey(server.URL, "default")
 	if _, ok, err := store.ExactAuthE(key); err != nil || !ok {
 		t.Fatalf("credentials not preserved: %v %v", ok, err)
 	}
@@ -200,5 +200,44 @@ func TestLoginIgnoresLegacyEnvironmentAndStoresDoomerRegistry(t *testing.T) {
 	auth, ok, err := store.ExactAuthE(adversarylabs.AuthKey(adversarylabs.DefaultAPIURL, "default"))
 	if err != nil || !ok || auth.RegistryHost != "localhost:8787" {
 		t.Fatalf("wrong endpoint or registry: found=%v registry=%q error=%v", ok, auth.RegistryHost, err)
+	}
+}
+
+func TestProjectProfilesShareAccountLogin(t *testing.T) {
+	store := isolate(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		if _, exists := payload["team"]; exists {
+			t.Error("login should not select a project")
+		}
+		_, _ = w.Write([]byte(`{"token":"account-token","client_id":"account"}`))
+	}))
+	defer server.Close()
+	for _, name := range []string{"work", "personal"} {
+		if _, err := execute(t, "", "profiles", "add", name, "--endpoint", server.URL, "--project", name+"-project"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := execute(t, "secret", "--profile", "work", "login", "--email-address", "user@example.com", "--password-stdin"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, "default")); err != nil || !ok {
+		t.Fatalf("account login missing: %v", err)
+	}
+	if _, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, "work")); err != nil || ok {
+		t.Fatalf("personal login bound to profile: %v", err)
+	}
+	out, err := execute(t, "", "profiles", "list")
+	if err != nil || !strings.Contains(out, "work-project") || !strings.Contains(out, "personal-project") {
+		t.Fatalf("profiles: %q %v", out, err)
+	}
+	if _, err := execute(t, "", "--profile", "personal", "logout", "--local-only"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, "default")); err != nil || ok {
+		t.Fatalf("account login not removed: %v", err)
 	}
 }
