@@ -85,7 +85,8 @@ engine, package registry implementation, or prior release artifacts.
 
 Depot CI reads `.depot/workflows/ci.yml` and `.depot/workflows/release.yml`.
 Push an immutable CalVer tag such as `2026.10.3` from reviewed `main` to build
-and publish a release, then update `doomerlabs/homebrew-tap` as `doomer`.
+and publish a release. Depot also opens the verified Homebrew formula PR and
+waits for automatic review/merge into `doomerlabs/homebrew-tap` as `doomer`.
 Install with `brew install doomerlabs/tap/doomer`.
 Prerelease tags such as `2026.10.3-beta.1` update `doomer-beta` separately.
 

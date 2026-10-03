@@ -241,7 +241,38 @@ publish_formula() {
   git -C "$tap_dir" config user.name "${GIT_COMMITTER_NAME:-doomer-release-bot}"
   git -C "$tap_dir" config user.email "${GIT_COMMITTER_EMAIL:-release-bot@adversarylabs.com}"
   git -C "$tap_dir" add "Formula/${FORMULA_NAME}"
-  git -C "$tap_dir" diff --cached --quiet || { git -C "$tap_dir" commit -m "Update doomer to ${TAG}"; git -C "$tap_dir" push origin HEAD; }
+  if git -C "$tap_dir" diff --cached --quiet; then
+    log "Homebrew formula already matches ${TAG}"
+    return
+  fi
+  local base branch expected remote_formula attempt
+  base="$(git -C "$tap_dir" symbolic-ref --short refs/remotes/origin/HEAD)"
+  base="${base#origin/}"
+  branch="release/doomer-${TAG}"
+  expected="$(shasum -a 256 "${DIST_DIR}/${FORMULA_NAME}" | awk '{print $1}')"
+  remote_formula="$(mktemp "${TMPDIR:-/tmp}/doomer-tap-formula.XXXXXX")"; TEMP_PATHS+=("$remote_formula")
+  if [[ -n "$(git -C "$tap_dir" ls-remote --heads origin "refs/heads/$branch")" ]]; then
+    git -C "$tap_dir" fetch origin "$branch"
+    git -C "$tap_dir" show "FETCH_HEAD:Formula/$FORMULA_NAME" >"$remote_formula"
+    [[ "$(shasum -a 256 "$remote_formula" | awk '{print $1}')" == "$expected" ]] || fail "existing release branch formula differs from verified bundle"
+    log "Resuming Homebrew publication from $branch"
+  else
+    git -C "$tap_dir" commit -m "Update doomer to ${TAG}"
+    git -C "$tap_dir" push origin "HEAD:refs/heads/$branch"
+  fi
+  log "Waiting for the tap's Depot workflow to publish $branch"
+  # The tap workflow opens the PR and merges only after required review/checks.
+  # A tag job is successful only after the verified formula reaches the base.
+  for attempt in $(seq 1 40); do
+    git -C "$tap_dir" fetch origin "$base"
+    git -C "$tap_dir" show "FETCH_HEAD:Formula/$FORMULA_NAME" >"$remote_formula"
+    if [[ "$(shasum -a 256 "$remote_formula" | awk '{print $1}')" == "$expected" ]]; then
+      log "Verified ${TAG} formula on the tap's $base branch"
+      return
+    fi
+    if [[ "$attempt" != 40 ]]; then sleep 15; fi
+  done
+  fail "Homebrew publication timed out; inspect Depot CI for $TAP_REPO branch $branch and retry this job"
 }
 
 for legacy_mode in BUILD_ONLY PUBLISH_ONLY VERIFY_ONLY SKIP_PUBLISH; do

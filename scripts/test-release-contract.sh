@@ -281,16 +281,45 @@ case "$1" in
     ;;
   -C)
     printf 'tap %s\n' "$*" >>"$PUBLISH_TEST_LOG"
+    case "$3" in
+      diff) [ "$PUBLISH_TAP_STATE" = current ] ;;
+      symbolic-ref) printf 'origin/main\n' ;;
+      ls-remote) case "$PUBLISH_TAP_STATE" in resume|mismatch) printf 'abc refs/heads/release/doomer-2099.1.2\n';; esac ;;
+      fetch) printf '%s\n' "$5" >"$PUBLISH_TAP_FETCH" ;;
+      show)
+        if [ "$PUBLISH_TAP_STATE" = timeout ] || { [ "$PUBLISH_TAP_STATE" = mismatch ] && grep -q release/ "$PUBLISH_TAP_FETCH"; }; then
+          printf 'different formula\n'
+        else
+          cat "$PUBLISH_TAP_FORMULA"
+        fi
+        ;;
+    esac
     ;;
   *) exec "$REAL_GIT" "$@" ;;
 esac
 EOF
-chmod 0700 "$fakebin/git"
-export REAL_GIT="$real_git"
-: >"$publish_log"
-PATH="$fakebin:$PATH" RELEASE_MODE=publish-homebrew HOMEBREW_TAP_TOKEN=test-token DIST_DIR="$tmp" scripts/publish-homebrew.sh 2099.1.2 >/dev/null
-grep -Fxq 'clone' "$publish_log" || fail 'Homebrew-only publication did not stage the verified formula'
-if grep -Fq 'release ' "$publish_log"; then fail 'Homebrew-only publication invoked GitHub release operations'; fi
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$fakebin/sleep"
+chmod 0700 "$fakebin/git" "$fakebin/sleep"
+export REAL_GIT="$real_git" PUBLISH_TAP_FORMULA="$PWD/$tmp/doomer.rb" PUBLISH_TAP_FETCH="$fakebin/tap-fetch"
+for scenario in fresh resume current; do
+  export PUBLISH_TAP_STATE="$scenario"
+  : >"$publish_log"
+  PATH="$fakebin:$PATH" RELEASE_MODE=publish-homebrew HOMEBREW_TAP_TOKEN=test-token DIST_DIR="$tmp" scripts/publish-homebrew.sh 2099.1.2 >/dev/null
+  grep -Fxq 'clone' "$publish_log" || fail 'Homebrew-only publication did not stage the verified formula'
+  if grep -Fq 'release ' "$publish_log"; then fail 'Homebrew-only publication invoked GitHub release operations'; fi
+  if [[ "$scenario" == fresh ]]; then
+    grep -Fq 'push origin HEAD:refs/heads/release/doomer-2099.1.2' "$publish_log" || fail 'publisher did not push a release branch'
+    grep -Fq 'fetch origin main' "$publish_log" || fail 'publisher did not verify publication on main'
+  elif grep -Fq 'push origin' "$publish_log"; then
+    fail "Homebrew retry pushed again: $scenario"
+  fi
+done
+for scenario in mismatch timeout; do
+  export PUBLISH_TAP_STATE="$scenario"
+  : >"$publish_log"
+  if PATH="$fakebin:$PATH" RELEASE_MODE=publish-homebrew HOMEBREW_TAP_TOKEN=test-token DIST_DIR="$tmp" scripts/publish-homebrew.sh 2099.1.2 >/dev/null 2>&1; then fail "Homebrew publication accepted $scenario"; fi
+  if [[ "$scenario" == mismatch ]] && grep -Fq 'push origin' "$publish_log"; then fail 'mismatched branch was overwritten'; fi
+done
 
 for archive in "$tmp"/*.tar.gz; do
   listing="$(tar -tzf "$archive")"
