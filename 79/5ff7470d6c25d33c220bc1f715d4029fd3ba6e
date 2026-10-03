@@ -1,0 +1,59 @@
+.github/workflows/ci.yml
+  s_8c3641f319aafc::t_5b0eee31198d87 1-18
+.gitignore
+  s_8c3641f319aafc::t_35189b686b4027 1-4
+LICENSE
+  s_8c3641f319aafc::t_991366983add4f 1-201
+README.md
+  s_8c3641f319aafc::t_132cde46314e2c 1-82
+cmd/auth.go
+  s_8c3641f319aafc::t_f5307acede85a4 1-168
+cmd/auth_helpers.go
+  s_8c3641f319aafc::t_49b0ca020d28a2 1-87
+cmd/auth_test.go
+  s_8c3641f319aafc::t_598918a3f593e0 1-188
+cmd/root.go
+  s_8c3641f319aafc::t_0d2f0b9be03ba1 1-244
+go.mod
+  s_8c3641f319aafc::t_687a9b60e1b50f 1-32
+go.sum
+  s_8c3641f319aafc::t_73b5c75a631195 1-80
+internal/application/application.go
+  s_8c3641f319aafc::t_3e909aa73bf4ad 1-55
+internal/dependencies/browser_auth_test.go
+  s_8c3641f319aafc::t_2aea0fc5ed1501 1-360
+internal/dependencies/dependencies.go
+  s_8c3641f319aafc::t_adfbf516b5a5da 1-278
+internal/paths/paths.go
+  s_8c3641f319aafc::t_e84537a28c47bc 1-62
+main.go
+  s_8c3641f319aafc::t_973cbf3c6b842e 1-18
+pkg/adversarylabs/client.go
+  s_8c3641f319aafc::t_c2012c622ab0cd 1-377
+pkg/adversarylabs/config.go
+  s_8c3641f319aafc::t_d5241b22fdf1a8 1-316
+pkg/adversarylabs/config_test.go
+  s_8c3641f319aafc::t_4d099e609b31ee 1-33
+pkg/adversarylabs/lock_unix.go
+  s_8c3641f319aafc::t_06d101789efe51 1-54
+pkg/adversarylabs/lock_windows.go
+  s_8c3641f319aafc::t_a52456e1397631 1-49
+pkg/adversarylabs/response_error.go
+  s_8c3641f319aafc::t_2d95dabbdc5961 1-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "795ff7470d6c25d33c220bc1f715d4029fd3ba6e",
+  "prompts": {},
+  "sessions": {
+    "s_8c3641f319aafc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a10334-4774-7b90-8710-ace04befe70d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
