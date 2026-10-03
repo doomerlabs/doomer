@@ -1,0 +1,35 @@
+README.md
+  s_8c3641f319aafc::t_72ff65d0d2e2e3 32-35,99-104
+cmd/auth.go
+  s_8c3641f319aafc::t_6299af560d3193 25,27
+cmd/auth_test.go
+  s_8c3641f319aafc::t_68292efc9cdcc2 31,189-204
+cmd/root.go
+  s_8c3641f319aafc::t_4b108ae0586a55 128
+internal/paths/paths.go
+  s_8c3641f319aafc::t_1311e5cfc99a31 14,19,22
+internal/paths/paths_test.go
+  s_8c3641f319aafc::t_42370d0c25dad0 33
+pkg/adversarylabs/client.go
+  s_8c3641f319aafc::t_91dcb1e42128b8 79
+pkg/adversarylabs/config.go
+  s_8c3641f319aafc::t_bc692eb1af1e3f 25-30
+pkg/adversarylabs/legacy_auth_test.go
+  s_8c3641f319aafc::t_dfcd873f2324df 19-20,24,33-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f8b348f312a5191b6b1ecd22b1e2bd6a3007694b",
+  "prompts": {},
+  "sessions": {
+    "s_8c3641f319aafc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a10334-4774-7b90-8710-ace04befe70d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
