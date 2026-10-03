@@ -1,0 +1,27 @@
+README.md
+  s_8c3641f319aafc::t_645f51197c6352 19-20,28-31,52
+cmd/auth.go
+  s_8c3641f319aafc::t_77496b4ece6ade 11-13,37,43,93,98,140-146,174-182
+cmd/auth_helpers.go
+  s_8c3641f319aafc::t_ad77b7e0bb47ce 52
+cmd/auth_test.go
+  s_8c3641f319aafc::t_076a3f3c8b8492 82,103,109,205-243
+cmd/root.go
+  s_8c3641f319aafc::t_15399a3d831be3 85,199,203-204,209-212,222,231
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "00c7ed782081a15dd50974298d17fa3a2210b50e",
+  "prompts": {},
+  "sessions": {
+    "s_8c3641f319aafc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a10334-4774-7b90-8710-ace04befe70d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
