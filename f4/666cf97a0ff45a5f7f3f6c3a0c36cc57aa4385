@@ -1,0 +1,79 @@
+.depot/workflows/ci.yml
+  s_8c3641f319aafc::t_8ab288b9713fa3 1-202
+.depot/workflows/release.yml
+  s_8c3641f319aafc::t_97bca99d17be16 1-2,5-10,13,15-17,19-27,30-139
+.gitignore
+  s_ecb5aabde290ce::t_722840428f716f 5-7
+Formula/doomer.rb.tmpl
+  s_ecb5aabde290ce::t_52f92017bca945 1-38
+Makefile
+  s_ecb5aabde290ce::t_3c6092c2bcf653 1-29
+README.md
+  s_8c3641f319aafc::t_e89c0aa185a467 4,83-95
+cmd/root.go
+  s_8c3641f319aafc::t_f92e74d8b3d7b5 20,135-137
+cmd/version.go
+  s_8c3641f319aafc::t_3f1e0bdfee7cde 1-31
+docs/release.md
+  s_8c3641f319aafc::t_4b5728eb7ef34c 1-53
+docs/trust-model.md
+  s_8c3641f319aafc::t_4fd03af23f27a1 1-10
+internal/paths/paths_test.go
+  s_ecb5aabde290ce::t_287c7a47152299 1-41
+internal/version/version.go
+  s_8c3641f319aafc::t_3311ed4c7f8a9b 1-10
+pkg/adversarylabs/legacy_auth_test.go
+  s_ecb5aabde290ce::t_9a7f8091fbafde 1-349
+pkg/adversarylabs/network_test.go
+  s_ecb5aabde290ce::t_a2d80a871facd4 1-242
+scripts/generate-release-manifest.go
+  s_8c3641f319aafc::t_17627458344e40 1-56
+scripts/generate-sbom.go
+  s_8c3641f319aafc::t_f27a546edbc9f1 1-146
+scripts/publish-homebrew.sh
+  s_ecb5aabde290ce::t_e0e9c11c4ea9f9 1-304
+scripts/spdx-validator/go.mod
+  s_8c3641f319aafc::t_264a2eed65c1f7 1-7
+scripts/spdx-validator/go.sum
+  s_8c3641f319aafc::t_9e9fc18e515a66 1-12
+scripts/spdx-validator/main.go
+  s_8c3641f319aafc::t_d780e5cede8875 1-28
+scripts/test-release-contract.sh
+  s_ecb5aabde290ce::t_6410433f208035 1-300
+scripts/test-release-tags.sh
+  s_8c3641f319aafc::t_17f682ac464c0f 1-29
+scripts/testdata/spdx-replace/main/go.mod
+  s_8c3641f319aafc::t_ad83aec4f964a1 1-7
+scripts/testdata/spdx-replace/replacement/go.mod
+  s_8c3641f319aafc::t_afc20a51f2144d 1-3
+scripts/verify-ci-contract.go
+  s_ecb5aabde290ce::t_e3e9633552fbaa 1-452
+scripts/verify-release-bundle.go
+  s_8c3641f319aafc::t_f366e2fb390593 1-220
+scripts/verify-release-ref.sh
+  s_8c3641f319aafc::t_3905a9195a31b7 1-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f4666cf97a0ff45a5f7f3f6c3a0c36cc57aa4385",
+  "prompts": {},
+  "sessions": {
+    "s_8c3641f319aafc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a10334-4774-7b90-8710-ace04befe70d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    },
+    "s_ecb5aabde290ce": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1033c-62a2-7ec0-88c2-b9910cb8a1c4",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
