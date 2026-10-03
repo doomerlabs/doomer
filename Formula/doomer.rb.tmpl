@@ -1,0 +1,38 @@
+class __FORMULA_CLASS__ < Formula
+  desc "Connect to the Doomer SaaS"
+  homepage "https://github.com/doomerlabs/doomer"
+  version "__VERSION__"
+  license "Apache-2.0"
+
+  on_macos do
+    on_intel do
+      url "__DARWIN_AMD64_URL__"
+      sha256 "__DARWIN_AMD64_SHA256__"
+    end
+
+    on_arm do
+      url "__DARWIN_ARM64_URL__"
+      sha256 "__DARWIN_ARM64_SHA256__"
+    end
+  end
+
+  on_linux do
+    on_intel do
+      url "__LINUX_AMD64_URL__"
+      sha256 "__LINUX_AMD64_SHA256__"
+    end
+
+    on_arm do
+      url "__LINUX_ARM64_URL__"
+      sha256 "__LINUX_ARM64_SHA256__"
+    end
+  end
+
+  def install
+    bin.install "doomer" => "__INSTALLED_BINARY__"
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/__INSTALLED_BINARY__ version")
+  end
+end

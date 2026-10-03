@@ -17,6 +17,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/application"
 	"github.com/doomerlabs/doomer/internal/dependencies"
 	"github.com/doomerlabs/doomer/internal/paths"
+	"github.com/doomerlabs/doomer/internal/version"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -131,6 +132,9 @@ func newRootCommand(injected *application.App) *cobra.Command {
 		return nil
 	}
 	root.AddCommand(newLoginCommand(app, &apiURL, &profile), newLogoutCommand(app, &apiURL, &profile), newProfilesCommand(settings))
+	root.AddCommand(newVersionCommand())
+	root.Version = fmt.Sprintf("%s (commit %s, built %s)", version.Version, version.Commit, version.BuildDate)
+	root.SetVersionTemplate("doomer {{.Version}}\n")
 	root.CompletionOptions.DisableDefaultCmd = true
 	return root
 }

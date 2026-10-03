@@ -2,3 +2,6 @@
 /doomer
 *.test
 .DS_Store
+
+/dist/
+/.release-dist/

@@ -1,0 +1,7 @@
+module github.com/doomerlabs/doomer/scripts/spdx-validator
+
+go 1.26.6
+
+require github.com/spdx/tools-golang v0.5.7
+
+require github.com/anchore/go-struct-converter v0.1.0 // indirect

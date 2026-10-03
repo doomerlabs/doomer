@@ -1,7 +1,7 @@
 # Doomer CLI
 
 A Cobra/Viper client for the Doomer SaaS. This bootstrap supports connection
-profiles, login, and logout. Code submission and hosted run status are planned;
+profiles, login, logout, and version information. Code submission and hosted run status are planned;
 `run` and local code execution are not implemented.
 
 ## Build
@@ -80,3 +80,16 @@ go vet ./...
 Authentication and credential-storage code has been adapted from the previous
 CLI. This repository starts with a new Git history and contains no local review
 engine, package registry implementation, or prior release artifacts.
+
+## Releases and Homebrew
+
+Depot CI reads `.depot/workflows/ci.yml` and `.depot/workflows/release.yml`.
+Push an immutable CalVer tag such as `2026.10.3` from reviewed `main` to build
+and publish a release, then update `doomerlabs/homebrew-tap` as `doomer`.
+Install with `brew install doomerlabs/tap/doomer`.
+Prerelease tags such as `2026.10.3-beta.1` update `doomer-beta` separately.
+
+Release archives include stamped version/commit/build metadata, checksums,
+an SPDX dependency graph, and a release manifest. `doomer version` and
+`doomer --version` print build metadata. Unstamped builds report version `dev`.
+See [release operations](docs/release.md) for the publication and secret setup.
