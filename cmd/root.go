@@ -82,7 +82,7 @@ func newRootCommand(injected *application.App) *cobra.Command {
 	settings.SetDefault("profile", "default")
 	root := &cobra.Command{Use: "doomer", Short: "Connect to the Doomer SaaS", SilenceUsage: true, SilenceErrors: true}
 	app := &application.App{}
-	root.PersistentFlags().String("profile", "", "project/connection profile (default: selected profile or default)")
+	root.PersistentFlags().String("profile", "", "credential profile (default: selected profile or default)")
 	root.PersistentFlags().String("api-url", "", "SaaS API endpoint (default: https://doomer.ai/api)")
 	_ = settings.BindPFlag("profile", root.PersistentFlags().Lookup("profile"))
 	_ = settings.BindPFlag("api-url", root.PersistentFlags().Lookup("api-url"))
@@ -196,19 +196,15 @@ func newProfilesCommand(settings *viper.Viper) *cobra.Command {
 			if endpoint == "" {
 				endpoint = adversarylabs.DefaultAPIURL
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s %s\t%s\t%s\n", marker, name, endpoint, settings.GetString("profiles."+name+".project"))
+			fmt.Fprintf(cmd.OutOrStdout(), "%s %s\t%s\n", marker, name, endpoint)
 		}
 		return nil
 	}})
-	var endpoint, project string
-	add := &cobra.Command{Use: "add NAME", Short: "Save a project connection profile", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	var endpoint string
+	add := &cobra.Command{Use: "add NAME", Short: "Save a profile's API endpoint", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		name := strings.ToLower(strings.TrimSpace(args[0]))
 		if !validProfile(name) {
 			return fmt.Errorf("invalid profile name")
-		}
-		project = strings.TrimSpace(project)
-		if project != "" && !validProfile(project) {
-			return fmt.Errorf("project must contain only lowercase letters, digits, underscores, or hyphens")
 		}
 		if err := adversarylabs.ValidateAPIURL(endpoint); err != nil {
 			return err
@@ -219,7 +215,6 @@ func newProfilesCommand(settings *viper.Viper) *cobra.Command {
 		if err := file.ReadInConfig(); err != nil && !os.IsNotExist(err) {
 			return err
 		}
-		file.Set("profiles."+name+".project", project)
 		file.Set("profiles."+name+".api-url", strings.TrimRight(endpoint, "/"))
 		if err := writeSettings(file); err != nil {
 			return err
@@ -228,7 +223,6 @@ func newProfilesCommand(settings *viper.Viper) *cobra.Command {
 		return nil
 	}}
 	add.Flags().StringVar(&endpoint, "endpoint", adversarylabs.DefaultAPIURL, "SaaS API endpoint")
-	add.Flags().StringVar(&project, "project", "", "SaaS project slug for commands using this profile")
 	profiles.AddCommand(add)
 	profiles.AddCommand(&cobra.Command{Use: "use NAME", Short: "Select the default profile", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		name := strings.ToLower(strings.TrimSpace(args[0]))

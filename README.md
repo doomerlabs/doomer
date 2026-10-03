@@ -16,8 +16,7 @@ go build -o bin/doomer .
 ## Profiles
 
 ```sh
-doomer login
-doomer profiles add work --project my-team --endpoint https://doomer.ai/api
+doomer profiles add work --endpoint https://doomer.ai/api
 doomer profiles use work
 doomer profiles list
 doomer --profile work login
@@ -25,10 +24,8 @@ doomer --profile work logout
 ```
 
 The default profile is `default`. A profile can also be used directly with
-`--profile NAME` without saving settings first. Saved profiles bind a project
-slug and API endpoint. Personal login is shared by profiles on the same API
-service; imported service-account/CI tokens stay isolated by profile and service.
-Project-bound commands will use the selected profile when they are added. Profile names are case insensitive and accept
+`--profile NAME` without saving settings first. Tokens are isolated by both
+profile name and API service. Profile names are case insensitive and accept
 letters, digits, hyphens, and underscores.
 
 Connection precedence is `--api-url`, `DOOMER_API_URL`, top-level `api-url` in
@@ -45,11 +42,16 @@ contain tokens. The credential format and platform path are compatible with
 previous installations; the legacy `~/.adversary/config.json` fallback is
 retained when using the default directory.
 
+Profiles separate accounts and API connections, including multiple accounts on
+the same service. Login authenticates the selected account without choosing a
+project. Project-specific commands will select their project with `--project`;
+projects are not saved in profiles.
+
 ## Authentication
 
 ```sh
 # Browser login with PKCE and a loopback callback
-doomer login --name "My laptop"
+doomer --profile work login --name "My laptop"
 
 # Headless device login or short-lived automation login
 doomer --profile work login --device

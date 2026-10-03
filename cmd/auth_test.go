@@ -106,7 +106,7 @@ func TestPasswordLoginAndRevocationFailurePreservesCredentials(t *testing.T) {
 	if _, err := execute(t, "", append(args, "logout")...); err == nil || strings.Contains(err.Error(), "test-token") {
 		t.Fatalf("revocation failure: %v", err)
 	}
-	key := adversarylabs.AuthKey(server.URL, "default")
+	key := adversarylabs.AuthKey(server.URL, "work")
 	if _, ok, err := store.ExactAuthE(key); err != nil || !ok {
 		t.Fatalf("credentials not preserved: %v %v", ok, err)
 	}
@@ -203,7 +203,7 @@ func TestLoginIgnoresLegacyEnvironmentAndStoresDoomerRegistry(t *testing.T) {
 	}
 }
 
-func TestProjectProfilesShareAccountLogin(t *testing.T) {
+func TestAccountProfilesKeepPersonalLoginsSeparate(t *testing.T) {
 	store := isolate(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
@@ -213,31 +213,36 @@ func TestProjectProfilesShareAccountLogin(t *testing.T) {
 		if _, exists := payload["team"]; exists {
 			t.Error("login should not select a project")
 		}
-		_, _ = w.Write([]byte(`{"token":"account-token","client_id":"account"}`))
+		if r.URL.Path != "/v1/auth/login" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"token": "token-" + payload["email_address"].(string), "client_id": "account"})
 	}))
 	defer server.Close()
 	for _, name := range []string{"work", "personal"} {
-		if _, err := execute(t, "", "profiles", "add", name, "--endpoint", server.URL, "--project", name+"-project"); err != nil {
+		if _, err := execute(t, "", "profiles", "add", name, "--endpoint", server.URL); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := execute(t, "secret", "--profile", name, "login", "--email-address", name+"@example.com", "--password-stdin"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := execute(t, "secret", "--profile", "work", "login", "--email-address", "user@example.com", "--password-stdin"); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"work", "personal"} {
+		auth, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, name))
+		if err != nil || !ok || auth.Token != "token-"+name+"@example.com" {
+			t.Fatalf("wrong account for profile %s: %v", name, err)
+		}
 	}
-	if _, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, "default")); err != nil || !ok {
-		t.Fatalf("account login missing: %v", err)
+	if _, err := execute(t, "", "--profile", "work", "logout", "--local-only"); err != nil {
+		t.Fatal(err)
 	}
 	if _, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, "work")); err != nil || ok {
-		t.Fatalf("personal login bound to profile: %v", err)
+		t.Fatalf("work login not removed: %v", err)
 	}
-	out, err := execute(t, "", "profiles", "list")
-	if err != nil || !strings.Contains(out, "work-project") || !strings.Contains(out, "personal-project") {
-		t.Fatalf("profiles: %q %v", out, err)
-	}
-	if _, err := execute(t, "", "--profile", "personal", "logout", "--local-only"); err != nil {
-		t.Fatal(err)
+	if auth, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, "personal")); err != nil || !ok || auth.Token != "token-personal@example.com" {
+		t.Fatalf("other account was affected: %v", err)
 	}
 	if _, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, "default")); err != nil || ok {
-		t.Fatalf("account login not removed: %v", err)
+		t.Fatalf("account leaked into default profile: %v", err)
 	}
 }

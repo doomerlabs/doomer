@@ -34,7 +34,7 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 			stdin, clock, browserAuth, tty := cmd.InOrStdin(), deps.Clock, deps.BrowserAuth, deps.TTY
 			store := deps.Auth
 			var err error
-			if _, _, err := store.ExactAuthE(adversarylabs.AuthKey(valueOf(apiURL), loginCredentialProfile(opts.tokenStdin, valueOf(profile)))); err != nil {
+			if _, _, err := store.ExactAuthE(adversarylabs.AuthKey(valueOf(apiURL), valueOf(profile))); err != nil {
 				return err
 			}
 			client := deps.API.New(valueOf(apiURL))
@@ -95,7 +95,7 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 					return err
 				}
 			}
-			if err := store.SetAuth(adversarylabs.AuthKey(valueOf(apiURL), loginCredentialProfile(opts.tokenStdin, valueOf(profile))), adversarylabs.Auth{
+			if err := store.SetAuth(adversarylabs.AuthKey(valueOf(apiURL), valueOf(profile)), adversarylabs.Auth{
 				Token:             token.Token,
 				ClientID:          token.ClientID,
 				ExpiresAt:         token.ExpiresAt,
@@ -137,13 +137,6 @@ func newLogoutCommand(app *application.App, apiURL, profile *string) *cobra.Comm
 			if err != nil {
 				return err
 			}
-			if !ok && valueOf(profile) != "default" {
-				key = adversarylabs.AuthKey(valueOf(apiURL), "default")
-				auth, ok, err = store.StoredAuthE(key)
-				if err != nil {
-					return err
-				}
-			}
 			if !ok && key == adversarylabs.AuthKey(adversarylabs.DefaultAPIURL, "default") { // exact legacy migration fallback
 				auth, ok, err = store.StoredAuthE(deps.RegistryHost)
 				key = deps.RegistryHost
@@ -170,13 +163,4 @@ func newLogoutCommand(app *application.App, apiURL, profile *string) *cobra.Comm
 	}
 	cmd.Flags().BoolVar(&opts.localOnly, "local-only", false, "remove local credentials without contacting Doomer")
 	return cmd
-}
-
-// Imported service credentials remain profile-specific; personal login belongs
-// to the account at this API endpoint and is shared by its project profiles.
-func loginCredentialProfile(imported bool, profile string) string {
-	if imported {
-		return profile
-	}
-	return "default"
 }
