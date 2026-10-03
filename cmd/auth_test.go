@@ -28,7 +28,7 @@ func isolate(t *testing.T) adversarylabs.ConfigStore {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("DOOMER_CONFIG_DIR", dir)
-	for _, key := range []string{"DOOMER_PROFILE", "DOOMER_API_URL", "ADVERSARY_API_URL"} {
+	for _, key := range []string{"DOOMER_PROFILE", "DOOMER_API_URL", "DOOMER_REGISTRY_HOST", "ADVERSARY_API_URL", "ADVERSARY_REGISTRY_HOST"} {
 		t.Setenv(key, "")
 	}
 	return adversarylabs.ConfigStore{Path: filepath.Join(dir, "config.json")}
@@ -184,5 +184,21 @@ func TestDeviceLogin(t *testing.T) {
 	}
 	if auth, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, "default")); err != nil || !ok || auth.Token != "device-token" {
 		t.Fatal("device token not saved")
+	}
+}
+
+func TestLoginIgnoresLegacyEnvironmentAndStoresDoomerRegistry(t *testing.T) {
+	store := isolate(t)
+	t.Setenv("ADVERSARY_API_URL", "http://localhost:3000/api")
+	t.Setenv("ADVERSARY_REGISTRY_HOST", "localhost:9999")
+	t.Setenv("ADVERSARY_MODEL", "unused-model")
+	t.Setenv("ADVERSARY_MODEL_PROVIDER", "unused-provider")
+	t.Setenv("DOOMER_REGISTRY_HOST", " localhost:8787 ")
+	if _, err := execute(t, "test-token", "login", "--token-stdin"); err != nil {
+		t.Fatal(err)
+	}
+	auth, ok, err := store.ExactAuthE(adversarylabs.AuthKey(adversarylabs.DefaultAPIURL, "default"))
+	if err != nil || !ok || auth.RegistryHost != "localhost:8787" {
+		t.Fatalf("wrong endpoint or registry: found=%v registry=%q error=%v", ok, auth.RegistryHost, err)
 	}
 }

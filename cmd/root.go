@@ -125,7 +125,7 @@ func newRootCommand(injected *application.App) *cobra.Command {
 			}
 		}
 		app.Deps = application.Dependencies{
-			Auth: store, API: apiFactory{store}, RegistryHost: adversarylabs.DefaultRegistry,
+			Auth: store, API: apiFactory{store}, RegistryHost: adversarylabs.ResolveRegistryHost(),
 			Clock: dependencies.Clock{NowFunc: time.Now, TimerFunc: func(d time.Duration) application.Timer { return timer{time.NewTimer(d)} }},
 			TTY:   processTTY{}, BrowserAuth: dependencies.BrowserAuth{Entropy: rand.Reader, ListenFunc: net.Listen, NewServerFunc: dependencies.NewHTTPCallbackServer, OpenFunc: openBrowser},
 		}

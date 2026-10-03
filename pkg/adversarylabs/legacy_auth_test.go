@@ -16,16 +16,42 @@ import (
 )
 
 func TestResolveAPIURLDefaultEnvAndOverride(t *testing.T) {
-	t.Setenv("ADVERSARY_API_URL", "")
+	t.Setenv("DOOMER_API_URL", "")
+	t.Setenv("ADVERSARY_API_URL", "http://localhost:3000/api")
 	if got := ResolveAPIURL(""); got != "https://doomer.ai/api" {
 		t.Fatalf("default API URL = %q", got)
 	}
-	t.Setenv("ADVERSARY_API_URL", "http://localhost:3000/api/")
+	t.Setenv("DOOMER_API_URL", "http://localhost:3000/api/")
 	if got := ResolveAPIURL(""); got != "http://localhost:3000/api" {
 		t.Fatalf("env API URL = %q", got)
 	}
 	if got := ResolveAPIURL("http://127.0.0.1:8787/api/"); got != "http://127.0.0.1:8787/api" {
 		t.Fatalf("override API URL = %q", got)
+	}
+}
+
+func TestLegacyEnvironmentDoesNotRedirectBrowserLogin(t *testing.T) {
+	t.Setenv("DOOMER_API_URL", "")
+	t.Setenv("ADVERSARY_API_URL", "http://localhost:3000/api")
+	client := NewClient(ConfigStore{})
+	loginURL, err := client.BrowserLoginURL(BrowserLoginOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(loginURL, "https://doomer.ai/login?") {
+		t.Fatalf("legacy environment redirected login: %s", loginURL)
+	}
+}
+
+func TestResolveRegistryHostEnvironment(t *testing.T) {
+	t.Setenv("DOOMER_REGISTRY_HOST", "")
+	t.Setenv("ADVERSARY_REGISTRY_HOST", "localhost:8787")
+	if got := ResolveRegistryHost(); got != DefaultRegistry {
+		t.Fatalf("legacy environment changed registry: %q", got)
+	}
+	t.Setenv("DOOMER_REGISTRY_HOST", " localhost:8787 ")
+	if got := ResolveRegistryHost(); got != "localhost:8787" {
+		t.Fatalf("Doomer registry override = %q", got)
 	}
 }
 

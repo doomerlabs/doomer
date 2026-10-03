@@ -76,7 +76,7 @@ func ResolveAPIURL(override string) string {
 	if value := strings.TrimSpace(override); value != "" {
 		return strings.TrimRight(value, "/")
 	}
-	if env := strings.TrimSpace(os.Getenv("ADVERSARY_API_URL")); env != "" {
+	if env := strings.TrimSpace(os.Getenv("DOOMER_API_URL")); env != "" {
 		return strings.TrimRight(env, "/")
 	}
 	return strings.TrimRight(DefaultAPIURL, "/")

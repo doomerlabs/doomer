@@ -22,9 +22,9 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 		Example: `  doomer login
   doomer login --name "Marc's MacBook Pro"
   doomer login --ci
-  printf '%s\n' "$ADVERSARY_SERVICE_TOKEN" | doomer login --token-stdin --registry-namespace my-team
+  printf '%s\n' "$DOOMER_TOKEN" | doomer login --token-stdin --registry-namespace my-team
   doomer login --email-address marc@example.com
-  printf '%s\n' "$ADVERSARY_PASSWORD" | doomer login --email-address marc@example.com --password-stdin`,
+  printf '%s\n' "$DOOMER_PASSWORD" | doomer login --email-address marc@example.com --password-stdin`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.device && (opts.emailAddress != "" || opts.passwordStdin) {

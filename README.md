@@ -29,8 +29,10 @@ profile name and API service. Profile names are case insensitive and accept
 letters, digits, hyphens, and underscores.
 
 Connection precedence is `--api-url`, `DOOMER_API_URL`, top-level `api-url` in
-settings, the selected profile's endpoint, `ADVERSARY_API_URL` (legacy), then
-`https://doomer.ai/api`. Profile selection is `--profile`, `DOOMER_PROFILE`,
+settings, the selected profile's endpoint, then
+`https://doomer.ai/api`. `DOOMER_REGISTRY_HOST` overrides the registry host
+stored with login credentials (default: `registry.doomer.ai`).
+Profile selection is `--profile`, `DOOMER_PROFILE`,
 the saved selected profile, then `default`.
 
 Settings live in `settings.yaml` and credentials in `config.json` under the
@@ -94,3 +96,9 @@ Release archives include stamped version/commit/build metadata, checksums,
 an SPDX dependency graph, and a release manifest. `doomer version` and
 `doomer --version` print build metadata. Unstamped builds report version `dev`.
 See [release operations](docs/release.md) for the publication and secret setup.
+
+Environment variables use the `DOOMER_` prefix. Legacy `ADVERSARY_*`
+variables are ignored, including API and registry overrides. This SaaS bridge
+has no local model/provider or Node runtime configuration. `DOOMER_DATA_DIR`
+overrides the artifact data directory; credentials remain in the separate
+configuration directory.
