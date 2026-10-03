@@ -8,9 +8,9 @@ import (
 )
 
 type loginOptions struct {
-	ci                                          bool
-	name, emailAddress, registryNamespace, team string
-	passwordStdin, tokenStdin, device           bool
+	ci                                    bool
+	name, emailAddress, registryNamespace string
+	passwordStdin, tokenStdin, device     bool
 }
 type logoutOptions struct{ localOnly bool }
 
@@ -22,9 +22,9 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 		Example: `  doomer login
   doomer login --name "Marc's MacBook Pro"
   doomer login --ci
-  printf '%s\n' "$ADVERSARY_SERVICE_TOKEN" | doomer login --token-stdin --registry-namespace my-team
+  printf '%s\n' "$DOOMER_TOKEN" | doomer login --token-stdin --registry-namespace my-team
   doomer login --email-address marc@example.com
-  printf '%s\n' "$ADVERSARY_PASSWORD" | doomer login --email-address marc@example.com --password-stdin`,
+  printf '%s\n' "$DOOMER_PASSWORD" | doomer login --email-address marc@example.com --password-stdin`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.device && (opts.emailAddress != "" || opts.passwordStdin) {
@@ -40,7 +40,7 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 			client := deps.API.New(valueOf(apiURL))
 			var token adversarylabs.TokenResponse
 			if opts.tokenStdin {
-				if opts.emailAddress != "" || opts.passwordStdin || opts.device || opts.ci || opts.team != "" {
+				if opts.emailAddress != "" || opts.passwordStdin || opts.device || opts.ci {
 					return fmt.Errorf("--token-stdin cannot be combined with password, device, or CI login options")
 				}
 				value, readErr := readSecretLine(stdin, "token")
@@ -74,7 +74,6 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 					Password:     password,
 					Name:         opts.name,
 					CI:           opts.ci,
-					Team:         opts.team,
 				})
 				if err != nil {
 					return err
@@ -91,7 +90,7 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 				if opts.registryNamespace != "" {
 					return fmt.Errorf("--registry-namespace requires --token-stdin")
 				}
-				token, err = browserAuth.Login(cmd.Context(), application.BrowserAuthRequest{Client: client, Name: opts.name, Team: opts.team, CI: opts.ci, Output: cmd.OutOrStdout()})
+				token, err = browserAuth.Login(cmd.Context(), application.BrowserAuthRequest{Client: client, Name: opts.name, CI: opts.ci, Output: cmd.OutOrStdout()})
 				if err != nil {
 					return err
 				}
@@ -119,7 +118,6 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 	cmd.Flags().BoolVar(&opts.passwordStdin, "password-stdin", false, "read the password from standard input")
 	cmd.Flags().BoolVar(&opts.tokenStdin, "token-stdin", false, "read a service account or short-lived CI token from standard input")
 	cmd.Flags().StringVar(&opts.registryNamespace, "registry-namespace", "", "registry namespace for a service account or CI token")
-	cmd.Flags().StringVar(&opts.team, "team", "", "team slug to use for browser, password, or device login")
 	return cmd
 }
 

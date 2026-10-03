@@ -30,7 +30,7 @@ func TestDataDirPlatformDefaults(t *testing.T) {
 func TestDataDirOverride(t *testing.T) {
 	override := filepath.Join(t.TempDir(), "custom")
 	got, err := dataDir("linux", func(k string) string {
-		if k == "ADVERSARY_DATA_DIR" {
+		if k == "DOOMER_DATA_DIR" {
 			return override
 		}
 		return "ignored"

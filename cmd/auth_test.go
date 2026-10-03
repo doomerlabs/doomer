@@ -28,7 +28,7 @@ func isolate(t *testing.T) adversarylabs.ConfigStore {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("DOOMER_CONFIG_DIR", dir)
-	for _, key := range []string{"DOOMER_PROFILE", "DOOMER_API_URL", "ADVERSARY_API_URL"} {
+	for _, key := range []string{"DOOMER_PROFILE", "DOOMER_API_URL", "DOOMER_REGISTRY_HOST", "ADVERSARY_API_URL", "ADVERSARY_REGISTRY_HOST"} {
 		t.Setenv(key, "")
 	}
 	return adversarylabs.ConfigStore{Path: filepath.Join(dir, "config.json")}
@@ -79,7 +79,7 @@ func TestPasswordLoginAndRevocationFailurePreservesCredentials(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 				t.Error(err)
 			}
-			if input.EmailAddress != "user@example.com" || input.Password != "secret" || input.Team != "team" {
+			if input.EmailAddress != "user@example.com" || input.Password != "secret" || input.Team != "" {
 				t.Errorf("wrong password payload: email=%q team=%q", input.EmailAddress, input.Team)
 			}
 			_, _ = w.Write([]byte(`{"token":"test-token","client_id":"client"}`))
@@ -100,7 +100,7 @@ func TestPasswordLoginAndRevocationFailurePreservesCredentials(t *testing.T) {
 	}))
 	defer server.Close()
 	args := []string{"--api-url", server.URL, "--profile", "work"}
-	if out, err := execute(t, "secret\n", append(args, "login", "--email-address", "user@example.com", "--password-stdin", "--team", "team")...); err != nil || strings.Contains(out, "test-token") {
+	if out, err := execute(t, "secret\n", append(args, "login", "--email-address", "user@example.com", "--password-stdin")...); err != nil || strings.Contains(out, "test-token") {
 		t.Fatalf("password login: %q %v", out, err)
 	}
 	if _, err := execute(t, "", append(args, "logout")...); err == nil || strings.Contains(err.Error(), "test-token") {
@@ -184,5 +184,65 @@ func TestDeviceLogin(t *testing.T) {
 	}
 	if auth, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, "default")); err != nil || !ok || auth.Token != "device-token" {
 		t.Fatal("device token not saved")
+	}
+}
+
+func TestLoginIgnoresLegacyEnvironmentAndStoresDoomerRegistry(t *testing.T) {
+	store := isolate(t)
+	t.Setenv("ADVERSARY_API_URL", "http://localhost:3000/api")
+	t.Setenv("ADVERSARY_REGISTRY_HOST", "localhost:9999")
+	t.Setenv("ADVERSARY_MODEL", "unused-model")
+	t.Setenv("ADVERSARY_MODEL_PROVIDER", "unused-provider")
+	t.Setenv("DOOMER_REGISTRY_HOST", " localhost:8787 ")
+	if _, err := execute(t, "test-token", "login", "--token-stdin"); err != nil {
+		t.Fatal(err)
+	}
+	auth, ok, err := store.ExactAuthE(adversarylabs.AuthKey(adversarylabs.DefaultAPIURL, "default"))
+	if err != nil || !ok || auth.RegistryHost != "localhost:8787" {
+		t.Fatalf("wrong endpoint or registry: found=%v registry=%q error=%v", ok, auth.RegistryHost, err)
+	}
+}
+
+func TestAccountProfilesKeepPersonalLoginsSeparate(t *testing.T) {
+	store := isolate(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		if _, exists := payload["team"]; exists {
+			t.Error("login should not select a project")
+		}
+		if r.URL.Path != "/v1/auth/login" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"token": "token-" + payload["email_address"].(string), "client_id": "account"})
+	}))
+	defer server.Close()
+	for _, name := range []string{"work", "personal"} {
+		if _, err := execute(t, "", "profiles", "add", name, "--endpoint", server.URL); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := execute(t, "secret", "--profile", name, "login", "--email-address", name+"@example.com", "--password-stdin"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"work", "personal"} {
+		auth, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, name))
+		if err != nil || !ok || auth.Token != "token-"+name+"@example.com" {
+			t.Fatalf("wrong account for profile %s: %v", name, err)
+		}
+	}
+	if _, err := execute(t, "", "--profile", "work", "logout", "--local-only"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, "work")); err != nil || ok {
+		t.Fatalf("work login not removed: %v", err)
+	}
+	if auth, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, "personal")); err != nil || !ok || auth.Token != "token-personal@example.com" {
+		t.Fatalf("other account was affected: %v", err)
+	}
+	if _, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, "default")); err != nil || ok {
+		t.Fatalf("account leaked into default profile: %v", err)
 	}
 }

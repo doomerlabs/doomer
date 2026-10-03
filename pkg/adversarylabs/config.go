@@ -22,7 +22,12 @@ const (
 	expirySkew      = 30 * time.Second
 )
 
-func ResolveRegistryHost() string { return DefaultRegistry }
+func ResolveRegistryHost() string {
+	if host := strings.TrimSpace(os.Getenv("DOOMER_REGISTRY_HOST")); host != "" {
+		return host
+	}
+	return DefaultRegistry
+}
 
 // AuthKey isolates credentials by API service and profile. The legacy registry
 // key remains readable so existing installations and OCI credential lookup keep working.

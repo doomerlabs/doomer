@@ -11,15 +11,15 @@ import (
 
 const appName = "doomer"
 
-// DataDir returns persistent artifact data. ADVERSARY_DATA_DIR overrides only
+// DataDir returns persistent artifact data. DOOMER_DATA_DIR overrides only
 // this root; credentials and disposable caches remain separate.
 func DataDir() (string, error) { return dataDir(runtime.GOOS, os.Getenv, os.UserHomeDir) }
 
 func dataDir(goos string, getenv func(string) string, home func() (string, error)) (string, error) {
-	if override := strings.TrimSpace(getenv("ADVERSARY_DATA_DIR")); override != "" {
+	if override := strings.TrimSpace(getenv("DOOMER_DATA_DIR")); override != "" {
 		p, err := filepath.Abs(override)
 		if err != nil {
-			return "", fmt.Errorf("resolve ADVERSARY_DATA_DIR: %w", err)
+			return "", fmt.Errorf("resolve DOOMER_DATA_DIR: %w", err)
 		}
 		return filepath.Clean(p), nil
 	}
