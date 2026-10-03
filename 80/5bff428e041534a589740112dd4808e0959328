@@ -1,0 +1,33 @@
+README.md
+  s_8c3641f319aafc::t_f41ee40dedcb57 88-89
+docs/release.md
+  s_8c3641f319aafc::t_738e4c3640563c 12-17,30-34
+scripts/publish-homebrew.sh
+  s_8c3641f319aafc::t_84676ffba8e5d6 244-275
+scripts/test-release-contract.sh
+  s_37098f2e32fe70::t_d5fa3f1d49d3ed 284-296,301-322
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "805bff428e041534a589740112dd4808e0959328",
+  "prompts": {},
+  "sessions": {
+    "s_37098f2e32fe70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1033c-c82f-7e93-b5a6-8f7b4afdec73",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    },
+    "s_8c3641f319aafc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a10334-4774-7b90-8710-ace04befe70d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
