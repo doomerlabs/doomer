@@ -132,7 +132,7 @@ func newRootCommand(injected *application.App) *cobra.Command {
 		return nil
 	}
 	root.AddCommand(newLoginCommand(app, &apiURL, &profile), newLogoutCommand(app, &apiURL, &profile), newProfilesCommand(settings))
-	root.AddCommand(newVersionCommand())
+	root.AddCommand(newVersionCommand(), newRunCommand(app, &apiURL, &profile), newReviewsCommand(app, &apiURL, &profile))
 	root.Version = fmt.Sprintf("%s (commit %s, built %s)", version.Version, version.Commit, version.BuildDate)
 	root.SetVersionTemplate("doomer {{.Version}}\n")
 	root.CompletionOptions.DisableDefaultCmd = true
