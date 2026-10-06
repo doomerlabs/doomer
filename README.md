@@ -1,8 +1,8 @@
 # Doomer CLI
 
 A Cobra/Viper client for the Doomer SaaS. This bootstrap supports connection
-profiles, login, logout, and version information. Code submission and hosted run status are planned;
-`run` and local code execution are not implemented.
+profiles, login, logout, and version information. `run` captures local source for queued hosted reviews and `reviews show` reads
+results. Review execution runs in the SaaS worker.
 
 ## Build
 
@@ -107,3 +107,42 @@ variables are ignored, including API and registry overrides. This SaaS bridge
 has no local model/provider or Node runtime configuration. `DOOMER_DATA_DIR`
 overrides the artifact data directory; credentials remain in the separate
 configuration directory.
+
+## Hosted reviews from local changes
+
+```sh
+doomer run --project my-project                 # capture and wait
+doomer run --project my-project --async         # return a queued review ID
+doomer run --project my-project --staged        # capture only the index
+doomer run --project my-project --base main     # branch commits and local edits
+doomer reviews show REVIEW_ID
+```
+
+The CLI sends source code to the selected Doomer project. Dirty checkouts use
+HEAD as the baseline and capture staged changes, unstaged changes, deletions,
+and nonignored untracked files. A clean feature branch compares with its default
+branch's merge base; a clean default branch reports no changes. `--base` selects
+an explicit merge base; `--staged` captures the index. Tracked ignored files are
+included. Git state and source files are never changed by capture.
+
+Reviews use a fixed source snapshot, not the live checkout. Continue editing or
+remove the checkout after submission; workers and retries use the same captured
+bytes. Closing the terminal does not cancel an accepted review. Output is JSON,
+including captured finding excerpts and file hashes; anchors refer to captured
+source, not current editor lines.
+
+An interrupted submission prints a key. Run `doomer run --resume KEY` with the
+original API/profile to retry without reading the source checkout. Pending
+snapshots are private local files under `DOOMER_DATA_DIR` (or the platform data
+directory), separate from credentials; they are deleted after remote acceptance.
+Server uploads expire after 24 hours. Accepted source is retained for retries and
+eligible for removal after seven days and terminal completion; captured result
+excerpts remain available.
+
+This first version requires Git and an existing HEAD commit. Source snapshots
+are limited to 16 MiB JSON, 2 MiB per file and 20,000 paths per tree. Symlinks,
+submodules, sparse checkouts, merge conflicts and LFS pointers are rejected.
+Project hosted inference must be enabled. Account logins and project service
+accounts are supported; CI repository tokens are not supported for this flow.
+A submission requires `registry:push`; read access also accepts `registry:pull`.
+The snapshot endpoints must be deployed before using these commands.
