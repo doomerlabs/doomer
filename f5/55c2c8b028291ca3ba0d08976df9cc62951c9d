@@ -1,0 +1,235 @@
+README.md
+  s_a58d9bc173b9e9::t_f985d32b003de7 3-4,80-129,138-139
+cmd/artifact_pack.go
+  s_a58d9bc173b9e9::t_c9a102b044f06b 1-136
+cmd/artifact_pull.go
+  s_a58d9bc173b9e9::t_51706074d560d3 1-351
+cmd/artifact_pull_digest_test.go
+  s_a58d9bc173b9e9::t_5f4a16497c311d 1-74
+cmd/artifact_push.go
+  s_a58d9bc173b9e9::t_321e1c1508d8bb 1-135
+cmd/artifacts.go
+  s_a58d9bc173b9e9::t_c577bb7e19f451 1-54
+cmd/catalog_aliases.go
+  s_a58d9bc173b9e9::t_935df547c989a5 1-41
+cmd/publishing_app.go
+  s_a58d9bc173b9e9::t_f26e5888023876 1-176
+cmd/publishing_output.go
+  s_a58d9bc173b9e9::t_7fbd16482c3fc7 1-113
+cmd/publishing_registry_test.go
+  s_a58d9bc173b9e9::t_bae261d8148ade 1-210
+cmd/publishing_test.go
+  s_a58d9bc173b9e9::t_391b92597e892e 1-176
+cmd/registry_helpers.go
+  s_a58d9bc173b9e9::t_d70d8943b50049 1-249
+cmd/root.go
+  s_a58d9bc173b9e9::t_d6e0ed12f5f43c 132-136,141
+go.mod
+  s_a58d9bc173b9e9::t_b23708106f3002 6-9,12
+go.sum
+  s_a58d9bc173b9e9::t_0760ba7bb9d6e6 1-2,8-11,30-31,44-45,74
+internal/application/application.go
+  s_a58d9bc173b9e9::t_a9cd7cc19b5c35 52-57
+internal/application/publishing.go
+  s_a58d9bc173b9e9::t_4eed78a5cd176d 1-69
+internal/archiveutil/archive.go
+  s_a58d9bc173b9e9::t_563a1d5acb43c8 1-258
+internal/archiveutil/archive_test.go
+  s_a58d9bc173b9e9::t_18f4fa355fc862 1-139
+internal/archiveutil/canonical_mode_test.go
+  s_a58d9bc173b9e9::t_42737c689139fa 1-63
+internal/archiveutil/coverage_boundaries_test.go
+  s_a58d9bc173b9e9::t_c44077cdece1a9 1-98
+internal/archiveutil/publish_darwin.go
+  s_a58d9bc173b9e9::t_7c65196dc2e323 1-110
+internal/archiveutil/publish_other.go
+  s_a58d9bc173b9e9::t_527f73225fb9d4 1-27
+internal/archiveutil/publish_test.go
+  s_a58d9bc173b9e9::t_ac46064a7709a3 1-76
+internal/archiveutil/seal_publish.go
+  s_a58d9bc173b9e9::t_8829d96ec9be06 1-35
+internal/archiveutil/umask_unix_test.go
+  s_a58d9bc173b9e9::t_cb43090160463c 1-27
+internal/publock/lock.go
+  s_a58d9bc173b9e9::t_1bc89d815d2b33 1-59
+internal/publock/lock_test.go
+  s_a58d9bc173b9e9::t_762d25f14bd8de 1-33
+internal/publock/lock_unix.go
+  s_a58d9bc173b9e9::t_e74704cfe711a2 1-17
+internal/publock/lock_windows.go
+  s_a58d9bc173b9e9::t_e5975cca31fea8 1-21
+internal/rootreplace/replace.go
+  s_a58d9bc173b9e9::t_9d45708040bc97 1-73
+internal/rootreplace/replace_test.go
+  s_a58d9bc173b9e9::t_5e9f28196617e4 1-69
+internal/rootreplace/replace_unix.go
+  s_a58d9bc173b9e9::t_a7d6c1dc99548e 1-15
+internal/rootreplace/replace_windows.go
+  s_a58d9bc173b9e9::t_626965cbab4fce 1-59
+internal/safepath/safepath.go
+  s_a58d9bc173b9e9::t_eb0cb47dd3aacf 1-61
+internal/safepath/safepath_test.go
+  s_a58d9bc173b9e9::t_a215b843dcbf1f 1-39
+pkg/adversarylabs/publishing.go
+  s_a58d9bc173b9e9::t_d93841ee7f3b3d 1-88
+pkg/blobsource/source.go
+  s_a58d9bc173b9e9::t_16f35dac146967 1-236
+pkg/blobsource/source_test.go
+  s_a58d9bc173b9e9::t_95032b4c37cd6b 1-232
+pkg/manifest/manifest.go
+  s_a58d9bc173b9e9::t_7b9f9bbc9fe9fd 1-668
+pkg/manifest/manifest_test.go
+  s_a58d9bc173b9e9::t_d3793901db0182 1-613
+pkg/manifest/uses_test.go
+  s_a58d9bc173b9e9::t_e6a7b2ef0eafc4 1-81
+pkg/namespacesig/namespacesig.go
+  s_a58d9bc173b9e9::t_fb76eff98a4212 1-255
+pkg/namespacesig/namespacesig_test.go
+  s_a58d9bc173b9e9::t_ded794c37fc94a 1-76
+pkg/oci/auth.go
+  s_a58d9bc173b9e9::t_4538b6d0afbd8c 1-377
+pkg/oci/auth_limits_test.go
+  s_a58d9bc173b9e9::t_86a608a4ca69e5 1-19
+pkg/oci/auth_security_unix_test.go
+  s_a58d9bc173b9e9::t_de3928ada94492 1-72
+pkg/oci/auth_test.go
+  s_a58d9bc173b9e9::t_8cd5c25b37ee4f 1-685
+pkg/oci/blob_source.go
+  s_a58d9bc173b9e9::t_1ffb03a138aa23 1-30
+pkg/oci/blob_source_test.go
+  s_a58d9bc173b9e9::t_1e16d7b4619ce9 1-34
+pkg/oci/config_open_unix.go
+  s_a58d9bc173b9e9::t_cd70c12916b98f 1-27
+pkg/oci/config_open_windows.go
+  s_a58d9bc173b9e9::t_0f0a7e289818d2 1-32
+pkg/oci/digest.go
+  s_a58d9bc173b9e9::t_72a2d98b0c297d 1-79
+pkg/oci/digest_test.go
+  s_a58d9bc173b9e9::t_8356a97e8029fb 1-47
+pkg/oci/layer_files.go
+  s_a58d9bc173b9e9::t_e0d591d26deb72 1-85
+pkg/oci/manifest.go
+  s_a58d9bc173b9e9::t_e10287faeb0747 1-132
+pkg/oci/manifest_test.go
+  s_a58d9bc173b9e9::t_8ec59fc3e42a2f 1-85
+pkg/oci/metadata.go
+  s_a58d9bc173b9e9::t_f6b17c13eef75a 1-129
+pkg/oci/metadata_test.go
+  s_a58d9bc173b9e9::t_9d90d3c5c03cf0 1-126
+pkg/oci/network.go
+  s_a58d9bc173b9e9::t_45a93380bc70f1 1-127
+pkg/oci/network_test.go
+  s_a58d9bc173b9e9::t_a2316bfe7671e0 1-103
+pkg/oci/reference.go
+  s_a58d9bc173b9e9::t_17264070f81d10 1-99
+pkg/oci/reference_test.go
+  s_a58d9bc173b9e9::t_e633337a96913a 1-127
+pkg/oci/referrers_fallback_test.go
+  s_a58d9bc173b9e9::t_bd91e67135e263 1-116
+pkg/oci/registry.go
+  s_a58d9bc173b9e9::t_b0eaf9d928a409 1-788
+pkg/oci/registry_integrity_test.go
+  s_a58d9bc173b9e9::t_f4b7aacc3acee0 1-135
+pkg/oci/registry_sources.go
+  s_a58d9bc173b9e9::t_0878ba2e5cfa1e 1-300
+pkg/oci/registry_sources_test.go
+  s_a58d9bc173b9e9::t_34a9fc15afdca0 1-327
+pkg/oci/registry_validation_test.go
+  s_a58d9bc173b9e9::t_af759034e35c0d 1-43
+pkg/oci/token_cache.go
+  s_a58d9bc173b9e9::t_c19994cc4bde47 1-126
+pkg/oci/token_cache_test.go
+  s_a58d9bc173b9e9::t_05ccafc5b7a4bb 1-74
+pkg/officialsig/keys_common.go
+  s_a58d9bc173b9e9::t_465b3c0e9026af 1-13
+pkg/officialsig/keys_dev.go
+  s_a58d9bc173b9e9::t_002933d4aa784e 1-16
+pkg/officialsig/keys_release.go
+  s_a58d9bc173b9e9::t_74e2a3ca4bbabb 1-14
+pkg/officialsig/keys_release_test.go
+  s_a58d9bc173b9e9::t_7e83a9a96dd48b 1-25
+pkg/pack/build_environment_test.go
+  s_a58d9bc173b9e9::t_8b6dd8b0482334 1-32
+pkg/pack/build_state_unix.go
+  s_a58d9bc173b9e9::t_ab4ba108ad83a9 1-17
+pkg/pack/build_state_windows.go
+  s_a58d9bc173b9e9::t_4e5b0caa38f5ba 1-7
+pkg/pack/config.go
+  s_a58d9bc173b9e9::t_e913105a5a30c0 1-211
+pkg/pack/config_test.go
+  s_a58d9bc173b9e9::t_b94a8acaca05c2 1-80
+pkg/pack/coverage_boundaries_test.go
+  s_a58d9bc173b9e9::t_f40e9d04b339d4 1-44
+pkg/pack/pack.go
+  s_a58d9bc173b9e9::t_14051cb190222a 1-1951
+pkg/pack/pack_test.go
+  s_a58d9bc173b9e9::t_abab45e93b2ef2 1-1771
+pkg/pack/preflight_test.go
+  s_a58d9bc173b9e9::t_2161a13b7572f4 1-169
+pkg/pack/sdk_import_review_test.go
+  s_a58d9bc173b9e9::t_d44d8f26e3d6a0 1-415
+pkg/pack/sdk_import_scan.go
+  s_a58d9bc173b9e9::t_63c1a81990f445 1-1796
+pkg/pack/sources.go
+  s_a58d9bc173b9e9::t_7cf7301927cb5e 1-30
+pkg/pack/sources_test.go
+  s_a58d9bc173b9e9::t_f094869cfe3615 1-43
+pkg/pack/streaming_test.go
+  s_a58d9bc173b9e9::t_f676413cd800ed 1-124
+pkg/repository/adapters.go
+  s_a58d9bc173b9e9::t_8b44ef24493ca3 1-153
+pkg/repository/artifact_validation.go
+  s_a58d9bc173b9e9::t_9458debb4459be 1-177
+pkg/repository/concurrent_leases_test.go
+  s_a58d9bc173b9e9::t_ca55271e9e67a0 1-112
+pkg/repository/equivalent_manifest.go
+  s_a58d9bc173b9e9::t_41ad51995c5dba 1-113
+pkg/repository/equivalent_manifest_test.go
+  s_a58d9bc173b9e9::t_e576b747ef1674 1-330
+pkg/repository/import_sources.go
+  s_a58d9bc173b9e9::t_e7c667f578af70 1-338
+pkg/repository/import_sources_test.go
+  s_a58d9bc173b9e9::t_8c926ccceaa2ad 1-812
+pkg/repository/inventory.go
+  s_a58d9bc173b9e9::t_4f44fa95f2e16c 1-40
+pkg/repository/lifecycle.go
+  s_a58d9bc173b9e9::t_c2ac28536ec47a 1-856
+pkg/repository/lifecycle_test.go
+  s_a58d9bc173b9e9::t_ff4553fe1f7a69 1-755
+pkg/repository/namespace_signature.go
+  s_a58d9bc173b9e9::t_0dfa4dcf56e3c1 1-69
+pkg/repository/official_signature.go
+  s_a58d9bc173b9e9::t_6890e86449b3c9 1-52
+pkg/repository/repository.go
+  s_a58d9bc173b9e9::t_e090cf2a80926d 1-1725
+pkg/repository/repository_test.go
+  s_a58d9bc173b9e9::t_7755d8cafb1147 1-1436
+pkg/repository/sources.go
+  s_a58d9bc173b9e9::t_24b2c891ab9de6 1-193
+pkg/repository/sources_test.go
+  s_a58d9bc173b9e9::t_e29129ccb5b05c 1-327
+pkg/repository/transaction.go
+  s_a58d9bc173b9e9::t_666fe5797aeac8 1-393
+schema/adversary.manifest.v1.schema.json
+  s_a58d9bc173b9e9::t_15937770aef87c 1-244
+schema/fixtures/adversary.manifest.v1.invalid.yaml
+  s_a58d9bc173b9e9::t_d5ac1bad0d11db 1-6
+schema/fixtures/adversary.manifest.v1.valid.yaml
+  s_a58d9bc173b9e9::t_cdf6c847e91fe9 1-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f555c2c8b028291ca3ba0d08976df9cc62951c9d",
+  "prompts": {},
+  "sessions": {
+    "s_a58d9bc173b9e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11c97-4bac-76c1-9fc2-24c4ca60b097",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
