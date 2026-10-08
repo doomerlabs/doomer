@@ -129,10 +129,16 @@ func newRootCommand(injected *application.App) *cobra.Command {
 			Clock: dependencies.Clock{NowFunc: time.Now, TimerFunc: func(d time.Duration) application.Timer { return timer{time.NewTimer(d)} }},
 			TTY:   processTTY{}, BrowserAuth: dependencies.BrowserAuth{Entropy: rand.Reader, ListenFunc: net.Listen, NewServerFunc: dependencies.NewHTTPCallbackServer, OpenFunc: openBrowser},
 		}
+		switch command.Name() {
+		case "pack", "push", "pull", "list", "inspect", "remove", "check":
+			check, _ := command.Flags().GetBool("check")
+			return configurePublishing(app, !(command.Name() == "pack" && check))
+		}
 		return nil
 	}
 	root.AddCommand(newLoginCommand(app, &apiURL, &profile), newLogoutCommand(app, &apiURL, &profile), newProfilesCommand(settings))
 	root.AddCommand(newVersionCommand())
+	root.AddCommand(newPackCommand(app), newPushCommand(app, &apiURL, &profile), newPullCommand(app, &apiURL, &profile), newArtifactsCommand(app))
 	root.Version = fmt.Sprintf("%s (commit %s, built %s)", version.Version, version.Commit, version.BuildDate)
 	root.SetVersionTemplate("doomer {{.Version}}\n")
 	root.CompletionOptions.DisableDefaultCmd = true
