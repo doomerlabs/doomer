@@ -11,7 +11,7 @@ import (
 
 func TestRepeatLoginCreatesAndSelectsProfile(t *testing.T) {
 	store := isolate(t)
-	endpoint := "https://work.example/api"
+	endpoint := "http://localhost:3000/api"
 	if _, err := execute(t, "first-token", "--api-url", endpoint, "login", "--token-stdin"); err != nil {
 		t.Fatal(err)
 	}
@@ -38,6 +38,10 @@ func TestRepeatLoginCreatesAndSelectsProfile(t *testing.T) {
 	}
 	if settings.GetString("profile") != "default-4" || settings.GetString("profiles.default-4.api-url") != endpoint {
 		t.Fatal("new profile selection or endpoint was not saved")
+	}
+	out, err = execute(t, "", "profile", "ls")
+	if err != nil || !strings.Contains(out, "* default-4\t"+endpoint) {
+		t.Fatalf("selected profile endpoint not displayed: %q, %v", out, err)
 	}
 	// The next command resolves the new profile and its endpoint from settings.
 	if _, err := execute(t, "", "logout", "--local-only"); err != nil {

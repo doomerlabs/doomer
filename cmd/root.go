@@ -182,13 +182,13 @@ func writeSettings(settings *viper.Viper) error {
 func newProfileCommand(settings *viper.Viper) *cobra.Command {
 	profile := &cobra.Command{Use: "profile", Short: "Manage SaaS connection profiles"}
 	profile.AddCommand(&cobra.Command{Use: "ls", Short: "List profiles without credentials", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		names := settings.GetStringMap("profiles")
-		if names == nil {
-			names = map[string]any{}
+		// Viper may return its underlying map; do not overwrite profile settings.
+		names := map[string]bool{"default": true}
+		for name := range settings.GetStringMap("profiles") {
+			names[name] = true
 		}
-		names["default"] = nil
 		selected := settings.GetString("profile")
-		names[selected] = nil
+		names[selected] = true
 		keys := make([]string, 0, len(names))
 		for name := range names {
 			keys = append(keys, name)
