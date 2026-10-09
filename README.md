@@ -51,6 +51,17 @@ the same service. Login authenticates the selected account without choosing a
 project. Project-specific commands will select their project with `--project`;
 projects are not saved in profiles.
 
+## Projects
+
+```sh
+doomer project ls
+doomer --profile work project ls
+```
+
+Lists the selected account's projects with `SLUG` and `NAME` columns, sorted by
+slug. `project list` is an alias. Service-account and CI tokens list their scoped
+project.
+
 ## Authentication
 
 ```sh
