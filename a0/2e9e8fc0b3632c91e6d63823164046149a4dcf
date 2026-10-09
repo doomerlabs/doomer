@@ -1,0 +1,87 @@
+cmd/root.go
+  s_a58d9bc173b9e9::t_84aa3c89927767 142
+cmd/init.go
+  s_a58d9bc173b9e9::t_84aa3c89927767 1-77
+pkg/repository/repository_test.go
+  s_a58d9bc173b9e9::t_3874342dba25b6 52-57
+  s_a58d9bc173b9e9::t_f106876ceaffe6 58-80,82-88
+  s_a58d9bc173b9e9::t_86a2b1b3574c7a 81
+pkg/pack/pack_test.go
+  s_a58d9bc173b9e9::t_673596291d0641 255,271-279
+templates/typescript/CONTRIBUTING.md
+  s_a58d9bc173b9e9::t_84aa3c89927767 1-23
+templates/typescript/package.json
+  s_a58d9bc173b9e9::t_84aa3c89927767 1-18
+pkg/repository/import_sources_test.go
+  s_a58d9bc173b9e9::t_f106876ceaffe6 183-185,194-200
+  s_a58d9bc173b9e9::t_3874342dba25b6 802
+README.md
+  s_a58d9bc173b9e9::t_84aa3c89927767 114-118
+templates/typescript/agent/voice.md
+  s_a58d9bc173b9e9::t_2677732a6501aa 1-63
+scripts/ci-verify.sh
+  s_a58d9bc173b9e9::t_24526a1f18db1f 124-125,127
+internal/initproject/init.go
+  s_a58d9bc173b9e9::t_84aa3c89927767 1-224
+pkg/pack/pack.go
+  s_a58d9bc173b9e9::t_673596291d0641 429-439
+  s_a58d9bc173b9e9::t_e1c1ab69fad3e8 153,304,419
+internal/initproject/init_test.go
+  s_a58d9bc173b9e9::t_2677732a6501aa 1-408
+internal/initproject/publish_darwin.go
+  s_a58d9bc173b9e9::t_47c12585df7dae 1-9
+internal/initproject/publish_linux.go
+  s_a58d9bc173b9e9::t_9a0301b19b0116 1-9
+internal/initproject/publish_unsupported.go
+  s_a58d9bc173b9e9::t_8f3314b628a896 1-9
+internal/initproject/publish_windows.go
+  s_a58d9bc173b9e9::t_d1ed9696be7cf3 1-18
+templates/embed.go
+  s_a58d9bc173b9e9::t_71295117505d57 1-8
+templates/typescript/.gitignore
+  s_a58d9bc173b9e9::t_82a9bd2db60bb4 1-7
+templates/typescript/AGENTS.md
+  s_a58d9bc173b9e9::t_64eb324215cd0d 1-57
+templates/typescript/CHECKS.md
+  s_a58d9bc173b9e9::t_37e2c18a6ae160 1-5
+templates/typescript/README.md
+  s_a58d9bc173b9e9::t_03531bd51428b3 1-26
+templates/typescript/adversary.yaml
+  s_a58d9bc173b9e9::t_91b1ccec0b725a 1-26
+templates/typescript/dist/index.d.ts
+  s_a58d9bc173b9e9::t_5f9d1b4bdc7144 1-5
+templates/typescript/dist/index.js
+  s_a58d9bc173b9e9::t_077dfbcaeae241 1-46
+templates/typescript/docs/README.md
+  s_a58d9bc173b9e9::t_3318f3c1d9b07d 1-7
+templates/typescript/docs/scope.md
+  s_a58d9bc173b9e9::t_fa9386f3dbaf37 1-47
+templates/typescript/fixtures/clean/README.md
+  s_a58d9bc173b9e9::t_e18294be41c756 1-3
+templates/typescript/fixtures/vulnerable/.gitkeep
+  s_a58d9bc173b9e9::t_c76f249a0adb1b 1
+templates/typescript/package-lock.json
+  s_a58d9bc173b9e9::t_cd37f92d01022b 1-1011
+templates/typescript/src/index.ts
+  s_a58d9bc173b9e9::t_06e99fc28da651 1-57
+templates/typescript/test/index.test.ts
+  s_a58d9bc173b9e9::t_147751f4ac543e 1-20
+templates/typescript/tsconfig.json
+  s_a58d9bc173b9e9::t_7093a13a293cb8 1-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a02e9e8fc0b3632c91e6d63823164046149a4dcf",
+  "prompts": {},
+  "sessions": {
+    "s_a58d9bc173b9e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11c97-4bac-76c1-9fc2-24c4ca60b097",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
