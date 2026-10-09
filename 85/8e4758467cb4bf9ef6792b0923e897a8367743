@@ -1,0 +1,29 @@
+pkg/adversarylabs/profiles.go
+  s_a58d9bc173b9e9::t_7d53656e58f0ba 1-72
+README.md
+  s_a58d9bc173b9e9::t_7d53656e58f0ba 44-47
+  s_a58d9bc173b9e9::t_2e5bff6820a7f6 28-29
+  s_a58d9bc173b9e9::t_8600706f66bdeb 48
+cmd/profile_manage.go
+  s_a58d9bc173b9e9::t_7d53656e58f0ba 1-104
+cmd/root.go
+  s_a58d9bc173b9e9::t_7d53656e58f0ba 139,182,254
+cmd/profile_manage_test.go
+  s_a58d9bc173b9e9::t_04dd4afac84ce3 1-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "858e4758467cb4bf9ef6792b0923e897a8367743",
+  "prompts": {},
+  "sessions": {
+    "s_a58d9bc173b9e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11c97-4bac-76c1-9fc2-24c4ca60b097",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
