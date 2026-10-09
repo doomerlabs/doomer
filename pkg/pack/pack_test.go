@@ -252,7 +252,7 @@ func TestCreateStoresRuntimeRequirement(t *testing.T) {
 	}
 }
 
-func TestCreateStoresAdversaryManifestOutsideImageLayer(t *testing.T) {
+func TestCreateIncludesValidatedManifestForHostedPublication(t *testing.T) {
 	dir := testProject(t)
 	manifestBytes, err := os.ReadFile(filepath.Join(dir, "adversary.yaml"))
 	if err != nil {
@@ -268,10 +268,15 @@ func TestCreateStoresAdversaryManifestOutsideImageLayer(t *testing.T) {
 	if artifact.AdversaryManifestDigest == "" {
 		t.Fatal("adversary manifest digest missing")
 	}
-	for _, file := range artifact.Files {
-		if file.Path == "adversary.yaml" {
-			t.Fatal("adversary.yaml must not be included in the runnable image layer")
-		}
+	documents, err := oci.ExtractLayerFiles(artifact.LayerSource, "adversary.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(documents["adversary.yaml"]) != string(manifestBytes) {
+		t.Fatal("uploaded layer must contain the exact validated adversary manifest")
+	}
+	if !inventoryContains(artifact.Files, "adversary.yaml") {
+		t.Fatal("uploaded manifest missing from file inventory")
 	}
 }
 

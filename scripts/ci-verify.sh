@@ -121,10 +121,10 @@ cli_smoke() {
   log "build and execute CLI version/profile/auth smoke"
   go build -trimpath -ldflags='-X github.com/doomerlabs/doomer/internal/version.Version=ci-smoke' -o "$binary" .
   "$binary" version | grep -Fq 'ci-smoke' || fail "version smoke failed"
-  DOOMER_CONFIG_DIR="$tmp/config" "$binary" profiles add smoke --endpoint https://doomer.ai/api
-  DOOMER_CONFIG_DIR="$tmp/config" "$binary" profiles use smoke
+  DOOMER_CONFIG_DIR="$tmp/config" "$binary" profile add smoke --endpoint https://doomer.ai/api
+  DOOMER_CONFIG_DIR="$tmp/config" "$binary" profile use smoke
   printf '%s\n' 'smoke-token' | DOOMER_CONFIG_DIR="$tmp/config" "$binary" login --token-stdin
-  DOOMER_CONFIG_DIR="$tmp/config" "$binary" profiles list | grep -Fq '* smoke' || fail "profile selection smoke failed"
+  DOOMER_CONFIG_DIR="$tmp/config" "$binary" profile ls | grep -Fq '* smoke' || fail "profile selection smoke failed"
   DOOMER_CONFIG_DIR="$tmp/config" "$binary" logout --local-only
   if grep -Fq 'smoke-token' "$tmp/config/config.json"; then fail "logout retained token"; fi
   rm -rf -- "$tmp"

@@ -49,6 +49,43 @@ func artifact(t *testing.T, content string) pack.Artifact {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return legacyAttachmentArtifact(t, a)
+}
+
+func legacyAttachmentArtifact(t *testing.T, a pack.Artifact) pack.Artifact {
+	t.Helper()
+	var err error
+	// Keep the attachment-only legacy fixture so these tests continue to cover
+	// packages produced before hosted publication included YAML in the layer.
+	layer := blobsource.Bytes(appendLayerFile(t, a.LayerSource, "", nil))
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+	a.LayerSource = blobsource.Owned(layer, func() error { return nil })
+	a.LayerDigest = layer.Digest()
+	var config pack.ArtifactConfig
+	if err := json.Unmarshal(a.Config, &config); err != nil {
+		t.Fatal(err)
+	}
+	files := make([]pack.File, 0, len(a.Files))
+	for _, file := range a.Files {
+		if file.Path != "adversary.yaml" {
+			files = append(files, file)
+		}
+	}
+	a.Files, config.Files = files, files
+	a.Config, err = json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.ConfigDigest = blobsource.Bytes(a.Config).Digest()
+	descriptor := a.OCIManifest.Layers[0]
+	descriptor.Digest, descriptor.Size = layer.Digest(), layer.Size()
+	a.Manifest, a.ManifestDigest, a.OCIManifest, err = oci.NewManifest(a.Config, descriptor, a.OCIManifest.Annotations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Size = int64(len(a.Config)+len(a.Manifest)) + layer.Size()
 	return a
 }
 

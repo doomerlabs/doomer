@@ -139,6 +139,7 @@ func newRootCommand(injected *application.App) *cobra.Command {
 	root.AddCommand(newLoginCommand(app, &apiURL, &profile, settings), newLogoutCommand(app, &apiURL, &profile), newProfileCommand(app, settings))
 	root.AddCommand(newVersionCommand())
 	root.AddCommand(newProjectCommand(app, &apiURL, &profile))
+	root.AddCommand(newInitCommand())
 	root.AddCommand(newPackCommand(app), newPushCommand(app, &apiURL, &profile), newPullCommand(app, &apiURL, &profile), newArtifactsCommand(app))
 	root.Version = fmt.Sprintf("%s (commit %s, built %s)", version.Version, version.Commit, version.BuildDate)
 	root.SetVersionTemplate("doomer {{.Version}}\n")

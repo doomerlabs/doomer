@@ -150,7 +150,7 @@ func Check(opts Options) (result Preflight, err error) {
 			return result, err
 		}
 	}
-	files, err := collectAndBuildLayerTo(root, dir, io.Discard, m)
+	files, err := collectAndBuildLayerTo(root, dir, io.Discard, m, data)
 	if err != nil {
 		return result, err
 	}
@@ -301,7 +301,7 @@ func Create(ctx context.Context, opts Options) (Artifact, error) {
 			}
 		}()
 		hash := sha256.New()
-		files, err = collectAndBuildLayerTo(root, dir, io.MultiWriter(tmp, hash), m)
+		files, err = collectAndBuildLayerTo(root, dir, io.MultiWriter(tmp, hash), m, adversaryManifest)
 		if err == nil {
 			err = tmp.Sync()
 		}
@@ -416,7 +416,7 @@ type packFile interface {
 
 var openPackFile = func(root *os.Root, name string) (packFile, error) { return root.Open(name) }
 
-func collectAndBuildLayerTo(root *os.Root, dir string, dst io.Writer, m manifest.Manifest) ([]File, error) {
+func collectAndBuildLayerTo(root *os.Root, dir string, dst io.Writer, m manifest.Manifest, adversaryManifest []byte) ([]File, error) {
 	ignore := loadIgnore(dir)
 	files := make([]File, 0)
 	gz, err := gzip.NewWriterLevel(dst, gzip.BestCompression)
@@ -426,6 +426,17 @@ func collectAndBuildLayerTo(root *os.Root, dir string, dst io.Writer, m manifest
 	gz.Name = ""
 	gz.ModTime = time.Unix(0, 0).UTC()
 	tw := tar.NewWriter(gz)
+	// Hosted publication needs the manifest in the uploaded image. Use the
+	// validated bytes rather than rereading a file that the build may change.
+	header := &tar.Header{Name: manifest.FileName, Mode: 0644, Size: int64(len(adversaryManifest)), ModTime: time.Unix(0, 0).UTC(), Format: tar.FormatPAX}
+	if err := tw.WriteHeader(header); err != nil {
+		return nil, errors.Join(err, tw.Close(), gz.Close())
+	}
+	if _, err := tw.Write(adversaryManifest); err != nil {
+		return nil, errors.Join(err, tw.Close(), gz.Close())
+	}
+	manifestHash := sha256.Sum256(adversaryManifest)
+	files = append(files, File{Path: manifest.FileName, Size: int64(len(adversaryManifest)), SHA256: hex.EncodeToString(manifestHash[:]), Mode: 0644})
 	addFile := func(rel string) error {
 		rel = filepath.ToSlash(rel)
 		before, err := root.Lstat(rel)

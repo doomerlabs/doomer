@@ -180,6 +180,9 @@ func appendLayerFile(t *testing.T, source blobsource.Source, name string, conten
 		if err != nil {
 			t.Fatal(err)
 		}
+		if name == "" && header.Name == "adversary.yaml" {
+			continue
+		}
 		copyHeader := *header
 		if err := tarWriter.WriteHeader(&copyHeader); err != nil {
 			t.Fatal(err)
@@ -188,11 +191,13 @@ func appendLayerFile(t *testing.T, source blobsource.Source, name string, conten
 			t.Fatal(err)
 		}
 	}
-	if err := tarWriter.WriteHeader(&tar.Header{Name: name, Mode: 0644, Size: int64(len(content)), Typeflag: tar.TypeReg}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tarWriter.Write(content); err != nil {
-		t.Fatal(err)
+	if name != "" {
+		if err := tarWriter.WriteHeader(&tar.Header{Name: name, Mode: 0644, Size: int64(len(content)), Typeflag: tar.TypeReg}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tarWriter.Write(content); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := tarWriter.Close(); err != nil {
 		t.Fatal(err)
@@ -794,6 +799,7 @@ func sourceFixture(t *testing.T) (pack.Artifact, SourceImport) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	a = legacyAttachmentArtifact(t, a)
 	blobs, err := a.Sources()
 	if err != nil {
 		a.Close()

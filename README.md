@@ -111,6 +111,11 @@ Publish an adversary project containing `adversary.yaml` and its runtime files:
 
 ```sh
 doomer --profile work login
+doomer init my-reviewer
+cd my-reviewer
+npm ci
+npm test
+cd ..
 doomer pack ./my-reviewer --check
 doomer pack ./my-reviewer
 doomer --profile work push my-reviewer:1.0.0
