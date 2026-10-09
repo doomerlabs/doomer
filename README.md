@@ -87,6 +87,12 @@ doomer --profile work logout --local-only
 ```
 
 `--registry-namespace` remains accepted with `--token-stdin` for compatibility.
+If the selected profile already has an unexpired login, `login` creates and
+selects a new profile (for example, `default-2`) and preserves the existing
+credentials. The new profile keeps the same API endpoint. Use `login --replace`
+to deliberately replace the selected login, or `--profile NAME login` to use a
+named profile. Expired logins are refreshed in place. Failed authentication does
+not create or select a profile.
 If revocation fails, logout preserves local credentials for retry. Credential
 writes are atomic, locked, and restricted to the current user on Unix. Logout
 uses compare-and-swap to avoid deleting a concurrently replaced token. API

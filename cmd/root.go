@@ -136,7 +136,7 @@ func newRootCommand(injected *application.App) *cobra.Command {
 		}
 		return nil
 	}
-	root.AddCommand(newLoginCommand(app, &apiURL, &profile), newLogoutCommand(app, &apiURL, &profile), newProfilesCommand(settings))
+	root.AddCommand(newLoginCommand(app, &apiURL, &profile, settings), newLogoutCommand(app, &apiURL, &profile), newProfilesCommand(settings))
 	root.AddCommand(newVersionCommand())
 	root.AddCommand(newProjectCommand(app, &apiURL, &profile))
 	root.AddCommand(newPackCommand(app), newPushCommand(app, &apiURL, &profile), newPullCommand(app, &apiURL, &profile), newArtifactsCommand(app))
