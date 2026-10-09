@@ -25,6 +25,8 @@ doomer profile use work
 doomer profile ls
 doomer --profile work login
 doomer --profile work logout
+doomer profile rename work company
+doomer profile rm company
 ```
 
 The default profile is `default`. A profile can also be used directly with
@@ -38,6 +40,11 @@ settings, the selected profile's endpoint, then
 stored with login credentials (default: `registry.doomer.ai`).
 Profile selection is `--profile`, `DOOMER_PROFILE`,
 the saved selected profile, then `default`.
+
+Renaming a profile preserves its endpoint and credentials and updates the saved
+selection. Removing a profile deletes its local credentials for every endpoint
+without revoking tokens remotely. Removing the selected profile selects
+`default`. The implicit `default` profile remains available after removal.
 
 Settings live in `settings.yaml` and credentials in `config.json` under the
 platform's user configuration directory for `doomer`. `DOOMER_CONFIG_DIR`

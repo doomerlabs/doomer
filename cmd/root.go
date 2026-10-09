@@ -136,7 +136,7 @@ func newRootCommand(injected *application.App) *cobra.Command {
 		}
 		return nil
 	}
-	root.AddCommand(newLoginCommand(app, &apiURL, &profile, settings), newLogoutCommand(app, &apiURL, &profile), newProfileCommand(settings))
+	root.AddCommand(newLoginCommand(app, &apiURL, &profile, settings), newLogoutCommand(app, &apiURL, &profile), newProfileCommand(app, settings))
 	root.AddCommand(newVersionCommand())
 	root.AddCommand(newProjectCommand(app, &apiURL, &profile))
 	root.AddCommand(newPackCommand(app), newPushCommand(app, &apiURL, &profile), newPullCommand(app, &apiURL, &profile), newArtifactsCommand(app))
@@ -179,7 +179,7 @@ func writeSettings(settings *viper.Viper) error {
 	return os.Chmod(file, 0600)
 }
 
-func newProfileCommand(settings *viper.Viper) *cobra.Command {
+func newProfileCommand(app *application.App, settings *viper.Viper) *cobra.Command {
 	profile := &cobra.Command{Use: "profile", Short: "Manage SaaS connection profiles"}
 	profile.AddCommand(&cobra.Command{Use: "ls", Short: "List profiles without credentials", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		// Viper may return its underlying map; do not overwrite profile settings.
@@ -251,5 +251,6 @@ func newProfileCommand(settings *viper.Viper) *cobra.Command {
 		fmt.Fprintf(cmd.OutOrStdout(), "Selected profile %s.\n", name)
 		return nil
 	}})
+	profile.AddCommand(newProfileManageCommand(app, settings, false), newProfileManageCommand(app, settings, true))
 	return profile
 }
