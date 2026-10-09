@@ -15,7 +15,7 @@ func TestRepeatLoginCreatesAndSelectsProfile(t *testing.T) {
 	if _, err := execute(t, "first-token", "--api-url", endpoint, "login", "--token-stdin"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := execute(t, "", "profiles", "add", "default-2", "--endpoint", endpoint); err != nil {
+	if _, err := execute(t, "", "profile", "add", "default-2", "--endpoint", endpoint); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SetAuth(adversarylabs.AuthKey(endpoint, "default-3"), adversarylabs.Auth{Token: "expired-token", ExpiresAt: "2020-01-01T00:00:00Z"}); err != nil {
@@ -94,7 +94,7 @@ func TestFailedRepeatLoginPreservesProfile(t *testing.T) {
 	if err != nil || !ok || auth.Token != "old-token" {
 		t.Fatalf("old login changed: %+v, %v, %v", auth, ok, err)
 	}
-	out, err := execute(t, "", "profiles", "list")
+	out, err := execute(t, "", "profile", "ls")
 	if err != nil || strings.Contains(out, "default-2") || !strings.Contains(out, "* default") {
 		t.Fatalf("failed login changed settings: %q, %v", out, err)
 	}

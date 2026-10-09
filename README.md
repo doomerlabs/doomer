@@ -20,9 +20,9 @@ go build -o bin/doomer .
 ## Profiles
 
 ```sh
-doomer profiles add work --endpoint https://doomer.ai/api
-doomer profiles use work
-doomer profiles list
+doomer profile add work --endpoint https://doomer.ai/api
+doomer profile use work
+doomer profile ls
 doomer --profile work login
 doomer --profile work logout
 ```
