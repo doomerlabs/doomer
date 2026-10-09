@@ -1,0 +1,408 @@
+package initproject
+
+import (
+	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+)
+
+func TestCreateGeneratesVersionActionCompatibleNodeRuntime(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "version-compatible")
+	if _, err := Create(Options{Destination: dst, SDK: "typescript"}); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest, err := os.ReadFile(filepath.Join(dst, "adversary.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(manifest), "  command:\n    - dist/index.js\n") {
+		t.Fatalf("runtime command is not a block-style string list:\n%s", manifest)
+	}
+	if strings.Contains(string(manifest), "command: [") {
+		t.Fatalf("runtime command uses unsupported inline YAML:\n%s", manifest)
+	}
+
+	for _, name := range []string{"src/index.ts", "dist/index.js"} {
+		source, err := os.ReadFile(filepath.Join(dst, filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{
+			`readFileSync(new URL("../package.json", import.meta.url), "utf8")`,
+			"version: packageVersion",
+		} {
+			if !strings.Contains(string(source), want) {
+				t.Fatalf("%s missing %q:\n%s", name, want, source)
+			}
+		}
+		if strings.Contains(string(source), `version: "0.0.1"`) {
+			t.Fatalf("%s hard-codes the runtime version:\n%s", name, source)
+		}
+	}
+}
+
+func TestCreateCleansOwnedStageAfterInjectedRenderAndWriteFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		inject func()
+	}{
+		{"render", func() {
+			renderTemplate = func([]byte, map[string]string) ([]byte, error) { return nil, errors.New("injected render failure") }
+		}},
+		{"write", func() {
+			writeTemplateFile = func(string, []byte, os.FileMode) error { return errors.New("injected write failure") }
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parent := t.TempDir()
+			sentinel := filepath.Join(parent, "user-data")
+			if err := os.WriteFile(sentinel, []byte("preserve"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			originalRender, originalWrite := renderTemplate, writeTemplateFile
+			t.Cleanup(func() { renderTemplate, writeTemplateFile = originalRender, originalWrite })
+			tc.inject()
+			dst := filepath.Join(parent, "failed-project")
+			if _, err := Create(Options{Destination: dst}); err == nil {
+				t.Fatal("Create succeeded")
+			}
+			if _, err := os.Lstat(dst); !os.IsNotExist(err) {
+				t.Fatalf("destination exists: %v", err)
+			}
+			stages, err := filepath.Glob(filepath.Join(parent, ".adversary-init-*"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(stages) != 0 {
+				t.Fatalf("owned stages remain: %v", stages)
+			}
+			if data, err := os.ReadFile(sentinel); err != nil || string(data) != "preserve" {
+				t.Fatalf("user data changed: %q, %v", data, err)
+			}
+		})
+	}
+}
+
+func TestCreateClaimsDestinationExactlyOnce(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "race-project")
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); <-start; _, err := Create(Options{Destination: dst}); errs <- err }()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	success := 0
+	for err := range errs {
+		if err == nil {
+			success++
+		}
+	}
+	if success != 1 {
+		t.Fatalf("successes = %d, want 1", success)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "adversary.yaml")); err != nil {
+		t.Fatalf("winner output removed: %v", err)
+	}
+}
+
+func TestCreateRejectsUnsafeProjectNamesWithoutCreatingDestination(t *testing.T) {
+	for _, name := range []string{"Has Spaces", "O'Reilly", "日本語", "UPPER"} {
+		dst := filepath.Join(t.TempDir(), name)
+		if _, err := Create(Options{Destination: dst}); err == nil {
+			t.Fatalf("Create(%q) succeeded", name)
+		}
+		if _, err := os.Stat(dst); !os.IsNotExist(err) {
+			t.Fatalf("destination exists after rejection: %v", err)
+		}
+	}
+}
+
+func TestCreateRejectsNPMReservedAndOversizedNamesBeforeParentCreation(t *testing.T) {
+	for _, name := range []string{"node_modules", "favicon.ico", "http", strings.Repeat("a", 215)} {
+		root := t.TempDir()
+		parent := filepath.Join(root, "must-not-exist")
+		dst := filepath.Join(parent, name)
+		if _, err := Create(Options{Destination: dst}); err == nil {
+			t.Fatalf("Create(%q) succeeded", name)
+		}
+		if _, err := os.Lstat(parent); !os.IsNotExist(err) {
+			t.Fatalf("parent mutated after rejecting %q: %v", name, err)
+		}
+	}
+}
+
+func TestCreateNeverRemovesExistingDestinationData(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "existing-project")
+	if err := os.Mkdir(dst, 0755); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(dst, "another-actors-data")
+	if err := os.WriteFile(sentinel, []byte("preserve me"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Create(Options{Destination: dst}); err == nil {
+		t.Fatal("Create succeeded")
+	}
+	data, err := os.ReadFile(sentinel)
+	if err != nil {
+		t.Fatalf("sentinel removed: %v", err)
+	}
+	if string(data) != "preserve me" {
+		t.Fatalf("sentinel changed: %q", data)
+	}
+}
+
+func TestCreatePreservesDestinationCreatedAtPublishRace(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "raced-project")
+	original := publishProject
+	publishProject = func(staging, destination string) error {
+		if err := os.Mkdir(destination, 0755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(destination, "other-data"), []byte("safe"), 0644); err != nil {
+			return err
+		}
+		return os.Rename(staging, destination)
+	}
+	t.Cleanup(func() { publishProject = original })
+	if _, err := Create(Options{Destination: dst}); err == nil {
+		t.Fatal("Create succeeded")
+	}
+	data, err := os.ReadFile(filepath.Join(dst, "other-data"))
+	if err != nil {
+		t.Fatalf("racing actor's data removed: %v", err)
+	}
+	if string(data) != "safe" {
+		t.Fatalf("racing actor's data changed: %q", data)
+	}
+}
+
+func TestCreateDoesNotReplaceConcurrentEmptyDestination(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "empty-race")
+	original := publishProject
+	var before os.FileInfo
+	publishProject = func(staging, destination string) error {
+		if err := os.Mkdir(destination, 0711); err != nil {
+			return err
+		}
+		var err error
+		before, err = os.Stat(destination)
+		if err != nil {
+			return err
+		}
+		return original(staging, destination)
+	}
+	t.Cleanup(func() { publishProject = original })
+	if _, err := Create(Options{Destination: dst}); err == nil {
+		t.Fatal("Create succeeded")
+	}
+	after, err := os.Stat(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(before, after) {
+		t.Fatal("concurrent empty destination was replaced")
+	}
+	if after.Mode().Perm() != 0711 {
+		t.Fatalf("destination mode = %o, want 711", after.Mode().Perm())
+	}
+}
+
+func TestCreatePublishesProjectRootMode(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "mode-project")
+	if _, err := Create(Options{Destination: dst}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0755 {
+		t.Fatalf("project root mode = %o, want 755", info.Mode().Perm())
+	}
+}
+
+func TestCreateScaffoldsFactoryScopeDocs(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "scope-docs-project")
+	if _, err := Create(Options{Destination: dst}); err != nil {
+		t.Fatal(err)
+	}
+	scopePath := filepath.Join(dst, "docs", "scope.md")
+	raw, err := os.ReadFile(scopePath)
+	if err != nil {
+		t.Fatalf("docs/scope.md missing: %v", err)
+	}
+	text := string(raw)
+	for _, want := range []string{
+		"scope-docs-project", // rendered {{name}}
+		"## Mission",
+		"## In scope",
+		"## Out of scope",
+		"## Factory grading rule",
+		"local/scope-docs-project",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("docs/scope.md missing %q\n\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "{{name}}") {
+		t.Fatal("docs/scope.md still contains unrendered {{name}}")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "docs", "README.md")); err != nil {
+		t.Fatalf("docs/README.md missing: %v", err)
+	}
+	readme, err := os.ReadFile(filepath.Join(dst, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(readme), "docs/scope.md") {
+		t.Fatal("project README should mention docs/scope.md")
+	}
+}
+
+func TestCreateScaffoldsCatalogAndContributorDocs(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "catalog-docs-project")
+	if _, err := Create(Options{Destination: dst}); err != nil {
+		t.Fatal(err)
+	}
+
+	readmeRaw, err := os.ReadFile(filepath.Join(dst, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	readme := string(readmeRaw)
+	for _, want := range []string{"## Goals", "## Scope", "## Boundaries", "CHECKS.md", "CONTRIBUTING.md"} {
+		if !strings.Contains(readme, want) {
+			t.Fatalf("README.md missing %q\n\n%s", want, readme)
+		}
+	}
+	for _, command := range []string{"npm ci", "npm test", "doomer validate", "doomer pack"} {
+		if strings.Contains(readme, command) {
+			t.Fatalf("README.md contains contributor command %q\n\n%s", command, readme)
+		}
+	}
+
+	checksRaw, err := os.ReadFile(filepath.Join(dst, "CHECKS.md"))
+	if err != nil {
+		t.Fatalf("CHECKS.md missing: %v", err)
+	}
+	checks := string(checksRaw)
+	for _, want := range []string{"| Rule | Severity | Scans for |", "`readme.exists`", "Repositories without a root `README.md`"} {
+		if !strings.Contains(checks, want) {
+			t.Fatalf("CHECKS.md missing %q\n\n%s", want, checks)
+		}
+	}
+
+	contributingRaw, err := os.ReadFile(filepath.Join(dst, "CONTRIBUTING.md"))
+	if err != nil {
+		t.Fatalf("CONTRIBUTING.md missing: %v", err)
+	}
+	contributing := string(contributingRaw)
+	for _, want := range []string{"npm ci", "npm test", "doomer pack . --check", "CHECKS.md"} {
+		if !strings.Contains(contributing, want) {
+			t.Fatalf("CONTRIBUTING.md missing %q\n\n%s", want, contributing)
+		}
+	}
+}
+
+func TestCreateScaffoldsAgentVoice(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "voice-scaffold-project")
+	if _, err := Create(Options{Destination: dst}); err != nil {
+		t.Fatal(err)
+	}
+	voicePath := filepath.Join(dst, "agent", "voice.md")
+	raw, err := os.ReadFile(voicePath)
+	if err != nil {
+		t.Fatalf("agent/voice.md missing: %v", err)
+	}
+	text := string(raw)
+	for _, want := range []string{
+		"voice-scaffold-project", // rendered {{name}}
+		"## Core voice",
+		"## Example maintainer comments (style only)",
+		"### Ship / OK",
+		"### Design / technical judgment",
+		"### Defects / correctness",
+		"### Nits / style",
+		"Catalog training may ask implementers",
+		"## Output",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("agent/voice.md missing %q\n\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "{{name}}") {
+		t.Fatal("agent/voice.md still contains unrendered {{name}}")
+	}
+	readme, err := os.ReadFile(filepath.Join(dst, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(readme), "agent/voice.md") {
+		t.Fatal("project README should mention agent/voice.md")
+	}
+}
+
+func TestCreateUsesPublishedSDKNotVendor(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "published-sdk-project")
+	if _, err := Create(Options{Destination: dst}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "vendor", "adversary-sdk")); !os.IsNotExist(err) {
+		t.Fatalf("must not scaffold vendor/adversary-sdk: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "node_modules")); !os.IsNotExist(err) {
+		t.Fatalf("must not scaffold node_modules: %v", err)
+	}
+	pkg, err := os.ReadFile(filepath.Join(dst, "package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(pkg)
+	if !strings.Contains(text, `"@adversarylabs/sdk"`) {
+		t.Fatalf("package.json missing published SDK dependency:\n%s", text)
+	}
+	if strings.Contains(text, "file:vendor") {
+		t.Fatalf("package.json still points at vendored SDK:\n%s", text)
+	}
+	src, err := os.ReadFile(filepath.Join(dst, "src", "index.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src), `from "@adversarylabs/sdk"`) {
+		t.Fatalf("src must import published @adversarylabs/sdk:\n%s", src)
+	}
+}
+
+func TestRenderSuccessUsesLocationAndShellQuotes(t *testing.T) {
+	var out bytes.Buffer
+	location := "/tmp/a path/it's-here"
+	RenderSuccess(&out, Result{Location: location, SDK: "TypeScript"}, "wrong", "linux")
+	if !strings.Contains(out.String(), location) || !strings.Contains(out.String(), `cd '/tmp/a path/it'"'"'s-here'`) {
+		t.Fatalf("output not safely rendered:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "npm ci") || strings.Contains(out.String(), "npm install") {
+		t.Fatalf("output does not use lockfile install:\n%s", out.String())
+	}
+}
+
+func TestRenderSuccessUsesPowerShellLiteralPathOnWindows(t *testing.T) {
+	var out bytes.Buffer
+	location := `C:\Users\Ada O'Brien\review`
+	RenderSuccess(&out, Result{Location: location, SDK: "TypeScript"}, "wrong", "windows")
+	if !strings.Contains(out.String(), `Set-Location -LiteralPath 'C:\Users\Ada O''Brien\review'`) {
+		t.Fatalf("output not safely rendered for PowerShell:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "  cd ") {
+		t.Fatalf("output contains POSIX navigation on Windows:\n%s", out.String())
+	}
+}

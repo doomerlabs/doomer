@@ -5,16 +5,17 @@ import (
 	"github.com/doomerlabs/doomer/internal/application"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 type loginOptions struct {
-	ci                                    bool
-	name, emailAddress, registryNamespace string
-	passwordStdin, tokenStdin, device     bool
+	ci                                         bool
+	name, emailAddress, registryNamespace      string
+	passwordStdin, tokenStdin, device, replace bool
 }
 type logoutOptions struct{ localOnly bool }
 
-func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Command {
+func newLoginCommand(app *application.App, apiURL, profile *string, settings *viper.Viper) *cobra.Command {
 	opts := &loginOptions{}
 	cmd := &cobra.Command{
 		Use:   "login",
@@ -34,7 +35,8 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 			stdin, clock, browserAuth, tty := cmd.InOrStdin(), deps.Clock, deps.BrowserAuth, deps.TTY
 			store := deps.Auth
 			var err error
-			if _, _, err := store.ExactAuthE(adversarylabs.AuthKey(valueOf(apiURL), valueOf(profile))); err != nil {
+			targetProfile, newSettings, err := loginProfile(deps, valueOf(apiURL), valueOf(profile), settings, opts.replace)
+			if err != nil {
 				return err
 			}
 			client := deps.API.New(valueOf(apiURL))
@@ -95,7 +97,7 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 					return err
 				}
 			}
-			if err := store.SetAuth(adversarylabs.AuthKey(valueOf(apiURL), valueOf(profile)), adversarylabs.Auth{
+			if err := store.SetAuth(adversarylabs.AuthKey(valueOf(apiURL), targetProfile), adversarylabs.Auth{
 				Token:             token.Token,
 				ClientID:          token.ClientID,
 				ExpiresAt:         token.ExpiresAt,
@@ -106,13 +108,22 @@ func newLoginCommand(app *application.App, apiURL, profile *string) *cobra.Comma
 			}); err != nil {
 				return err
 			}
+			if newSettings != nil {
+				if err := writeSettings(newSettings); err != nil {
+					return fmt.Errorf("login saved in profile %q, but could not select it: %w", targetProfile, err)
+				}
+			}
 			fmt.Fprintln(cmd.OutOrStdout())
-			fmt.Fprintln(cmd.OutOrStdout(), "Logged in to Doomer.")
+			if newSettings != nil {
+				fmt.Fprintf(cmd.OutOrStdout(), "Created and selected profile %s; preserved login in %s.\n", targetProfile, valueOf(profile))
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Logged in to Doomer using profile %s.\n", targetProfile)
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&opts.ci, "ci", false, "request a short-lived automation token")
 	cmd.Flags().BoolVar(&opts.device, "device", false, "use device login for a headless environment")
+	cmd.Flags().BoolVar(&opts.replace, "replace", false, "replace the selected profile's existing login")
 	cmd.Flags().StringVar(&opts.name, "name", "", "friendly name for this client")
 	cmd.Flags().StringVar(&opts.emailAddress, "email-address", "", "email address for password login")
 	cmd.Flags().BoolVar(&opts.passwordStdin, "password-stdin", false, "read the password from standard input")

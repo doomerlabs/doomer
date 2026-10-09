@@ -129,10 +129,18 @@ func newRootCommand(injected *application.App) *cobra.Command {
 			Clock: dependencies.Clock{NowFunc: time.Now, TimerFunc: func(d time.Duration) application.Timer { return timer{time.NewTimer(d)} }},
 			TTY:   processTTY{}, BrowserAuth: dependencies.BrowserAuth{Entropy: rand.Reader, ListenFunc: net.Listen, NewServerFunc: dependencies.NewHTTPCallbackServer, OpenFunc: openBrowser},
 		}
+		switch command.Name() {
+		case "pack", "push", "pull", "list", "inspect", "remove", "check":
+			check, _ := command.Flags().GetBool("check")
+			return configurePublishing(app, !(command.Name() == "pack" && check))
+		}
 		return nil
 	}
-	root.AddCommand(newLoginCommand(app, &apiURL, &profile), newLogoutCommand(app, &apiURL, &profile), newProfilesCommand(settings))
+	root.AddCommand(newLoginCommand(app, &apiURL, &profile, settings), newLogoutCommand(app, &apiURL, &profile), newProfileCommand(app, settings))
 	root.AddCommand(newVersionCommand())
+	root.AddCommand(newProjectCommand(app, &apiURL, &profile))
+	root.AddCommand(newInitCommand())
+	root.AddCommand(newPackCommand(app), newPushCommand(app, &apiURL, &profile), newPullCommand(app, &apiURL, &profile), newArtifactsCommand(app))
 	root.Version = fmt.Sprintf("%s (commit %s, built %s)", version.Version, version.Commit, version.BuildDate)
 	root.SetVersionTemplate("doomer {{.Version}}\n")
 	root.CompletionOptions.DisableDefaultCmd = true
@@ -172,16 +180,16 @@ func writeSettings(settings *viper.Viper) error {
 	return os.Chmod(file, 0600)
 }
 
-func newProfilesCommand(settings *viper.Viper) *cobra.Command {
-	profiles := &cobra.Command{Use: "profiles", Short: "Manage SaaS connection profiles"}
-	profiles.AddCommand(&cobra.Command{Use: "list", Short: "List profiles without credentials", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		names := settings.GetStringMap("profiles")
-		if names == nil {
-			names = map[string]any{}
+func newProfileCommand(app *application.App, settings *viper.Viper) *cobra.Command {
+	profile := &cobra.Command{Use: "profile", Short: "Manage SaaS connection profiles"}
+	profile.AddCommand(&cobra.Command{Use: "ls", Short: "List profiles without credentials", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+		// Viper may return its underlying map; do not overwrite profile settings.
+		names := map[string]bool{"default": true}
+		for name := range settings.GetStringMap("profiles") {
+			names[name] = true
 		}
-		names["default"] = nil
 		selected := settings.GetString("profile")
-		names[selected] = nil
+		names[selected] = true
 		keys := make([]string, 0, len(names))
 		for name := range names {
 			keys = append(keys, name)
@@ -223,8 +231,8 @@ func newProfilesCommand(settings *viper.Viper) *cobra.Command {
 		return nil
 	}}
 	add.Flags().StringVar(&endpoint, "endpoint", adversarylabs.DefaultAPIURL, "SaaS API endpoint")
-	profiles.AddCommand(add)
-	profiles.AddCommand(&cobra.Command{Use: "use NAME", Short: "Select the default profile", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	profile.AddCommand(add)
+	profile.AddCommand(&cobra.Command{Use: "use NAME", Short: "Select the default profile", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		name := strings.ToLower(strings.TrimSpace(args[0]))
 		if !validProfile(name) {
 			return fmt.Errorf("invalid profile name")
@@ -235,7 +243,7 @@ func newProfilesCommand(settings *viper.Viper) *cobra.Command {
 			return err
 		}
 		if name != "default" && !file.IsSet("profiles."+name) {
-			return fmt.Errorf("unknown profile %q; use profiles add first", name)
+			return fmt.Errorf("unknown profile %q; use profile add first", name)
 		}
 		file.Set("profile", name)
 		if err := writeSettings(file); err != nil {
@@ -244,5 +252,6 @@ func newProfilesCommand(settings *viper.Viper) *cobra.Command {
 		fmt.Fprintf(cmd.OutOrStdout(), "Selected profile %s.\n", name)
 		return nil
 	}})
-	return profiles
+	profile.AddCommand(newProfileManageCommand(app, settings, false), newProfileManageCommand(app, settings, true))
+	return profile
 }

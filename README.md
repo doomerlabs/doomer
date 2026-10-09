@@ -1,12 +1,16 @@
 # Doomer CLI
 
-A Cobra/Viper client for the Doomer SaaS. This bootstrap supports connection
-profiles, login, logout, and version information. Code submission and hosted run status are planned;
+A Cobra/Viper client for the Doomer SaaS. It supports connection
+profiles, login, logout, packaging, and publishing private adversaries. Code submission and hosted run status are planned;
 `run` and local code execution are not implemented.
 
 ## Build
 
 Requires Go 1.26.6 or newer.
+
+The Nix development shell supplies Go 1.26.6, Node 22, and the build and CI
+tools. With Nix and direnv installed, run `direnv allow` in this checkout to
+activate it. You can also enter the shell with `nix develop`.
 
 ```sh
 go build -o bin/doomer .
@@ -16,11 +20,13 @@ go build -o bin/doomer .
 ## Profiles
 
 ```sh
-doomer profiles add work --endpoint https://doomer.ai/api
-doomer profiles use work
-doomer profiles list
+doomer profile add work --endpoint https://doomer.ai/api
+doomer profile use work
+doomer profile ls
 doomer --profile work login
 doomer --profile work logout
+doomer profile rename work company
+doomer profile rm company
 ```
 
 The default profile is `default`. A profile can also be used directly with
@@ -35,6 +41,11 @@ stored with login credentials (default: `registry.doomer.ai`).
 Profile selection is `--profile`, `DOOMER_PROFILE`,
 the saved selected profile, then `default`.
 
+Renaming a profile preserves its endpoint and credentials and updates the saved
+selection. Removing a profile deletes its local credentials for every endpoint
+without revoking tokens remotely. Removing the selected profile selects
+`default`. The implicit `default` profile remains available after removal.
+
 Settings live in `settings.yaml` and credentials in `config.json` under the
 platform's user configuration directory for `doomer`. `DOOMER_CONFIG_DIR`
 overrides that directory for isolated installations or tests. Settings never
@@ -46,6 +57,17 @@ Profiles separate accounts and API connections, including multiple accounts on
 the same service. Login authenticates the selected account without choosing a
 project. Project-specific commands will select their project with `--project`;
 projects are not saved in profiles.
+
+## Projects
+
+```sh
+doomer project ls
+doomer --profile work project ls
+```
+
+Lists the selected account's projects with `SLUG` and `NAME` columns, sorted by
+slug. `project list` is an alias. Service-account and CI tokens list their scoped
+project.
 
 ## Authentication
 
@@ -72,10 +94,71 @@ doomer --profile work logout --local-only
 ```
 
 `--registry-namespace` remains accepted with `--token-stdin` for compatibility.
+If the selected profile already has an unexpired login, `login` creates and
+selects a new profile (for example, `default-2`) and preserves the existing
+credentials. The new profile keeps the same API endpoint. Use `login --replace`
+to deliberately replace the selected login, or `--profile NAME login` to use a
+named profile. Expired logins are refreshed in place. Failed authentication does
+not create or select a profile.
 If revocation fails, logout preserves local credentials for retry. Credential
 writes are atomic, locked, and restricted to the current user on Unix. Logout
 uses compare-and-swap to avoid deleting a concurrently replaced token. API
 endpoints require HTTPS, with loopback HTTP allowed for development.
+
+## Private adversaries
+
+Publish an adversary project containing `adversary.yaml` and its runtime files:
+
+```sh
+doomer --profile work login
+doomer init my-reviewer
+cd my-reviewer
+npm ci
+npm test
+cd ..
+doomer pack ./my-reviewer --check
+doomer pack ./my-reviewer
+doomer --profile work push my-reviewer:1.0.0
+# On another machine, use your team's namespace:
+doomer --profile work pull my-team/my-reviewer:1.0.0
+```
+
+Use the name and version printed by `pack` as the local reference. The default
+push destination is `registry.doomer.ai/<team-namespace>/<name>:<version>`.
+The CLI uses the selected profile's namespace or retrieves it from your account.
+`DOOMER_REGISTRY_NAMESPACE` overrides that namespace. For imported service
+account tokens, supply `login --token-stdin --registry-namespace my-team`.
+
+The CLI uploads the package image and layers. SaaS processes hosted uploads:
+it extracts `adversary.yaml`, `README.md`, and `CHECKS.md` from the package,
+publishes versioned OCI attachments, and signs private team packages. Downloads
+verify and cache publisher signatures when available. Hosted processing can
+finish after `push` returns; `push` reports the immutable upload digest.
+External registries receive the package image and layers without SaaS processing.
+
+```sh
+# Override the destination or use Docker credentials for an external registry:
+doomer push my-reviewer:1.0.0 ghcr.io/my-team/my-reviewer:1.0.0
+doomer pull ghcr.io/my-team/my-reviewer:1.0.0
+
+# Inspect and maintain local packages:
+doomer artifacts list
+doomer artifacts inspect my-reviewer:1.0.0
+doomer artifacts check
+doomer artifacts remove my-team/my-reviewer:1.0.0 sha256:<expected-digest>
+```
+
+`pack --check` validates the manifest and inventories files without building or
+writing artifacts. `pack` runs the project's build script; it supports
+`--builder local` (default, npm and Node 22) or `--builder docker`.
+`--name` overrides the local artifact name. `pack`, `push`, and `pull` support
+`--format json`; the deprecated `--json` alias is retained for compatibility.
+Build logs and transfer progress are written to stderr.
+
+`DOOMER_DATA_DIR` overrides artifact storage. The store uses the previous CLI's
+platform data directory and `repository-v1` format, so existing packages remain
+available. References support tags and immutable digests. Loopback registries
+use HTTP for local development; remote registries use HTTPS.
 
 ## Development
 
@@ -85,8 +168,8 @@ go vet ./...
 ```
 
 Authentication and credential-storage code has been adapted from the previous
-CLI. This repository starts with a new Git history and contains no local review
-engine, package registry implementation, or prior release artifacts.
+CLI, together with its package builder, OCI registry client, and artifact store.
+This repository contains no local review engine or prior release artifacts.
 
 ## Releases and Homebrew
 

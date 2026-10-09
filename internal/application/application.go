@@ -49,6 +49,12 @@ type Dependencies struct {
 	BrowserAuth  BrowserAuth
 	TTY          TTY
 	RegistryHost string
+	RegistryNS   string
+	Projects     Projects
+	References   References
+	Resolver     Resolver
+	Repository   Repository
+	Registries   RegistryFactory
 }
 type App struct{ Deps Dependencies }
 

@@ -1,0 +1,26 @@
+name: local/{{name}}
+version: {{version}}
+description: {{description}}
+
+triggers:
+  manual: true
+
+runtime:
+  name: node
+  version: "22"
+  command:
+    - dist/index.js
+
+permissions:
+  enforcement: advisory
+  filesystem:
+    read:
+      - .
+    write:
+      - .adversary/results
+  network: false
+  environment:
+    allow: []
+
+findings:
+  format: adversary.review.v1
