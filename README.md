@@ -8,6 +8,10 @@ profiles, login, logout, packaging, and publishing private adversaries. Code sub
 
 Requires Go 1.26.6 or newer.
 
+The Nix development shell supplies Go 1.26.6, Node 22, and the build and CI
+tools. With Nix and direnv installed, run `direnv allow` in this checkout to
+activate it. You can also enter the shell with `nix develop`.
+
 ```sh
 go build -o bin/doomer .
 ./bin/doomer --help
