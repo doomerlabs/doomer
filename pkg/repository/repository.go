@@ -594,9 +594,9 @@ func (r Repository) Resolve(value string) (Record, error) {
 	}
 	sort.Slice(records, func(i, j int) bool { return records[i].Digest < records[j].Digest })
 	if preferencesAgree {
-		for _, rec := range records {
-			if rec.Digest == preferenceRoot {
-				return rec, nil
+		for i := range records {
+			if records[i].Digest == preferenceRoot {
+				return records[i], nil
 			}
 		}
 	}

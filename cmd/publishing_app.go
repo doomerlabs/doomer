@@ -119,13 +119,16 @@ func configurePublishing(app *application.App, createStore bool) error {
 			return err
 		}
 	}
-	if entries, readErr := os.ReadDir(filepath.Join(repo.Root, "transactions")); readErr == nil && len(entries) > 0 {
-		if err := repo.Recover(); err != nil {
-			return err
+	if createStore {
+		if entries, readErr := os.ReadDir(filepath.Join(repo.Root, "transactions")); readErr == nil && len(entries) > 0 {
+			if err := repo.Recover(); err != nil {
+				return err
+			}
+		} else if readErr != nil && !os.IsNotExist(readErr) {
+			return readErr
 		}
-	} else if readErr != nil && !os.IsNotExist(readErr) {
-		return readErr
 	}
+
 	npm, npmErr := exec.LookPath("npm")
 	node, nodeErr := exec.LookPath("node")
 	docker, dockerErr := exec.LookPath("docker")
