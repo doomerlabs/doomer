@@ -1,0 +1,14 @@
+pkg/repository/repository.go
+  h_aa44c3b5b60dec 637-638,658-660,676-680,683,1389-1391,1396,1721-1723
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "db3f88bb8d993418edc4686b146d0a15a220371a",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
