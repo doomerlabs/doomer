@@ -634,7 +634,8 @@ func preferNewestSamePackageName(records []Record) (Record, bool) {
 		return Record{}, false
 	}
 	versions := map[string]struct{}{}
-	for _, rec := range records {
+	for i := range records {
+		rec := &records[i]
 		if strings.TrimSpace(rec.Name) != name {
 			return Record{}, false
 		}
@@ -654,8 +655,9 @@ func (r Repository) preferNewestSameRepository(records []Record) (Record, bool) 
 		return Record{}, false
 	}
 	identities := make([]string, 0, len(records))
-	for _, rec := range records {
-		id, err := r.recordRepositoryIdentity(rec)
+	for i := range records {
+		rec := &records[i]
+		id, err := r.recordRepositoryIdentity(*rec)
 		if err != nil || id == "" {
 			return Record{}, false
 		}
@@ -671,17 +673,14 @@ func (r Repository) preferNewestSameRepository(records []Record) (Record, bool) 
 }
 
 func newestRecord(records []Record) Record {
-	best := records[0]
-	for _, rec := range records[1:] {
-		if versionPreferred(rec.Version, best.Version) {
-			best = rec
-			continue
-		}
-		if rec.Version == best.Version && rec.Digest > best.Digest {
-			best = rec
+	best := 0
+	for i := 1; i < len(records); i++ {
+		if versionPreferred(records[i].Version, records[best].Version) ||
+			(records[i].Version == records[best].Version && records[i].Digest > records[best].Digest) {
+			best = i
 		}
 	}
-	return best
+	return records[best]
 }
 
 // recordRepositoryIdentity returns a stable registry/repository key for a
@@ -1387,13 +1386,14 @@ func (r Repository) authoritativeAliasMap(allowPending bool) (map[string][]strin
 		return nil, err
 	}
 	out := map[string][]string{}
-	for _, rec := range records {
-		for _, alias := range aliases(rec, "") {
+	for i := range records {
+		rec := &records[i]
+		for _, alias := range aliases(*rec, "") {
 			out[alias] = append(out[alias], rec.Digest)
 		}
 		for ref, digest := range refs {
 			if digest == rec.Digest {
-				for _, alias := range aliases(rec, ref) {
+				for _, alias := range aliases(*rec, ref) {
 					out[alias] = append(out[alias], rec.Digest)
 				}
 			}
@@ -1718,8 +1718,9 @@ func (r Repository) Reconcile(after string, limit int) (map[string]VerifyResult,
 		return nil, err
 	}
 	out := map[string]VerifyResult{}
-	for _, rec := range records {
-		out[rec.Digest] = r.Verify(rec)
+	for i := range records {
+		rec := &records[i]
+		out[rec.Digest] = r.Verify(*rec)
 	}
 	return out, nil
 }
