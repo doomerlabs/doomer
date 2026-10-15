@@ -111,16 +111,16 @@ Publish an adversary project containing `adversary.yaml` and its runtime files:
 
 ```sh
 doomer --profile work login
-doomer init my-reviewer
+doomer adversary init my-reviewer
 cd my-reviewer
 npm ci
 npm test
 cd ..
-doomer pack ./my-reviewer --check
-doomer pack ./my-reviewer
-doomer --profile work push my-reviewer:1.0.0
+doomer adversary pack ./my-reviewer --check
+doomer adversary pack ./my-reviewer
+doomer --profile work adversary push my-reviewer:1.0.0
 # On another machine, use your team's namespace:
-doomer --profile work pull my-team/my-reviewer:1.0.0
+doomer --profile work adversary pull my-team/my-reviewer:1.0.0
 ```
 
 Use the name and version printed by `pack` as the local reference. The default
@@ -138,15 +138,21 @@ External registries receive the package image and layers without SaaS processing
 
 ```sh
 # Override the destination or use Docker credentials for an external registry:
-doomer push my-reviewer:1.0.0 ghcr.io/my-team/my-reviewer:1.0.0
-doomer pull ghcr.io/my-team/my-reviewer:1.0.0
+doomer adversary push my-reviewer:1.0.0 ghcr.io/my-team/my-reviewer:1.0.0
+doomer adversary pull ghcr.io/my-team/my-reviewer:1.0.0
 
 # Inspect and maintain local packages:
-doomer artifacts list
-doomer artifacts inspect my-reviewer:1.0.0
-doomer artifacts check
-doomer artifacts remove my-team/my-reviewer:1.0.0 sha256:<expected-digest>
+doomer adversary ls
+doomer adversary inspect my-reviewer:1.0.0
+doomer adversary check
+doomer adversary rm my-team/my-reviewer:1.0.0
 ```
+
+`adversary ls` lists every local reference, including tags pointing to the same
+package. `adversary rm` removes one local reference; it leaves remote packages
+and shared local content intact. Use `--if-digest sha256:...` when a script needs
+to remove a reference only if it still points to an expected digest. Ambiguous
+short names require a fully qualified reference from `adversary ls`.
 
 `pack --check` validates the manifest and inventories files without building or
 writing artifacts. `pack` runs the project's build script; it supports

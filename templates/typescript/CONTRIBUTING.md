@@ -10,7 +10,7 @@
 ```sh
 npm ci
 npm test
-doomer pack . --check
+doomer adversary pack . --check
 ```
 
 ## Changing review behavior

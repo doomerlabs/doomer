@@ -181,9 +181,9 @@ func RenderSuccess(w io.Writer, result Result, _ string, platform string) {
 	fmt.Fprintln(w, "  npm ci")
 	fmt.Fprintln(w, "  npm run build")
 	fmt.Fprintln(w, "  npm test")
-	fmt.Fprintln(w, "  doomer pack . --check")
-	fmt.Fprintln(w, "  doomer pack .")
-	fmt.Fprintln(w, "  doomer push "+filepath.Base(result.Location)+":"+DefaultVersion)
+	fmt.Fprintln(w, "  doomer adversary pack . --check")
+	fmt.Fprintln(w, "  doomer adversary pack .")
+	fmt.Fprintln(w, "  doomer adversary push "+filepath.Base(result.Location)+":"+DefaultVersion)
 }
 
 func shellQuote(value string) string {
@@ -211,7 +211,7 @@ func writableFileMode(mode fs.FileMode) fs.FileMode {
 }
 
 // shouldSkipInitTemplatePath excludes install/vendor trees that must not ship
-// inside `doomer init` scaffolds (use the published npm SDK instead).
+// inside `doomer adversary init` scaffolds (use the published npm SDK instead).
 func shouldSkipInitTemplatePath(rel string) bool {
 	rel = filepath.ToSlash(rel)
 	if rel == "node_modules" || strings.HasPrefix(rel, "node_modules/") {

@@ -78,19 +78,19 @@ func TestPrivatePublishingRoundTrip(t *testing.T) {
 	writeProject(t, project)
 	os.WriteFile(filepath.Join(project, "CHECKS.md"), []byte("# Checks\n"), 0644)
 	// Preflight validates without committing local artifacts.
-	publishCommand(t, "pack", project, "--check", "--format", "json")
+	publishCommand(t, "adversary", "pack", project, "--check", "--format", "json")
 	if _, err := os.Stat(filepath.Join(data, "repository-v1", "records")); !os.IsNotExist(err) {
 		t.Fatalf("preflight created records: %v", err)
 	}
 	var packed outputEnvelope[packDTO]
-	if err := json.Unmarshal(publishCommand(t, "pack", project, "--format", "json"), &packed); err != nil {
+	if err := json.Unmarshal(publishCommand(t, "adversary", "pack", project, "--format", "json"), &packed); err != nil {
 		t.Fatal(err)
 	}
 	if packed.SchemaVersion != 2 || packed.Data.Name != "local/security-reviewer" || len(packed.Data.Files) == 0 {
 		t.Fatalf("invalid package output: %+v", packed)
 	}
 	var pushed outputEnvelope[pushDTO]
-	if err := json.Unmarshal(publishCommand(t, "--profile", "work", "--api-url", api.URL, "push", "local/security-reviewer:1.4.2", "--format", "json"), &pushed); err != nil {
+	if err := json.Unmarshal(publishCommand(t, "--profile", "work", "--api-url", api.URL, "adversary", "push", "local/security-reviewer:1.4.2", "--format", "json"), &pushed); err != nil {
 		t.Fatal(err)
 	}
 	if pushed.Data.CanonicalReference != host+"/my-team/security-reviewer:1.4.2" || pushed.Data.Digest != packed.Data.Digest {
@@ -135,7 +135,7 @@ func TestPrivatePublishingRoundTrip(t *testing.T) {
 	pulledData := t.TempDir()
 	t.Setenv("DOOMER_DATA_DIR", pulledData)
 	var pulled outputEnvelope[pullDTO]
-	if err := json.Unmarshal(publishCommand(t, "--profile", "work", "--api-url", api.URL, "pull", pushed.Data.CanonicalReference, "--format", "json"), &pulled); err != nil {
+	if err := json.Unmarshal(publishCommand(t, "--profile", "work", "--api-url", api.URL, "adversary", "pull", pushed.Data.CanonicalReference, "--format", "json"), &pulled); err != nil {
 		t.Fatal(err)
 	}
 	repo := repository.Repository{Root: filepath.Join(pulledData, "repository-v1"), DefaultRegistry: host}
@@ -145,11 +145,11 @@ func TestPrivatePublishingRoundTrip(t *testing.T) {
 	if _, err := repo.Resolve(host + "/my-team/security-reviewer:1.4.2"); err != nil {
 		t.Fatal(err)
 	}
-	publishCommand(t, "artifacts", "list", "--format", "json")
-	publishCommand(t, "artifacts", "inspect", pulled.Data.Digest)
-	publishCommand(t, "artifacts", "check")
+	publishCommand(t, "adversary", "ls", "--format", "json")
+	publishCommand(t, "adversary", "inspect", pulled.Data.Digest)
+	publishCommand(t, "adversary", "check")
 	// Repeating a pull refreshes references without downloading another record.
-	publishCommand(t, "--profile", "work", "--api-url", api.URL, "pull", pushed.Data.CanonicalReference)
+	publishCommand(t, "--profile", "work", "--api-url", api.URL, "adversary", "pull", pushed.Data.CanonicalReference)
 	for _, mediaType := range []string{oci.AdversaryManifestMediaType, oci.ReadmeMediaType, oci.ChecksMediaType, namespacesig.SignatureMediaType, namespacesig.TrustMediaType} {
 		found := false
 		for _, d := range remote.referrers[pushed.Data.Digest] {

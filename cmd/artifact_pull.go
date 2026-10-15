@@ -25,10 +25,10 @@ func newPullCommand(app *application.App, apiURL, profile *string) *cobra.Comman
 	cmd := &cobra.Command{
 		Use:   "pull <reference>",
 		Short: "Pull and install an adversary from an OCI registry",
-		Example: `  doomer pull security-reviewer
-  doomer pull adversarylabs/security-reviewer
-  doomer pull ghcr.io/acme/security-reviewer
-  doomer pull localhost:5000/security-reviewer`,
+		Example: `  doomer adversary pull security-reviewer
+  doomer adversary pull adversarylabs/security-reviewer
+  doomer adversary pull ghcr.io/acme/security-reviewer
+  doomer adversary pull localhost:5000/security-reviewer`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			resolved, err := commandFormat(cmd, format, legacyJSON)

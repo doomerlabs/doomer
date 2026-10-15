@@ -151,7 +151,7 @@ func pushErrorWithNamespaceHint(err error, localRef string, ref oci.Reference) e
 	} else {
 		suggested += ":" + ref.Tag
 	}
-	return fmt.Errorf("push is not authorized for %s\n\nThe remote namespace %q may not match your Doomer team slug. Push to your slug namespace, for example:\n  doomer push %s %s\n\nFor unqualified pushes, set DOOMER_REGISTRY_NAMESPACE=<slug>.\n\nOriginal error: %w", ref.Locator(), namespace, localRef, suggested, err)
+	return fmt.Errorf("push is not authorized for %s\n\nThe remote namespace %q may not match your Doomer team slug. Push to your slug namespace, for example:\n  doomer adversary push %s %s\n\nFor unqualified pushes, set DOOMER_REGISTRY_NAMESPACE=<slug>.\n\nOriginal error: %w", ref.Locator(), namespace, localRef, suggested, err)
 }
 
 func isRegistryAccessDenied(err error) bool {
