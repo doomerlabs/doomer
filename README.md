@@ -138,7 +138,7 @@ Each file must be regular and at most 2 MiB; each tree can contain at most 20,00
 files, and the encoded upload cannot exceed 16 MiB. Symlinks, submodules, sparse
 checkouts, unresolved merges, and Git LFS pointers cause an explicit error.
 
-SaaS stores repository identity, HEAD SHA, and dirty status alongside verified
+SaaS stores repository identity, branch, HEAD SHA, and dirty status alongside verified
 baseline and target tree fingerprints. Fingerprints cover every captured path,
 file mode, and file's exact bytes, independent of branch names and commits.
 Hashing shares the upload capture pass and batches baseline Git object reads.

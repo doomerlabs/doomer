@@ -27,6 +27,7 @@ type CaptureOptions struct {
 
 type SourceMetadata struct {
 	Repository string `json:"repository,omitempty"`
+	Branch     string `json:"branch,omitempty"`
 	HeadSHA    string `json:"headSha"`
 	Dirty      bool   `json:"dirty"`
 }
@@ -239,6 +240,9 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 	result.BaseTreeHash = TreeHash(m.Base)
 	result.TargetTreeHash = TreeHash(m.Target)
 	result.Source = SourceMetadata{HeadSHA: head, Dirty: dirty}
+	if branch, err := g.text("symbolic-ref", "--quiet", "--short", "HEAD"); err == nil {
+		result.Source.Branch = branch
+	}
 	if remote, err := g.text("config", "--get", "remote.origin.url"); err == nil {
 		result.Source.Repository = repositoryIdentity(remote)
 	}

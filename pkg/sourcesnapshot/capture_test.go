@@ -77,7 +77,7 @@ func TestCaptureIncludesStagedUnstagedUntrackedAndDeletions(t *testing.T) {
 	status := git(t, dir, "status", "--porcelain=v1", "--untracked-files=all")
 	index := git(t, dir, "ls-files", "--stage")
 	snapshot := capture(t, dir, "")
-	if !snapshot.Source.Dirty || snapshot.Source.HeadSHA != head {
+	if !snapshot.Source.Dirty || snapshot.Source.HeadSHA != head || snapshot.Source.Branch != "feature" {
 		t.Fatalf("source: %+v", snapshot.Source)
 	}
 	m := manifest(t, snapshot)

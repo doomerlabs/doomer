@@ -73,7 +73,7 @@ func TestReviewUploadsImmutableWorktreeUsingSelectedProfile(t *testing.T) {
 				return
 			}
 			keys = append(keys, request.IdempotencyKey)
-			if request.Project != "my-team" || request.Source.HeadSHA != base || !request.Source.Dirty || request.Source.Repository != "github.com/owner/repository" {
+			if request.Project != "my-team" || request.Source.Branch != "main" || request.Source.HeadSHA != base || !request.Source.Dirty || request.Source.Repository != "github.com/owner/repository" {
 				t.Errorf("wrong review source: %+v", request)
 			}
 			json.NewEncoder(w).Encode(adversarylabs.ReviewSubmission{ID: id, Digest: request.Digest, Status: "uploading"})

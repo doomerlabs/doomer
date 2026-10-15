@@ -8,7 +8,7 @@ and queues the existing `uploaded_snapshot` review worker.
 The v1 source transport stays compatible with existing workers. Source metadata
 is supplied when creating a submission; the server checks that its HEAD SHA
 matches the uploaded snapshot's `headRef`. Metadata contains a sanitized origin
-identity such as `github.com/owner/repo`, HEAD SHA, and dirty flag. Credentials,
+identity such as `github.com/owner/repo`, branch name, HEAD SHA, and dirty flag. Credentials,
 URL query strings, and local filesystem remote paths are omitted. These are
 client-provided hints; they are not proof that a commit contains the uploaded code.
 
@@ -32,13 +32,13 @@ for ASCII and UTF-8 paths and executable modes.
 
 The upload digest is a separate SHA-256 of the full JSON snapshot bytes. It binds
 both trees, refs, modes, and blob data during transport. The submission's
-idempotency key additionally binds its repository/HEAD/dirty metadata; it is
+idempotency key additionally binds its repository/branch/HEAD/dirty metadata; it is
 scoped by project and authenticated owner on the server.
 
 SaaS writes `tree_hash_version`, `base_tree_hash`, and `target_tree_hash` only
 after validating the uploaded bytes, with the payload and uploaded status in
 one update. It retains these columns after payload cleanup. `repository`,
-`git_head_sha`, and `worktree_dirty` are separate nullable hint columns. Existing
+`git_branch`, `git_head_sha`, and `worktree_dirty` are separate nullable hint columns. Existing
 submissions stay compatible and are not automatically backfilled.
 
 ## Future PR matching
