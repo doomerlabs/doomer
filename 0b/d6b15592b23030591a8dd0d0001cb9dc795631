@@ -1,0 +1,29 @@
+README.md
+  s_a58d9bc173b9e9::t_a8a243948e7b2d 9,11
+flake.nix
+  s_a58d9bc173b9e9::t_ce46c2b7e2aa48 17,19-20,44-45
+go.mod
+  s_a58d9bc173b9e9::t_1414149608ad35 3
+scripts/spdx-validator/go.mod
+  s_a58d9bc173b9e9::t_4781a0b8bd1c5d 3
+scripts/testdata/spdx-replace/main/go.mod
+  s_a58d9bc173b9e9::t_a896517d8f7d58 3
+scripts/testdata/spdx-replace/replacement/go.mod
+  s_a58d9bc173b9e9::t_9ec3ce3e318159 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0bd6b15592b23030591a8dd0d0001cb9dc795631",
+  "prompts": {},
+  "sessions": {
+    "s_a58d9bc173b9e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11c97-4bac-76c1-9fc2-24c4ca60b097",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
