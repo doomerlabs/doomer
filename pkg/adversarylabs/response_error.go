@@ -28,8 +28,13 @@ func responseError(resp *http.Response, token string) error {
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxErrorBytes+1))
 	if err == nil && len(data) <= maxErrorBytes && json.Unmarshal(data, &body) == nil {
 		switch body.Error {
-		case "invalid_request", "invalid_json", "unauthorized", "insufficient_scope", "repository_mismatch":
+		case "invalid_request", "invalid_json", "unauthorized", "insufficient_scope", "repository_mismatch",
+			"not_found", "submission_limit", "idempotency_conflict", "payload_too_large", "invalid_snapshot",
+			"digest_mismatch", "source_head_mismatch", "submission_expired_or_finalized", "not_ready":
 			message += ": " + body.Error
+		}
+		if body.Error == "reviews_disabled" {
+			message += ": hosted reviews are not enabled for this project"
 		}
 		if body.Error == "invalid_request" {
 			reason := ""

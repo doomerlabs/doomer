@@ -105,6 +105,55 @@ writes are atomic, locked, and restricted to the current user on Unix. Logout
 uses compare-and-swap to avoid deleting a concurrently replaced token. API
 endpoints require HTTPS, with loopback HTTP allowed for development.
 
+## Review your worktree
+
+```sh
+# Review the repository containing the current directory:
+doomer review --project my-team
+
+# Select a profile and another worktree:
+doomer --profile dev review --project my-team --path ../feature-worktree
+
+# Choose a baseline explicitly:
+doomer review --project my-team --base origin/main --format json
+```
+
+`--project` is required and accepts the slug or ID shown by `doomer project ls`.
+`--path` defaults to the current directory; a subdirectory selects its entire
+repository. The command uploads an immutable snapshot and queues a hosted review
+using the selected profile. It returns the review ID and status without waiting
+for completion. Hosted reviews must be enabled for the project.
+
+The default baseline is the merge base of HEAD and origin's local default-branch
+ref, falling back to origin/main, origin/master, main, master, then HEAD. No refs
+are fetched. `--base` uses the specified local ref or commit directly. An
+unchanged snapshot is rejected; use a baseline containing the changes you want
+reviewed. Both clean feature branches and uncommitted work are supported.
+
+Snapshots include tracked files and non-ignored untracked files, with current
+working bytes taking precedence over the index. Deleted files appear only in the
+baseline. Git metadata and ignored untracked files are excluded. No commits,
+index changes, builds, hooks, filters, or local review processes are performed.
+Each file must be regular and at most 2 MiB; each tree can contain at most 20,000
+files, and the encoded upload cannot exceed 16 MiB. Symlinks, submodules, sparse
+checkouts, unresolved merges, and Git LFS pointers cause an explicit error.
+
+SaaS stores repository identity, HEAD SHA, and dirty status alongside verified
+baseline and target tree fingerprints. Fingerprints cover every captured path,
+file mode, and file's exact bytes, independent of branch names and commits.
+Hashing shares the upload capture pass and batches baseline Git object reads.
+The same dirty code gets the same target fingerprint after it is committed,
+provided the paths, bytes, and executable modes are unchanged. Line-ending or
+Git-filter transformations can change that identity. Git metadata is informational;
+SaaS recomputes the tree fingerprints from the validated upload.
+
+Repeating the exact capture resumes the same submission, including after a lost
+upload/finalize response. The fingerprints remain after snapshot payload cleanup.
+Automatic matching or reuse when a PR opens is future work; this change stores
+the identities needed for it. See [the fingerprint contract](docs/review-snapshots.md).
+The SaaS schema update must be applied through its normal SchemaHero workflow
+before using the new CLI review submission metadata.
+
 ## Private adversaries
 
 Publish an adversary project containing `adversary.yaml` and its runtime files:
