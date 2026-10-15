@@ -7,6 +7,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/application"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/oci"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -55,9 +56,16 @@ func registryAuthRealm(apiURL string) string {
 }
 
 func hasLocalhostPort(registry string) bool {
-	return registry == "127.0.0.1" || registry == "[::1]" ||
-		len(registry) > len("localhost:") && registry[:len("localhost:")] == "localhost:" ||
-		len(registry) > len("127.0.0.1:") && registry[:len("127.0.0.1:")] == "127.0.0.1:"
+	host := registry
+	if parsed, _, err := net.SplitHostPort(registry); err == nil {
+		host = parsed
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func hasExplicitRegistry(ref string) bool {
