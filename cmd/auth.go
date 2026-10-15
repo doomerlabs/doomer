@@ -39,6 +39,14 @@ func newLoginCommand(app *application.App, apiURL, profile *string, settings *vi
 			if err != nil {
 				return err
 			}
+			key := adversarylabs.AuthKey(valueOf(apiURL), targetProfile)
+			previous, existed, err := store.StoredAuthE(key)
+			if err != nil {
+				return err
+			}
+			if newSettings != nil && existed {
+				return fmt.Errorf("profile %q was created by another login; rerun login", targetProfile)
+			}
 			client := deps.API.New(valueOf(apiURL))
 			var token adversarylabs.TokenResponse
 			if opts.tokenStdin {
@@ -97,7 +105,7 @@ func newLoginCommand(app *application.App, apiURL, profile *string, settings *vi
 					return err
 				}
 			}
-			if err := store.SetAuth(adversarylabs.AuthKey(valueOf(apiURL), targetProfile), adversarylabs.Auth{
+			savedAuth := adversarylabs.Auth{
 				Token:             token.Token,
 				ClientID:          token.ClientID,
 				ExpiresAt:         token.ExpiresAt,
@@ -105,8 +113,14 @@ func newLoginCommand(app *application.App, apiURL, profile *string, settings *vi
 				Namespace:         token.Namespace,
 				Team:              token.Team,
 				RegistryHost:      deps.RegistryHost,
-			}); err != nil {
-				return err
+			}
+			if opts.replace {
+				err = store.SetAuth(key, savedAuth)
+			} else {
+				err = store.SetAuthCAS(key, previous, existed, savedAuth)
+			}
+			if err != nil {
+				return fmt.Errorf("save login in profile %q (rerun login if the profile changed): %w", targetProfile, err)
 			}
 			if newSettings != nil {
 				if err := writeSettings(newSettings); err != nil {

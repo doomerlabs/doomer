@@ -1,8 +1,8 @@
 # Doomer CLI
 
 A Cobra/Viper client for the Doomer SaaS. It supports connection
-profiles, login, logout, packaging, and publishing private adversaries. Code submission and hosted run status are planned;
-`run` and local code execution are not implemented.
+profiles, login, logout, packaging and publishing private adversaries, and submitting
+Git worktrees for hosted review with `doomer review`. Local `run` execution is not implemented.
 
 ## Build
 

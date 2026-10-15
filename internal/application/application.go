@@ -19,6 +19,7 @@ type AuthStore interface {
 	StoredAuthE(string) (adversarylabs.Auth, bool, error)
 	ExactAuthE(string) (adversarylabs.Auth, bool, error)
 	SetAuth(string, adversarylabs.Auth) error
+	SetAuthCAS(string, adversarylabs.Auth, bool, adversarylabs.Auth) error
 	RemoveAuthCAS(string, adversarylabs.Auth) error
 }
 type APIClient interface {
