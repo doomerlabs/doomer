@@ -1,0 +1,41 @@
+README.md
+  s_a58d9bc173b9e9::t_1a031ad98a5e59 108-156
+cmd/review.go
+  s_a58d9bc173b9e9::t_3dad70a0120c0a 1-99
+cmd/review_test.go
+  s_a58d9bc173b9e9::t_87cd2da125e0bb 1-142
+cmd/root.go
+  s_a58d9bc173b9e9::t_7cadc10f3a2c4b 142
+docs/review-snapshots.md
+  s_a58d9bc173b9e9::t_36b1d6f328d4eb 1-55
+pkg/adversarylabs/response_error.go
+  s_a58d9bc173b9e9::t_0761cd7aa7aba9 31-33,36-38
+pkg/adversarylabs/reviews.go
+  s_a58d9bc173b9e9::t_debbb58ae05277 1-67
+pkg/sourcesnapshot/capture.go
+  s_a58d9bc173b9e9::t_d1e49aee9048d6 1-496
+pkg/sourcesnapshot/capture_test.go
+  s_a58d9bc173b9e9::t_b0bf5279696384 1-222
+pkg/sourcesnapshot/fingerprint.go
+  s_a58d9bc173b9e9::t_e60bd70fd4bbff 1-28
+pkg/sourcesnapshot/format.go
+  s_a58d9bc173b9e9::t_4d687ddc43af79 1-120
+testdata/source-tree-v1.json
+  s_a58d9bc173b9e9::t_3604e7342a5e79 1-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e7d2289217ac08bce10888b82961d03e2f6ced8f",
+  "prompts": {},
+  "sessions": {
+    "s_a58d9bc173b9e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11c97-4bac-76c1-9fc2-24c4ca60b097",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
