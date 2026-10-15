@@ -1,0 +1,27 @@
+README.md
+  s_a58d9bc173b9e9::t_51e7f1cb17b8b5 4-5
+cmd/auth.go
+  s_a58d9bc173b9e9::t_982f62e174c2f6 42-49,108,116-123
+internal/application/application.go
+  s_a58d9bc173b9e9::t_9a401ff14c5be3 22
+pkg/adversarylabs/config.go
+  s_a58d9bc173b9e9::t_d471dccf85f65a 232-244
+pkg/adversarylabs/config_test.go
+  s_a58d9bc173b9e9::t_2381f2944dbb01 34-56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "08f59fd086d97bcca6a98ea388e667d8aef4b12a",
+  "prompts": {},
+  "sessions": {
+    "s_a58d9bc173b9e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11c97-4bac-76c1-9fc2-24c4ca60b097",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
