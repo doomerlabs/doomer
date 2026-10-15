@@ -1,6 +1,6 @@
 module github.com/doomerlabs/doomer/scripts/spdx-validator
 
-go 1.26.6
+go 1.26.9
 
 require github.com/spdx/tools-golang v0.5.7
 
