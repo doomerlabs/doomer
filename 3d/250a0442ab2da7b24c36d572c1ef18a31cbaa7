@@ -1,0 +1,43 @@
+README.md
+  s_a58d9bc173b9e9::t_e022f8d3770c7c 114,119-121,123,141-142,145-148,151-156
+cmd/adversary.go
+  s_a58d9bc173b9e9::t_cc1c4d43dd69a4 5-6,8,12-13,15,19,39-80,82,96
+cmd/adversary_test.go
+  s_a58d9bc173b9e9::t_f2f8d204a44be2 1-144
+cmd/artifact_pull.go
+  s_a58d9bc173b9e9::t_1edfcfcdbcb450 28-31
+cmd/artifact_push.go
+  s_a58d9bc173b9e9::t_fb1e7ed5bdd572 38-41
+cmd/init.go
+  s_a58d9bc173b9e9::t_5b4f477f741430 29-35
+cmd/publishing_test.go
+  s_a58d9bc173b9e9::t_a3d1efedf1bb95 81,86,93,138,148-150,152
+cmd/registry_helpers.go
+  s_a58d9bc173b9e9::t_2be7b37e8ac2f1 154
+cmd/root.go
+  s_a58d9bc173b9e9::t_53ada5513b5f0b 132,141
+internal/initproject/init.go
+  s_a58d9bc173b9e9::t_42a9e14a2a63db 184-186,214
+internal/initproject/init_test.go
+  s_a58d9bc173b9e9::t_b2e61e2761dc8a 288,310
+templates/embed.go
+  s_a58d9bc173b9e9::t_b70362ec2104b8 5
+templates/typescript/CONTRIBUTING.md
+  s_a58d9bc173b9e9::t_9140a070439b52 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3d250a0442ab2da7b24c36d572c1ef18a31cbaa7",
+  "prompts": {},
+  "sessions": {
+    "s_a58d9bc173b9e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11c97-4bac-76c1-9fc2-24c4ca60b097",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
