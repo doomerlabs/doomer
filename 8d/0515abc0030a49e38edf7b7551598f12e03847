@@ -1,0 +1,16 @@
+cmd/registry_helpers.go
+  h_aa44c3b5b60dec 10,59-68
+cmd/registry_helpers_test.go
+  h_aa44c3b5b60dec 1-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d0515abc0030a49e38edf7b7551598f12e03847",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
