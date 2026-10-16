@@ -118,7 +118,7 @@ func projectDefaults(store application.AuthStore) (defaultProjectStore, error) {
 	return defaults, nil
 }
 
-func accessibleProjects(ctx context.Context, client *adversarylabs.Client, token string) ([]adversarylabs.Team, error) {
+func accessibleProjects(ctx context.Context, client adversarylabs.Client, token string) ([]adversarylabs.Team, error) {
 	account, err := client.Whoami(ctx, token)
 	if err != nil {
 		return nil, err
