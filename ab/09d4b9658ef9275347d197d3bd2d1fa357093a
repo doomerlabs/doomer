@@ -1,0 +1,35 @@
+README.md
+  s_a58d9bc173b9e9::t_16c9957e5f50d9 58-59,66,70-73,124-126
+cmd/project.go
+  s_a58d9bc173b9e9::t_11242b77703e03 4,32,40-50,53,57-61,68-104,107-162
+cmd/project_test.go
+  s_a58d9bc173b9e9::t_a5195cd7805917 4,10,19,77-150
+cmd/review.go
+  s_a58d9bc173b9e9::t_b525c8404eadc8 17,20-21,32-34,50-53,70,92,96
+cmd/review_test.go
+  s_a58d9bc173b9e9::t_aeecfba479c12d 29,31-32
+docs/review-snapshots.md
+  s_a58d9bc173b9e9::t_58edc716810ce4 3,56-59
+pkg/adversarylabs/config.go
+  s_a58d9bc173b9e9::t_c02d4880806132 75-76,336-354
+pkg/adversarylabs/config_test.go
+  s_a58d9bc173b9e9::t_86434101ed1ef1 57-89
+pkg/adversarylabs/profiles.go
+  s_a58d9bc173b9e9::t_8f975b99eb9d97 31-35,48-53,78-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ab09d4b9658ef9275347d197d3bd2d1fa357093a",
+  "prompts": {},
+  "sessions": {
+    "s_a58d9bc173b9e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11c97-4bac-76c1-9fc2-24c4ca60b097",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
