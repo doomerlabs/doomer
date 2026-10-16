@@ -72,7 +72,8 @@ func canonicalService(raw string) string {
 }
 
 type Config struct {
-	Auths map[string]Auth `json:"auths"`
+	Auths           map[string]Auth   `json:"auths"`
+	DefaultProjects map[string]string `json:"default_projects,omitempty"`
 }
 type Auth struct {
 	Token             string `json:"token,omitempty"`
@@ -249,6 +250,7 @@ func (s ConfigStore) RemoveAuth(key string) (Auth, bool, error) {
 		auth, ok = c.Auths[key]
 		if ok {
 			delete(c.Auths, key)
+			clearDefaultProject(c, key)
 		}
 		return nil
 	})
@@ -265,8 +267,17 @@ func (s ConfigStore) RemoveAuthCAS(key string, expected Auth) error {
 			return fmt.Errorf("%w: %s", ErrAuthCAS, key)
 		}
 		delete(c.Auths, key)
+		clearDefaultProject(c, key)
 		return nil
 	})
+}
+
+func clearDefaultProject(config *Config, authKey string) {
+	delete(config.DefaultProjects, authKey)
+	// Legacy credentials are only used by the default production profile.
+	if !strings.HasPrefix(authKey, "auth:v2:") {
+		delete(config.DefaultProjects, AuthKey(DefaultAPIURL, "default"))
+	}
 }
 
 func (s ConfigStore) AuthE(key string) (Auth, bool, error) {
@@ -331,4 +342,23 @@ func (s ConfigStore) StoredAuthE(key string) (Auth, bool, error) {
 	}
 	auth, ok := c.Auths[key]
 	return auth, ok, nil
+}
+
+// DefaultProject is scoped to the same API endpoint and profile as credentials.
+func (s ConfigStore) DefaultProject(key string) (string, error) {
+	config, err := s.Load()
+	if err != nil {
+		return "", err
+	}
+	return config.DefaultProjects[key], nil
+}
+
+func (s ConfigStore) SetDefaultProject(key, project string) error {
+	return s.locked(func(config *Config) error {
+		if config.DefaultProjects == nil {
+			config.DefaultProjects = make(map[string]string)
+		}
+		config.DefaultProjects[key] = project
+		return nil
+	})
 }

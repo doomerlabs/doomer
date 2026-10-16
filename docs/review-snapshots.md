@@ -1,6 +1,6 @@
 # Worktree review identity
 
-`doomer review --project SLUG [--path DIRECTORY] [--base REF]` uses the existing
+`doomer review [--project SLUG] [--path DIRECTORY] [--base REF]` uses the existing
 create/upload/finalize snapshot API. The CLI sends the selected profile's token
 to all three API calls. SaaS authorizes the project, validates all source bytes,
 and queues the existing `uploaded_snapshot` review worker.
@@ -53,3 +53,7 @@ Matching the target alone identifies code; reusing a review also requires a
 matching baseline tree and compatible review settings, policies, and coverage.
 The schema index includes project, repository, algorithm, target, and baseline.
 This change does not automatically attach CLI findings to PRs or skip PR reviews.
+
+When `--project` is omitted, the review uses the current profile’s selected
+project (`doomer project use SLUG`), or its only accessible project when no
+selection has been saved. Multiple projects require an explicit selection.

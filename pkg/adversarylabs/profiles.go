@@ -28,6 +28,11 @@ func (s ConfigStore) ProfileExists(profile, registryHost string) (bool, error) {
 // RemoveProfile removes all endpoint-scoped credentials, including expired ones.
 func (s ConfigStore) RemoveProfile(profile, registryHost string) error {
 	return s.locked(func(config *Config) error {
+		for key := range config.DefaultProjects {
+			if profileAuthKey(key, profile, registryHost) {
+				delete(config.DefaultProjects, key)
+			}
+		}
 		for key := range config.Auths {
 			if profileAuthKey(key, profile, registryHost) {
 				delete(config.Auths, key)
@@ -40,6 +45,12 @@ func (s ConfigStore) RemoveProfile(profile, registryHost string) error {
 // RenameProfile moves credentials under one lock and never overwrites a login.
 func (s ConfigStore) RenameProfile(oldName, newName, registryHost string) error {
 	return s.locked(func(config *Config) error {
+		for key := range config.DefaultProjects {
+			if profileAuthKey(key, newName, registryHost) {
+				return fmt.Errorf("profile %q already has project settings", newName)
+			}
+		}
+
 		for key := range config.Auths {
 			if profileAuthKey(key, newName, registryHost) {
 				return fmt.Errorf("profile %q already has credentials", newName)
@@ -63,6 +74,16 @@ func (s ConfigStore) RenameProfile(oldName, newName, registryHost string) error 
 			if profileAuthKey(key, oldName, registryHost) {
 				delete(config.Auths, key)
 			}
+		}
+		projectMoves := make(map[string]string)
+		for key, project := range config.DefaultProjects {
+			if profileAuthKey(key, oldName, registryHost) {
+				projectMoves[strings.TrimSuffix(key, ":"+oldName)+":"+newName] = project
+				delete(config.DefaultProjects, key)
+			}
+		}
+		for key, project := range projectMoves {
+			config.DefaultProjects[key] = project
 		}
 		for key, auth := range moves {
 			config.Auths[key] = auth

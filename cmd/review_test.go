@@ -26,10 +26,10 @@ func reviewGit(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(data))
 }
 
-func TestReviewRequiresProjectAndAuthentication(t *testing.T) {
+func TestReviewRequiresAuthentication(t *testing.T) {
 	isolate(t)
-	if _, err := execute(t, "", "review"); err == nil || !strings.Contains(err.Error(), "project") {
-		t.Fatalf("missing required project: %v", err)
+	if _, err := execute(t, "", "review"); err == nil || !strings.Contains(err.Error(), "not logged in") {
+		t.Fatalf("missing auth: %v", err)
 	}
 	if _, err := execute(t, "", "review", "--project", "my-team"); err == nil || !strings.Contains(err.Error(), "not logged in") {
 		t.Fatalf("missing auth: %v", err)

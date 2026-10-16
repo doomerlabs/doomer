@@ -55,19 +55,23 @@ retained when using the default directory.
 
 Profiles separate accounts and API connections, including multiple accounts on
 the same service. Login authenticates the selected account without choosing a
-project. Project-specific commands will select their project with `--project`;
-projects are not saved in profiles.
+project. Each profile can select a default project for its API endpoint with
+`doomer project use <slug>`. An explicit `--project` overrides that selection.
 
 ## Projects
 
 ```sh
 doomer project ls
 doomer --profile work project ls
+doomer project use my-team
 ```
 
 Lists the selected account's projects with `SLUG` and `NAME` columns, sorted by
-slug. `project list` is an alias. Service-account and CI tokens list their scoped
-project.
+slug, with `*` beside the selected default. `project list` is an alias.
+When the account has only one project and no saved selection, that project is
+used automatically. With multiple projects, select one with `project use`.
+Service-account and CI tokens list their scoped project. Logging out clears the
+selected project for that login; other profiles and endpoints are unchanged.
 
 ## Authentication
 
@@ -118,7 +122,9 @@ doomer --profile dev review --project my-team --path ../feature-worktree
 doomer review --project my-team --base origin/main --format json
 ```
 
-`--project` is required and accepts the slug or ID shown by `doomer project ls`.
+`--project` accepts a project slug or ID. Omit it to use the default selected
+with `doomer project use`, or the only available project. If the saved project is
+no longer available, select another project or pass `--project` explicitly.
 `--path` defaults to the current directory; a subdirectory selects its entire
 repository. The command uploads an immutable snapshot and queues a hosted review
 using the selected profile. It returns the review ID and status without waiting
