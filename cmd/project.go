@@ -55,7 +55,7 @@ func newProjectCommand(app *application.App, apiURL, profile *string) *cobra.Com
 			}
 			for _, project := range projects {
 				marker := ""
-				if project.Slug == selected || project.ID == selected {
+				if selected != "" && (project.Slug == selected || project.ID == selected) {
 					marker = "*"
 				}
 				if _, err := fmt.Fprintf(output, "%s\t%s\t%s\n", marker, project.Slug, project.Name); err != nil {
