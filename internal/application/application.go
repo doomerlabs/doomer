@@ -19,6 +19,7 @@ type AuthStore interface {
 	StoredAuthE(string) (adversarylabs.Auth, bool, error)
 	ExactAuthE(string) (adversarylabs.Auth, bool, error)
 	SetAuth(string, adversarylabs.Auth) error
+	SetAuthCAS(string, adversarylabs.Auth, bool, adversarylabs.Auth) error
 	RemoveAuthCAS(string, adversarylabs.Auth) error
 }
 type APIClient interface {
@@ -49,6 +50,12 @@ type Dependencies struct {
 	BrowserAuth  BrowserAuth
 	TTY          TTY
 	RegistryHost string
+	RegistryNS   string
+	Projects     Projects
+	References   References
+	Resolver     Resolver
+	Repository   Repository
+	Registries   RegistryFactory
 }
 type App struct{ Deps Dependencies }
 

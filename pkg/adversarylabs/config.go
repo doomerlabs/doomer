@@ -229,6 +229,19 @@ func (s ConfigStore) locked(fn func(*Config) error) error {
 func (s ConfigStore) SetAuth(key string, auth Auth) error {
 	return s.locked(func(c *Config) error { c.Auths[key] = auth; return nil })
 }
+
+// SetAuthCAS preserves credentials written by a concurrent login.
+func (s ConfigStore) SetAuthCAS(key string, expected Auth, existed bool, auth Auth) error {
+	return s.locked(func(c *Config) error {
+		current, exists := c.Auths[key]
+		if exists != existed || (exists && current != expected) {
+			return fmt.Errorf("%w: %s", ErrAuthCAS, key)
+		}
+		c.Auths[key] = auth
+		return nil
+	})
+}
+
 func (s ConfigStore) RemoveAuth(key string) (Auth, bool, error) {
 	var auth Auth
 	var ok bool

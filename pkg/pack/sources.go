@@ -1,0 +1,30 @@
+package pack
+
+import (
+	"fmt"
+
+	"github.com/doomerlabs/doomer/pkg/blobsource"
+	"github.com/doomerlabs/doomer/pkg/oci"
+)
+
+// Sources exposes the current packed bytes through the repeatable source
+// contract. The subsequent migration will make Create produce file-backed
+// sources directly; this compatibility adapter lets downstream code migrate
+// first without changing Artifact.
+func (a Artifact) Sources() ([]oci.SourceBlob, error) {
+	if len(a.OCIManifest.Layers) != 1 {
+		return nil, fmt.Errorf("packed artifact must have one layer")
+	}
+	config, err := oci.NewSourceBlob(a.OCIManifest.Config, blobsource.Bytes(a.Config))
+	if err != nil {
+		return nil, err
+	}
+	if a.LayerSource == nil {
+		return nil, fmt.Errorf("packed artifact layer source is closed or unavailable")
+	}
+	layer, err := oci.NewSourceBlob(a.OCIManifest.Layers[0], a.LayerSource)
+	if err != nil {
+		return nil, err
+	}
+	return []oci.SourceBlob{config, layer}, nil
+}

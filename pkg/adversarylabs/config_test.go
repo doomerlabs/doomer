@@ -31,3 +31,26 @@ func TestCredentialCASAndCanonicalScope(t *testing.T) {
 		t.Fatal("concurrent login lost")
 	}
 }
+
+func TestConcurrentLoginCannotOverwriteReservedCredentials(t *testing.T) {
+	store := ConfigStore{Path: filepath.Join(t.TempDir(), "config.json")}
+	key := AuthKey(DefaultAPIURL, "default-2")
+	results := make(chan error, 2)
+	for _, token := range []string{"first", "second"} {
+		go func(value string) { results <- store.SetAuthCAS(key, Auth{}, false, Auth{Token: value}) }(token)
+	}
+	success, conflict := 0, 0
+	for range 2 {
+		err := <-results
+		if err == nil {
+			success++
+		} else if errors.Is(err, ErrAuthCAS) {
+			conflict++
+		} else {
+			t.Fatal(err)
+		}
+	}
+	if success != 1 || conflict != 1 {
+		t.Fatalf("expected one login and one conflict, got %d and %d", success, conflict)
+	}
+}

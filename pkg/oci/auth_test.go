@@ -1,0 +1,685 @@
+package oci
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync/atomic"
+	"testing"
+)
+
+func TestDockerCredentialHelper(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture")
+	}
+	home, bin := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := os.MkdirAll(filepath.Join(home, ".docker"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".docker", "config.json"), []byte(`{"credHelpers":{"registry.example":"fixture"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	helper := filepath.Join(bin, "docker-credential-fixture")
+	if err := os.WriteFile(helper, []byte("#!/bin/sh\nread server\n[ \"$server\" = registry.example ] || exit 1\nprintf '{\"Username\":\"user\",\"Secret\":\"secret\"}'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := (DockerCredentialStore{HomeDir: home, Lstat: os.Lstat, Open: func(path string) (io.ReadCloser, error) { return os.Open(path) }, RunHelper: func(_ context.Context, executable, input string) ([]byte, error) {
+		if executable != "docker-credential-fixture" || input != "registry.example\n" {
+			t.Fatalf("helper=%q input=%q", executable, input)
+		}
+		return []byte(`{"Username":"user","Secret":"secret"}`), nil
+	}}).Credentials("registry.example")
+	if !ok || got.Username != "user" || got.Password != "secret" {
+		t.Fatalf("got %#v, %v", got, ok)
+	}
+}
+
+func TestDockerCredentialHelperInheritsCallerCancellation(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".docker"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".docker", "config.json"), []byte(`{"credHelpers":{"registry.example":"fixture"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	observed := make(chan error, 1)
+	store := DockerCredentialStore{
+		HomeDir: home,
+		Lstat:   os.Lstat,
+		Open:    func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		RunHelper: func(ctx context.Context, executable, input string) ([]byte, error) {
+			if executable != "docker-credential-fixture" || input != "registry.example\n" {
+				t.Fatalf("helper=%q input=%q", executable, input)
+			}
+			observed <- ctx.Err()
+			return nil, ctx.Err()
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, ok := store.CredentialsContext(ctx, "registry.example"); ok {
+		t.Fatal("canceled credential helper returned credentials")
+	}
+	if err := <-observed; !errors.Is(err, context.Canceled) {
+		t.Fatalf("helper context error=%v", err)
+	}
+}
+
+func TestCredentialChainPropagatesContextAndSupportsLegacyFallback(t *testing.T) {
+	type contextKey struct{}
+	wantCtx := context.WithValue(context.Background(), contextKey{}, "request")
+	seen := make(chan context.Context, 1)
+	contextual := contextCredentialStore{
+		context: func(ctx context.Context, registry string) (Credentials, bool) {
+			if registry != "registry.example" {
+				t.Fatalf("registry=%q", registry)
+			}
+			seen <- ctx
+			return Credentials{}, false
+		},
+		legacy: func(string) (Credentials, bool) {
+			t.Fatal("context-aware store used legacy lookup")
+			return Credentials{}, false
+		},
+	}
+	stores := ChainCredentialStore{contextual, staticCredentialStore{registry: "registry.example", creds: Credentials{Token: "legacy-token"}}}
+	got, ok := stores.CredentialsContext(wantCtx, "registry.example")
+	if !ok || got.Token != "legacy-token" {
+		t.Fatalf("credentials=%#v ok=%v", got, ok)
+	}
+	if gotCtx := <-seen; gotCtx != wantCtx {
+		t.Fatal("chain replaced caller context")
+	}
+}
+
+func TestCredentialChainStopsBeforeLegacyFallbackAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	legacyCalled := false
+	contextual := contextCredentialStore{
+		context: func(got context.Context, registry string) (Credentials, bool) {
+			if got != ctx || registry != "registry.example" {
+				t.Fatalf("context=%v registry=%q", got, registry)
+			}
+			cancel()
+			return Credentials{}, false
+		},
+		legacy: func(string) (Credentials, bool) {
+			t.Fatal("context-aware store used legacy lookup")
+			return Credentials{}, false
+		},
+	}
+	legacy := legacyCredentialStore(func(string) (Credentials, bool) {
+		legacyCalled = true
+		return Credentials{Token: "must-not-return"}, true
+	})
+	if creds, ok := (ChainCredentialStore{contextual, legacy}).CredentialsContext(ctx, "registry.example"); ok || creds != (Credentials{}) {
+		t.Fatalf("credentials=%#v ok=%v", creds, ok)
+	}
+	if legacyCalled {
+		t.Fatal("legacy fallback ran after request cancellation")
+	}
+
+	directLegacyCalled := false
+	directLegacy := legacyCredentialStore(func(string) (Credentials, bool) {
+		directLegacyCalled = true
+		return Credentials{}, false
+	})
+	if _, ok := credentialsForContext(ctx, directLegacy, "registry.example"); ok || directLegacyCalled {
+		t.Fatal("canceled direct lookup reached credential store")
+	}
+}
+
+func TestRegistryCredentialLookupStopsOnCanceledRequest(t *testing.T) {
+	called := false
+	store := contextCredentialStore{
+		context: func(ctx context.Context, registry string) (Credentials, bool) {
+			called = true
+			return Credentials{}, false
+		},
+		legacy: func(string) (Credentials, bool) {
+			t.Fatal("registry used legacy credential lookup")
+			return Credentials{}, false
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://registry.example/v2/team/tool/manifests/latest", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := &HTTPRegistry{Client: NewHTTPClient(), Credentials: store}
+	_, err = registry.do(req, Reference{Registry: "registry.example", Repository: "team/tool", Tag: "latest"}, "repository:team/tool:pull")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("registry error=%v", err)
+	}
+	if called {
+		t.Fatal("canceled registry request performed credential lookup")
+	}
+}
+
+func TestDockerCredentialInputsAreBounded(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".docker"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	oversized := append([]byte(`{"auths":{"registry.example":{"auth":"dXNlcjpwYXNz"}}}`), bytes.Repeat([]byte(" "), (1<<20)+1)...)
+	if err := os.WriteFile(filepath.Join(home, ".docker", "config.json"), oversized, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := (DockerCredentialStore{HomeDir: home, Lstat: os.Lstat, Open: func(path string) (io.ReadCloser, error) { return os.Open(path) }}).Credentials("registry.example"); ok {
+		t.Fatal("accepted oversized Docker config")
+	}
+}
+
+func TestDockerConfigRequiresVerifiableOpenedHandle(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".docker", "config.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"auths":{}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	store := DockerCredentialStore{HomeDir: home, Lstat: os.Lstat, Open: func(string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(`{"auths":{}}`)), nil }}
+	if _, err := store.readConfig(); err == nil || !strings.Contains(err.Error(), "cannot be verified") {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestCredentialHelperOutputIsBounded(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture")
+	}
+	home, bin := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := os.MkdirAll(filepath.Join(home, ".docker"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".docker", "config.json"), []byte(`{"credsStore":"overflow"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "docker-credential-overflow"), []byte("#!/bin/sh\nyes x\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := (DockerCredentialStore{HomeDir: home, Lstat: os.Lstat, Open: func(path string) (io.ReadCloser, error) { return os.Open(path) }, RunHelper: func(context.Context, string, string) ([]byte, error) {
+		return bytes.Repeat([]byte("x"), (1<<20)+1), nil
+	}}).Credentials("registry.example"); ok {
+		t.Fatal("accepted oversized helper output")
+	}
+}
+
+func TestApplyAuthHeaderBearerToken(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "https://registry.example/v2/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ApplyAuthHeader(req, Credentials{Token: "secret-token"})
+	if got := req.Header.Get("Authorization"); got != "Bearer secret-token" {
+		t.Fatalf("Authorization = %q", got)
+	}
+}
+
+func TestApplyAuthHeaderBasic(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "https://registry.example/v2/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ApplyAuthHeader(req, Credentials{Username: "user", Password: "pass"})
+	username, password, ok := req.BasicAuth()
+	if !ok || username != "user" || password != "pass" {
+		t.Fatalf("basic auth = %q %q %v", username, password, ok)
+	}
+}
+
+func TestBearerTokenCacheIsSharedAcrossRegistryClients(t *testing.T) {
+	var tokenRequests, registryRequests atomic.Int32
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Host {
+		case "auth.example":
+			tokenRequests.Add(1)
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(`{"token":"registry-jwt","expires_in":300}`)), Header: http.Header{}, Request: req}, nil
+		case "registry.example":
+			registryRequests.Add(1)
+			if got := req.Header.Get("Authorization"); got != "Bearer registry-jwt" {
+				t.Fatalf("registry Authorization = %q", got)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("ok")), Header: http.Header{}, Request: req}, nil
+		default:
+			t.Fatalf("unexpected host %q", req.URL.Host)
+			return nil, nil
+		}
+	})}
+	cache := NewBearerTokenCache()
+	ref := Reference{Registry: "registry.example", Repository: "team/tool", Tag: "latest"}
+	for range 2 {
+		registry := NewHTTPRegistry()
+		registry.Client = client
+		registry.Credentials = staticCredentialStore{registry: ref.Registry, creds: Credentials{Token: "cli-token"}}
+		registry.BearerRealm = "https://auth.example/token"
+		registry.BearerService = ref.Registry
+		registry.TokenAuthorities[ref.Registry] = TokenAuthority{Origin: "https://auth.example", Service: ref.Registry}
+		registry.TokenCache = cache
+		req, err := registry.newRequest(t.Context(), http.MethodGet, ref, "/manifests/latest", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := registry.do(req, ref, "repository:team/tool:pull")
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+	if got := tokenRequests.Load(); got != 1 {
+		t.Fatalf("token requests = %d, want 1", got)
+	}
+	if got := registryRequests.Load(); got != 2 {
+		t.Fatalf("registry requests = %d, want 2", got)
+	}
+}
+
+func TestBearerTokenCacheIsIsolatedByRegistryHost(t *testing.T) {
+	var tokenRequests atomic.Int32
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Host {
+		case "auth.example":
+			request := tokenRequests.Add(1)
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{"token":"registry-jwt-%d","expires_in":300}`, request))), Header: http.Header{}, Request: req}, nil
+		case "one.registry.example", "two.registry.example":
+			want := "Bearer registry-jwt-1"
+			if req.URL.Host == "two.registry.example" {
+				want = "Bearer registry-jwt-2"
+			}
+			if got := req.Header.Get("Authorization"); got == "" {
+				return &http.Response{StatusCode: http.StatusUnauthorized, Status: "401 Unauthorized", Body: io.NopCloser(strings.NewReader("auth required")), Header: http.Header{"Www-Authenticate": {`Bearer realm="https://auth.example/token",service="shared-service"`}}, Request: req}, nil
+			} else if got != want {
+				t.Fatalf("%s received Authorization %q, want %q", req.URL.Host, got, want)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("ok")), Header: http.Header{}, Request: req}, nil
+		default:
+			t.Fatalf("unexpected host %q", req.URL.Host)
+			return nil, nil
+		}
+	})}
+	cache := NewBearerTokenCache()
+	creds := Credentials{Token: "same-cli-token"}
+	for _, host := range []string{"one.registry.example", "two.registry.example"} {
+		registry := NewHTTPRegistry()
+		registry.Client = client
+		registry.Credentials = staticCredentialStore{registry: host, creds: creds}
+		registry.TokenAuthorities[host] = TokenAuthority{Origin: "https://auth.example", Service: "shared-service"}
+		registry.TokenCache = cache
+		ref := Reference{Registry: host, Repository: "team/tool", Tag: "latest"}
+		req, err := registry.newRequest(t.Context(), http.MethodGet, ref, "/manifests/latest", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := registry.do(req, ref, "repository:team/tool:pull")
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+	if got := tokenRequests.Load(); got != 2 {
+		t.Fatalf("token requests = %d, want one per registry host", got)
+	}
+}
+
+func TestBearerTokenCacheEvictsTokenRejectedByRetry(t *testing.T) {
+	var tokenRequests atomic.Int32
+	rejectAuthenticated := true
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Host {
+		case "auth.example":
+			request := tokenRequests.Add(1)
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{"token":"registry-jwt-%d","expires_in":300}`, request))), Header: http.Header{}, Request: req}, nil
+		case "registry.example":
+			authorization := req.Header.Get("Authorization")
+			if authorization == "" || rejectAuthenticated {
+				return &http.Response{StatusCode: http.StatusUnauthorized, Status: "401 Unauthorized", Body: io.NopCloser(strings.NewReader("rejected")), Header: http.Header{"Www-Authenticate": {`Bearer realm="https://auth.example/token",service="registry.example"`}}, Request: req}, nil
+			}
+			if authorization != "Bearer registry-jwt-2" {
+				t.Fatalf("retry reused rejected token: %q", authorization)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("ok")), Header: http.Header{}, Request: req}, nil
+		default:
+			t.Fatalf("unexpected host %q", req.URL.Host)
+			return nil, nil
+		}
+	})}
+	registry := NewHTTPRegistry()
+	registry.Client = client
+	registry.Credentials = staticCredentialStore{registry: "registry.example", creds: Credentials{Token: "cli-token"}}
+	registry.TokenAuthorities["registry.example"] = TokenAuthority{Origin: "https://auth.example", Service: "registry.example"}
+	ref := Reference{Registry: "registry.example", Repository: "team/tool", Tag: "latest"}
+	request := func() *http.Response {
+		req, err := registry.newRequest(t.Context(), http.MethodGet, ref, "/manifests/latest", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := registry.do(req, ref, "repository:team/tool:pull")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+	first := request()
+	first.Body.Close()
+	if first.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("first status = %d, want 401", first.StatusCode)
+	}
+	rejectAuthenticated = false
+	second := request()
+	second.Body.Close()
+	if second.StatusCode != http.StatusOK {
+		t.Fatalf("second status = %d, want 200", second.StatusCode)
+	}
+	if got := tokenRequests.Load(); got != 2 {
+		t.Fatalf("token requests = %d, want 2", got)
+	}
+}
+
+func TestReadBearerTokenErrorIncludesTokenURL(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusNotFound,
+			Status:     "404 Not Found",
+			Body:       io.NopCloser(strings.NewReader("missing token route")),
+			Header:     http.Header{},
+			Request:    req,
+		}, nil
+	})}
+	realm := "https://registry.example/v1/registry/token"
+
+	_, err := readBearerToken(context.Background(), client, bearerChallenge{
+		Realm:   realm,
+		Service: "adversary-registry",
+	}, "repository:library/dockerfile-adversary:push,pull", Credentials{}, false)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	text := err.Error()
+	for _, want := range []string{
+		"token request failed: 404 Not Found",
+		realm,
+		"missing token route",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("error %q missing %q", text, want)
+		}
+	}
+	if strings.Contains(text, "scope=") || strings.Contains(text, "service=") {
+		t.Fatalf("token query leaked: %s", text)
+	}
+}
+
+func TestHTTPRegistryDoesNotSendStoredBearerTokenToRegistry(t *testing.T) {
+	var requests []string
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		requests = append(requests, req.URL.Host+req.URL.Path+" "+req.Header.Get("Authorization"))
+		switch req.URL.Host {
+		case "registry.example":
+			if len(requests) == 1 {
+				if got := req.Header.Get("Authorization"); got != "" {
+					t.Fatalf("first registry request Authorization = %q, want empty", got)
+				}
+				return &http.Response{
+					StatusCode: http.StatusUnauthorized,
+					Status:     "401 Unauthorized",
+					Body:       io.NopCloser(strings.NewReader("authentication required")),
+					Header: http.Header{
+						"Www-Authenticate": {`Bearer realm="https://auth.example/token",service="registry.example",scope="repository:marc/dockerfile-adversary:pull"`},
+					},
+					Request: req,
+				}, nil
+			}
+			if got := req.Header.Get("Authorization"); got != "Bearer registry-jwt" {
+				t.Fatalf("retry registry request Authorization = %q, want registry JWT", got)
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Body:       io.NopCloser(strings.NewReader("ok")),
+				Header:     http.Header{},
+				Request:    req,
+			}, nil
+		case "auth.example":
+			if got := req.Header.Get("Authorization"); got != "Bearer adv_cli_token" {
+				t.Fatalf("token request Authorization = %q, want CLI token", got)
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Body:       io.NopCloser(strings.NewReader(`{"token":"registry-jwt"}`)),
+				Header:     http.Header{},
+				Request:    req,
+			}, nil
+		default:
+			t.Fatalf("unexpected request host %q", req.URL.Host)
+			return nil, nil
+		}
+	})}
+	var debug bytes.Buffer
+	registry := &HTTPRegistry{
+		Client:           client,
+		Credentials:      staticCredentialStore{registry: "registry.example", creds: Credentials{Token: "adv_cli_token"}},
+		Debug:            &debug,
+		TokenAuthorities: map[string]TokenAuthority{"registry.example": {Origin: "https://auth.example", Service: "registry.example"}},
+	}
+	ref := Reference{Registry: "registry.example", Repository: "marc/dockerfile-adversary", Tag: "latest"}
+	req, err := registry.newRequest(t.Context(), http.MethodGet, ref, "/manifests/latest", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := registry.do(req, ref, "repository:marc/dockerfile-adversary:pull")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %s, want 200 OK", resp.Status)
+	}
+	if len(requests) != 3 {
+		t.Fatalf("requests = %v, want registry challenge, token, registry retry", requests)
+	}
+	debugText := debug.String()
+	for _, want := range []string{
+		"challenge realm=https://auth.example/token service=registry.example scope=repository:marc/dockerfile-adversary:pull",
+		"retrying GET /v2/marc/dockerfile-adversary/manifests/latest authorization_header=true",
+	} {
+		if !strings.Contains(debugText, want) {
+			t.Fatalf("debug output %q missing %q", debugText, want)
+		}
+	}
+	for _, secret := range []string{"adv_cli_token", "registry-jwt"} {
+		if strings.Contains(debugText, secret) {
+			t.Fatalf("debug output leaked token %q: %s", secret, debugText)
+		}
+	}
+}
+
+func TestUntrustedChallengeRealmReceivesNoStoredCredentials(t *testing.T) {
+	var tokenAuthorization string
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Host {
+		case "registry.example":
+			if req.Header.Get("Authorization") == "Bearer anonymous-jwt" {
+				return &http.Response{StatusCode: 200, Status: "200 OK", Body: io.NopCloser(strings.NewReader("ok")), Header: http.Header{}, Request: req}, nil
+			}
+			return &http.Response{StatusCode: 401, Status: "401 Unauthorized", Body: io.NopCloser(strings.NewReader("auth")), Header: http.Header{"Www-Authenticate": {`Bearer realm="https://evil.example/token",service="registry.example"`}}, Request: req}, nil
+		case "evil.example":
+			tokenAuthorization = req.Header.Get("Authorization")
+			return &http.Response{StatusCode: 200, Status: "200 OK", Body: io.NopCloser(strings.NewReader(`{"token":"anonymous-jwt"}`)), Header: http.Header{}, Request: req}, nil
+		default:
+			t.Fatalf("unexpected host %s", req.URL.Host)
+			return nil, nil
+		}
+	})}
+	r := &HTTPRegistry{Client: client, Credentials: staticCredentialStore{registry: "registry.example", creds: Credentials{Username: "user", Password: "secret"}}}
+	ref := Reference{Registry: "registry.example", Repository: "team/tool", Tag: "latest"}
+	req, _ := r.newRequest(t.Context(), http.MethodGet, ref, "/manifests/latest", nil)
+	resp, err := r.do(req, ref, "repository:team/tool:pull")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if tokenAuthorization != "" {
+		t.Fatalf("stored credentials leaked to realm: %q", tokenAuthorization)
+	}
+}
+
+func TestDockerHubTokenAuthority(t *testing.T) {
+	r := NewHTTPRegistry()
+	ref := Reference{Registry: "registry-1.docker.io", Repository: "library/alpine", Tag: "latest"}
+	if !r.trustedTokenAuthority(ref, bearerChallenge{Realm: "https://auth.docker.io/token", Service: "registry.docker.io"}) {
+		t.Fatal("Docker Hub authority not trusted")
+	}
+	if r.trustedTokenAuthority(ref, bearerChallenge{Realm: "https://evil.example/token", Service: "registry.docker.io"}) {
+		t.Fatal("wrong Docker Hub origin trusted")
+	}
+}
+
+func TestHTTPRegistryUsesRootChallengeWhenRepository401HasNoChallenge(t *testing.T) {
+	var requests []string
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		requests = append(requests, req.Method+" "+req.URL.Host+req.URL.Path+" "+req.Header.Get("Authorization"))
+		switch req.URL.Host {
+		case "registry.example":
+			switch req.URL.Path {
+			case "/v2/marc/dockerfile-adversary/blobs/uploads/":
+				if len(requests) == 1 {
+					if got := req.Header.Get("Authorization"); got != "" {
+						t.Fatalf("first registry request Authorization = %q, want empty", got)
+					}
+					return &http.Response{
+						StatusCode: http.StatusUnauthorized,
+						Status:     "401 Unauthorized",
+						Body:       io.NopCloser(strings.NewReader("authentication required")),
+						Header:     http.Header{},
+						Request:    req,
+					}, nil
+				}
+				if got := req.Header.Get("Authorization"); got != "Bearer registry-jwt" {
+					t.Fatalf("retry registry request Authorization = %q, want registry JWT", got)
+				}
+				return &http.Response{
+					StatusCode: http.StatusAccepted,
+					Status:     "202 Accepted",
+					Body:       io.NopCloser(strings.NewReader("accepted")),
+					Header:     http.Header{},
+					Request:    req,
+				}, nil
+			case "/v2/":
+				return &http.Response{
+					StatusCode: http.StatusUnauthorized,
+					Status:     "401 Unauthorized",
+					Body:       io.NopCloser(strings.NewReader("authentication required")),
+					Header: http.Header{
+						"Www-Authenticate": {`Bearer realm="https://auth.example/token",service="registry.example"`},
+					},
+					Request: req,
+				}, nil
+			default:
+				t.Fatalf("unexpected registry path %q", req.URL.Path)
+				return nil, nil
+			}
+		case "auth.example":
+			if got := req.Header.Get("Authorization"); got != "Bearer adv_cli_token" {
+				t.Fatalf("token request Authorization = %q, want CLI token", got)
+			}
+			if got := req.URL.Query().Get("scope"); got != "repository:marc/dockerfile-adversary:push,pull" {
+				t.Fatalf("token request scope = %q, want requested scope", got)
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Body:       io.NopCloser(strings.NewReader(`{"token":"registry-jwt"}`)),
+				Header:     http.Header{},
+				Request:    req,
+			}, nil
+		default:
+			t.Fatalf("unexpected request host %q", req.URL.Host)
+			return nil, nil
+		}
+	})}
+	var debug bytes.Buffer
+	registry := &HTTPRegistry{
+		Client:           client,
+		Credentials:      staticCredentialStore{registry: "registry.example", creds: Credentials{Token: "adv_cli_token"}},
+		Debug:            &debug,
+		TokenAuthorities: map[string]TokenAuthority{"registry.example": {Origin: "https://auth.example", Service: "registry.example"}},
+	}
+	ref := Reference{Registry: "registry.example", Repository: "marc/dockerfile-adversary", Tag: "latest"}
+	req, err := registry.newRequest(t.Context(), http.MethodPost, ref, "/blobs/uploads/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := registry.do(req, ref, "repository:marc/dockerfile-adversary:push,pull")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %s, want 202 Accepted", resp.Status)
+	}
+	if len(requests) != 4 {
+		t.Fatalf("requests = %v, want registry 401, root challenge, token, registry retry", requests)
+	}
+	debugText := debug.String()
+	for _, want := range []string{
+		"POST /v2/marc/dockerfile-adversary/blobs/uploads/ returned 401 without bearer challenge",
+		"probing /v2/ for bearer challenge",
+		"retrying POST /v2/marc/dockerfile-adversary/blobs/uploads/ authorization_header=true",
+	} {
+		if !strings.Contains(debugText, want) {
+			t.Fatalf("debug output %q missing %q", debugText, want)
+		}
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
+type staticCredentialStore struct {
+	registry string
+	creds    Credentials
+}
+
+type contextCredentialStore struct {
+	context func(context.Context, string) (Credentials, bool)
+	legacy  func(string) (Credentials, bool)
+}
+
+type legacyCredentialStore func(string) (Credentials, bool)
+
+func (s legacyCredentialStore) Credentials(registry string) (Credentials, bool) {
+	return s(registry)
+}
+
+func (s contextCredentialStore) Credentials(registry string) (Credentials, bool) {
+	return s.legacy(registry)
+}
+
+func (s contextCredentialStore) CredentialsContext(ctx context.Context, registry string) (Credentials, bool) {
+	return s.context(ctx, registry)
+}
+
+func (s staticCredentialStore) Credentials(registry string) (Credentials, bool) {
+	if registry != s.registry {
+		return Credentials{}, false
+	}
+	return s.creds, true
+}

@@ -36,8 +36,8 @@ func isolate(t *testing.T) adversarylabs.ConfigStore {
 func TestProfilesAndCredentialIsolation(t *testing.T) {
 	store := isolate(t)
 	for _, args := range [][]string{
-		{"profiles", "add", "work", "--endpoint", "https://work.example/api"},
-		{"profiles", "use", "work"},
+		{"profile", "add", "work", "--endpoint", "https://work.example/api"},
+		{"profile", "use", "work"},
 	} {
 		if _, err := execute(t, "", args...); err != nil {
 			t.Fatal(err)
@@ -65,7 +65,7 @@ func TestProfilesAndCredentialIsolation(t *testing.T) {
 	if info.Mode().Perm() != 0600 {
 		t.Fatalf("credential permissions: %v", info.Mode())
 	}
-	if out, err := execute(t, "", "profiles", "list"); err != nil || strings.Contains(out, "personal-token") || !strings.Contains(out, "* work") {
+	if out, err := execute(t, "", "profile", "ls"); err != nil || strings.Contains(out, "personal-token") || !strings.Contains(out, "* work") {
 		t.Fatalf("list: %q %v", out, err)
 	}
 }
@@ -220,7 +220,7 @@ func TestAccountProfilesKeepPersonalLoginsSeparate(t *testing.T) {
 	}))
 	defer server.Close()
 	for _, name := range []string{"work", "personal"} {
-		if _, err := execute(t, "", "profiles", "add", name, "--endpoint", server.URL); err != nil {
+		if _, err := execute(t, "", "profile", "add", name, "--endpoint", server.URL); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := execute(t, "secret", "--profile", name, "login", "--email-address", name+"@example.com", "--password-stdin"); err != nil {
