@@ -54,3 +54,36 @@ func TestConcurrentLoginCannotOverwriteReservedCredentials(t *testing.T) {
 		t.Fatalf("expected one login and one conflict, got %d and %d", success, conflict)
 	}
 }
+
+func TestDefaultProjectFollowsProfileLifecycle(t *testing.T) {
+	store := ConfigStore{Path: filepath.Join(t.TempDir(), "config.json")}
+	oldKey := AuthKey(DefaultAPIURL, "work")
+	newKey := AuthKey(DefaultAPIURL, "renamed")
+	if err := store.SetAuth(oldKey, Auth{Token: "before"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetDefaultProject(oldKey, "team-id"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetAuth(oldKey, Auth{Token: "refreshed"}); err != nil {
+		t.Fatal(err)
+	}
+	if value, err := store.DefaultProject(oldKey); err != nil || value != "team-id" {
+		t.Fatalf("refresh lost selection: %q %v", value, err)
+	}
+	if err := store.RenameProfile("work", "renamed", DefaultRegistry); err != nil {
+		t.Fatal(err)
+	}
+	if value, err := store.DefaultProject(newKey); err != nil || value != "team-id" {
+		t.Fatalf("rename lost selection: %q %v", value, err)
+	}
+	if value, err := store.DefaultProject(oldKey); err != nil || value != "" {
+		t.Fatalf("old selection remains: %q %v", value, err)
+	}
+	if err := store.RemoveProfile("renamed", DefaultRegistry); err != nil {
+		t.Fatal(err)
+	}
+	if value, err := store.DefaultProject(newKey); err != nil || value != "" {
+		t.Fatalf("removed selection remains: %q %v", value, err)
+	}
+}

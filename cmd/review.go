@@ -14,10 +14,11 @@ import (
 func newReviewCommand(app *application.App, apiURL, profile *string) *cobra.Command {
 	var project, path, base, format string
 	command := &cobra.Command{
-		Use:   "review --project <slug>",
+		Use:   "review [--project <slug>]",
 		Short: "Upload your Git worktree and start a hosted review",
 		Long: `Upload the repository containing the current directory and queue a review
-using the selected profile. --path selects another worktree or a directory in it.
+using the selected profile. Omit --project to use the project selected with
+project use, or the only available project. --path selects another worktree or a directory in it.
 
 The snapshot includes tracked files and non-ignored untracked files, including
 staged and unstaged edits. It excludes Git metadata and ignored untracked files.
@@ -28,17 +29,15 @@ No commits are created and no local changes are staged or modified.
 Snapshots support regular files up to 2 MiB each, 20,000 files per tree, and a
 16 MiB encoded upload. Symlinks, submodules, sparse checkouts, unresolved merges,
 and Git LFS pointers are unsupported and cause an error instead of being skipped.`,
-		Example: `  doomer review --project my-team
+		Example: `  doomer project use my-team
+  doomer review
+  doomer review --project my-team
   doomer --profile dev review --project my-team --path ../feature-worktree
   doomer review --project my-team --base origin/main --format json`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if _, err := validateFormat(format, false); err != nil {
 				return err
-			}
-			project = strings.TrimSpace(project)
-			if project == "" {
-				return fmt.Errorf("--project is required; use doomer project ls to list projects")
 			}
 			deps := app.Dependencies()
 			auth, ok, err := scopedAuth(deps.Auth, *apiURL, *profile, deps.RegistryHost)
@@ -47,6 +46,10 @@ and Git LFS pointers are unsupported and cause an error instead of being skipped
 			}
 			if !ok || strings.TrimSpace(auth.Token) == "" {
 				return fmt.Errorf("not logged in for profile %q; run doomer --profile %s login", *profile, *profile)
+			}
+			selectedProject, err := resolveReviewProject(cmd.Context(), deps, *apiURL, *profile, project, auth.Token)
+			if err != nil {
+				return err
 			}
 			fmt.Fprintln(cmd.ErrOrStderr(), "Capturing worktree...")
 			snapshot, err := sourcesnapshot.CaptureWorktree(cmd.Context(), sourcesnapshot.CaptureOptions{Path: path, Base: base})
@@ -64,7 +67,7 @@ and Git LFS pointers are unsupported and cause an error instead of being skipped
 			}
 			client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, *apiURL)
 			submission, err := client.CreateReviewSubmission(cmd.Context(), auth.Token, adversarylabs.ReviewSubmissionRequest{
-				Project: project, IdempotencyKey: sourcesnapshot.Digest(identity), Digest: snapshot.Digest, Source: snapshot.Source,
+				Project: selectedProject, IdempotencyKey: sourcesnapshot.Digest(identity), Digest: snapshot.Digest, Source: snapshot.Source,
 			})
 			if err != nil {
 				return err
@@ -86,14 +89,13 @@ and Git LFS pointers are unsupported and cause an error instead of being skipped
 			if format == "json" {
 				return writeJSON(cmd.OutOrStdout(), "review", accepted)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Review %s: %s\nProject: %s\nProfile: %s\nCommit: %s\nWorktree dirty: %t\nTree: %s\n", accepted.ID, accepted.Status, project, *profile, snapshot.Source.HeadSHA, snapshot.Source.Dirty, snapshot.TargetTreeHash)
+			fmt.Fprintf(cmd.OutOrStdout(), "Review %s: %s\nProject: %s\nProfile: %s\nCommit: %s\nWorktree dirty: %t\nTree: %s\n", accepted.ID, accepted.Status, selectedProject, *profile, snapshot.Source.HeadSHA, snapshot.Source.Dirty, snapshot.TargetTreeHash)
 			return nil
 		},
 	}
-	command.Flags().StringVar(&project, "project", "", "project slug or ID (required)")
+	command.Flags().StringVar(&project, "project", "", "project slug or ID (default: selected project, or the only available project)")
 	command.Flags().StringVar(&path, "path", ".", "directory in the Git worktree to upload")
 	command.Flags().StringVar(&base, "base", "", "local baseline ref or commit (default: merge base with the default branch)")
 	command.Flags().StringVar(&format, "format", "text", "output format: text or json")
-	_ = command.MarkFlagRequired("project")
 	return command
 }
