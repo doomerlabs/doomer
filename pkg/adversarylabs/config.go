@@ -250,6 +250,7 @@ func (s ConfigStore) RemoveAuth(key string) (Auth, bool, error) {
 		auth, ok = c.Auths[key]
 		if ok {
 			delete(c.Auths, key)
+			clearDefaultProject(c, key)
 		}
 		return nil
 	})
@@ -266,8 +267,17 @@ func (s ConfigStore) RemoveAuthCAS(key string, expected Auth) error {
 			return fmt.Errorf("%w: %s", ErrAuthCAS, key)
 		}
 		delete(c.Auths, key)
+		clearDefaultProject(c, key)
 		return nil
 	})
+}
+
+func clearDefaultProject(config *Config, authKey string) {
+	delete(config.DefaultProjects, authKey)
+	// Legacy credentials are only used by the default production profile.
+	if !strings.HasPrefix(authKey, "auth:v2:") {
+		delete(config.DefaultProjects, AuthKey(DefaultAPIURL, "default"))
+	}
 }
 
 func (s ConfigStore) AuthE(key string) (Auth, bool, error) {

@@ -70,7 +70,8 @@ Lists the selected account's projects with `SLUG` and `NAME` columns, sorted by
 slug, with `*` beside the selected default. `project list` is an alias.
 When the account has only one project and no saved selection, that project is
 used automatically. With multiple projects, select one with `project use`.
-Service-account and CI tokens list their scoped project.
+Service-account and CI tokens list their scoped project. Logging out clears the
+selected project for that login; other profiles and endpoints are unchanged.
 
 ## Authentication
 
