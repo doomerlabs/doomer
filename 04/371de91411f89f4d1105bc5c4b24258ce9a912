@@ -1,0 +1,29 @@
+pkg/adversarylabs/findings.go
+  s_f7e61191ae7d9b::t_c97288e0e9cf19 12-13,46
+pkg/adversarylabs/findings_test.go
+  s_902c4820e5fd07::t_8b90a888729be8 119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "04371de91411f89f4d1105bc5c4b24258ce9a912",
+  "prompts": {},
+  "sessions": {
+    "s_902c4820e5fd07": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13823-c2f6-75b3-9978-5851192c2a99",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    },
+    "s_f7e61191ae7d9b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a14a93-3a37-79d3-9c94-722c4a24e404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
