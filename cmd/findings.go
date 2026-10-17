@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/doomerlabs/doomer/internal/application"
@@ -9,16 +10,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var findingIDPatternForCommand = regexp.MustCompile(`^[a-f0-9]{7,64}$`)
+
 func newFindingsCommand(app *application.App, apiURL, profile *string) *cobra.Command {
 	command := &cobra.Command{Use: "findings", Short: "Read the evidence behind Doomer review findings"}
-	command.AddCommand(&cobra.Command{
+	var project string
+	show := &cobra.Command{
 		Use:   "show <finding-id>",
 		Short: "Print a review finding's full evidence as markdown",
 		Long: `Read the full evidence and suggested fix for a finding using your existing
 Doomer login. Copy the finding ID from the PR comment. The server checks access
-to that finding's project; no project selector or secret-link token is required.
+to that finding's project. Short IDs use --project or your selected default project.
 Review details must be enabled for the project.`,
-		Example: `  doomer findings show <finding-id>
+		Example: `  doomer findings show a1b2c3d --project my-project
   doomer --profile work findings show <finding-id>`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -31,13 +35,25 @@ Review details must be enabled for the project.`,
 				return fmt.Errorf("not logged in for profile %q; run doomer --profile %s login", *profile, *profile)
 			}
 			client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, *apiURL)
-			markdown, err := client.FindingDetail(cmd.Context(), auth.Token, args[0])
+			scope := strings.TrimSpace(project)
+			if len(args[0]) < 64 {
+				if !findingIDPatternForCommand.MatchString(args[0]) {
+					return fmt.Errorf("invalid finding ID: use the ID from the Doomer review comment")
+				}
+				scope, err = resolveReviewProject(cmd.Context(), deps, *apiURL, *profile, scope, auth.Token)
+				if err != nil {
+					return err
+				}
+			}
+			markdown, err := client.FindingDetail(cmd.Context(), auth.Token, args[0], scope)
 			if err != nil {
 				return err
 			}
 			_, err = fmt.Fprint(cmd.OutOrStdout(), markdown)
 			return err
 		},
-	})
+	}
+	show.Flags().StringVar(&project, "project", "", "Project slug or ID (defaults to the selected project)")
+	command.AddCommand(show)
 	return command
 }

@@ -22,14 +22,16 @@ go build -o bin/doomer .
 Copy the finding ID from a Doomer PR comment to retrieve its full evidence as markdown:
 
 ```sh
-doomer findings show <finding-id>
+doomer findings show a1b2c3d --project my-project
 doomer --profile work findings show <finding-id>
 ```
 
-This uses the selected profile's existing login and API endpoint. The finding ID
-identifies the project; the server checks your current access, so no `--project`
-argument is needed. It works whether the team allows secret links or requires
-CLI-only access, including retained evidence after a PR closes.
+This uses the selected profile's existing login and API endpoint. Short IDs are
+unique within a project and use `--project` or the profile's selected default
+project. The server checks your current access. Full IDs from older comments
+remain supported without a project selector. Both forms work whether the team
+allows secret links or requires CLI-only access, including retained evidence
+after a PR closes.
 
 The SaaS must support the finding-detail endpoint and enable the project's
 `review_finding_details` feature flag. A missing finding, unavailable project
