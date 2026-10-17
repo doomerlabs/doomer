@@ -9,7 +9,7 @@ import (
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
 
-func TestFindingsShowUsesSelectedProfileAndPrintsExactMarkdown(t *testing.T) {
+func TestFindingGetUsesSelectedProfileAndPrintsExactMarkdown(t *testing.T) {
 	store := isolate(t)
 	id := strings.Repeat("a", 64)
 	markdown := "# Finding evidence\n\nA suggested fix is one possible approach.\n"
@@ -38,8 +38,8 @@ func TestFindingsShowUsesSelectedProfileAndPrintsExactMarkdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{
-		{"findings", "show", id},
-		{"--api-url", server.URL + "/api", "--profile", "work", "findings", "show", id},
+		{"finding", "get", id},
+		{"--api-url", server.URL + "/api", "--profile", "work", "finding", "get", id},
 	} {
 		output, err := execute(t, "", args...)
 		if err != nil || output != markdown {
@@ -51,14 +51,14 @@ func TestFindingsShowUsesSelectedProfileAndPrintsExactMarkdown(t *testing.T) {
 	}
 }
 
-func TestFindingsShowDoesNotBorrowAnotherProfileOrEndpointLogin(t *testing.T) {
+func TestFindingGetDoesNotBorrowAnotherProfileOrEndpointLogin(t *testing.T) {
 	for _, endpoint := range []string{adversarylabs.DefaultAPIURL, "https://another.example/api"} {
 		t.Run(endpoint, func(t *testing.T) {
 			store := isolate(t)
 			if err := store.SetAuth(adversarylabs.AuthKey(endpoint, "default"), adversarylabs.Auth{Token: "personal-secret"}); err != nil {
 				t.Fatal(err)
 			}
-			output, err := execute(t, "", "--profile", "work", "findings", "show", strings.Repeat("a", 64))
+			output, err := execute(t, "", "--profile", "work", "finding", "get", strings.Repeat("a", 64))
 			if err == nil || output != "" || !strings.Contains(err.Error(), "doomer --profile work login") {
 				t.Fatalf("missing profile login: %q, %v", output, err)
 			}
@@ -66,14 +66,14 @@ func TestFindingsShowDoesNotBorrowAnotherProfileOrEndpointLogin(t *testing.T) {
 	}
 }
 
-func TestFindingsShowRejectsInvalidIDsAndArgumentCounts(t *testing.T) {
+func TestFindingGetRejectsInvalidIDsAndArgumentCounts(t *testing.T) {
 	store := isolate(t)
 	if err := store.SetAuth(adversarylabs.AuthKey(adversarylabs.DefaultAPIURL, "default"), adversarylabs.Auth{Token: "token"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{
-		{"findings", "show"}, {"findings", "show", "one", "two"},
-		{"findings", "show", "../private"}, {"findings", "show", "https://example.test?token=secret"},
+		{"finding", "get"}, {"finding", "get", "one", "two"},
+		{"finding", "get", "../private"}, {"finding", "get", "https://example.test?token=secret"},
 	} {
 		output, err := execute(t, "", args...)
 		if err == nil || output != "" {
@@ -82,7 +82,7 @@ func TestFindingsShowRejectsInvalidIDsAndArgumentCounts(t *testing.T) {
 	}
 }
 
-func TestFindingsShowDoesNotPrintErrorResponseOrCredentials(t *testing.T) {
+func TestFindingGetDoesNotPrintErrorResponseOrCredentials(t *testing.T) {
 	for _, status := range []int{401, 403, 404, 500} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			store := isolate(t)
@@ -94,7 +94,7 @@ func TestFindingsShowDoesNotPrintErrorResponseOrCredentials(t *testing.T) {
 			if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: "credential-secret"}); err != nil {
 				t.Fatal(err)
 			}
-			output, err := execute(t, "", "--api-url", server.URL, "findings", "show", strings.Repeat("a", 64))
+			output, err := execute(t, "", "--api-url", server.URL, "finding", "get", strings.Repeat("a", 64))
 			if err == nil || output != "" || strings.Contains(err.Error(), "private-response") || strings.Contains(err.Error(), "credential-secret") {
 				t.Fatalf("unsafe failure: %q, %v", output, err)
 			}
@@ -102,7 +102,7 @@ func TestFindingsShowDoesNotPrintErrorResponseOrCredentials(t *testing.T) {
 	}
 }
 
-func TestFindingsShowShortIDWithProject(t *testing.T) {
+func TestFindingGetShortIDWithProject(t *testing.T) {
 	store := isolate(t)
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -117,13 +117,13 @@ func TestFindingsShowShortIDWithProject(t *testing.T) {
 	if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: "scoped-token"}); err != nil {
 		t.Fatal(err)
 	}
-	output, err := execute(t, "", "--api-url", server.URL, "findings", "show", "abcdef1", "--project", "my-project")
+	output, err := execute(t, "", "--api-url", server.URL, "finding", "get", "abcdef1", "--project", "my-project")
 	if err != nil || output != "# Evidence\n" || requests != 1 {
 		t.Fatalf("scoped lookup: %q, %v, requests=%d", output, err, requests)
 	}
 }
 
-func TestFindingsShowShortIDUsesSelectedDefaultProject(t *testing.T) {
+func TestFindingGetShortIDUsesSelectedDefaultProject(t *testing.T) {
 	store := isolate(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/auth/whoami" {
@@ -145,13 +145,13 @@ func TestFindingsShowShortIDUsesSelectedDefaultProject(t *testing.T) {
 	if err := store.SetDefaultProject(key, "project-id"); err != nil {
 		t.Fatal(err)
 	}
-	output, err := execute(t, "", "--api-url", server.URL, "findings", "show", "abcdef1")
+	output, err := execute(t, "", "--api-url", server.URL, "finding", "get", "abcdef1")
 	if err != nil || output != "evidence" {
 		t.Fatalf("default project: %q %v", output, err)
 	}
 }
 
-func TestFindingsShowShortIDRequiresSelectionWhenSeveralProjectsAreAvailable(t *testing.T) {
+func TestFindingGetShortIDRequiresSelectionWhenSeveralProjectsAreAvailable(t *testing.T) {
 	store := isolate(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/auth/whoami" {
@@ -164,8 +164,70 @@ func TestFindingsShowShortIDRequiresSelectionWhenSeveralProjectsAreAvailable(t *
 	if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: "token"}); err != nil {
 		t.Fatal(err)
 	}
-	output, err := execute(t, "", "--api-url", server.URL, "findings", "show", "abcdef1")
+	output, err := execute(t, "", "--api-url", server.URL, "finding", "get", "abcdef1")
 	if err == nil || output != "" || !strings.Contains(err.Error(), "--project") {
 		t.Fatalf("ambiguous project: %q %v", output, err)
+	}
+}
+
+func TestFindingListUsesProfileProjectAndPagination(t *testing.T) {
+	store := isolate(t)
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Path != "/v1/findings" || r.URL.Query().Get("project") != "my-project" || r.URL.Query().Get("limit") != "2" || r.URL.Query().Get("offset") != "4" || r.Header.Get("Authorization") != "Bearer work-token" {
+			t.Errorf("unexpected list request: %s", r.URL)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"findings":[{"id":"abcdef1","repository":"acme/api","pull_request":42,"adversary":"review/code"}]}`))
+	}))
+	defer server.Close()
+	if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "work"), adversarylabs.Auth{Token: "work-token"}); err != nil {
+		t.Fatal(err)
+	}
+	output, err := execute(t, "", "--api-url", server.URL, "--profile", "work", "finding", "ls", "--project", "my-project", "--limit", "2", "--offset", "4")
+	if err != nil || !strings.Contains(output, "abcdef1") || !strings.Contains(output, "acme/api") || requests != 1 {
+		t.Fatalf("list: %q, %v, requests=%d", output, err, requests)
+	}
+}
+
+func TestFindingListRejectsInvalidArguments(t *testing.T) {
+	isolate(t)
+	for _, args := range [][]string{
+		{"finding", "ls", "extra"}, {"finding", "ls", "--limit", "0"}, {"finding", "ls", "--limit", "201"}, {"finding", "ls", "--offset", "-1"},
+	} {
+		output, err := execute(t, "", args...)
+		if err == nil || output != "" {
+			t.Fatalf("accepted %v: %q %v", args, output, err)
+		}
+	}
+}
+
+func TestFindingListEmptyAndFailureResponses(t *testing.T) {
+	for _, status := range []int{200, 401, 403, 404, 500} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			store := isolate(t)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(status)
+				if status == 200 {
+					_, _ = w.Write([]byte(`{"findings":[]}`))
+				} else {
+					_, _ = w.Write([]byte(`{"error":"private-secret"}`))
+				}
+			}))
+			defer server.Close()
+			if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: "private-secret"}); err != nil {
+				t.Fatal(err)
+			}
+			output, err := execute(t, "", "--api-url", server.URL, "finding", "ls", "--project", "my-project")
+			if status == 200 {
+				if err != nil || output != "No findings found.\n" {
+					t.Fatalf("empty list: %q %v", output, err)
+				}
+			} else if err == nil || output != "" || strings.Contains(err.Error(), "private-secret") {
+				t.Fatalf("unsafe failure: %q %v", output, err)
+			}
+		})
 	}
 }
