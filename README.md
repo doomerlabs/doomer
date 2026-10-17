@@ -19,12 +19,15 @@ go build -o bin/doomer .
 
 ## Finding evidence
 
-Copy the finding ID from a Doomer PR comment to retrieve its full evidence as markdown:
+List project findings, then use an ID from the list or a Doomer PR comment to retrieve its full evidence as markdown:
 
 ```sh
-doomer findings show a1b2c3d --project my-project
-doomer --profile work findings show <finding-id>
+doomer finding ls --project my-project
+doomer finding get a1b2c3d --project my-project
+doomer --profile work finding get <finding-id>
 ```
+
+`ls` shows the newest 50 stored findings. Use `--limit` (1–200) and `--offset` to page through older findings.
 
 This uses the selected profile's existing login and API endpoint. Short IDs are
 unique within a project and use `--project` or the profile's selected default
