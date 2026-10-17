@@ -154,6 +154,22 @@ repository. The command uploads an immutable snapshot and queues a hosted review
 using the selected profile. It returns the review ID and status without waiting
 for completion. Hosted reviews must be enabled for the project.
 
+Read that submission's status and results with:
+
+```sh
+doomer review get <review-id>
+doomer review get <review-id> --format json
+```
+
+`review status <review-id>` is an alias. The response includes the job status,
+summary, conclusion, complete findings, and any job error when available. A queued
+or running review may not have results yet. Reading a failed job still exits
+successfully if the lookup succeeds; inspect `data.status` and `data.error` in
+JSON output. Access uses the selected profile and the submission's ownership.
+`finding ls` continues to list stored findings across a project; use `review get`
+for the findings belonging to a specific CLI worktree review.
+
+
 The default baseline is the merge base of HEAD and origin's local default-branch
 ref, falling back to origin/main, origin/master, main, master, then HEAD. No refs
 are fetched. `--base` uses the specified local ref or commit directly. An

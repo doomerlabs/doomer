@@ -97,5 +97,6 @@ and Git LFS pointers are unsupported and cause an error instead of being skipped
 	command.Flags().StringVar(&path, "path", ".", "directory in the Git worktree to upload")
 	command.Flags().StringVar(&base, "base", "", "local baseline ref or commit (default: merge base with the default branch)")
 	command.Flags().StringVar(&format, "format", "text", "output format: text or json")
+	command.AddCommand(newReviewGetCommand(app, apiURL, profile))
 	return command
 }
