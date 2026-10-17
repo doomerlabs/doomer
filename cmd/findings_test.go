@@ -101,3 +101,71 @@ func TestFindingsShowDoesNotPrintErrorResponseOrCredentials(t *testing.T) {
 		})
 	}
 }
+
+func TestFindingsShowShortIDWithProject(t *testing.T) {
+	store := isolate(t)
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Path != "/v1/findings/abcdef1/detail" || r.URL.Query().Get("project") != "my-project" || r.Header.Get("Authorization") != "Bearer scoped-token" {
+			t.Errorf("wrong scoped request: %s", r.URL)
+		}
+		w.Header().Set("Content-Type", "text/markdown")
+		_, _ = w.Write([]byte("# Evidence\n"))
+	}))
+	defer server.Close()
+	if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: "scoped-token"}); err != nil {
+		t.Fatal(err)
+	}
+	output, err := execute(t, "", "--api-url", server.URL, "findings", "show", "abcdef1", "--project", "my-project")
+	if err != nil || output != "# Evidence\n" || requests != 1 {
+		t.Fatalf("scoped lookup: %q, %v, requests=%d", output, err, requests)
+	}
+}
+
+func TestFindingsShowShortIDUsesSelectedDefaultProject(t *testing.T) {
+	store := isolate(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/auth/whoami" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"teams":[{"id":"project-id","slug":"my-project","name":"My project"}]}`))
+			return
+		}
+		if r.URL.Path != "/v1/findings/abcdef1/detail" || r.URL.Query().Get("project") != "my-project" {
+			t.Errorf("wrong default project request: %s", r.URL)
+		}
+		w.Header().Set("Content-Type", "text/markdown")
+		_, _ = w.Write([]byte("evidence"))
+	}))
+	defer server.Close()
+	key := adversarylabs.AuthKey(server.URL, "default")
+	if err := store.SetAuth(key, adversarylabs.Auth{Token: "token"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetDefaultProject(key, "project-id"); err != nil {
+		t.Fatal(err)
+	}
+	output, err := execute(t, "", "--api-url", server.URL, "findings", "show", "abcdef1")
+	if err != nil || output != "evidence" {
+		t.Fatalf("default project: %q %v", output, err)
+	}
+}
+
+func TestFindingsShowShortIDRequiresSelectionWhenSeveralProjectsAreAvailable(t *testing.T) {
+	store := isolate(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/auth/whoami" {
+			t.Errorf("finding request must not happen without a project selection: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"teams":[{"id":"one","slug":"one"},{"id":"two","slug":"two"}]}`))
+	}))
+	defer server.Close()
+	if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: "token"}); err != nil {
+		t.Fatal(err)
+	}
+	output, err := execute(t, "", "--api-url", server.URL, "findings", "show", "abcdef1")
+	if err == nil || output != "" || !strings.Contains(err.Error(), "--project") {
+		t.Fatalf("ambiguous project: %q %v", output, err)
+	}
+}

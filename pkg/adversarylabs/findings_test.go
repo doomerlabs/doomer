@@ -65,7 +65,7 @@ func TestFindingDetailRejectsBadInputsBeforeHTTP(t *testing.T) {
 		t.Fatal("invalid input reached transport")
 		return nil, nil
 	})}}
-	for _, id := range []string{"", "../private", strings.Repeat("A", 64), strings.Repeat("a", 63), strings.Repeat("a", 65)} {
+	for _, id := range []string{"", "../private", strings.Repeat("A", 64), strings.Repeat("a", 6), strings.Repeat("a", 65)} {
 		if _, err := client.FindingDetail(context.Background(), "secret", id); err == nil {
 			t.Fatalf("accepted invalid ID %q", id)
 		}
@@ -109,5 +109,22 @@ func TestFindingDetailDoesNotFollowCrossOriginRedirects(t *testing.T) {
 	client := NewClientWithBaseURL(ConfigStore{}, source.URL)
 	if _, err := client.FindingDetail(context.Background(), "secret", strings.Repeat("a", 64)); err == nil || targetCalls != 0 {
 		t.Fatalf("redirect followed: requests=%d, error=%v", targetCalls, err)
+	}
+}
+
+func TestFindingDetailShortIDRequiresProjectAndEncodesScope(t *testing.T) {
+	calls := 0
+	client := Client{BaseURL: "https://example.test/api", HTTP: &http.Client{Transport: findingTransport(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if r.URL.Query().Get("project") != "project & one" || r.Header.Get("Authorization") != "Bearer login-token" || !strings.HasPrefix(r.Header.Get("User-Agent"), "doomer/") {
+			t.Errorf("invalid scope or auth")
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/markdown"}}, Body: io.NopCloser(strings.NewReader("evidence"))}, nil
+	})}}
+	if _, err := client.FindingDetail(context.Background(), "login-token", "abcdef1"); err == nil || calls != 0 {
+		t.Fatal("unscoped short ID reached HTTP")
+	}
+	if body, err := client.FindingDetail(context.Background(), "login-token", "abcdef1", "project & one"); err != nil || body != "evidence" || calls != 1 {
+		t.Fatalf("scoped detail: %q %v", body, err)
 	}
 }

@@ -6,19 +6,30 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"regexp"
+	"strings"
+
+	"github.com/doomerlabs/doomer/internal/version"
 )
 
 const maxFindingDetailBytes = 1 << 20
 
-var findingIDPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
+var findingIDPattern = regexp.MustCompile(`^[a-f0-9]{7,64}$`)
 
 // FindingDetail retrieves stored evidence through authenticated team access.
 // The server enforces the review_finding_details feature flag and permissions;
-// neither a project selector nor a secret-link token is needed here.
-func (c Client) FindingDetail(ctx context.Context, token, id string) (string, error) {
+// short IDs require a project; secret-link tokens are never CLI credentials.
+func (c Client) FindingDetail(ctx context.Context, token, id string, projects ...string) (string, error) {
 	if !findingIDPattern.MatchString(id) {
 		return "", errors.New("invalid finding ID: use the ID from the Doomer review comment")
+	}
+	project := ""
+	if len(projects) > 0 {
+		project = strings.TrimSpace(projects[0])
+	}
+	if len(id) < 64 && project == "" {
+		return "", errors.New("short finding IDs require a project; use --project <slug>")
 	}
 	if _, err := validateBaseURL(c.BaseURL); err != nil {
 		return "", err
@@ -27,8 +38,12 @@ func (c Client) FindingDetail(ctx context.Context, token, id string) (string, er
 	if err != nil {
 		return "", err
 	}
+	if project != "" {
+		request.URL.RawQuery = url.Values{"project": {project}}.Encode()
+	}
 	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Accept", "text/markdown")
+	request.Header.Set("User-Agent", "doomer/"+version.Version)
 	response, err := c.httpClient().Do(request)
 	if err != nil {
 		if ctx.Err() != nil {
