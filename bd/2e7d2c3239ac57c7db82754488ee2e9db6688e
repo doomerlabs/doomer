@@ -1,0 +1,35 @@
+README.md
+  s_902c4820e5fd07::t_5c8a41030ccda5 25,29-34
+cmd/findings.go
+  s_902c4820e5fd07::t_e5be98e128a92c 5,13-14,17-18,23,25,38-48,55-57
+cmd/findings_test.go
+  s_b2af389a952e96::t_be2714a8f5b2d5 104-171
+pkg/adversarylabs/findings.go
+  s_902c4820e5fd07::t_10cd591b2ce91d 9,11,16,20-21,25-31,39-41
+pkg/adversarylabs/findings_test.go
+  s_902c4820e5fd07::t_40226e70b4d9ac 68,114-130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bd2e7d2c3239ac57c7db82754488ee2e9db6688e",
+  "prompts": {},
+  "sessions": {
+    "s_902c4820e5fd07": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13823-c2f6-75b3-9978-5851192c2a99",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    },
+    "s_b2af389a952e96": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a14620-94cd-7443-8352-8c9a8de878d4",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
