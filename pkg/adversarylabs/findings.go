@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/doomerlabs/doomer/internal/version"
 )
 
 const maxFindingDetailBytes = 1 << 20
@@ -41,6 +43,7 @@ func (c Client) FindingDetail(ctx context.Context, token, id string, projects ..
 	}
 	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Accept", "text/markdown")
+	request.Header.Set("User-Agent", "doomer/"+version.Version)
 	response, err := c.httpClient().Do(request)
 	if err != nil {
 		if ctx.Err() != nil {

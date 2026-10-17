@@ -116,7 +116,7 @@ func TestFindingDetailShortIDRequiresProjectAndEncodesScope(t *testing.T) {
 	calls := 0
 	client := Client{BaseURL: "https://example.test/api", HTTP: &http.Client{Transport: findingTransport(func(r *http.Request) (*http.Response, error) {
 		calls++
-		if r.URL.Query().Get("project") != "project & one" || r.Header.Get("Authorization") != "Bearer login-token" {
+		if r.URL.Query().Get("project") != "project & one" || r.Header.Get("Authorization") != "Bearer login-token" || !strings.HasPrefix(r.Header.Get("User-Agent"), "doomer/") {
 			t.Errorf("invalid scope or auth")
 		}
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/markdown"}}, Body: io.NopCloser(strings.NewReader("evidence"))}, nil
