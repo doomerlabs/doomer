@@ -1,0 +1,29 @@
+README.md
+  s_902c4820e5fd07::t_4ee286a69f9f7a 20-38
+cmd/findings.go
+  s_902c4820e5fd07::t_9db1f49b2957e3 1-43
+cmd/findings_test.go
+  s_902c4820e5fd07::t_a13b301c6bb243 1-103
+cmd/root.go
+  s_902c4820e5fd07::t_df1a28b9b2a6de 143
+pkg/adversarylabs/findings.go
+  s_902c4820e5fd07::t_b199b88e7b3a4f 1-63
+pkg/adversarylabs/findings_test.go
+  s_902c4820e5fd07::t_e1679f5fbb05c2 1-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9e7482015ff865a7bc45b088c9ffd63db797d650",
+  "prompts": {},
+  "sessions": {
+    "s_902c4820e5fd07": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13823-c2f6-75b3-9978-5851192c2a99",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
