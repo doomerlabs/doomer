@@ -103,6 +103,14 @@ func TestReviewUploadsImmutableWorktreeUsingSelectedProfile(t *testing.T) {
 				ID: id, Digest: request.Digest, Status: "queued", Source: &request.Source,
 				TreeHashVersion: sourcesnapshot.TreeHashVersion, BaseTreeHash: sourcesnapshot.TreeHash(tree.Base), TargetTreeHash: sourcesnapshot.TreeHash(tree.Target),
 			})
+		case "/v1/reviews/submissions/" + id:
+			if r.Method != "GET" {
+				t.Errorf("unexpected method %s", r.Method)
+			}
+			json.NewEncoder(w).Encode(adversarylabs.ReviewStatus{
+				ReviewSubmission: adversarylabs.ReviewSubmission{ID: id, Status: "completed", TargetTreeHash: sourcesnapshot.TreeHash(tree.Target)},
+				Result:           &adversarylabs.ReviewResult{Conclusion: "success", Summary: "Finished review"},
+			})
 		default:
 			t.Errorf("unexpected route %s", r.URL.Path)
 			w.WriteHeader(404)
@@ -114,8 +122,14 @@ func TestReviewUploadsImmutableWorktreeUsingSelectedProfile(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for range 2 {
-		out, err := execute(t, "", "--profile", "work", "--api-url", api.URL, "review", "--project", "my-team", "--path", dir, "--base", base, "--format", "json")
+	for _, wait := range []bool{false, true} {
+		args := []string{"--profile", "work", "--api-url", api.URL, "review", "--project", "my-team", "--path", dir, "--base", base, "--format", "json"}
+		expectedStatus := "queued"
+		if wait {
+			args = append(args, "--wait")
+			expectedStatus = "completed"
+		}
+		out, err := execute(t, "", args...)
 		if err != nil {
 			t.Fatalf("review: %s %v", out, err)
 		}
@@ -125,15 +139,15 @@ func TestReviewUploadsImmutableWorktreeUsingSelectedProfile(t *testing.T) {
 		if err := json.Unmarshal([]byte(lines[len(lines)-1]), &result); err != nil {
 			t.Fatal(err)
 		}
-		if result.Data.ID != id || result.Data.Status != "queued" || result.Data.TargetTreeHash == "" {
+		if result.Data.ID != id || result.Data.Status != expectedStatus || result.Data.TargetTreeHash == "" {
 			t.Fatalf("bad review result: %+v", result)
 		}
 	}
 	expected := []string{"POST /v1/reviews/submissions", "PUT /v1/reviews/submissions/" + id + "/snapshot", "POST /v1/reviews/submissions/" + id + "/finalize"}
-	if len(methods) != 6 {
+	if len(methods) != 7 {
 		t.Fatalf("wrong request count: %v", methods)
 	}
-	if !reflect.DeepEqual(methods[:3], expected) || !reflect.DeepEqual(methods[3:], expected) {
+	if !reflect.DeepEqual(methods[:3], expected) || !reflect.DeepEqual(methods[3:6], expected) || methods[6] != "GET /v1/reviews/submissions/"+id {
 		t.Fatalf("wrong protocol order: %v", methods)
 	}
 	if len(keys) != 2 || keys[0] != keys[1] {
