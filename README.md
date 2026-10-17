@@ -17,6 +17,25 @@ go build -o bin/doomer .
 ./bin/doomer --help
 ```
 
+## Finding evidence
+
+Copy the finding ID from a Doomer PR comment to retrieve its full evidence as markdown:
+
+```sh
+doomer findings show <finding-id>
+doomer --profile work findings show <finding-id>
+```
+
+This uses the selected profile's existing login and API endpoint. The finding ID
+identifies the project; the server checks your current access, so no `--project`
+argument is needed. It works whether the team allows secret links or requires
+CLI-only access, including retained evidence after a PR closes.
+
+The SaaS must support the finding-detail endpoint and enable the project's
+`review_finding_details` feature flag. A missing finding, unavailable project
+access, or disabled flag returns an error without printing private response data.
+This command reads evidence only; it does not modify code or GitHub comments.
+
 ## Profiles
 
 ```sh
