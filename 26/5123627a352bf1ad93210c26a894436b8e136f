@@ -1,0 +1,21 @@
+cmd/review_get.go
+  s_ed41def6c55480::t_5dc278ddc6edc0 19-21
+cmd/review_get_test.go
+  s_ed41def6c55480::t_6942c62446139c 58,81,83-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "265123627a352bf1ad93210c26a894436b8e136f",
+  "prompts": {},
+  "sessions": {
+    "s_ed41def6c55480": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a14c2a-1ac2-7712-aeed-c60e079f46d8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
