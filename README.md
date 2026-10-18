@@ -151,8 +151,23 @@ with `doomer project use`, or the only available project. If the saved project i
 no longer available, select another project or pass `--project` explicitly.
 `--path` defaults to the current directory; a subdirectory selects its entire
 repository. The command uploads an immutable snapshot and queues a hosted review
-using the selected profile. It returns the review ID and status without waiting
+using the selected profile. By default it returns the review ID and status without waiting
 for completion. Hosted reviews must be enabled for the project.
+
+To wait for the review and print its results:
+
+```sh
+doomer review --project my-team --wait
+doomer review --wait --timeout 20m --poll-interval 5s --format json
+```
+
+Waiting starts after the upload is accepted, defaults to a 30-minute timeout,
+and polls every five seconds. Output includes the last known status even on a
+wait failure. A failed, cancelled, or expired job, a timeout, or a polling error
+exits nonzero. A completed review exits zero regardless of its conclusion or
+finding count; workflows can inspect the JSON result for their own policies.
+Cancelling the wait does not cancel the hosted job. The review ID remains usable
+with `review get`, so a timeout never requires submitting another review.
 
 Read that submission's status and results with:
 
