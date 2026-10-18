@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/doomerlabs/doomer/internal/application"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
@@ -13,6 +15,8 @@ import (
 
 func newReviewCommand(app *application.App, apiURL, profile *string) *cobra.Command {
 	var project, path, base, format string
+	var wait bool
+	var timeout, pollInterval time.Duration
 	command := &cobra.Command{
 		Use:   "review [--project <slug>]",
 		Short: "Upload your Git worktree and start a hosted review",
@@ -38,6 +42,12 @@ and Git LFS pointers are unsupported and cause an error instead of being skipped
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if _, err := validateFormat(format, false); err != nil {
 				return err
+			}
+			if (cmd.Flags().Changed("timeout") || cmd.Flags().Changed("poll-interval")) && !wait {
+				return fmt.Errorf("--timeout and --poll-interval require --wait")
+			}
+			if timeout <= 0 || pollInterval <= 0 {
+				return fmt.Errorf("--timeout and --poll-interval must be positive")
 			}
 			deps := app.Dependencies()
 			auth, ok, err := scopedAuth(deps.Auth, *apiURL, *profile, deps.RegistryHost)
@@ -86,6 +96,15 @@ and Git LFS pointers are unsupported and cause an error instead of being skipped
 			if accepted.TreeHashVersion != sourcesnapshot.TreeHashVersion || accepted.BaseTreeHash != snapshot.BaseTreeHash || accepted.TargetTreeHash != snapshot.TargetTreeHash {
 				return fmt.Errorf("review %s was accepted, but the server did not confirm the captured tree fingerprints; update the SaaS snapshot API", submission.ID)
 			}
+			if wait {
+				ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
+				defer cancel()
+				result, waitErr := waitForReview(ctx, deps.Clock, client, auth.Token, accepted, pollInterval)
+				if err := writeReviewStatus(cmd.OutOrStdout(), "review", format, result); err != nil {
+					return err
+				}
+				return waitErr
+			}
 			if format == "json" {
 				return writeJSON(cmd.OutOrStdout(), "review", accepted)
 			}
@@ -97,5 +116,9 @@ and Git LFS pointers are unsupported and cause an error instead of being skipped
 	command.Flags().StringVar(&path, "path", ".", "directory in the Git worktree to upload")
 	command.Flags().StringVar(&base, "base", "", "local baseline ref or commit (default: merge base with the default branch)")
 	command.Flags().StringVar(&format, "format", "text", "output format: text or json")
+	command.Flags().BoolVar(&wait, "wait", false, "wait for completion and print the review results")
+	command.Flags().DurationVar(&timeout, "timeout", 30*time.Minute, "maximum wait after submission (requires --wait)")
+	command.Flags().DurationVar(&pollInterval, "poll-interval", 5*time.Second, "time between status requests (requires --wait)")
+	command.AddCommand(newReviewGetCommand(app, apiURL, profile))
 	return command
 }

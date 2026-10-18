@@ -3,9 +3,11 @@ package adversarylabs
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 )
@@ -64,4 +66,51 @@ func (c Client) FinalizeReviewSubmission(ctx context.Context, token, id string) 
 	var out ReviewSubmission
 	err := c.postJSON(ctx, "/v1/reviews/submissions/"+url.PathEscape(id)+"/finalize", struct{}{}, token, &out)
 	return out, err
+}
+
+// ReviewResult preserves findings and source evidence returned by the snapshot API.
+type ReviewResult struct {
+	SnapshotDigest string            `json:"snapshotDigest,omitempty"`
+	Conclusion     string            `json:"conclusion"`
+	Summary        string            `json:"summary"`
+	Findings       []json.RawMessage `json:"findings"`
+	CoverageGaps   []string          `json:"coverageGaps,omitempty"`
+	CodeContexts   json.RawMessage   `json:"codeContexts,omitempty"`
+}
+
+type ReviewStatus struct {
+	ReviewSubmission
+	Result *ReviewResult `json:"result,omitempty"`
+	Error  string        `json:"error,omitempty"`
+}
+
+func (c Client) GetReview(ctx context.Context, token, id string) (ReviewStatus, error) {
+	var out ReviewStatus
+	if strings.TrimSpace(id) == "" || strings.ContainsAny(id, "/\\?#") || id == "." || id == ".." {
+		return out, fmt.Errorf("invalid review ID")
+	}
+	if _, err := validateBaseURL(c.BaseURL); err != nil {
+		return out, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/v1/reviews/submissions/"+url.PathEscape(id), nil)
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.httpClient().Do(req)
+	if err != nil {
+		return out, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return out, responseError(resp, token)
+	}
+	if err := decodeLimited(resp.Body, &out); err != nil {
+		return out, err
+	}
+	if out.ID != id || out.Status == "" {
+		return out, fmt.Errorf("invalid review status response")
+	}
+	return out, nil
 }
