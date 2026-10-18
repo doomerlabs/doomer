@@ -16,8 +16,9 @@ func newReviewGetCommand(app *application.App, apiURL, profile *string) *cobra.C
 	var format string
 	command := &cobra.Command{
 		Use: "get <review-id>", Aliases: []string{"status"},
-		Short: "Read a submitted review's status, findings, summary, conclusion, and errors",
-		Args:  cobra.ExactArgs(1),
+		Short:        "Read a submitted review's status, findings, summary, conclusion, and errors",
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if _, err := validateFormat(format, false); err != nil {
 				return err

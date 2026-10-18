@@ -55,7 +55,7 @@ func TestReviewGetValidationAndUnavailableResults(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; w.WriteHeader(status); fmt.Fprint(w, payload) }))
 	defer api.Close()
 	args := []string{"--api-url", api.URL, "review", "get", "job"}
-	if _, err := execute(t, "", args...); err == nil || !strings.Contains(err.Error(), "not logged in") {
+	if out, err := execute(t, "", args...); err == nil || !strings.Contains(err.Error(), "not logged in") || strings.Contains(out, "Usage:") {
 		t.Fatalf("auth: %v", err)
 	}
 	if err := store.SetAuth(adversarylabs.AuthKey(api.URL, "default"), adversarylabs.Auth{Token: "token"}); err != nil {
@@ -78,8 +78,10 @@ func TestReviewGetValidationAndUnavailableResults(t *testing.T) {
 	}
 	for _, code := range []int{401, 403, 404, 500} {
 		status = code
-		if _, err := execute(t, "", args...); err == nil {
+		if out, err := execute(t, "", args...); err == nil {
 			t.Fatalf("accepted HTTP %d", code)
+		} else if strings.Contains(out, "Usage:") {
+			t.Fatalf("runtime error printed usage: %s", out)
 		}
 	}
 	status = 200
