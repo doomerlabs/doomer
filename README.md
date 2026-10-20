@@ -271,6 +271,12 @@ writing artifacts. `pack` runs the project's build script; it supports
 `--format json`; the deprecated `--json` alias is retained for compatibility.
 Build logs and transfer progress are written to stderr.
 
+Manifests may declare `requires: [go-module-dependencies]`. The CLI validates
+and preserves this field when packaging; the hosted review runtime prepares
+the dependencies. Packing does not run that prerequisite or download the
+reviewed repository's Go modules. Unknown or duplicate prerequisite names are
+rejected. Publish such packages only after the hosted runtime supports them.
+
 `DOOMER_DATA_DIR` overrides artifact storage. The store uses the previous CLI's
 platform data directory and `repository-v1` format, so existing packages remain
 available. References support tags and immutable digests. Loopback registries
