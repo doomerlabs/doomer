@@ -1,0 +1,29 @@
+README.md
+  s_ae1bc8a4f71f08::t_0c64ccddc92c71 274-279
+pkg/manifest/manifest_test.go
+  s_ae1bc8a4f71f08::t_d2ab1d3a58e7bc 554-559
+  s_ae1bc8a4f71f08::t_fcc9f717d2bdeb 620-639
+schema/adversary.manifest.v1.schema.json
+  s_ae1bc8a4f71f08::t_d2ab1d3a58e7bc 32-37
+pkg/manifest/manifest.go
+  s_ae1bc8a4f71f08::t_d2ab1d3a58e7bc 37-38,172-174,245-254
+  s_ae1bc8a4f71f08::t_15051fadca8636 36
+pkg/pack/prerequisites_test.go
+  s_ae1bc8a4f71f08::t_3da1124e5c3152 1-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d5b0b32ab258a86b0bfbe31ba0c2d0301b544e06",
+  "prompts": {},
+  "sessions": {
+    "s_ae1bc8a4f71f08": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a15704-7e8d-7520-ad99-00abcb90b0f3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
