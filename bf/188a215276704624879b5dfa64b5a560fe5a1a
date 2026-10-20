@@ -1,0 +1,21 @@
+pkg/manifest/manifest.go
+  s_ae1bc8a4f71f08::t_dc708584beeb6f 246,248,251
+pkg/manifest/manifest_test.go
+  s_ae1bc8a4f71f08::t_f9b864b35f7ec2 640-661
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf188a215276704624879b5dfa64b5a560fe5a1a",
+  "prompts": {},
+  "sessions": {
+    "s_ae1bc8a4f71f08": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a15704-7e8d-7520-ad99-00abcb90b0f3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
