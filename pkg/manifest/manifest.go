@@ -243,12 +243,12 @@ func safeNode(n *yaml.Node, path string) error {
 
 func (m Manifest) Validate() error {
 	seenRequirements := map[string]bool{}
-	for _, requirement := range m.Requires {
+	for i, requirement := range m.Requires {
 		if requirement != "go-module-dependencies" {
-			return fmt.Errorf("unsupported prerequisite %q", requirement)
+			return fmt.Errorf("manifest requires[%d] %q is unsupported", i, requirement)
 		}
 		if seenRequirements[requirement] {
-			return fmt.Errorf("duplicate prerequisite %q", requirement)
+			return fmt.Errorf("manifest requires[%d] duplicates %q", i, requirement)
 		}
 		seenRequirements[requirement] = true
 	}

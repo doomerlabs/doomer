@@ -637,3 +637,25 @@ func TestPrerequisiteSerialization(t *testing.T) {
 		}
 	}
 }
+
+func TestPrerequisiteValidationErrorIdentifiesEntry(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		requires []string
+		want     string
+	}{
+		{"unsupported", []string{"go-module-dependencies", "shell"}, `manifest requires[1] "shell" is unsupported`},
+		{"duplicate", []string{"go-module-dependencies", "go-module-dependencies"}, `manifest requires[1] duplicates "go-module-dependencies"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, err := Parse([]byte(valid))
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.Requires = tc.requires
+			if err := m.Validate(); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("want error containing %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
