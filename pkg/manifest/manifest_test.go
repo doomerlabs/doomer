@@ -551,6 +551,12 @@ func TestPublishedDraft2020SchemaMatchesCanonicalFixtures(t *testing.T) {
 		valid bool
 	}{
 		"valid":                {valid, true},
+		"requires valid":       {valid + "requires: [go-module-dependencies]\n", true},
+		"requires empty":       {valid + "requires: []\n", true},
+		"requires unknown":     {valid + "requires: [shell]\n", false},
+		"requires duplicate":   {valid + "requires: [go-module-dependencies, go-module-dependencies]\n", false},
+		"requires null":        {valid + "requires: null\n", false},
+		"requires scalar":      {valid + "requires: go-module-dependencies\n", false},
 		"unknown":              {valid + "unknown: true\n", false},
 		"bad semver":           {strings.Replace(valid, "1.2.3", "1.2.3-01", 1), false},
 		"unsupported runtime":  {strings.Replace(valid, "name: node", "name: shell", 1), false},
@@ -610,4 +616,24 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte("x: &x [*x]"))
 	f.Add([]byte("name: a\nname: b"))
 	f.Fuzz(func(t *testing.T, data []byte) { _, _ = Parse(data) })
+}
+
+func TestPrerequisiteSerialization(t *testing.T) {
+	m, err := Parse([]byte(valid + "requires: [go-module-dependencies]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Requires) != 1 || m.Requires[0] != "go-module-dependencies" {
+		t.Fatalf("prerequisites: %v", m.Requires)
+	}
+	for _, encode := range []func(any) ([]byte, error){json.Marshal, yaml.Marshal} {
+		data, err := encode(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		restored, err := Parse(data)
+		if err != nil || len(restored.Requires) != 1 || restored.Requires[0] != m.Requires[0] {
+			t.Fatalf("round trip failed: %s: %v", data, err)
+		}
+	}
 }

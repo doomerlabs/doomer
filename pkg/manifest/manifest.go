@@ -33,7 +33,9 @@ type Manifest struct {
 	// (composition). The CLI expands uses transitively, then runs each leaf
 	// (and this package). Voice for GitHub rewrite comes from the CLI entry
 	// package, not from members.
-	Uses        []Use       `yaml:"uses,omitempty" json:"uses,omitempty"`
+	Uses []Use `yaml:"uses,omitempty" json:"uses,omitempty"`
+	// Requires declares preparation performed by the review runtime, not the CLI.
+	Requires    []string    `yaml:"requires,omitempty" json:"requires,omitempty"`
 	Triggers    Triggers    `yaml:"triggers,omitempty" json:"triggers,omitempty"`
 	Detection   Detection   `yaml:"detection,omitempty" json:"detection,omitempty"`
 	Runtime     Runtime     `yaml:"runtime" json:"runtime"`
@@ -167,6 +169,9 @@ func Parse(data []byte) (Manifest, error) {
 }
 
 func validatePresentFields(root *yaml.Node, m Manifest) error {
+	if requires := fieldNode(root, "requires"); requires != nil && requires.Kind != yaml.SequenceNode {
+		return errors.New("manifest requires must be a list")
+	}
 	if hasField(root, "version") && m.Version == "" {
 		return errors.New("manifest version must not be empty when present")
 	}
@@ -237,6 +242,16 @@ func safeNode(n *yaml.Node, path string) error {
 }
 
 func (m Manifest) Validate() error {
+	seenRequirements := map[string]bool{}
+	for _, requirement := range m.Requires {
+		if requirement != "go-module-dependencies" {
+			return fmt.Errorf("unsupported prerequisite %q", requirement)
+		}
+		if seenRequirements[requirement] {
+			return fmt.Errorf("duplicate prerequisite %q", requirement)
+		}
+		seenRequirements[requirement] = true
+	}
 	if !nameRE.MatchString(m.Name) {
 		return fmt.Errorf("manifest name %q must be a normalized lowercase slash-separated name", m.Name)
 	}

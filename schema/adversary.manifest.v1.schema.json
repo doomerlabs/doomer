@@ -29,6 +29,12 @@
     "description": {
       "type": "string"
     },
+    "requires": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["go-module-dependencies"] },
+      "description": "Runtime-owned prerequisites prepared before this reviewer starts; shared within a review."
+    },
     "uses": {
       "type": "array",
       "description": "Other adversaries to run when this package is selected (composition). Expanded transitively by the CLI. GitHub comment voice comes from the CLI entry package, not members.",
