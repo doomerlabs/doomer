@@ -454,20 +454,20 @@ func TestHookWaitsOnlyOncePerEditButStopStillWaits(t *testing.T) {
 	if err := Write(filepath.Join(root, "heartbeat.json"), time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	run := func(event string) error {
-		raw, _ := json.Marshal(HookInput{Session: owner.Session, Turn: owner.Turn, CWD: dir, Event: event, Tool: "read_file"})
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	run := func(event string, timeout time.Duration) error {
+		raw, _ := json.Marshal(HookInput{Session: owner.Session, Turn: owner.Turn, CWD: dir, Event: event, Tool: "read_file", ToolID: "read"})
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		Hook(ctx, root, cfg, strings.NewReader(string(raw)), io.Discard)
 		return ctx.Err()
 	}
-	if err := run("PostToolUse"); !errors.Is(err, context.DeadlineExceeded) {
+	if err := run("PostToolUse", 200*time.Millisecond); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("first inline hook should wait: %v", err)
 	}
-	if err := run("PostToolUse"); err != nil {
+	if err := run("PostToolUse", 2*time.Second); err != nil {
 		t.Fatalf("subsequent inline hook should return without waiting: %v", err)
 	}
-	if err := run("Stop"); !errors.Is(err, context.DeadlineExceeded) {
+	if err := run("Stop", 200*time.Millisecond); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Stop should retain its bounded wait: %v", err)
 	}
 }

@@ -27,6 +27,7 @@ func TestFailedPostCaptureResumesWithoutAnotherHook(t *testing.T) {
 	if !agentReviewRequested(root, path, capture.Digest, since) {
 		t.Fatal("resumed edit is not eligible for upload")
 	}
+	state = State{}
 	if err := Read(StatePath(root, path), &state); err != nil {
 		t.Fatal(err)
 	}
