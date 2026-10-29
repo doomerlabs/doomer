@@ -1,0 +1,81 @@
+pkg/adversarylabs/workspace_incremental.go
+  s_87045b9172083a::t_719abeec54a231 1-46,48-157
+  s_87045b9172083a::t_0c9fd7f39dc5d7 47
+README.md
+  s_87045b9172083a::t_dc03e61bff8598 22-64,79-86,100-123,126-128
+  s_87045b9172083a::t_4d3f5669e21e98 3-4,87-99,124-125
+  s_87045b9172083a::t_d24ee5c9f06fd9 65-78
+  s_87045b9172083a::t_9502ec9d28f51b 129
+pkg/adversarylabs/workspace.go
+  s_87045b9172083a::t_b9a57ec89278dd 1-136
+cmd/root.go
+  s_87045b9172083a::t_c68da838380b56 140
+cmd/setup_consent.go
+  s_87045b9172083a::t_4b6f74660ec4e3 1-166
+cmd/setup_consent_test.go
+  s_87045b9172083a::t_ed73e3ccf31894 1-152
+cmd/watch.go
+  s_87045b9172083a::t_3f3ddcbb5cb1a6 1-465
+cmd/watch_directories_test.go
+  s_87045b9172083a::t_2adaefb4c861ed 1-45
+internal/publock/lock.go
+  s_87045b9172083a::t_6f1c825714fa72 13,18,21-23,45-49
+internal/publock/lock_unix.go
+  s_87045b9172083a::t_188c8390a9a5c2 18-25
+internal/publock/lock_windows.go
+  s_87045b9172083a::t_3c5c44e9fac31c 22-30
+internal/watch/hook.go
+  s_87045b9172083a::t_b74adbca2ee7dc 1-422
+internal/watch/hook_paths.go
+  s_87045b9172083a::t_39f14a23830133 1-84
+internal/watch/hook_paths_test.go
+  s_87045b9172083a::t_d034ac9f495006 1-67
+internal/watch/hypotheses.go
+  s_87045b9172083a::t_84ea5894accc2a 1-225
+internal/watch/hypotheses_test.go
+  s_87045b9172083a::t_0e133cc9b07cf9 1-89
+internal/watch/recent_changes.go
+  s_87045b9172083a::t_75eb65e1e26a3e 1-95
+internal/watch/recent_changes_test.go
+  s_87045b9172083a::t_87fb13b0add14e 1-34
+internal/watch/responses.go
+  s_87045b9172083a::t_e00aed6a6239ee 1-171
+internal/watch/responses_test.go
+  s_87045b9172083a::t_d14c315479678f 1-119
+internal/watch/revision_test.go
+  s_87045b9172083a::t_1e8169012adc21 1-35
+internal/watch/runner.go
+  s_87045b9172083a::t_46e09a179541e5 1-319
+internal/watch/snapshot.go
+  s_87045b9172083a::t_3a88ee70f58487 1-85
+internal/watch/store.go
+  s_87045b9172083a::t_39eef0c670ee6e 1-146
+internal/watch/upload.go
+  s_87045b9172083a::t_363f7549baf529 1-64
+internal/watch/upload_test.go
+  s_87045b9172083a::t_7e15343fb4db7d 1-45
+internal/watch/watch_test.go
+  s_87045b9172083a::t_f67488930e158d 1-417
+pkg/adversarylabs/response_error.go
+  s_87045b9172083a::t_80c1109692137a 33
+pkg/adversarylabs/workspace_incremental_test.go
+  s_87045b9172083a::t_0a47087599fcdf 1-132
+pkg/adversarylabs/workspace_test.go
+  s_87045b9172083a::t_25c00621fb05ce 1-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d7dbcbd56af0880ec09c790273e6f887f2af14c9",
+  "prompts": {},
+  "sessions": {
+    "s_87045b9172083a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a179c7-5eae-7cc0-9084-dae16889fd2b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
