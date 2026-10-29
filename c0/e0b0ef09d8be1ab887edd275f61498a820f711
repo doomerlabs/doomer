@@ -1,0 +1,27 @@
+internal/watch/hook.go
+  s_87045b9172083a::t_049679c9e37148 140-142,178,442-444
+internal/watch/pending_capture.go
+  s_87045b9172083a::t_9bdcf2a987d6a8 1-74
+internal/watch/pending_capture_test.go
+  s_87045b9172083a::t_834f6555b74b92 1-86
+internal/watch/runner.go
+  s_87045b9172083a::t_be23c0d16877f4 96-98,111-113
+internal/watch/store.go
+  s_87045b9172083a::t_5829c514424726 34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c0e0b0ef09d8be1ab887edd275f61498a820f711",
+  "prompts": {},
+  "sessions": {
+    "s_87045b9172083a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a179c7-5eae-7cc0-9084-dae16889fd2b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
