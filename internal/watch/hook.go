@@ -192,6 +192,7 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 					if !s.Ambiguous {
 						s.Owner = owner
 						s.RequestedAt = time.Now()
+						s.InlineWaited = false
 						s.Fingerprint = fingerprint
 						s.Prompt = turn.Prompt
 						s.Agent = agent
@@ -213,6 +214,22 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 	}
 	if input.Event != "PostToolUse" && input.Event != "Stop" || input.StopActive {
 		return
+	}
+	allowWait := true
+	if input.Event == "PostToolUse" {
+		allowWait = false
+		_ = Locked(root, path, func() error {
+			var state State
+			if Read(StatePath(root, path), &state) != nil || state.Owner != owner || state.InlineWaited || (!state.HypothesesSubmitted && time.Since(state.RequestedAt) < hypothesisGrace) {
+				return nil
+			}
+			state.InlineWaited = true
+			if err := Write(StatePath(root, path), state); err != nil {
+				return err
+			}
+			allowWait = true
+			return nil
+		})
 	}
 	for {
 		var heartbeat time.Time
@@ -296,6 +313,9 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 					response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "PostToolUse", "additionalContext": message}}
 				}
 			}
+			return
+		}
+		if !allowWait {
 			return
 		}
 		select {

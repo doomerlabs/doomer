@@ -59,14 +59,15 @@ func Diff(ctx context.Context, m sourcesnapshot.Manifest) (string, error) {
 	cmd.Dir = directory
 	var output limitedDiff
 	cmd.Stdout = &output
-	if err = cmd.Run(); err != nil {
+	err = cmd.Run()
+	if output.overflow {
+		return "", fmt.Errorf("diff exceeds 16 MiB")
+	}
+	if err != nil {
 		var exit *exec.ExitError
 		if !errors.As(err, &exit) || exit.ExitCode() != 1 {
 			return "", fmt.Errorf("could not compute review diff")
 		}
-	}
-	if output.overflow {
-		return "", fmt.Errorf("diff exceeds 16 MiB")
 	}
 	return output.String(), nil
 }

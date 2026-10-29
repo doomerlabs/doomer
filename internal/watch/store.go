@@ -33,6 +33,7 @@ type Operation struct {
 	Attributable bool
 }
 type State struct {
+	InlineWaited        bool
 	Agent               string `json:"agent,omitempty"`
 	QuestionRequest     string
 	HypothesesSubmitted bool

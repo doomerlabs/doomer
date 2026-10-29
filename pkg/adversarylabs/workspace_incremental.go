@@ -63,6 +63,7 @@ func (c Client) UploadWorkspaceIncremental(ctx context.Context, token, repositor
 	// retry authentication failures or other server failures as a full upload.
 	if err != nil && previous != nil && strings.HasPrefix(err.Error(), "request failed: 410 ") {
 		changed = len(entries)
+		out = workspaceUpload{}
 		err = c.postJSON(ctx, "/v1/repositories", full, token, &out)
 	}
 	report("manifest", changed, 0, stage)
@@ -144,6 +145,7 @@ func (c Client) UploadWorkspaceIncremental(ctx context.Context, token, repositor
 			return WorkspaceTree{}, fmt.Errorf("unexpected finalize URL")
 		}
 		stage = time.Now()
+		out = workspaceUpload{}
 		err = c.postJSON(ctx, strings.TrimPrefix(expected, "/api"), struct{}{}, token, &out)
 		report("finalize", 0, 0, stage)
 		if err != nil {

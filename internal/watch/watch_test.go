@@ -210,8 +210,8 @@ func TestWatchOnceUsesWorkspaceAndStableRetryIdentity(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("changed\n"), 0600)
 	client := &fakeClient{}
 	r := Runner{Root: t.TempDir(), Config: Config{API: "https://example.com/api"}, Client: client, Token: "token", Output: io.Discard, Interval: time.Second}
+	requestTestAgentReview(t, &r, dir)
 	for range 2 {
-		requestTestAgentReview(t, &r, dir)
 		if e := r.Run(context.Background(), dir, true); e != nil {
 			t.Fatal(e)
 		}
@@ -302,7 +302,7 @@ func TestWatchDoesNotRetryTerminalReviewWithoutAssessment(t *testing.T) {
 	if strings.Contains(output.String(), "retrying later") || !strings.Contains(output.String(), "Waiting for a new change") {
 		t.Fatal(output.String())
 	}
-	if !strings.Contains(output.String(), "review already completed") {
+	if !strings.Contains(output.String(), "full review completed") {
 		t.Fatal(output.String())
 	}
 }
@@ -437,5 +437,37 @@ func TestHookRecordsExplicitCodingAgent(t *testing.T) {
 				t.Fatalf("agent=%q want %q", turn.Agent, want)
 			}
 		})
+	}
+}
+
+func TestHookWaitsOnlyOncePerEditButStopStillWaits(t *testing.T) {
+	dir := repository(t)
+	root := t.TempDir()
+	owner := Owner{Session: "chat", Turn: "turn"}
+	cfg := Config{Directories: []string{dir}}
+	if err := Write(TurnPath(root, owner.Session), Turn{Owner: owner}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(StatePath(root, dir), State{Owner: owner, RequestedAt: time.Now(), HypothesesSubmitted: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(filepath.Join(root, "heartbeat.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	run := func(event string) error {
+		raw, _ := json.Marshal(HookInput{Session: owner.Session, Turn: owner.Turn, CWD: dir, Event: event, Tool: "read_file"})
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		Hook(ctx, root, cfg, strings.NewReader(string(raw)), io.Discard)
+		return ctx.Err()
+	}
+	if err := run("PostToolUse"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("first inline hook should wait: %v", err)
+	}
+	if err := run("PostToolUse"); err != nil {
+		t.Fatalf("subsequent inline hook should return without waiting: %v", err)
+	}
+	if err := run("Stop"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Stop should retain its bounded wait: %v", err)
 	}
 }
