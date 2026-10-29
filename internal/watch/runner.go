@@ -93,6 +93,9 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 			r.debugf("%s: scan finished in %s: %s", path, time.Since(scanStarted).Round(time.Millisecond), err)
 			// A clean checkout is normal. Other errors are shown once until they change.
 			message := err.Error()
+			if strings.Contains(message, "worktree changed while capturing") {
+				message = "files changed during capture; retrying after they settle"
+			}
 			if !strings.Contains(message, "snapshot contains no changes") && message != observed {
 				r.logf("%s: %s", path, message)
 			}
@@ -105,6 +108,9 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 				return err
 			}
 		} else if capture.Source.Dirty || once {
+			if resumeCompletedEdit(ctx, r.Root, path, capture, started) {
+				r.logf("%s: files settled; resuming the agent review.", filepath.Base(path))
+			}
 			r.debugf("%s: snapshot captured in %s", path, time.Since(scanStarted).Round(time.Millisecond))
 			requested := agentReviewRequested(r.Root, path, capture.Digest, started)
 			if observed != capture.Digest {

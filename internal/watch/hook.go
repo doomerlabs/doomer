@@ -137,6 +137,9 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 			e = nil
 		}
 		if e != nil {
+			if input.Event == "PostToolUse" {
+				deferCompletedEdit(root, path, owner, input.ToolID)
+			}
 			return
 		}
 		snapshotFile := operationSnapshotPath(root, path, owner, input.ToolID)
@@ -172,7 +175,7 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 				if mutates(input) && fingerprint != "clean" {
 					_ = saveOperationSnapshot(snapshotFile, capture.Bytes)
 				}
-				s.Active[input.ToolID] = Operation{owner, fingerprint, time.Now(), mutates(input)}
+				s.Active[input.ToolID] = Operation{Owner: owner, Before: fingerprint, Started: time.Now(), Attributable: mutates(input)}
 			} else {
 				op, ok := s.Active[input.ToolID]
 				delete(s.Active, input.ToolID)
@@ -436,6 +439,9 @@ func finish(root, path string, owner Owner, ctx context.Context) {
 		}
 		for id, op := range s.Active {
 			if op.Owner == owner {
+				if !op.CompletedAt.IsZero() {
+					continue
+				}
 				if op.Before != fingerprint && s.Fingerprint != fingerprint {
 					s.Ambiguous = true
 				}

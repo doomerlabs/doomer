@@ -31,6 +31,7 @@ type Operation struct {
 	Before       string
 	Started      time.Time
 	Attributable bool
+	CompletedAt  time.Time
 }
 type State struct {
 	InlineWaited        bool
