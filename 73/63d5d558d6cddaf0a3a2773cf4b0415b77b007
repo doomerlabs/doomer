@@ -1,0 +1,16 @@
+internal/watch/runner.go
+  h_aa44c3b5b60dec 219-223
+internal/watch/upload.go
+  h_aa44c3b5b60dec 6,41,44-48,70-72,75-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7363d5d558d6cddaf0a3a2773cf4b0415b77b007",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
