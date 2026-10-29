@@ -1,0 +1,25 @@
+README.md
+  s_87045b9172083a::t_840df9311f1ba0 76,79-83
+cmd/watch.go
+  s_87045b9172083a::t_d45598a830548e 362-368,381,386-399,401-405
+internal/watch/worktrees.go
+  s_87045b9172083a::t_ae0a86128eb619 1-62
+internal/watch/worktrees_test.go
+  s_87045b9172083a::t_17ade3bef5951c 1-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2ee10a25d284bbfda3e65cc4a3c4e2e8201d478a",
+  "prompts": {},
+  "sessions": {
+    "s_87045b9172083a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a179c7-5eae-7cc0-9084-dae16889fd2b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
