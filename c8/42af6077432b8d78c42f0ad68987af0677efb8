@@ -1,0 +1,23 @@
+pkg/adversarylabs/workspace.go
+  s_87045b9172083a::t_5f09e698b05ae8 62
+pkg/adversarylabs/workspace_incremental.go
+  s_87045b9172083a::t_57472e8448ba17 36,57,74,89,149
+pkg/adversarylabs/workspace_incremental_test.go
+  s_87045b9172083a::t_8aabd83d925f4b 133-159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c842af6077432b8d78c42f0ad68987af0677efb8",
+  "prompts": {},
+  "sessions": {
+    "s_87045b9172083a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a179c7-5eae-7cc0-9084-dae16889fd2b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
