@@ -73,8 +73,13 @@ With no directories, it immediately includes the current
 Git checkout if approved for this profile. With all-repository approval, it also
 continues discovering repositories through the coding-agent hooks. Outside a
 Git checkout it waits for discovery. Use `doomer watch .` to watch only the current
-checkout, or `doomer watch --debug` for scan, discovery, and review-status details.
+checkout and its approved linked worktrees, or `doomer watch --debug` for scan, discovery, and review-status details.
 Diagnostics do not print source contents, prompts, review responses, or credentials.
+
+Registered Git worktrees are discovered at startup and every five seconds, including
+worktrees created while watch is running. Each checkout keeps its own review and
+conversation identity; discovery does not itself upload existing changes. Directory-
+scoped consent still applies independently to each checkout.
 
 The watcher uses filesystem notifications with a 750 ms debounce. A one-minute
 fallback scan catches missed events; `--interval` adjusts that fallback. Git-ignored

@@ -359,10 +359,13 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			} else {
 				statusf("Also watching for repositories discovered by your coding-agent hooks.")
 			}
-			lastDiscoveryLog := time.Time{}
-			ticker := time.NewTicker(time.Second)
-			defer ticker.Stop()
-			for ctx.Err() == nil {
+		}
+		lastDiscoveryLog := time.Time{}
+		lastWorktreeScan := time.Time{}
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for ctx.Err() == nil {
+			if discover {
 				entries, discoveryErr := os.ReadDir(filepath.Join(root, "discovered"))
 				if debug && time.Since(lastDiscoveryLog) >= 15*time.Second {
 					debugf("discovery: %d registrations; %d repositories watching", len(entries), len(running))
@@ -375,15 +378,31 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 					var path string
 					if watching.Read(filepath.Join(root, "discovered", entry.Name()), &path) == nil {
 						canonical, e := watching.Root(ctx, path)
-						if e == nil && canonical == path {
+						if e == nil && canonical == path && watching.Allowed(cfg, canonical) {
 							launch(path)
 						}
 					}
 				}
-				select {
-				case <-ctx.Done():
-				case <-ticker.C:
+			}
+			if time.Since(lastWorktreeScan) >= 5*time.Second {
+				roots := make([]string, 0, len(running))
+				for path := range running {
+					roots = append(roots, path)
 				}
+				scanCtx, stop := context.WithTimeout(ctx, 3*time.Second)
+				linked := watching.LinkedWorktrees(scanCtx, cfg, roots)
+				stop()
+				for _, path := range linked {
+					if !running[path] {
+						statusf("Discovered linked worktree: %s", path)
+						launch(path)
+					}
+				}
+				lastWorktreeScan = time.Now()
+			}
+			select {
+			case <-ctx.Done():
+			case <-ticker.C:
 			}
 		}
 		group.Wait()
