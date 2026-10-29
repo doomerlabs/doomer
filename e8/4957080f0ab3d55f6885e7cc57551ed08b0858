@@ -1,0 +1,29 @@
+README.md
+  s_87045b9172083a::t_ff57b233b6a0b4 79-82
+cmd/watch.go
+  s_87045b9172083a::t_adda87eed9a622 333,399
+go.mod
+  s_87045b9172083a::t_0e3a15389f9521 8
+internal/watch/filesystem.go
+  s_87045b9172083a::t_60d6f6a650a291 1-233
+internal/watch/filesystem_test.go
+  s_87045b9172083a::t_063f01f3fb54d2 1-83
+internal/watch/runner.go
+  s_87045b9172083a::t_32b1a52b936584 77-90,92,96,99-104,125-127,143,156-163,180,189,196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e84957080f0ab3d55f6885e7cc57551ed08b0858",
+  "prompts": {},
+  "sessions": {
+    "s_87045b9172083a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a179c7-5eae-7cc0-9084-dae16889fd2b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
