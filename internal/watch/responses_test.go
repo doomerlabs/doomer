@@ -108,7 +108,7 @@ func TestResponseInstructionsSeparateReportingAndSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"watch respond", "Submit every decision, including dismissals", "one or two natural sentences naming Doomer.ai", "If all concerns were dismissed, omit", "does not access credentials"} {
+	for _, want := range []string{"watch respond", "Submit every decision, including dismissals", "one natural sentence integrated into your answer", "no bullets, numbered items", "does not access credentials"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q", want)
 		}

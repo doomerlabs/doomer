@@ -83,7 +83,7 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 	}
 	if input.Event == "PostToolUse" {
 		if count := recordResponsesOutput(root, owner, input.ToolResponse); count > 0 {
-			response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "PostToolUse", "additionalContext": fmt.Sprintf("Doomer.ai recorded %d responses locally for upload. Continue without polling. Summarize meaningful fixes naturally in your final reply; omit per-item reports and dismissed noise.", count)}}
+			response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "PostToolUse", "additionalContext": fmt.Sprintf("Doomer.ai recorded %d responses locally for upload. Continue without polling. In your visible reply, simply acknowledge Doomer.ai provided feedback in one natural sentence. Do not show bullets, numbered items, separate outcome lines, or dismissal details.", count)}}
 			responsesRecorded = true
 		}
 		if submittedPath := recordHypothesesOutput(ctx, root, cfg, owner, input.ToolResponse); submittedPath != "" {
