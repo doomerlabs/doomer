@@ -130,3 +130,30 @@ func TestWorkspaceUploadsBlobsWithBoundedConcurrency(t *testing.T) {
 		t.Fatalf("parallel uploads: %d", peak.Load())
 	}
 }
+
+func TestWorkspaceUploadContinuesVerificationWithoutMissingBlobs(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests == 1 {
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Error(err)
+			}
+			if body["verification_limit"] != float64(256) {
+				t.Error("missing bounded verification request")
+			}
+		} else if r.URL.Query().Get("verification_limit") != "256" {
+			t.Error("finalize lost bounded verification")
+		}
+		fmt.Fprintf(w, `{"repository_id":"repo","snapshot_id":"snapshot","complete":%t,"checking":%t,"missing":[]}`, requests == 3, requests < 3)
+	}))
+	defer server.Close()
+	client := NewClientWithBaseURL(ConfigStore{}, server.URL+"/api")
+	if _, err := client.UploadWorkspaceIncremental(context.Background(), "token", "org/repo", nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 3 {
+		t.Fatalf("expected three verification pages, got %d", requests)
+	}
+}

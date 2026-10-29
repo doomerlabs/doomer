@@ -59,6 +59,7 @@ type workspaceUpload struct {
 	RepositoryID string `json:"repository_id"`
 	SnapshotID   string `json:"snapshot_id"`
 	Complete     bool   `json:"complete"`
+	Checking     bool   `json:"checking"`
 	Missing      []struct {
 		SHA  string `json:"sha256"`
 		Size int    `json:"size"`

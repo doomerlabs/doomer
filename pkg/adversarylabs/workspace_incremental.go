@@ -33,7 +33,7 @@ func (c Client) UploadWorkspaceIncremental(ctx context.Context, token, repositor
 	for _, e := range entries {
 		files = append(files, file(e))
 	}
-	full := map[string]any{"repository": repository, "files": files}
+	full := map[string]any{"repository": repository, "files": files, "verification_limit": 256}
 	body := full
 	changed := len(entries)
 	if previous != nil && workspaceID(previous.RepositoryID) && workspaceID(previous.SnapshotID) {
@@ -54,7 +54,7 @@ func (c Client) UploadWorkspaceIncremental(ctx context.Context, token, repositor
 			deletes = append(deletes, path)
 		}
 		changed = len(upserts)
-		body = map[string]any{"repository_id": previous.RepositoryID, "base_snapshot_id": previous.SnapshotID, "upserts": upserts, "deletes": deletes}
+		body = map[string]any{"repository_id": previous.RepositoryID, "base_snapshot_id": previous.SnapshotID, "upserts": upserts, "deletes": deletes, "verification_limit": 256}
 	}
 	var out workspaceUpload
 	stage := time.Now()
@@ -71,7 +71,7 @@ func (c Client) UploadWorkspaceIncremental(ctx context.Context, token, repositor
 		return WorkspaceTree{}, err
 	}
 	count, total := 0, 0
-	for round := 0; round < 10; round++ {
+	for round := 0; round < 2*((len(entries)+255)/256)+10; round++ {
 		if !workspaceID(out.RepositoryID) || !workspaceID(out.SnapshotID) {
 			return WorkspaceTree{}, fmt.Errorf("invalid workspace upload identity")
 		}
@@ -86,7 +86,7 @@ func (c Client) UploadWorkspaceIncremental(ctx context.Context, token, repositor
 			report("complete", count, total, started)
 			return WorkspaceTree{RepositoryID: repo, SnapshotID: id, Entries: entries}, nil
 		}
-		if len(out.Missing) == 0 {
+		if len(out.Missing) == 0 && !out.Checking {
 			return WorkspaceTree{}, fmt.Errorf("incomplete upload without missing blobs")
 		}
 		for _, missing := range out.Missing {
@@ -146,7 +146,7 @@ func (c Client) UploadWorkspaceIncremental(ctx context.Context, token, repositor
 		}
 		stage = time.Now()
 		out = workspaceUpload{}
-		err = c.postJSON(ctx, strings.TrimPrefix(expected, "/api"), struct{}{}, token, &out)
+		err = c.postJSON(ctx, strings.TrimPrefix(expected, "/api")+"?verification_limit=256", struct{}{}, token, &out)
 		report("finalize", 0, 0, stage)
 		if err != nil {
 			return WorkspaceTree{}, err
