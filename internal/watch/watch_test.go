@@ -68,11 +68,11 @@ func TestDiffMatchesAddedDeletedAndChangedFiles(t *testing.T) {
 	dir := repository(t)
 	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("one\nthree\n"), 0600)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("new"), 0600)
-	c, e := sourcesnapshot.CaptureWorktree(context.Background(), sourcesnapshot.CaptureOptions{Path: dir})
+	c, e := sourcesnapshot.CaptureWorktree(context.Background(), sourcesnapshot.CaptureOptions{Workspace: true, Path: dir})
 	if e != nil {
 		t.Fatal(e)
 	}
-	m, _ := sourcesnapshot.Decode(c.Bytes)
+	m, _ := sourcesnapshot.DecodeWorkspace(c.Bytes)
 	d, e := Diff(context.Background(), m)
 	if e != nil {
 		t.Fatal(e)
@@ -469,5 +469,15 @@ func TestHookWaitsOnlyOncePerEditButStopStillWaits(t *testing.T) {
 	}
 	if err := run("Stop"); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Stop should retain its bounded wait: %v", err)
+	}
+}
+
+func TestDiffLimitRemainsIndependentOfRepositorySize(t *testing.T) {
+	var output limitedDiff
+	if _, err := output.Write(make([]byte, 16<<20)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := output.Write([]byte("x")); err == nil || !output.overflow {
+		t.Fatal("diff must remain bounded to 16 MiB")
 	}
 }

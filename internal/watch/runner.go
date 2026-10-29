@@ -84,7 +84,7 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 		r.debugf("%s: scanning working tree", path)
 		scanStarted := time.Now()
 		captureCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		capture, err := sourcesnapshot.CaptureWorktree(captureCtx, sourcesnapshot.CaptureOptions{Path: path, Base: r.Base})
+		capture, err := sourcesnapshot.CaptureWorktree(captureCtx, sourcesnapshot.CaptureOptions{Workspace: true, Path: path, Base: r.Base})
 		cancel()
 		if ctx.Err() != nil {
 			return nil
@@ -167,7 +167,7 @@ func (r Runner) review(ctx context.Context, path string, capture sourcesnapshot.
 	if Read(StatePath(r.Root, path), &requestState) != nil || requestState.Fingerprint != capture.Digest || requestState.Ambiguous {
 		return fmt.Errorf("agent request changed before review")
 	}
-	manifest, err := sourcesnapshot.Decode(capture.Bytes)
+	manifest, err := sourcesnapshot.DecodeWorkspace(capture.Bytes)
 	if err != nil {
 		return err
 	}

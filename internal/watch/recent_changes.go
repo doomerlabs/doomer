@@ -42,7 +42,7 @@ func saveOperationSnapshot(file string, data []byte) error {
 }
 func recentAgentDiff(ctx context.Context, file, beforeDigest string, after sourcesnapshot.Capture) string {
 	defer os.Remove(file)
-	current, err := sourcesnapshot.Decode(after.Bytes)
+	current, err := sourcesnapshot.DecodeWorkspace(after.Bytes)
 	if err != nil {
 		return ""
 	}
@@ -52,14 +52,14 @@ func recentAgentDiff(ctx context.Context, file, beforeDigest string, after sourc
 		before.Blobs = current.Blobs
 	} else {
 		info, err := os.Stat(file)
-		if err != nil || info.Size() > sourcesnapshot.MaxBytes {
+		if err != nil || info.Size() > sourcesnapshot.MaxEncodedWorkspaceBytes {
 			return ""
 		}
 		raw, err := os.ReadFile(file)
 		if err != nil || sourcesnapshot.Digest(raw) != beforeDigest {
 			return ""
 		}
-		before, err = sourcesnapshot.Decode(raw)
+		before, err = sourcesnapshot.DecodeWorkspace(raw)
 		if err != nil {
 			return ""
 		}

@@ -21,8 +21,10 @@ import (
 )
 
 type CaptureOptions struct {
-	Path string
-	Base string
+	// Workspace enables larger local snapshots for reference-based uploads.
+	Workspace bool
+	Path      string
+	Base      string
 }
 
 type SourceMetadata struct {
@@ -41,8 +43,9 @@ type Capture struct {
 }
 
 type gitReader struct {
-	ctx context.Context
-	dir string
+	workspace bool
+	ctx       context.Context
+	dir       string
 }
 
 type boundedBuffer struct {
@@ -73,7 +76,7 @@ func (g gitReader) run(input []byte, args ...string) ([]byte, error) {
 	}
 	cmd.Env = append(cmd.Env, "GIT_OPTIONAL_LOCKS=0", "GIT_NO_REPLACE_OBJECTS=1", "GIT_TERMINAL_PROMPT=0", "GIT_NO_LAZY_FETCH=1")
 	cmd.Stdin = bytes.NewReader(input)
-	output := &boundedBuffer{limit: MaxBytes + MaxFiles*128}
+	output := &boundedBuffer{limit: limitsForWorkspace(g.workspace).content + MaxFiles*128}
 	cmd.Stdout = output
 	// Do not include Git stderr: it can contain credential-bearing remote URLs.
 	if err := cmd.Run(); err != nil {
@@ -131,7 +134,8 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 	if err != nil {
 		return result, err
 	}
-	g := gitReader{ctx: ctx, dir: directory}
+	g := gitReader{ctx: ctx, dir: directory, workspace: opts.Workspace}
+	limits := limitsForWorkspace(opts.Workspace)
 	topBytes, err := g.run(nil, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return result, err
@@ -184,7 +188,7 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		data, mode, err := readWorktreeFile(root, name)
+		data, mode, err := readWorktreeFile(root, name, limits.file)
 		if os.IsNotExist(err) {
 			// A tracked deletion belongs only in base.
 			continue
@@ -204,8 +208,8 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 			total += len(data)
 			m.Blobs[hash] = data
 		}
-		if total > MaxBytes {
-			return result, fmt.Errorf("snapshot content exceeds 16 MiB")
+		if total > limits.content {
+			return result, fmt.Errorf("snapshot content exceeds %d MiB", limits.content>>20)
 		}
 		m.Target = append(m.Target, Entry{Path: name, Hash: hash, Mode: mode})
 		if expected, exists := headTree[name]; !exists || expected.mode != mode || expected.oid != gitBlobHash(data, len(head)) {
@@ -226,15 +230,15 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 	if head != endHead || !bytes.Equal(before.index, after.index) || !equalNames(names, after.names) {
 		return result, fmt.Errorf("worktree changed while capturing; try again after edits finish")
 	}
-	if err := m.Validate(); err != nil {
+	if err := m.validate(opts.Workspace); err != nil {
 		return result, fmt.Errorf("cannot review snapshot: %w (choose --base to review committed changes)", err)
 	}
 	result.Bytes, err = json.Marshal(m)
 	if err != nil {
 		return result, err
 	}
-	if len(result.Bytes) > MaxBytes {
-		return Capture{}, fmt.Errorf("encoded snapshot exceeds the 16 MiB upload limit")
+	if len(result.Bytes) > limits.encoded {
+		return Capture{}, fmt.Errorf("encoded snapshot exceeds %d MiB", limits.encoded>>20)
 	}
 	result.Digest = Digest(result.Bytes)
 	result.BaseTreeHash = TreeHash(m.Base)
@@ -339,7 +343,7 @@ func (g gitReader) worktreeFiles() (worktreeInventory, error) {
 	return result, nil
 }
 
-func readWorktreeFile(root *os.Root, name string) ([]byte, string, error) {
+func readWorktreeFile(root *os.Root, name string, maxFileBytes int) ([]byte, string, error) {
 	path := filepath.FromSlash(name)
 	// Reject symlinks at every component, even ones that point inside the root.
 	for parent := path; parent != "."; parent = filepath.Dir(parent) {
@@ -355,8 +359,8 @@ func readWorktreeFile(root *os.Root, name string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	if !before.Mode().IsRegular() || before.Size() > MaxFileBytes {
-		return nil, "", fmt.Errorf("requires a regular file no larger than 2 MiB")
+	if !before.Mode().IsRegular() || before.Size() > int64(maxFileBytes) {
+		return nil, "", fmt.Errorf("requires a regular file no larger than %d MiB", maxFileBytes>>20)
 	}
 	file, err := root.Open(path)
 	if err != nil {
@@ -370,7 +374,7 @@ func readWorktreeFile(root *os.Root, name string) ([]byte, string, error) {
 	if !os.SameFile(before, opened) || !opened.Mode().IsRegular() {
 		return nil, "", fmt.Errorf("file changed while capturing")
 	}
-	data, err := io.ReadAll(io.LimitReader(file, MaxFileBytes+1))
+	data, err := io.ReadAll(io.LimitReader(file, int64(maxFileBytes)+1))
 	if err != nil {
 		return nil, "", err
 	}
@@ -378,7 +382,7 @@ func readWorktreeFile(root *os.Root, name string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	if len(data) > MaxFileBytes || before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) || before.Mode() != after.Mode() {
+	if len(data) > maxFileBytes || before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) || before.Mode() != after.Mode() {
 		return nil, "", fmt.Errorf("file changed while capturing")
 	}
 	mode := "100644"
@@ -444,8 +448,8 @@ func (g gitReader) readTree(commit string, blobs map[string][]byte) ([]Entry, er
 				return nil, fmt.Errorf("invalid baseline object")
 			}
 			size, err := strconv.Atoi(fields[2])
-			if err != nil || size < 0 || size > MaxFileBytes {
-				return nil, fmt.Errorf("baseline file exceeds 2 MiB")
+			if err != nil || size < 0 || size > limitsForWorkspace(g.workspace).file {
+				return nil, fmt.Errorf("baseline file exceeds %d MiB", limitsForWorkspace(g.workspace).file>>20)
 			}
 			content := make([]byte, size)
 			if _, err := io.ReadFull(reader, content); err != nil {
@@ -460,8 +464,8 @@ func (g gitReader) readTree(commit string, blobs map[string][]byte) ([]Entry, er
 				blobs[hash] = content
 				total += size
 			}
-			if total > MaxBytes {
-				return nil, fmt.Errorf("baseline content exceeds 16 MiB")
+			if total > limitsForWorkspace(g.workspace).content {
+				return nil, fmt.Errorf("baseline content exceeds %d MiB", limitsForWorkspace(g.workspace).content>>20)
 			}
 		}
 	}

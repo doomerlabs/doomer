@@ -220,3 +220,34 @@ func TestTreeHashSharedProtocolVector(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkspaceCapturesLargeRepositoryWithoutChangingEmbeddedLimits(t *testing.T) {
+	dir, _ := sourceRepo(t)
+	for _, name := range []string{"one.bin", "two.bin", "three.bin"} {
+		sourceFile(t, dir, name, strings.Repeat(name[:1], 6<<20))
+	}
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-m", "larger repository")
+	base := git(t, dir, "rev-parse", "HEAD")
+	sourceFile(t, dir, "code.go", "changed\n")
+	captured, err := CaptureWorktree(context.Background(), CaptureOptions{Path: dir, Base: base, Workspace: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(captured.Bytes) <= MaxBytes {
+		t.Fatal("test must exceed the embedded-upload limit")
+	}
+	m, err := DecodeWorkspace(captured.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Target) != 6 {
+		t.Fatalf("lost repository context: %d files", len(m.Target))
+	}
+	if _, err := Decode(captured.Bytes); err == nil {
+		t.Fatal("embedded decoder accepted a workspace-sized payload")
+	}
+	if _, err := CaptureWorktree(context.Background(), CaptureOptions{Path: dir, Base: base}); err == nil {
+		t.Fatal("embedded capture limits changed")
+	}
+}

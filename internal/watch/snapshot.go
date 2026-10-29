@@ -72,13 +72,15 @@ func Diff(ctx context.Context, m sourcesnapshot.Manifest) (string, error) {
 	return output.String(), nil
 }
 
+const maxDiffBytes = 16 << 20
+
 type limitedDiff struct {
 	bytes.Buffer
 	overflow bool
 }
 
 func (b *limitedDiff) Write(p []byte) (int, error) {
-	if b.Len()+len(p) > sourcesnapshot.MaxBytes {
+	if b.Len()+len(p) > maxDiffBytes {
 		b.overflow = true
 		return 0, fmt.Errorf("diff limit")
 	}

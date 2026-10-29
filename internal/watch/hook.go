@@ -32,7 +32,7 @@ type HookInput struct {
 }
 
 func snapshotDigest(ctx context.Context, path string) (string, error) {
-	c, err := sourcesnapshot.CaptureWorktree(ctx, sourcesnapshot.CaptureOptions{Path: path})
+	c, err := sourcesnapshot.CaptureWorktree(ctx, sourcesnapshot.CaptureOptions{Workspace: true, Path: path})
 	if err != nil && strings.Contains(err.Error(), "snapshot contains no changes") {
 		return "clean", nil
 	}
@@ -130,7 +130,7 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 		if input.ToolID == "" {
 			return
 		}
-		capture, e := sourcesnapshot.CaptureWorktree(ctx, sourcesnapshot.CaptureOptions{Path: path})
+		capture, e := sourcesnapshot.CaptureWorktree(ctx, sourcesnapshot.CaptureOptions{Workspace: true, Path: path})
 		fingerprint := capture.Digest
 		if e != nil && strings.Contains(e.Error(), "snapshot contains no changes") {
 			fingerprint = "clean"

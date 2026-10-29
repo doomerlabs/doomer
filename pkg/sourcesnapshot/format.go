@@ -17,6 +17,21 @@ const MaxBytes = 16 << 20
 const MaxFileBytes = 2 << 20
 const MaxFiles = 20000
 
+// Reference-based workspace uploads send blobs independently. These limits are
+// local resource safety ceilings, separate from legacy embedded upload limits.
+const MaxWorkspaceBytes = 1 << 30
+const MaxWorkspaceFileBytes = 20 << 20
+const MaxEncodedWorkspaceBytes = 1536 << 20
+
+type snapshotLimits struct{ content, file, encoded int }
+
+func limitsForWorkspace(workspace bool) snapshotLimits {
+	if workspace {
+		return snapshotLimits{MaxWorkspaceBytes, MaxWorkspaceFileBytes, MaxEncodedWorkspaceBytes}
+	}
+	return snapshotLimits{MaxBytes, MaxFileBytes, MaxBytes}
+}
+
 type Entry struct {
 	Path string `json:"path"`
 	Hash string `json:"hash"`
@@ -32,11 +47,14 @@ type Manifest struct {
 	Blobs   map[string][]byte `json:"blobs"`
 }
 
-func Digest(data []byte) string { h := sha256.Sum256(data); return hex.EncodeToString(h[:]) }
-func Decode(data []byte) (Manifest, error) {
+func Digest(data []byte) string                     { h := sha256.Sum256(data); return hex.EncodeToString(h[:]) }
+func Decode(data []byte) (Manifest, error)          { return decode(data, false) }
+func DecodeWorkspace(data []byte) (Manifest, error) { return decode(data, true) }
+func decode(data []byte, workspace bool) (Manifest, error) {
 	var m Manifest
-	if len(data) > MaxBytes {
-		return m, fmt.Errorf("snapshot exceeds 16 MiB")
+	limits := limitsForWorkspace(workspace)
+	if len(data) > limits.encoded {
+		return m, fmt.Errorf("encoded snapshot exceeds %d MiB", limits.encoded>>20)
 	}
 	d := json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
@@ -47,12 +65,14 @@ func Decode(data []byte) (Manifest, error) {
 	if !json.Valid(data) {
 		return m, fmt.Errorf("invalid snapshot JSON")
 	}
-	if err := m.Validate(); err != nil {
+	if err := m.validate(workspace); err != nil {
 		return m, err
 	}
 	return m, nil
 }
-func (m Manifest) Validate() error {
+func (m Manifest) Validate() error { return m.validate(false) }
+func (m Manifest) validate(workspace bool) error {
+	limits := limitsForWorkspace(workspace)
 	if m.Version != 1 || (m.Scope != "worktree" && m.Scope != "staged" && m.Scope != "branch") {
 		return fmt.Errorf("unsupported snapshot version or scope")
 	}
@@ -75,7 +95,7 @@ func (m Manifest) Validate() error {
 				return fmt.Errorf("unsupported file type: %s", e.Path)
 			}
 			data, ok := m.Blobs[e.Hash]
-			if !ok || len(e.Hash) != 64 || Digest(data) != e.Hash || len(data) > MaxFileBytes {
+			if !ok || len(e.Hash) != 64 || Digest(data) != e.Hash || len(data) > limits.file {
 				return fmt.Errorf("invalid or oversized file: %s", e.Path)
 			}
 			if bytes.HasPrefix(data, []byte("version https://git-lfs.github.com/spec/v1\n")) {
@@ -99,7 +119,7 @@ func (m Manifest) Validate() error {
 			}
 		}
 	}
-	if total > MaxBytes || len(used) != len(m.Blobs) {
+	if total > limits.content || len(used) != len(m.Blobs) {
 		return fmt.Errorf("snapshot contains oversized or unused blobs")
 	}
 	if slices.Equal(m.Base, m.Target) {

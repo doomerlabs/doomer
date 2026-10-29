@@ -76,6 +76,11 @@ Git checkout it waits for discovery. Use `doomer watch .` to watch only the curr
 checkout, or `doomer watch --debug` for scan, discovery, and review-status details.
 Diagnostics do not print source contents, prompts, review responses, or credentials.
 
+Workspace snapshots have a 1 GiB content safety ceiling (1.5 GiB encoded locally),
+a 20 MiB per-file limit, and a separate 16 MiB diff limit. These are separate from
+the smaller legacy embedded-upload limits below. Uploads still send only missing
+content blobs; unchanged files are reused.
+
 Keep `watch` running in a separate terminal, then edit the approved repository
 in Codex. After files settle, Doomer uploads a bounded snapshot and starts the
 hosted workspace review. The synchronous hook waits at most 30 seconds for the
