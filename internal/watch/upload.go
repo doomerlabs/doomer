@@ -3,6 +3,7 @@ package watch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 	"path/filepath"
@@ -37,8 +38,14 @@ func (r Runner) uploadSnapshots(ctx context.Context, path, repository string, ma
 	cachePath := filepath.Join(r.Root, "uploads", Key(r.Config.API+"\x00"+r.Config.Profile+"\x00"+r.Token+"\x00"+path)+".json")
 	var cache uploadCache
 	_ = Read(cachePath, &cache)
+	uploadedFiles, uploadedBytes, completedReports := 0, 0, 0
 	progress := func(label string) adversarylabs.WorkspaceUploadProgress {
 		return func(stage string, files, bytes int, elapsed time.Duration) {
+			if stage == "complete" {
+				uploadedFiles += files
+				uploadedBytes += bytes
+				completedReports++
+			}
 			r.debugf("%s: %s %s: %d files, %d bytes, %s", path, label, stage, files, bytes, elapsed.Round(time.Millisecond))
 		}
 	}
@@ -60,5 +67,22 @@ func (r Runner) uploadSnapshots(ctx context.Context, path, repository string, ma
 	if err := Write(cachePath, uploadCache{Base: base, Head: head}); err != nil {
 		r.debugf("%s: upload cache could not be saved", path)
 	}
+	if completedReports == 2 {
+		r.logf("%s: sent %s of file content (%d blobs); unchanged content reused.", filepath.Base(path), formatUploadBytes(uploadedBytes), uploadedFiles)
+	}
 	return base.RepositoryID, base.SnapshotID, head.SnapshotID, nil
+}
+
+func formatUploadBytes(size int) string {
+	if size < 1024 {
+		return fmt.Sprintf("%d B", size)
+	}
+	value := float64(size)
+	for _, unit := range []string{"KiB", "MiB", "GiB"} {
+		value /= 1024
+		if value < 1024 || unit == "GiB" {
+			return fmt.Sprintf("%.1f %s", value, unit)
+		}
+	}
+	return ""
 }

@@ -216,7 +216,11 @@ func (r Runner) review(ctx context.Context, path string, capture sourcesnapshot.
 	if repo == "" {
 		repo = "local/" + filepath.Base(path)
 	}
-	r.logf("%s: uploading snapshots for review.", filepath.Base(path))
+	sourceBytes := 0
+	for _, data := range manifest.Blobs {
+		sourceBytes += len(data)
+	}
+	r.logf("%s: uploading snapshots for review (%s source; only missing content is sent).", filepath.Base(path), formatUploadBytes(sourceBytes))
 	uploadStarted := time.Now()
 	baseRepo, baseID, headID, err := r.uploadSnapshots(ctx, path, repo, manifest)
 	if err != nil {
