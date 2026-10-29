@@ -1,5 +1,7 @@
 # Doomer CLI
 
+<!-- Temporary watch test; safe to remove. -->
+
 A Cobra/Viper client for the Doomer SaaS. It supports connection
 profiles, login, logout, packaging and publishing private adversaries, and submitting
 Git worktrees for hosted review with `doomer review`. Local `run` execution is not implemented.
@@ -16,6 +18,114 @@ activate it. You can also enter the shell with `nix develop`.
 go build -o bin/doomer .
 ./bin/doomer --help
 ```
+
+## Watch repositories while you code
+
+This first version uses an existing logged-in CLI profile and the same workspace
+review API as the Mac app. The Mac app is not required. No anonymous submissions
+or skill installation are included yet.
+
+```sh
+go build -o bin/doomer .
+./bin/doomer login                  # only if this profile is not already logged in
+./bin/doomer setup                 # approve all repositories used with this profile
+./bin/doomer watch
+```
+
+Run `setup` in a terminal. On a Mac or Linux desktop it opens a browser to explain
+what is shared and ask you to allow or cancel. Over SSH or on a headless server,
+it asks in the terminal. If the browser cannot open, it falls back to the terminal.
+
+```sh
+./bin/doomer setup --no-browser      # terminal approval, including over SSH
+./bin/doomer setup --browser         # explicitly choose browser approval
+./bin/doomer setup --yes             # explicitly approve and install without prompting
+./bin/doomer --profile local setup   # approval for this profile and its API only
+```
+
+Noninteractive setup requires `--yes`; it never treats piped input as approval.
+`--yes` approves the same source uploads and hook installation described by the
+interactive flow. Setup prints the profile, destination, and scope before saving.
+Without directory arguments, setup approves all current and future repositories
+used with the selected profile. Use `setup /path/to/repo` to limit approval to
+named repositories. Hooks discover repositories as you work; Doomer does not
+scan the whole disk. Base and current source snapshots, including files outside
+the diff, and agent review responses may be uploaded while `watch` is running.
+
+Browser setup uses `/cli/setup` at the selected profile's API origin. It passes
+setup details in a URL fragment, never login credentials. Approval returns to a
+one-time loopback callback on the same machine; remote terminals should use
+`--no-browser`. Browser login does not change the selected CLI account/profile.
+Approval expires after five minutes, and cancelling leaves existing settings alone.
+
+In Codex, open `/hooks` and review/trust the new definitions. The command preserves
+unrelated hooks and backs up existing settings. It does not automatically grant
+Codex permissions or start a background process.
+
+`watch` prints each repository it watches, detected changes, uploads, and initial
+assessment progress. Starting the watcher never uploads existing changes. Only
+an attributable coding-agent edit during this watcher session starts a review;
+manual edits and prompts without edits do not. Existing dirty files remain part
+of the reviewed snapshot once an agent edit triggers it. Direct/manual review is
+not part of this watch workflow.
+
+With no directories, it immediately includes the current
+Git checkout if approved for this profile. With all-repository approval, it also
+continues discovering repositories through the coding-agent hooks. Outside a
+Git checkout it waits for discovery. Use `doomer watch .` to watch only the current
+checkout, or `doomer watch --debug` for scan, discovery, and review-status details.
+Diagnostics do not print source contents, prompts, review responses, or credentials.
+
+Keep `watch` running in a separate terminal, then edit the approved repository
+in Codex. After files settle, Doomer uploads a bounded snapshot and starts the
+hosted workspace review. The synchronous hook waits at most 30 seconds for the
+initial assessment and otherwise releases the agent silently. The full review
+continues on the service; it is never waited on by the hook. New leads include a
+link to the web review and instructions to investigate within your task's scope.
+Outcome lines in the agent's final reply are captured locally and uploaded by the
+running watcher. Missing agent outcomes are never invented.
+
+After an edit, the hook asks the agent to submit up to five concrete review
+hypotheses through a local CLI command. That command only emits a tool-result envelope; the
+trusted hook saves the questions, and the watcher sends them with the edit for
+SubQ assessment. Requests are bound to that conversation and edit; stale replies
+are rejected. If no questions arrive within 20 seconds, the watcher uses its
+independent System1 checks instead. The agent can continue if submission fails.
+
+
+After the first upload, the watcher reuses stored snapshots and sends only changed
+file entries, deletions, and file contents the service is missing. `--debug` shows
+manifest, blob, finalization, and review-submission timings. Cached snapshot
+references are isolated by destination, profile, login, and checkout.
+
+```sh
+./bin/doomer --profile dev setup /path/to/repo --agent both
+./bin/doomer --profile dev watch /path/to/repo
+./bin/doomer --profile dev setup --status
+./bin/doomer --profile dev setup --uninstall
+```
+
+`--agent` accepts `codex` (default), `claude`, or `both`. Hooks and watched paths are
+isolated by API endpoint and login profile. Changing the login requires renewed
+setup approval. `setup --uninstall` removes this profile's CLI hooks and revokes
+its consent; a running watcher stops when it detects revocation. Ctrl+C stops a
+watcher without uninstalling it. Existing Mac-app hooks are preserved: stop the
+Mac app while testing this CLI so both integrations do not review the same edits.
+
+For a directory list, pass `watch --config watch.json` containing:
+
+```json
+{"directories":["/path/to/repo","/path/to/another-repo"]}
+```
+
+Every listed repository must already be approved through `setup`, unless you chose
+all-repository approval. No recursive
+repository discovery is performed. `--base` selects an explicit local baseline.
+The triggering user request is included as review context; it is not attributed
+to every changed line. This version does not yet carry prompt-to-line provenance or associate
+commits with PR reviews. Treat this as a local test build, not an unattended
+system service. Authentication/network failures remain visible in the watcher
+terminal; they do not block the coding agent.
 
 ## Finding evidence
 
