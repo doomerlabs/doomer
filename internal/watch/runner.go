@@ -74,11 +74,15 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 	var last, observed string
 	var changedAt time.Time
 	var nextRetry time.Time
+	var lastHookDiagnostic time.Time
 	tick := time.NewTicker(r.Interval)
 	defer tick.Stop()
 	for {
 		if ctx.Err() != nil {
 			return nil
+		}
+		if r.Debug {
+			lastHookDiagnostic = r.logHookDiagnostics(path, lastHookDiagnostic)
 		}
 		r.flush(ctx)
 		r.debugf("%s: scanning working tree", path)

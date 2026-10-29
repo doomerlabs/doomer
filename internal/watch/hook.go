@@ -53,7 +53,15 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 	if len(agents) > 0 && (agents[0] == "codex" || agents[0] == "claude") {
 		agent = agents[0]
 	}
+	diagnostic := hookDiagnostic{At: time.Now(), Event: input.Event, Tool: input.Tool, HasToolID: input.ToolID != "", Status: "received"}
+	defer func() {
+		_ = Write(filepath.Join(root, "hook-diagnostics", Key(input.Session+input.Event)+".json"), diagnostic)
+	}()
 	path, pathErr := hookRepository(ctx, input)
+	diagnostic.Repository = path
+	if pathErr != nil {
+		diagnostic.Status = pathErr.Error()
+	}
 	allowed := pathErr == nil && Allowed(cfg, path)
 	owner := Owner{input.Session, input.Turn}
 	turnFile := TurnPath(root, input.Session)
@@ -103,6 +111,9 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 		}
 	}
 	if !allowed {
+		if pathErr == nil {
+			diagnostic.Status = "repository not approved"
+		}
 		return
 	}
 	if cfg.AllRepositories && input.Event == "PreToolUse" {
@@ -128,6 +139,7 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 	}
 	if input.Event == "PreToolUse" || input.Event == "PostToolUse" {
 		if input.ToolID == "" {
+			diagnostic.Status = "missing tool use ID"
 			return
 		}
 		capture, e := sourcesnapshot.CaptureWorktree(ctx, sourcesnapshot.CaptureOptions{Workspace: true, Path: path})
@@ -137,6 +149,7 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 			e = nil
 		}
 		if e != nil {
+			diagnostic.Status = "capture failed: " + e.Error()
 			if input.Event == "PostToolUse" {
 				deferCompletedEdit(root, path, owner, input.ToolID)
 			}
@@ -210,6 +223,10 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 		})
 		if input.Event == "PostToolUse" {
 			_ = os.Remove(snapshotFile)
+		}
+		diagnostic.Status = "processed"
+		if err != nil {
+			diagnostic.Status = "state update failed: " + err.Error()
 		}
 		if err != nil || input.Event == "PreToolUse" || responsesRecorded {
 			return
