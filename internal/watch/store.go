@@ -33,6 +33,7 @@ type Operation struct {
 	Attributable bool
 }
 type State struct {
+	Agent               string `json:"agent,omitempty"`
 	QuestionRequest     string
 	HypothesesSubmitted bool
 	Hypotheses          []adversarylabs.WorkspaceHypothesis
@@ -66,6 +67,7 @@ type Pending struct {
 	ReviewID string
 }
 type Turn struct {
+	Agent         string   `json:"agent,omitempty"`
 	ResponseToken string   `json:"response_token,omitempty"`
 	Repositories  []string `json:"repositories,omitempty"`
 	Owner         Owner

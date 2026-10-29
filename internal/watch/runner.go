@@ -196,7 +196,7 @@ func (r Runner) review(ctx context.Context, path string, capture sourcesnapshot.
 		return err
 	}
 	hostname, _ := os.Hostname()
-	input := adversarylabs.WorkspaceSubmission{Hypotheses: requestState.Hypotheses, AgentDiff: requestState.AgentDiff, RepositoryID: baseRepo, SnapshotID: headID, BaseSnapshotID: baseID, ReviewID: rev.ID, GroupID: rev.Group, Revision: rev.Number, Repository: repo, Branch: capture.Source.Branch, Diff: diff, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "hostname": hostname}}
+	input := adversarylabs.WorkspaceSubmission{Hypotheses: requestState.Hypotheses, AgentDiff: requestState.AgentDiff, RepositoryID: baseRepo, SnapshotID: headID, BaseSnapshotID: baseID, ReviewID: rev.ID, GroupID: rev.Group, Revision: rev.Number, Repository: repo, Branch: capture.Source.Branch, Diff: diff, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "hostname": hostname, "agent": requestState.Agent}}
 	if prompt := strings.TrimSpace(requestState.Prompt); prompt != "" {
 		text := []rune(prompt)
 		if len(text) > 4000 {

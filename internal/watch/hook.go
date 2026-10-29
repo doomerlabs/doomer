@@ -41,13 +41,17 @@ func snapshotDigest(ctx context.Context, path string) (string, error) {
 
 // Hook always emits valid, nonblocking JSON on missing state, network outages,
 // unknown ownership or timeout. Only actionable new leads continue the agent.
-func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Writer) {
+func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Writer, agents ...string) {
 	response := map[string]any{}
 	responsesRecorded := false
 	defer func() { _ = json.NewEncoder(out).Encode(response) }()
 	var input HookInput
 	if json.NewDecoder(io.LimitReader(in, 1<<20)).Decode(&input) != nil || input.Session == "" {
 		return
+	}
+	agent := "other"
+	if len(agents) > 0 && (agents[0] == "codex" || agents[0] == "claude") {
+		agent = agents[0]
 	}
 	path, pathErr := hookRepository(ctx, input)
 	allowed := pathErr == nil && Allowed(cfg, path)
@@ -65,7 +69,7 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 		if allowed || cfg.AllRepositories {
 			prompt = input.Prompt
 		}
-		_ = Locked(root, input.Session, func() error { return Write(turnFile, Turn{Owner: owner, Prompt: prompt, Next: 1}) })
+		_ = Locked(root, input.Session, func() error { return Write(turnFile, Turn{Owner: owner, Prompt: prompt, Next: 1, Agent: agent}) })
 		if allowed && cfg.AllRepositories {
 			_ = Write(filepath.Join(root, "discovered", Key(path)+".json"), path)
 		}
@@ -108,7 +112,7 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 		_ = Locked(root, input.Session, func() error {
 			_ = Read(turnFile, &turn)
 			if turn.Owner != owner {
-				turn = Turn{Owner: owner, Next: 1}
+				turn = Turn{Owner: owner, Next: 1, Agent: agent}
 			}
 			for _, existing := range turn.Repositories {
 				if existing == path {
@@ -190,6 +194,7 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 						s.RequestedAt = time.Now()
 						s.Fingerprint = fingerprint
 						s.Prompt = turn.Prompt
+						s.Agent = agent
 						s.QuestionRequest = ""
 						s.HypothesesSubmitted = false
 						s.Hypotheses = nil

@@ -415,3 +415,27 @@ func TestAgentEditCanTriggerReviewWithExistingDirtyFiles(t *testing.T) {
 		t.Fatal("agent edit did not request review")
 	}
 }
+
+func TestHookRecordsExplicitCodingAgent(t *testing.T) {
+	for _, agent := range []string{"codex", "claude", "unsupported"} {
+		t.Run(agent, func(t *testing.T) {
+			dir := repository(t)
+			root := t.TempDir()
+			cfg := Config{Directories: []string{dir}}
+			input := HookInput{Session: "session", Turn: "turn", CWD: dir, Event: "UserPromptSubmit", Prompt: "Update docs"}
+			raw, _ := json.Marshal(input)
+			Hook(context.Background(), root, cfg, strings.NewReader(string(raw)), io.Discard, agent)
+			var turn Turn
+			if err := Read(TurnPath(root, "session"), &turn); err != nil {
+				t.Fatal(err)
+			}
+			want := agent
+			if want == "unsupported" {
+				want = "other"
+			}
+			if turn.Agent != want {
+				t.Fatalf("agent=%q want %q", turn.Agent, want)
+			}
+		})
+	}
+}

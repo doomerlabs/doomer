@@ -171,12 +171,12 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 			}
 			prefix = "env DOOMER_CONFIG_DIR=" + watching.Quote(absolute) + " "
 		}
-		command := prefix + watching.Quote(exe) + " --profile " + watching.Quote(*profile) + " --api-url " + watching.Quote(*api) + " watch hook --state " + watching.Quote(root) + " 2>/dev/null || printf '{}'"
+		command := prefix + watching.Quote(exe) + " --profile " + watching.Quote(*profile) + " --api-url " + watching.Quote(*api) + " watch hook --state " + watching.Quote(root)
 		if err = watching.Write(file, cfg); err != nil {
 			return err
 		}
 		for _, agent := range selected {
-			if err = watching.Install(watching.HookFile(home, agent), command, marker, false); err != nil {
+			if err = watching.Install(watching.HookFile(home, agent), command+" --agent "+watching.Quote(agent)+" 2>/dev/null || printf '{}'", marker, false); err != nil {
 				return err
 			}
 		}
@@ -397,7 +397,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	c.Flags().StringVar(&config, "config", "", "JSON file listing already-approved directories")
 	c.Flags().StringVar(&base, "base", "", "local baseline ref")
 	c.Flags().DurationVar(&interval, "interval", 2*time.Second, "local change scan interval")
-	var state string
+	var state, hookAgent string
 	hook := &cobra.Command{Use: "hook", Hidden: true, RunE: func(c *cobra.Command, _ []string) error {
 		expected, _, err := watchPaths(*api, *profile)
 		if err != nil || state != expected {
@@ -416,10 +416,11 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 		}
 		ctx, cancel := context.WithTimeout(c.Context(), 30*time.Second)
 		defer cancel()
-		watching.Hook(ctx, state, cfg, c.InOrStdin(), c.OutOrStdout())
+		watching.Hook(ctx, state, cfg, c.InOrStdin(), c.OutOrStdout(), hookAgent)
 		return nil
 	}}
 	hook.Flags().StringVar(&state, "state", "", "private watch state directory")
+	hook.Flags().StringVar(&hookAgent, "agent", "other", "coding agent identity")
 	c.AddCommand(hook)
 	var hypothesisState, hypothesisID string
 	hypotheses := &cobra.Command{Use: "hypotheses", Hidden: true, Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
