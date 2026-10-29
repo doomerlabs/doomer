@@ -330,7 +330,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 				fmt.Fprintf(output, "[debug %s] %s\n", time.Now().Format("15:04:05"), fmt.Sprintf(format, args...))
 			}
 		}
-		debugf("scan interval=%s; discovery=%t; initial repositories=%d", interval, discover, len(dirs))
+		debugf("filesystem events enabled; fallback scan interval=%s; discovery=%t; initial repositories=%d", interval, discover, len(dirs))
 		var group sync.WaitGroup
 		failures := make(chan error, 16)
 		running := map[string]bool{}
@@ -396,7 +396,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	c.Flags().BoolVar(&debug, "debug", false, "show repository discovery, scans, uploads, and review status (no source contents)")
 	c.Flags().StringVar(&config, "config", "", "JSON file listing already-approved directories")
 	c.Flags().StringVar(&base, "base", "", "local baseline ref")
-	c.Flags().DurationVar(&interval, "interval", 2*time.Second, "local change scan interval")
+	c.Flags().DurationVar(&interval, "interval", time.Minute, "fallback scan interval when filesystem events are missed")
 	var state, hookAgent string
 	hook := &cobra.Command{Use: "hook", Hidden: true, RunE: func(c *cobra.Command, _ []string) error {
 		expected, _, err := watchPaths(*api, *profile)

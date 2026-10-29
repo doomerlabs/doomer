@@ -72,17 +72,35 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 		started = time.Now()
 	}
 	var last, observed string
-	var changedAt time.Time
 	var nextRetry time.Time
 	var lastHookDiagnostic time.Time
-	tick := time.NewTicker(r.Interval)
-	defer tick.Stop()
+	if r.Interval <= 0 {
+		r.Interval = time.Minute
+	}
+	var events *filesystemEvents
+	if !once {
+		var eventErr error
+		events, eventErr = newFilesystemEvents(ctx, r, path)
+		if eventErr != nil {
+			r.logf("%s: filesystem notifications unavailable; checking every %s (%s).", filepath.Base(path), r.Interval, eventErr)
+		} else {
+			defer events.watcher.Close()
+			r.debugf("%s: filesystem notifications enabled; fallback scan every %s", path, r.Interval)
+		}
+	}
 	for {
+		var nextWake time.Duration
 		if ctx.Err() != nil {
 			return nil
 		}
-		if r.Debug {
+		if r.Debug && events == nil {
 			lastHookDiagnostic = r.logHookDiagnostics(path, lastHookDiagnostic)
+		}
+		if events != nil && time.Since(events.refreshedAt) >= r.Interval {
+			if err := events.addTree(ctx, path); err != nil {
+				r.debugf("%s: refreshing directory watches failed: %s", path, err)
+			}
+			events.refreshedAt = time.Now()
 		}
 		r.flush(ctx)
 		r.debugf("%s: scanning working tree", path)
@@ -104,6 +122,9 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 				r.logf("%s: %s", path, message)
 			}
 			observed = message
+			if strings.Contains(err.Error(), "worktree changed while capturing") {
+				nextWake = filesystemDebounce
+			}
 			if once {
 				if strings.Contains(message, "snapshot contains no changes") {
 					r.logf("No changes to review.")
@@ -119,12 +140,11 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 			requested := agentReviewRequested(r.Root, path, capture.Digest, started)
 			if observed != capture.Digest {
 				if requested {
-					r.logf("%s: agent change detected; waiting for files to settle.", filepath.Base(path))
+					r.logf("%s: agent change detected.", filepath.Base(path))
 				} else {
 					r.debugf("%s: local snapshot recorded; waiting for an agent edit", path)
 				}
 				observed = capture.Digest
-				changedAt = time.Now()
 			}
 			if !requested {
 				r.debugf("%s: no new review request from an agent; no upload", path)
@@ -133,7 +153,14 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 				}
 			} else if !once && awaitingHypotheses(r.Root, path) {
 				r.debugf("%s: waiting briefly for agent review hypotheses", path)
-			} else if capture.Digest != last && (once || time.Since(changedAt) >= 750*time.Millisecond) && time.Now().After(nextRetry) {
+				var state State
+				if Read(StatePath(r.Root, path), &state) == nil {
+					nextWake = time.Until(state.RequestedAt.Add(hypothesisGrace))
+				}
+				if nextWake <= 0 {
+					nextWake = time.Millisecond
+				}
+			} else if capture.Digest != last && time.Now().After(nextRetry) {
 				reviewCtx, stop := context.WithTimeout(ctx, 2*time.Minute)
 				err = r.review(reviewCtx, path, capture)
 				stop()
@@ -150,6 +177,7 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 				} else {
 					r.logf("%s: review unavailable; retrying later (%s)", path, err)
 					nextRetry = time.Now().Add(15 * time.Second)
+					nextWake = 15 * time.Second
 				}
 				if once {
 					return err
@@ -158,16 +186,15 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 				r.debugf("%s: unchanged since last review", path)
 			} else if time.Now().Before(nextRetry) {
 				r.debugf("%s: retry in %s", path, time.Until(nextRetry).Round(time.Second))
+				nextWake = time.Until(nextRetry)
 			} else {
 				r.debugf("%s: waiting for files to settle", path)
 			}
 		} else {
 			r.debugf("%s: working tree clean", path)
 		}
-		select {
-		case <-ctx.Done():
+		if !events.wait(ctx, r.Interval, nextWake) {
 			return nil
-		case <-tick.C:
 		}
 	}
 }

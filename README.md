@@ -76,6 +76,10 @@ Git checkout it waits for discovery. Use `doomer watch .` to watch only the curr
 checkout, or `doomer watch --debug` for scan, discovery, and review-status details.
 Diagnostics do not print source contents, prompts, review responses, or credentials.
 
+The watcher uses filesystem notifications with a 750 ms debounce. A one-minute
+fallback scan catches missed events; `--interval` adjusts that fallback. Git-ignored
+files and directories do not trigger reviews.
+
 Workspace snapshots have a 1 GiB content safety ceiling (1.5 GiB encoded locally),
 a 20 MiB per-file limit, and a separate 16 MiB diff limit. These are separate from
 the smaller legacy embedded-upload limits below. Uploads still send only missing
