@@ -1,0 +1,21 @@
+internal/watch/upload_progress.go
+  s_87045b9172083a::t_4904b50044d304 13,48-51
+internal/watch/upload_progress_test.go
+  s_87045b9172083a::t_fb851cad8f78fd 56-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e1e9fcde76ad1ca8c7f65ee968daae2b558ebdd",
+  "prompts": {},
+  "sessions": {
+    "s_87045b9172083a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a179c7-5eae-7cc0-9084-dae16889fd2b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
