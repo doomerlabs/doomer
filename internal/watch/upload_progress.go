@@ -10,6 +10,7 @@ type uploadProgressDisplay struct {
 	now         func() time.Time
 	lastReport  time.Time
 	sent, total int
+	reported    int
 	finished    bool
 }
 
@@ -44,6 +45,9 @@ func (d *uploadProgressDisplay) update(stage string, _ int, bytes int, _ time.Du
 	if now.Sub(d.lastReport) < 5*time.Second || d.sent+current == 0 {
 		return
 	}
-	d.log("%s: sending contents · %s sent so far", d.label, formatUploadBytes(d.sent+current))
+	// Pack retries restart their byte counter. Keep the display monotonic
+	// without counting failed attempts as additional completed content.
+	d.reported = max(d.reported, d.sent+current)
+	d.log("%s: sending contents · %s sent so far", d.label, formatUploadBytes(d.reported))
 	d.lastReport = now
 }

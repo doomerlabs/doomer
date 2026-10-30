@@ -53,3 +53,32 @@ func TestLongUploadProgressIsThrottledAcrossPhaseChanges(t *testing.T) {
 		t.Fatal(lines)
 	}
 }
+
+func TestUploadRetryProgressNeverMovesBackward(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	var lines []string
+	d := uploadProgressDisplay{label: "repo", now: func() time.Time { return now }, log: func(f string, a ...any) { lines = append(lines, fmt.Sprintf(f, a...)) }}
+	d.update("transfer_total", 1, 100, 0)
+	for _, bytes := range []int{80, 10, 45} {
+		now = now.Add(5 * time.Second)
+		d.update("transfer", 1, bytes, 0)
+	}
+	now = now.Add(5 * time.Second)
+	d.update("transfer_done", 1, 100, 0)
+	d.update("transfer_done", 1, 100, 0)
+	d.update("transfer_total", 1, 50, 0)
+	now = now.Add(5 * time.Second)
+	d.update("transfer", 1, 20, 0)
+	want := []string{"80 B", "80 B", "80 B", "100 B", "120 B"}
+	if len(lines) != len(want) {
+		t.Fatalf("unexpected progress: %v", lines)
+	}
+	for i, expected := range want {
+		if !strings.Contains(lines[i], expected+" sent so far") {
+			t.Fatalf("line %d: %s; want %s", i, lines[i], expected)
+		}
+	}
+	if d.sent != 100 {
+		t.Fatalf("retry bytes incorrectly counted as complete: %d", d.sent)
+	}
+}
