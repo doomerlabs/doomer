@@ -258,7 +258,7 @@ func TestWatchReportsDetectionAndGatesDiagnostics(t *testing.T) {
 			t.Fatal(err)
 		}
 		log := output.String()
-		for _, message := range []string{"change detected", "uploading snapshots", "look closer review requested", "look closer review completed", "https://example.com/worktree/reviews/review"} {
+		for _, message := range []string{"change detected", "preparing local checkout contents", "look closer review requested", "look closer review completed", "https://example.com/worktree/reviews/review"} {
 			if !strings.Contains(log, message) {
 				t.Fatalf("missing %q: %s", message, log)
 			}
@@ -339,7 +339,7 @@ func TestWatchStartupAndManualEditsDoNotUpload(t *testing.T) {
 	if err := r.Run(context.Background(), dir, true); err != nil {
 		t.Fatal(err)
 	}
-	if client.starts != 0 || strings.Contains(output.String(), "uploading snapshots") {
+	if client.starts != 0 || strings.Contains(output.String(), "preparing local checkout contents") {
 		t.Fatal(output.String())
 	}
 	// Even a valid old agent request must not cause a review on watcher restart.

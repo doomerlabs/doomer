@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -8,6 +9,19 @@ import (
 	"testing"
 	"time"
 )
+
+func TestCancelledWatcherStartupDoesNotWarnAboutFilesystemNotifications(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var output bytes.Buffer
+	runner := Runner{Root: t.TempDir(), Output: &output}
+	if err := runner.Run(ctx, t.TempDir(), false); err != nil {
+		t.Fatalf("cancelled watcher returned an error: %v", err)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("cancelled watcher emitted a warning: %s", output.String())
+	}
+}
 
 func TestFilesystemChangesAndHookRequestsWakeWatcher(t *testing.T) {
 	for _, change := range []string{"existing-file", "new-directory", "hook-request"} {

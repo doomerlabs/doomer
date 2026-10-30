@@ -6,11 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 )
@@ -80,54 +76,35 @@ func TestWorkspaceIncrementalOnlyFallsBackOnExpiredSnapshot(t *testing.T) {
 	}
 }
 
-func TestWorkspaceUploadsBlobsWithBoundedConcurrency(t *testing.T) {
+func TestWorkspaceBatchesMissingFilesInOnePack(t *testing.T) {
 	blobs := map[string][]byte{}
 	entries := []sourcesnapshot.Entry{}
-	missing := []map[string]any{}
+	missing := []workspaceMissing{}
 	for i := 0; i < 5; i++ {
 		data := []byte(fmt.Sprintf("file-%d", i))
-		sha := sourcesnapshot.Digest(data)
-		blobs[sha] = data
-		entries = append(entries, sourcesnapshot.Entry{Path: fmt.Sprintf("%d.go", i), Hash: sha, Mode: "100644"})
-		missing = append(missing, map[string]any{"sha256": sha, "size": len(data), "upload_url": "/api/v1/repositories/blobs/" + sha})
+		hash := sourcesnapshot.Digest(data)
+		blobs[hash] = data
+		entries = append(entries, sourcesnapshot.Entry{Path: fmt.Sprintf("%d.go", i), Hash: hash, Mode: "100644"})
+		missing = append(missing, workspaceMissing{SHA: hash, Size: len(data), URL: "/api/v1/repositories/blobs/" + hash})
 	}
-	var active, peak atomic.Int32
-	release := make(chan struct{})
-	var once sync.Once
+	uploads := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/api/v1/repositories":
-			json.NewEncoder(w).Encode(map[string]any{"repository_id": "repo", "snapshot_id": "snapshot", "missing": missing})
-		case strings.Contains(r.URL.Path, "/blobs/"):
-			n := active.Add(1)
-			defer active.Add(-1)
-			for old := peak.Load(); n > old; old = peak.Load() {
-				if peak.CompareAndSwap(old, n) {
-					break
-				}
-			}
-			if n == 4 {
-				once.Do(func() { close(release) })
-			}
-			select {
-			case <-release:
-			case <-r.Context().Done():
-				return
-			}
-			w.Write([]byte(`{}`))
-		default:
-			w.Write([]byte(`{"repository_id":"repo","snapshot_id":"snapshot","complete":true}`))
+		if handleTestPack(t, w, r, func(_ []byte) { uploads++ }) {
+			return
 		}
+		if r.URL.Path == "/api/v1/repositories" {
+			json.NewEncoder(w).Encode(map[string]any{"repository_id": "repo", "snapshot_id": "snapshot", "missing": missing, "pack_url": "/api/v1/repositories/packs"})
+			return
+		}
+		w.Write([]byte(`{"repository_id":"repo","snapshot_id":"snapshot","complete":true}`))
 	}))
 	defer server.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
 	c := NewClientWithBaseURL(ConfigStore{}, server.URL+"/api")
-	if _, _, err := c.UploadWorkspaceTree(ctx, "fixture", "org/repo", entries, blobs); err != nil {
+	if _, _, err := c.UploadWorkspaceTree(context.Background(), "fixture", "org/repo", entries, blobs); err != nil {
 		t.Fatal(err)
 	}
-	if peak.Load() != 4 {
-		t.Fatalf("parallel uploads: %d", peak.Load())
+	if uploads != 1 {
+		t.Fatalf("expected one pack, got %d uploads", uploads)
 	}
 }
 

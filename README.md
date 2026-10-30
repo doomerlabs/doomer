@@ -21,33 +21,34 @@ go build -o bin/doomer .
 
 ## Watch repositories while you code
 
-This first version uses an existing logged-in CLI profile and the same workspace
-review API as the Mac app. The Mac app is not required. No anonymous submissions
-or skill installation are included yet.
+The CLI uses the same workspace review API as the Mac app. Without a login,
+it runs free anonymous Look Closer reviews and returns an unlisted review link.
+A signed-in profile can also run Deep review. The Mac app is not required.
 
 ```sh
 go build -o bin/doomer .
-./bin/doomer login                  # only if this profile is not already logged in
-./bin/doomer setup                 # approve all repositories used with this profile
+./bin/doomer login                  # optional: enables authenticated reviews
 ./bin/doomer watch
 ```
 
-Run `setup` in a terminal. On a Mac or Linux desktop it opens a browser to explain
+Run `watch` in a terminal. For anonymous use, invoking the command authorizes
+source uploads and installs the integration. Signed-in profiles retain their
+existing upload-approval flow. For signed-in setup, a Mac or Linux desktop opens a browser to explain
 what is shared and ask you to allow or cancel. Over SSH or on a headless server,
 it asks in the terminal. If the browser cannot open, it falls back to the terminal.
 
 ```sh
-./bin/doomer setup --no-browser      # terminal approval, including over SSH
-./bin/doomer setup --browser         # explicitly choose browser approval
-./bin/doomer setup --yes             # explicitly approve and install without prompting
-./bin/doomer --profile local setup   # approval for this profile and its API only
+./bin/doomer watch --no-browser      # terminal approval, including over SSH
+./bin/doomer watch --browser         # explicitly choose browser approval
+./bin/doomer watch --yes             # explicitly approve and install without prompting
+./bin/doomer --profile local watch   # local profile and API only
 ```
 
 Noninteractive setup requires `--yes`; it never treats piped input as approval.
 `--yes` approves the same source uploads and hook installation described by the
 interactive flow. Setup prints the profile, destination, and scope before saving.
-Without directory arguments, setup approves all current and future repositories
-used with the selected profile. Use `setup /path/to/repo` to limit approval to
+Without directory arguments, first-time setup allows automatic discovery of repositories
+your agent edits. Use `watch /path/to/repo` on first use to limit upload approval to
 named repositories. Hooks discover repositories as you work; Doomer does not
 scan the whole disk. Base and current source snapshots, including files outside
 the diff, and agent review responses may be uploaded while `watch` is running.
@@ -73,13 +74,37 @@ With no directories, it immediately includes the current
 Git checkout if approved for this profile. With all-repository approval, it also
 continues discovering repositories through the coding-agent hooks. Outside a
 Git checkout it waits for discovery. Use `doomer watch .` to watch only the current
-checkout and its approved linked worktrees, or `doomer watch --debug` for scan, discovery, and review-status details.
+checkout for this run, or `doomer watch --debug` for scan, discovery, and review-status details.
 Diagnostics do not print source contents, prompts, review responses, or credentials.
 
 Registered Git worktrees are discovered at startup and every five seconds, including
-worktrees created while watch is running. Each checkout keeps its own review and
-conversation identity; discovery does not itself upload existing changes. Directory-
-scoped consent still applies independently to each checkout.
+worktrees created while watch is running. Discovery alone does not activate a linked
+checkout's filesystem watches or upload its contents. A coding-agent edit activates it.
+Automatically discovered checkouts become inactive after 14 days without agent edit
+activity; a later agent edit reactivates them. There is no fixed checkout-count limit.
+Each checkout keeps its own review and conversation identity. Upload approval still
+applies independently to each checkout.
+
+Manage selections independently of upload approval:
+
+```sh
+./bin/doomer watch ls
+./bin/doomer watch ls --worktrees
+./bin/doomer watch add /path/to/repo
+./bin/doomer watch rm /path/to/repo
+```
+
+`ls` shows one row per Git repository. `ls --worktrees` expands each repository
+into a tree of branch names, checkout paths, and live watch states. Checkouts show
+Watching only when the current watcher session has activated them; eligible
+checkouts show Not running when no watcher is running.
+
+`add` enables the repository and its linked worktrees; the explicitly added checkout
+stays active until removed, while automatic linked checkouts still age out.
+`rm` stops all checkouts of that repository and blocks hook-driven rediscovery,
+including new linked worktrees, until the repository is added again.
+Selections, removals, and upload approval are scoped to the selected API and profile.
+Use `watch uninstall` to remove hooks and revoke upload approval.
 
 The watcher uses filesystem notifications with a 750 ms debounce. A one-minute
 fallback scan catches missed events; `--interval` adjusts that fallback. Git-ignored
@@ -93,7 +118,7 @@ content blobs; unchanged files are reused.
 Keep `watch` running in a separate terminal, then edit the approved repository
 in Codex. After files settle, Doomer uploads a bounded snapshot and starts the
 hosted workspace review. The synchronous hook waits at most 30 seconds for the
-initial assessment and otherwise releases the agent silently. The full review
+initial assessment and otherwise releases the agent silently. The deep review
 continues on the service; it is never waited on by the hook. New leads include a
 link to the web review and instructions to investigate within your task's scope.
 Outcome lines in the agent's final reply are captured locally and uploaded by the
@@ -113,15 +138,15 @@ manifest, blob, finalization, and review-submission timings. Cached snapshot
 references are isolated by destination, profile, login, and checkout.
 
 ```sh
-./bin/doomer --profile dev setup /path/to/repo --agent both
+./bin/doomer --profile dev watch add /path/to/repo --agent both
 ./bin/doomer --profile dev watch /path/to/repo
-./bin/doomer --profile dev setup --status
-./bin/doomer --profile dev setup --uninstall
+./bin/doomer --profile dev watch ls
+./bin/doomer --profile dev watch uninstall
 ```
 
 `--agent` accepts `codex` (default), `claude`, or `both`. Hooks and watched paths are
 isolated by API endpoint and login profile. Changing the login requires renewed
-setup approval. `setup --uninstall` removes this profile's CLI hooks and revokes
+setup approval. `watch uninstall` removes this profile's CLI hooks and revokes
 its consent; a running watcher stops when it detects revocation. Ctrl+C stops a
 watcher without uninstalling it. Existing Mac-app hooks are preserved: stop the
 Mac app while testing this CLI so both integrations do not review the same edits.
@@ -132,8 +157,8 @@ For a directory list, pass `watch --config watch.json` containing:
 {"directories":["/path/to/repo","/path/to/another-repo"]}
 ```
 
-Every listed repository must already be approved through `setup`, unless you chose
-all-repository approval. No recursive
+First-time setup obtains approval for the listed repositories; expanding an existing
+restricted selection requires additional approval. No recursive
 repository discovery is performed. `--base` selects an explicit local baseline.
 The triggering user request is included as review context; it is not attributed
 to every changed line. This version does not yet carry prompt-to-line provenance or associate
@@ -261,46 +286,96 @@ endpoints require HTTPS, with loopback HTTP allowed for development.
 
 ```sh
 # Review the repository containing the current directory:
-doomer review --project my-team
+doomer review
 
 # Select a profile and another worktree:
-doomer --profile dev review --project my-team --path ../feature-worktree
+doomer --profile dev review --path ../feature-worktree
 
 # Choose a baseline explicitly:
-doomer review --project my-team --base origin/main --format json
+doomer review --base origin/main --format json
 ```
 
-`--project` accepts a project slug or ID. Omit it to use the default selected
-with `doomer project use`, or the only available project. If the saved project is
-no longer available, select another project or pass `--project` explicitly.
+There is no project selector for `review`. SaaS uses the repository's Git remote
+to find a unique project accessible to the logged-in account. With no match or
+multiple matches, account-level settings apply. A saved project is ignored for
+reviews; other commands retain their project selection.
 `--path` defaults to the current directory; a subdirectory selects its entire
-repository. The command uploads an immutable snapshot and queues a hosted review
-using the selected profile. By default it returns the review ID and status without waiting
-for completion. Hosted reviews must be enabled for the project.
+repository. The command uploads immutable snapshots using the selected profile.
+Look Closer uses a score threshold of 80/100 by default. Lower it to return more
+tentative areas to investigate; it does not change deep-review filtering:
+
+```sh
+doomer review --look-closer-threshold=55
+```
+
+By default it runs both reviews: it returns Look Closer results synchronously,
+with a link to the deep review continuing on the server. It reuses the same
+content-addressed upload cache as `watch` and needs no installed agent hooks.
+
+```sh
+# Look Closer only; do not run a deep review:
+doomer review --deep-review=false
+
+# Deep review only:
+doomer review --look-closer=false
+```
+
+All modes use the workspace API and the same user/service-account credentials
+as `watch`.
+
+The summary always shows changed files, added/deleted lines, and hunk counts.
+Add `--show-diff` to print the exact patch before uploading and running the review:
+
+```sh
+doomer review --base origin/main --path ../my-repo --show-diff
+```
+
+It defaults to false. The patch goes to stderr so `--format=json` keeps stdout
+machine-readable. Non-ignored untracked files are included in the patch.
+
+Enable reviews separately from choosing which results to wait for:
+
+| Look Closer | Deep review | Command |
+|---|---|---|
+| Sync | Async | `doomer review` (default) |
+| Async | Async | `doomer review --wait=none` |
+| Async | Sync | `doomer review --wait=deep` |
+| Sync | Sync | `doomer review --wait=all` |
+| Sync | Disabled | `doomer review --deep-review=false` |
+| Async | Disabled | `doomer review --deep-review=false --wait=none` |
+| Disabled | Async | `doomer review --look-closer=false` |
+| Disabled | Sync | `doomer review --look-closer=false --wait=deep` |
+
+`--wait=look-closer` explicitly selects the default wait behavior. Bare `--wait`
+means `--wait=all`, waiting for all enabled stages. Disabling both reviews or
+explicitly waiting for a disabled stage is an error. Async commands still wait
+for upload and server acceptance; the reviews then run on the server.
 
 To wait for the review and print its results:
 
 ```sh
-doomer review --project my-team --wait
+doomer review --wait
 doomer review --wait --timeout 20m --poll-interval 5s --format json
 ```
 
-Waiting starts after the upload is accepted, defaults to a 30-minute timeout,
-and polls every five seconds. Output includes the last known status even on a
+Waiting starts after the upload is accepted. Look Closer has a 30-second default
+wait; Waiting for the deep review raises the default to 30 minutes.
+Both poll once per second. `--timeout` and `--poll-interval` override these defaults. Output includes the last known status even on a
 wait failure. A failed, cancelled, or expired job, a timeout, or a polling error
 exits nonzero. A completed review exits zero regardless of its conclusion or
 finding count; workflows can inspect the JSON result for their own policies.
 Cancelling the wait does not cancel the hosted job. The review ID remains usable
-with `review get`, so a timeout never requires submitting another review.
+with `review get --workspace`, so a timeout never requires submitting another review.
 
 Read that submission's status and results with:
 
 ```sh
-doomer review get <review-id>
-doomer review get <review-id> --format json
+doomer review get <review-id> --workspace
+doomer review get <review-id> --workspace --format json
 ```
 
-`review status <review-id>` is an alias. The response includes the job status,
+`review status <review-id>` is an alias. Omit `--workspace` only when reading
+a legacy submission. The response includes the job status,
 summary, conclusion, complete findings, and any job error when available. A queued
 or running review may not have results yet. Reading a failed job still exits
 successfully if the lookup succeeds; inspect `data.status` and `data.error` in
@@ -319,8 +394,8 @@ Snapshots include tracked files and non-ignored untracked files, with current
 working bytes taking precedence over the index. Deleted files appear only in the
 baseline. Git metadata and ignored untracked files are excluded. No commits,
 index changes, builds, hooks, filters, or local review processes are performed.
-Each file must be regular and at most 2 MiB; each tree can contain at most 20,000
-files, and the encoded upload cannot exceed 16 MiB. Symlinks, submodules, sparse
+The default workspace path permits regular files up to 20 MiB and 1 GiB of
+source; each tree can contain at most 20,000 files. All review modes use this upload path. Symlinks, submodules, sparse
 checkouts, unresolved merges, and Git LFS pointers cause an explicit error.
 
 SaaS stores repository identity, branch, HEAD SHA, and dirty status alongside verified
@@ -436,3 +511,60 @@ variables are ignored, including API and registry overrides. This SaaS bridge
 has no local model/provider or Node runtime configuration. `DOOMER_DATA_DIR`
 overrides the artifact data directory; credentials remain in the separate
 configuration directory.
+
+### Anonymous reviews
+
+No login is required for `review` or `watch`. Command invocation authorizes sending
+source code and review context to the selected service. Anonymous runs always use
+Look Closer only, even when Deep review is requested. By default the CLI waits for
+Look Closer; `--wait=none` still returns immediately. Existing signed-in profiles
+keep their normal review modes.
+
+The unlisted link lets anyone holding it view that one review. It can be saved to
+an account after signing in. Unclaimed links expire after seven days. To run Deep
+review, log in and rerun the review. Login does not silently merge anonymous
+uploads into the account.
+
+Anonymous identities, uploads and hooks are isolated by API URL and profile.
+To test locally without changing your existing login:
+
+```sh
+./bin/doomer --profile anonymous-local --api-url http://localhost:3000/api review --path /path/to/repo
+./bin/doomer --profile anonymous-local --api-url http://localhost:3000/api watch --agent both
+```
+
+Codex still manages hook trust in `/hooks`. Agent feedback keeps using the same
+conversation-scoped workflow. Hooks stay quiet when no useful results are ready;
+the CLI displays the review link even when Look Closer returns no areas.
+
+### Check your account
+
+```sh
+doomer whoami
+doomer whoami --profile anonymous-local
+doomer whoami --profile work --format json
+```
+
+`whoami` shows the profile and service, and verifies a saved login with that
+service before showing account, team and plan information. With no login it
+reports anonymous mode. It does not create credentials or change profiles.
+An expired or rejected login is reported as an error, not as anonymous mode.
+
+### Reuse content across profiles
+
+When the service supports it, the CLI answers a fresh challenge using the entire
+local file before reusing content uploaded by another identity. A SHA alone never
+grants access. Successful proofs avoid sending the file again; unavailable or
+rejected proofs fall back to normal upload. This works for uncommitted changes
+and private repositories as well as public code.
+
+`watch` reports the bytes and blobs reused after proving possession. This saves
+upload bandwidth; it still reads local files to calculate the proof. Reuse can
+reveal that identical content is already stored, but not who uploaded it.
+
+Uploads show preparation and reuse checks, followed by byte progress for each
+batch of required content. Progress includes bytes sent, percentage and an
+estimated remaining transfer time. Waiting for server confirmation is shown
+separately; upload estimates do not include the review itself. Human progress
+messages go to stderr for `review`, so `--format json` keeps stdout readable by
+other programs.

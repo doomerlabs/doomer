@@ -110,7 +110,7 @@ func TestWaitForReviewCancellationAndLookupFailure(t *testing.T) {
 
 func TestReviewWaitFlagValidation(t *testing.T) {
 	isolate(t)
-	for _, args := range [][]string{{"--timeout", "1s"}, {"--poll-interval", "1s"}, {"--wait", "--timeout", "0s"}, {"--wait", "--poll-interval", "-1s"}} {
+	for _, args := range [][]string{{"--look-closer=false", "--timeout", "1s"}, {"--look-closer=false", "--poll-interval", "1s"}, {"--wait", "--timeout", "0s"}, {"--wait", "--poll-interval", "-1s"}} {
 		if _, err := execute(t, "", append([]string{"review"}, args...)...); err == nil {
 			t.Fatalf("accepted %v", args)
 		}

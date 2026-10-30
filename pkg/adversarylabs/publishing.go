@@ -8,6 +8,8 @@ import (
 )
 
 type WhoamiResponse struct {
+	Type              string       `json:"type,omitempty"`
+	Scopes            []string     `json:"scopes,omitempty"`
 	ID                string       `json:"id,omitempty"`
 	Name              string       `json:"name,omitempty"`
 	Email             string       `json:"email,omitempty"`
