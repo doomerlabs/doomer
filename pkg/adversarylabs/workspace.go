@@ -23,9 +23,21 @@ type WorkspaceAssessment struct {
 	Leads  []WorkspaceLead `json:"leads"`
 }
 type WorkspaceReview struct {
-	ID     string               `json:"id"`
-	Status string               `json:"status"`
-	Early  *WorkspaceAssessment `json:"early_assessment"`
+	LookCloserThreshold *int                 `json:"look_closer_threshold,omitempty"`
+	URL                 string               `json:"url,omitempty"`
+	Anonymous           bool                 `json:"anonymous,omitempty"`
+	Upgrade             *WorkspaceUpgrade    `json:"upgrade,omitempty"`
+	LookCloserEnabled   *bool                `json:"look_closer_enabled,omitempty"`
+	ID                  string               `json:"id"`
+	Status              string               `json:"status"`
+	Early               *WorkspaceAssessment `json:"early_assessment"`
+	Error               string               `json:"error,omitempty"`
+	Full                *WorkspaceFullReview `json:"full_review,omitempty"`
+}
+type WorkspaceFullReview struct {
+	Enabled bool          `json:"enabled"`
+	Status  string        `json:"status"`
+	Result  *ReviewResult `json:"result,omitempty"`
 }
 type WorkspaceUserRequest struct {
 	Prompt    string `json:"prompt"`
@@ -39,33 +51,41 @@ type WorkspaceHypothesis struct {
 	Check      string `json:"check"`
 }
 type WorkspaceSubmission struct {
-	Hypotheses       []WorkspaceHypothesis `json:"hypotheses,omitempty"`
-	AgentDiff        string                `json:"agent_diff,omitempty"`
-	UserRequest      *WorkspaceUserRequest `json:"user_request,omitempty"`
-	RepositoryID     string                `json:"repository_id"`
-	SnapshotID       string                `json:"snapshot_id"`
-	BaseSnapshotID   string                `json:"base_snapshot_id"`
-	ReviewID         string                `json:"review_id"`
-	GroupID          string                `json:"review_group_id"`
-	Revision         int                   `json:"revision"`
-	Repository       string                `json:"repository"`
-	Branch           string                `json:"branch"`
-	Diff             string                `json:"diff"`
-	Continuity       bool                  `json:"review_continuity"`
-	Client           map[string]string     `json:"client"`
-	PromptProvenance any                   `json:"prompt_provenance,omitempty"`
+	LookCloserThreshold *int                  `json:"look_closer_threshold,omitempty"`
+	ReviewScope         string                `json:"review_scope,omitempty"`
+	LookCloser          *bool                 `json:"look_closer,omitempty"`
+	FullReview          *bool                 `json:"full_review,omitempty"`
+	Hypotheses          []WorkspaceHypothesis `json:"hypotheses,omitempty"`
+	AgentDiff           string                `json:"agent_diff,omitempty"`
+	UserRequest         *WorkspaceUserRequest `json:"user_request,omitempty"`
+	RepositoryID        string                `json:"repository_id"`
+	SnapshotID          string                `json:"snapshot_id"`
+	BaseSnapshotID      string                `json:"base_snapshot_id"`
+	ReviewID            string                `json:"review_id"`
+	GroupID             string                `json:"review_group_id"`
+	Revision            int                   `json:"revision"`
+	Repository          string                `json:"repository"`
+	Branch              string                `json:"branch"`
+	Diff                string                `json:"diff"`
+	Continuity          bool                  `json:"review_continuity"`
+	Client              map[string]string     `json:"client"`
+	PromptProvenance    any                   `json:"prompt_provenance,omitempty"`
 }
 type workspaceUpload struct {
-	RepositoryID string `json:"repository_id"`
-	SnapshotID   string `json:"snapshot_id"`
-	Complete     bool   `json:"complete"`
-	Checking     bool   `json:"checking"`
-	Missing      []struct {
-		SHA  string `json:"sha256"`
-		Size int    `json:"size"`
-		URL  string `json:"upload_url"`
-	} `json:"missing"`
-	Finalize string `json:"finalize_url"`
+	RepositoryID string             `json:"repository_id"`
+	SnapshotID   string             `json:"snapshot_id"`
+	Complete     bool               `json:"complete"`
+	Checking     bool               `json:"checking"`
+	PackURL      string             `json:"pack_url"`
+	ProofURL     string             `json:"proof_url"`
+	Missing      []workspaceMissing `json:"missing"`
+	Finalize     string             `json:"finalize_url"`
+}
+
+type workspaceMissing struct {
+	SHA  string `json:"sha256"`
+	Size int    `json:"size"`
+	URL  string `json:"upload_url"`
 }
 
 // Workspace snapshots use the same content-addressed upload as the desktop.
@@ -94,6 +114,9 @@ func (c Client) workspaceRequest(ctx context.Context, token, method, path string
 	if err != nil {
 		return err
 	}
+	if method == http.MethodPut {
+		req.Body = trackWorkspaceBody(ctx, req.Body)
+	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/octet-stream")
 	resp, err := c.httpClient().Do(req)
@@ -111,18 +134,28 @@ func (c Client) workspaceRequest(ctx context.Context, token, method, path string
 }
 func (c Client) StartWorkspace(ctx context.Context, token string, input WorkspaceSubmission) (WorkspaceReview, error) {
 	var out WorkspaceReview
-	err := c.postJSON(ctx, "/v1/reviews/workspace", input, token, &out)
+	err := c.postJSON(ctx, "/v1/reviews/workspace?view=status", input, token, &out)
 	if err == nil && !workspaceID(out.ID) {
 		err = fmt.Errorf("invalid workspace review identity")
 	}
 	return out, err
 }
 func (c Client) GetWorkspace(ctx context.Context, token, id string) (WorkspaceReview, error) {
+	return c.getWorkspace(ctx, token, id, false)
+}
+func (c Client) GetWorkspaceResults(ctx context.Context, token, id string) (WorkspaceReview, error) {
+	return c.getWorkspace(ctx, token, id, true)
+}
+func (c Client) getWorkspace(ctx context.Context, token, id string, results bool) (WorkspaceReview, error) {
 	var out WorkspaceReview
 	if !workspaceID(id) {
 		return out, fmt.Errorf("invalid workspace review identity")
 	}
-	err := c.workspaceRequest(ctx, token, "GET", "/v1/reviews/workspace/"+url.PathEscape(id), nil, &out)
+	path := "/v1/reviews/workspace/" + url.PathEscape(id) + "?view=status"
+	if results {
+		path += "&results=full"
+	}
+	err := c.workspaceRequest(ctx, token, "GET", path, nil, &out)
 	if err == nil && out.ID != id {
 		err = fmt.Errorf("workspace review identity changed")
 	}
@@ -134,4 +167,9 @@ func (c Client) ReportWorkspaceLead(ctx context.Context, token, id, lead, status
 	}
 	var out json.RawMessage
 	return c.postJSON(ctx, "/v1/reviews/workspace/"+id+"/feedback", map[string]any{"lead_id": lead, "status": status, "reason": reason, "agrees": agrees}, token, &out)
+}
+
+type WorkspaceUpgrade struct {
+	URL     string `json:"url"`
+	Message string `json:"message"`
 }

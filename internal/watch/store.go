@@ -20,6 +20,7 @@ type Config struct {
 	API             string    `json:"api_url"`
 	Profile         string    `json:"profile"`
 	Directories     []string  `json:"directories"`
+	RepositoryIDs   []string  `json:"repository_ids,omitempty"`
 	ConsentedAt     time.Time `json:"consented_at"`
 }
 type Owner struct {
@@ -48,6 +49,7 @@ type State struct {
 	Prompt              string
 }
 type Feed struct {
+	Anonymous        bool
 	Owner            Owner
 	Fingerprint      string
 	ReviewID         string
@@ -144,6 +146,14 @@ func Allowed(cfg Config, path string) bool {
 	for _, p := range cfg.Directories {
 		if p == path {
 			return true
+		}
+	}
+	if len(cfg.RepositoryIDs) > 0 {
+		id := repositoryIdentity(path)
+		for _, approved := range cfg.RepositoryIDs {
+			if approved == id {
+				return true
+			}
 		}
 	}
 	return false

@@ -26,15 +26,17 @@ type Client interface {
 	ReportWorkspaceLead(context.Context, string, string, string, string, string, *bool) error
 }
 type Runner struct {
-	Root      string
-	Config    Config
-	Token     string
-	Client    Client
-	Output    io.Writer
-	Interval  time.Duration
-	Base      string
-	Debug     bool
-	StartedAt time.Time
+	Root         string
+	Config       Config
+	Token        string
+	Client       Client
+	Output       io.Writer
+	Interval     time.Duration
+	Base         string
+	Debug        bool
+	StartedAt    time.Time
+	WatchSession string
+	WatchToken   string
 }
 type revision struct {
 	RequestKey string
@@ -46,6 +48,9 @@ type revision struct {
 }
 
 func (r Runner) logf(format string, args ...any) {
+	if r.Output == nil {
+		return
+	}
 	fmt.Fprintf(r.Output, "[%s] %s\n", time.Now().Format("15:04:05"), fmt.Sprintf(format, args...))
 }
 
@@ -67,12 +72,16 @@ func agentReviewRequested(root, path, fingerprint string, since time.Time) bool 
 }
 
 func (r Runner) Run(ctx context.Context, path string, once bool) error {
+	if ctx.Err() != nil || RepositoryRemoved(r.Root, path) {
+		return nil
+	}
 	started := r.StartedAt
 	if started.IsZero() {
 		started = time.Now()
 	}
 	var last, observed string
 	var nextRetry time.Time
+	var retryRequest *State
 	var lastHookDiagnostic time.Time
 	if r.Interval <= 0 {
 		r.Interval = time.Minute
@@ -82,15 +91,21 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 		var eventErr error
 		events, eventErr = newFilesystemEvents(ctx, r, path)
 		if eventErr != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
 			r.logf("%s: filesystem notifications unavailable; checking every %s (%s).", filepath.Base(path), r.Interval, eventErr)
 		} else {
 			defer events.watcher.Close()
 			r.debugf("%s: filesystem notifications enabled; fallback scan every %s", path, r.Interval)
 		}
 	}
+	if r.WatchSession != "" && ctx.Err() == nil {
+		_ = SetWatchRuntime(r.Root, path, WatchRuntime{Session: r.WatchSession, Token: r.WatchToken, Status: "Watching"})
+	}
 	for {
 		var nextWake time.Duration
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || RepositoryRemoved(r.Root, path) {
 			return nil
 		}
 		if r.Debug && events == nil {
@@ -138,6 +153,15 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 			}
 			r.debugf("%s: snapshot captured in %s", path, time.Since(scanStarted).Round(time.Millisecond))
 			requested := agentReviewRequested(r.Root, path, capture.Digest, started)
+			if retryRequest != nil {
+				var current State
+				if Read(StatePath(r.Root, path), &current) != nil || !sameReviewRequest(current, *retryRequest) {
+					retryRequest = nil
+					nextRetry = time.Time{}
+				} else if retryReviewRequested(r.Root, path, capture.Digest, *retryRequest) {
+					requested = true
+				}
+			}
 			if observed != capture.Digest {
 				if requested {
 					r.logf("%s: agent change detected.", filepath.Base(path))
@@ -161,21 +185,32 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 					nextWake = time.Millisecond
 				}
 			} else if capture.Digest != last && time.Now().After(nextRetry) {
+				var attempt State
+				if e := Read(StatePath(r.Root, path), &attempt); e != nil {
+					r.debugf("%s: could not read the pending request: %v", path, e)
+				}
+				if retryRequest != nil {
+					r.logf("%s: retrying the pending review.", filepath.Base(path))
+				}
 				reviewCtx, stop := context.WithTimeout(ctx, 2*time.Minute)
-				err = r.review(reviewCtx, path, capture)
+				err = r.reviewForRequest(reviewCtx, path, capture, &attempt)
 				stop()
 				if ctx.Err() != nil {
 					return nil
 				}
 				if err == nil {
 					last = capture.Digest
+					retryRequest = nil
+					nextRetry = time.Time{}
 				} else if errors.Is(err, errReviewTerminal) {
 					// Reposting the same ID returns the same terminal review.
 					// Wait for a changed snapshot instead of retrying forever.
 					last = capture.Digest
+					retryRequest = nil
 					r.logf("%s: %s. Waiting for a new change.", filepath.Base(path), err)
 				} else {
-					r.logf("%s: review unavailable; retrying later (%s)", path, err)
+					retryRequest = &attempt
+					r.logf("%s: review unavailable; retrying in 15 seconds while watching for edits (%s)", path, err)
 					nextRetry = time.Now().Add(15 * time.Second)
 					nextWake = 15 * time.Second
 				}
@@ -198,10 +233,17 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 		}
 	}
 }
-func (r Runner) review(ctx context.Context, path string, capture sourcesnapshot.Capture) (err error) {
+func (r Runner) review(ctx context.Context, path string, capture sourcesnapshot.Capture) error {
+	return r.reviewForRequest(ctx, path, capture, nil)
+}
+
+func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourcesnapshot.Capture, expected *State) (err error) {
 	reviewStarted := time.Now()
 	var requestState State
 	if Read(StatePath(r.Root, path), &requestState) != nil || requestState.Fingerprint != capture.Digest || requestState.Ambiguous {
+		return fmt.Errorf("agent request changed before review")
+	}
+	if expected != nil && (!sameReviewRequest(requestState, *expected) || len(requestState.Active) > 0) {
 		return fmt.Errorf("agent request changed before review")
 	}
 	defer func() {
@@ -223,11 +265,6 @@ func (r Runner) review(ctx context.Context, path string, capture sourcesnapshot.
 	if repo == "" {
 		repo = "local/" + filepath.Base(path)
 	}
-	sourceBytes := 0
-	for _, data := range manifest.Blobs {
-		sourceBytes += len(data)
-	}
-	r.logf("%s: uploading snapshots for review (%s source; only missing content is sent).", filepath.Base(path), formatUploadBytes(sourceBytes))
 	uploadStarted := time.Now()
 	baseRepo, baseID, headID, err := r.uploadSnapshots(ctx, path, repo, manifest)
 	if err != nil {
@@ -259,7 +296,7 @@ func (r Runner) review(ctx context.Context, path string, capture sourcesnapshot.
 	if err != nil {
 		return err
 	}
-	link := strings.TrimSuffix(r.Config.API, "/api") + "/worktree/reviews/" + current.ID
+	link := adversarylabs.WorkspaceLink(r.Config.API, current)
 	r.logf("%s: look closer review requested — %s", filepath.Base(path), link)
 
 	for {
@@ -269,7 +306,7 @@ func (r Runner) review(ctx context.Context, path string, capture sourcesnapshot.
 		}
 		r.debugf("%s: review status=%s, look closer review=%s", path, current.Status, earlyStatus)
 		if current.Early != nil && (current.Early.Status == "ready" || current.Early.Status == "unavailable") {
-			feed := Feed{Owner: requestState.Owner, Fingerprint: capture.Digest, ReviewID: current.ID, URL: link, Updated: time.Now(), AssessmentStatus: current.Early.Status}
+			feed := Feed{Owner: requestState.Owner, Fingerprint: capture.Digest, ReviewID: current.ID, URL: link, Updated: time.Now(), AssessmentStatus: current.Early.Status, Anonymous: current.Anonymous}
 			for _, l := range current.Early.Leads {
 				_, idErr := hex.DecodeString(l.ID)
 				if len(feed.Leads) >= 10 {

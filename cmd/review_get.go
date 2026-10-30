@@ -14,6 +14,7 @@ import (
 
 func newReviewGetCommand(app *application.App, apiURL, profile *string) *cobra.Command {
 	var format string
+	var workspace bool
 	command := &cobra.Command{
 		Use: "get <review-id>", Aliases: []string{"status"},
 		Short:        "Read a submitted review's status, findings, summary, conclusion, and errors",
@@ -28,10 +29,22 @@ func newReviewGetCommand(app *application.App, apiURL, profile *string) *cobra.C
 			if err != nil {
 				return err
 			}
-			if !ok || strings.TrimSpace(auth.Token) == "" {
+			if workspace {
+				auth, err = reviewAuth(app, *apiURL, *profile)
+				if err != nil {
+					return err
+				}
+			} else if !ok || strings.TrimSpace(auth.Token) == "" {
 				return fmt.Errorf("not logged in for profile %q; run doomer --profile %s login", *profile, *profile)
 			}
 			client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, *apiURL)
+			if workspace {
+				result, err := client.GetWorkspaceResults(cmd.Context(), auth.Token, args[0])
+				if err != nil {
+					return err
+				}
+				return writeWorkspaceReview(cmd.OutOrStdout(), format, result, adversarylabs.WorkspaceLink(*apiURL, result), nil)
+			}
 			review, err := client.GetReview(cmd.Context(), auth.Token, args[0])
 			if err != nil {
 				return err
@@ -40,6 +53,7 @@ func newReviewGetCommand(app *application.App, apiURL, profile *string) *cobra.C
 		},
 	}
 	command.Flags().StringVar(&format, "format", "text", "output format: text or json")
+	command.Flags().BoolVar(&workspace, "workspace", false, "read a Look Closer/full worktree review")
 	return command
 }
 

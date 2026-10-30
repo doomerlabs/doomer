@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -34,14 +33,7 @@ func watchPaths(api, profile string) (string, string, error) {
 	return root, filepath.Join(root, "config.json"), nil
 }
 func watchAuth(app *application.App, api, profile string) (adversarylabs.Auth, error) {
-	auth, ok, err := scopedAuth(app.Dependencies().Auth, api, profile, app.Dependencies().RegistryHost)
-	if err != nil {
-		return auth, err
-	}
-	if !ok || strings.TrimSpace(auth.Token) == "" {
-		return auth, fmt.Errorf("not logged in; run doomer --profile %s login", profile)
-	}
-	return auth, nil
+	return reviewAuth(app, api, profile)
 }
 func newSetupCommand(app *application.App, api, profile *string) *cobra.Command {
 	var agents string
@@ -58,7 +50,7 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		if status {
 			fmt.Fprintf(c.OutOrStdout(), "Profile: %s\nService: %s\n", *profile, *api)
 			if cfg.AllRepositories {
-				fmt.Fprintln(c.OutOrStdout(), "Upload approval: all repositories used with this profile.")
+				fmt.Fprintln(c.OutOrStdout(), "Upload approval: automatic discovery of repositories your coding agent edits.")
 			}
 			for _, p := range cfg.Directories {
 				fmt.Fprintln(c.OutOrStdout(), p)
@@ -120,11 +112,12 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		consent := setupConsent{Profile: *profile, API: *api, AllRepositories: allRepositories, Directories: directories, Agents: selected}
 		f, ok := c.InOrStdin().(*os.File)
 		interactive := ok && term.IsTerminal(int(f.Fd()))
-		approved := yes
-		if !yes && !interactive {
+		anonymous := adversarylabs.IsAnonymousToken(auth.Token)
+		approved := yes || anonymous
+		if !yes && !anonymous && !interactive {
 			return fmt.Errorf("setup requires approval: run it in an interactive terminal, or pass --yes to allow source uploads and install hooks for this profile")
 		}
-		if !yes && !noBrowser && (browser || defaultSetupBrowser()) {
+		if !yes && !anonymous && !noBrowser && (browser || defaultSetupBrowser()) {
 			approved, err = browserSetupConsent(c.Context(), consent, c.OutOrStdout(), openBrowser)
 			if err != nil && !errors.Is(err, errBrowserLaunch) {
 				return err
@@ -141,6 +134,8 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 			if !terminalSetupConsent(c.Context(), f) {
 				return fmt.Errorf("setup cancelled; no upload consent saved")
 			}
+		} else if anonymous {
+			fmt.Fprintln(c.OutOrStdout(), "Free anonymous Look Closer enabled. Source code and agent review responses are uploaded to "+*api+". Deep review requires signing in.")
 		} else if yes {
 			consent.print(c.OutOrStdout())
 			fmt.Fprintln(c.OutOrStdout(), "\nApproved with --yes.")
@@ -158,6 +153,13 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 			return fmt.Errorf("setup cancelled; no upload consent saved")
 		}
 		cfg = watching.Config{AllRepositories: allRepositories, Version: 1, API: *api, Profile: *profile, Directories: directories, ConsentedAt: time.Now(), AccountKey: watching.Key(auth.Token)}
+		for _, path := range directories {
+			id, e := watching.RepositoryIdentity(c.Context(), path)
+			if e != nil {
+				return e
+			}
+			cfg.RepositoryIDs = append(cfg.RepositoryIDs, id)
+		}
 		exe, err := os.Executable()
 		if err != nil {
 			return err
@@ -180,7 +182,7 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 				return err
 			}
 		}
-		fmt.Fprintln(c.OutOrStdout(), "Setup saved. In Codex, open /hooks and trust the Doomer CLI hooks. Then run: doomer --profile "+*profile+" watch\nKeep the watcher running in its own terminal. Use setup --status or setup --uninstall to inspect or remove it.")
+		fmt.Fprintln(c.OutOrStdout(), "Integration saved. In Codex, open /hooks and trust the Doomer CLI hooks. Keep watch running in its own terminal. Use watch ls to manage watched checkouts or watch uninstall to remove the integration.")
 		return nil
 	}}
 	c.Flags().BoolVar(&yes, "yes", false, "approve uploads and hook installation for the selected profile without prompting")
@@ -224,23 +226,12 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	var config, base string
 	var debug bool
 	var interval time.Duration
-	c := &cobra.Command{Use: "watch [directories...]", Short: "Watch approved repositories and return initial reviews to your coding agent", Args: cobra.ArbitraryArgs, RunE: func(c *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "watch [directories...]", Short: "Set up and watch repositories with your coding agent", Args: cobra.ArbitraryArgs, RunE: func(c *cobra.Command, args []string) error {
 		root, file, err := watchPaths(*api, *profile)
 		if err != nil {
 			return err
 		}
 
-		var cfg watching.Config
-		if err = watching.Read(file, &cfg); err != nil {
-			return fmt.Errorf("run doomer setup first: %w", err)
-		}
-		auth, err := watchAuth(app, *api, *profile)
-		if err != nil {
-			return err
-		}
-		if cfg.Version != 1 || cfg.API != *api || cfg.Profile != *profile || cfg.ConsentedAt.IsZero() || cfg.AccountKey != watching.Key(auth.Token) {
-			return fmt.Errorf("upload consent does not match this login/profile; run doomer setup")
-		}
 		if interval < time.Second {
 			return fmt.Errorf("--interval must be at least 1s")
 		}
@@ -259,6 +250,11 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			}
 			args = selection.Directories
 		}
+		cfg, auth, err := prepareWatch(c, app, api, profile, args)
+		if err != nil {
+			return err
+		}
+
 		dirs := cfg.Directories
 		if len(args) == 0 {
 			dirs = initialWatchDirectories(c.Context(), cfg, ".")
@@ -271,7 +267,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 					return e
 				}
 				if !watching.Allowed(cfg, canonical) {
-					return fmt.Errorf("directory not approved; run doomer setup %s", canonical)
+					return fmt.Errorf("directory not approved; run doomer watch add %s", canonical)
 				}
 				dirs = append(dirs, canonical)
 			}
@@ -285,9 +281,9 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			}
 		}
 		dirs = unique
-		discover := cfg.AllRepositories && len(args) == 0
-		if (!discover && len(dirs) == 0) || len(dirs) > 16 {
-			return fmt.Errorf("configure between 1 and 16 repositories")
+		discover := len(args) == 0
+		if !discover && len(dirs) == 0 {
+			return fmt.Errorf("select at least one repository")
 		}
 		lock, err := publock.TryAcquire(root, "watcher")
 		if err != nil {
@@ -295,6 +291,10 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 		}
 		defer lock.Close()
 		watchStarted := time.Now()
+		watchSession := watchStarted.UTC().Format(time.RFC3339Nano)
+		if err := watching.Write(filepath.Join(root, "watch-session.json"), watchSession); err != nil {
+			return err
+		}
 		ctx, cancel := context.WithCancel(c.Context())
 		defer cancel()
 		heartbeat := filepath.Join(root, "heartbeat.json")
@@ -322,6 +322,9 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 		client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, *api)
 		output := &watchOutput{w: c.OutOrStdout()}
 		fmt.Fprintf(output, "Doomer watch · profile %s · %s\nPress Ctrl+C to stop.\n", *profile, *api)
+		if adversarylabs.IsAnonymousToken(auth.Token) {
+			fmt.Fprintln(output, "Anonymous mode: free Look Closer only. Source code is uploaded to the selected service.")
+		}
 		statusf := func(format string, args ...any) {
 			fmt.Fprintf(output, "[%s] %s\n", time.Now().Format("15:04:05"), fmt.Sprintf(format, args...))
 		}
@@ -332,56 +335,94 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 		}
 		debugf("filesystem events enabled; fallback scan interval=%s; discovery=%t; initial repositories=%d", interval, discover, len(dirs))
 		var group sync.WaitGroup
-		failures := make(chan error, 16)
-		running := map[string]bool{}
+		type runningWatch struct{ cancel context.CancelFunc }
+		type finishedWatch struct {
+			path string
+			run  *runningWatch
+			err  error
+		}
+		running := map[string]*runningWatch{}
+		finished := make(chan finishedWatch)
+		selected := map[string]bool{}
+		for _, dir := range dirs {
+			if !discover {
+				selected[dir] = true
+			}
+			explicit := false
+			for _, approved := range cfg.Directories {
+				if approved == dir {
+					explicit = true
+					break
+				}
+			}
+			if !watching.RepositoryRemoved(root, dir) {
+				if e := watching.RegisterRepository(root, dir, "current checkout", explicit, watchStarted); e != nil {
+					return e
+				}
+			}
+		}
 		launch := func(path string) {
-			if running[path] || len(running) >= 16 {
+			if running[path] != nil || watching.RepositoryRemoved(root, path) {
 				return
 			}
-			running[path] = true
+			runCtx, stop := context.WithCancel(ctx)
+			run := &runningWatch{cancel: stop}
+			running[path] = run
 			statusf("Watching %s — waiting for agent edits", path)
 			group.Add(1)
 			go func() {
 				defer group.Done()
-				r := watching.Runner{Root: root, Config: cfg, Token: auth.Token, Client: client, Output: output, Interval: interval, Base: base, Debug: debug, StartedAt: watchStarted}
-				if e := r.Run(ctx, path, false); e != nil {
-					statusf("%s: watcher stopped: %s", path, e)
-					failures <- e
+				defer stop()
+				token := time.Now().UTC().Format(time.RFC3339Nano)
+				_ = watching.SetWatchRuntime(root, path, watching.WatchRuntime{Session: watchSession, Token: token, Status: "Starting"})
+				defer watching.ClearWatchRuntime(root, path, token)
+				r := watching.Runner{Root: root, Config: cfg, Token: auth.Token, Client: client, Output: output, Interval: interval, Base: base, Debug: debug, StartedAt: watchStarted, WatchSession: watchSession, WatchToken: token}
+				e := r.Run(runCtx, path, false)
+				watching.ClearWatchRuntime(root, path, token)
+				select {
+				case finished <- finishedWatch{path, run, e}:
+				case <-ctx.Done():
 				}
 			}()
 		}
-		for _, dir := range dirs {
-			launch(dir)
-		}
 		if discover {
-			if len(running) == 0 {
-				fmt.Fprintf(output, "No repositories discovered yet. Waiting for your coding-agent hooks.\nTo watch this checkout directly, restart with: doomer --profile %s --api-url %s watch .\n", watching.Quote(*profile), watching.Quote(*api))
-			} else {
-				statusf("Also watching for repositories discovered by your coding-agent hooks.")
-			}
+			statusf("Agent discovery enabled; automatic checkouts become inactive after 14 days without an agent edit.")
 		}
-		lastDiscoveryLog := time.Time{}
 		lastWorktreeScan := time.Time{}
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 		for ctx.Err() == nil {
-			if discover {
-				entries, discoveryErr := os.ReadDir(filepath.Join(root, "discovered"))
-				if debug && time.Since(lastDiscoveryLog) >= 15*time.Second {
-					debugf("discovery: %d registrations; %d repositories watching", len(entries), len(running))
-					if discoveryErr != nil && !os.IsNotExist(discoveryErr) {
-						debugf("discovery scan failed: %s", discoveryErr)
-					}
-					lastDiscoveryLog = time.Now()
+			repos, e := watching.Repositories(root, cfg)
+			if e != nil {
+				cancel()
+				group.Wait()
+				return e
+			}
+			wanted := map[string]bool{}
+			for _, repo := range repos {
+				if repo.Removed || !watching.Allowed(cfg, repo.Path) {
+					continue
 				}
-				for _, entry := range entries {
-					var path string
-					if watching.Read(filepath.Join(root, "discovered", entry.Name()), &path) == nil {
-						canonical, e := watching.Root(ctx, path)
-						if e == nil && canonical == path && watching.Allowed(cfg, canonical) {
-							launch(path)
-						}
+				if !discover && !selected[repo.Path] {
+					continue
+				}
+				if repo.Active(time.Now()) || selected[repo.Path] {
+					if running[repo.Path] != nil {
+						wanted[repo.Path] = true
+						continue
 					}
+					canonical, e := watching.Root(ctx, repo.Path)
+					if e == nil && canonical == repo.Path {
+						wanted[repo.Path] = true
+						launch(repo.Path)
+					}
+				}
+			}
+			for path, run := range running {
+				if !wanted[path] {
+					run.cancel()
+					delete(running, path)
+					statusf("Stopped watching %s — inactive or removed.", path)
 				}
 			}
 			if time.Since(lastWorktreeScan) >= 5*time.Second {
@@ -393,25 +434,31 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 				linked := watching.LinkedWorktrees(scanCtx, cfg, roots)
 				stop()
 				for _, path := range linked {
-					if !running[path] {
-						statusf("Discovered linked worktree: %s", path)
-						launch(path)
+					// Knowing a Git worktree exists does not activate its file watchers.
+					if e := watching.RegisterRepository(root, path, "linked worktree", false, time.Time{}); e != nil {
+						debugf("could not register linked checkout: %s", e)
 					}
 				}
 				lastWorktreeScan = time.Now()
 			}
 			select {
 			case <-ctx.Done():
+			case result := <-finished:
+				if running[result.path] == result.run {
+					delete(running, result.path)
+				}
+				if result.err != nil {
+					statusf("%s: watcher stopped: %s", result.path, result.err)
+				}
 			case <-ticker.C:
 			}
 		}
 		group.Wait()
-		close(failures)
-		for e := range failures {
-			return e
-		}
+
 		return nil
 	}}
+	addWatchSetupFlags(c)
+	addWatchRepositoryCommands(c, app, api, profile)
 	c.Flags().BoolVar(&debug, "debug", false, "show repository discovery, scans, uploads, and review status (no source contents)")
 	c.Flags().StringVar(&config, "config", "", "JSON file listing already-approved directories")
 	c.Flags().StringVar(&base, "base", "", "local baseline ref")

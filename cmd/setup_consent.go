@@ -36,9 +36,9 @@ func (s setupConsent) print(w io.Writer) {
 	fmt.Fprintln(w, "Connect Doomer to your coding agent\n\nWhile doomer watch is running, Doomer can review repositories you work on.")
 	fmt.Fprintf(w, "\nProfile:      %s\nDestination:  %s\nHooks:        %s\n", s.Profile, s.API, strings.Join(s.Agents, ", "))
 	if s.AllRepositories {
-		fmt.Fprintln(w, "Access:       All current and future repositories used with this profile.")
+		fmt.Fprintln(w, "Access:       Repositories your coding agent edits, including future checkouts.")
 	} else {
-		fmt.Fprintln(w, "Access:       Only these repositories:")
+		fmt.Fprintln(w, "Access:       Only these repositories and their linked worktrees:")
 		for _, dir := range s.Directories {
 			fmt.Fprintln(w, "              "+dir)
 		}
