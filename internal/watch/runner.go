@@ -198,12 +198,19 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 		}
 	}
 }
-func (r Runner) review(ctx context.Context, path string, capture sourcesnapshot.Capture) error {
+func (r Runner) review(ctx context.Context, path string, capture sourcesnapshot.Capture) (err error) {
 	reviewStarted := time.Now()
 	var requestState State
 	if Read(StatePath(r.Root, path), &requestState) != nil || requestState.Fingerprint != capture.Digest || requestState.Ambiguous {
 		return fmt.Errorf("agent request changed before review")
 	}
+	defer func() {
+		if err != nil {
+			// Release a hook immediately on upload/request failure. The feed
+			// belongs only to this edit; a successful retry can replace it.
+			_ = Write(FeedPath(r.Root, path), Feed{Owner: requestState.Owner, Fingerprint: capture.Digest, Updated: time.Now(), AssessmentStatus: "unavailable"})
+		}
+	}()
 	manifest, err := sourcesnapshot.DecodeWorkspace(capture.Bytes)
 	if err != nil {
 		return err

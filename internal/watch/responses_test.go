@@ -83,7 +83,7 @@ func TestResponseCaptureClosesToolOperation(t *testing.T) {
 	cfg := Config{Directories: []string{dir}}
 	input := HookInput{Session: "chat", Turn: "turn", CWD: dir, Tool: "exec_command", ToolID: "respond", Event: "PreToolUse"}
 	raw, _ := json.Marshal(input)
-	Hook(context.Background(), root, cfg, strings.NewReader(string(raw)), &strings.Builder{})
+	hookForTest(context.Background(), root, cfg, strings.NewReader(string(raw)), &strings.Builder{})
 	var out strings.Builder
 	if err := EmitResponses(root, "chat", turn.ResponseToken, strings.NewReader(`[{"number":1,"status":"fixed","agrees":true,"reason":"verified"}]`), &out); err != nil {
 		t.Fatal(err)
@@ -92,7 +92,7 @@ func TestResponseCaptureClosesToolOperation(t *testing.T) {
 	input.ToolResponse = json.RawMessage(out.String())
 	raw, _ = json.Marshal(input)
 	var result strings.Builder
-	Hook(context.Background(), root, cfg, strings.NewReader(string(raw)), &result)
+	hookForTest(context.Background(), root, cfg, strings.NewReader(string(raw)), &result)
 	var state State
 	Read(StatePath(root, dir), &state)
 	if len(state.Active) != 0 {

@@ -13,7 +13,7 @@ func TestHookDiagnosticExplainsMissingIDWithoutCapturingInputs(t *testing.T) {
 	dir, root := repository(t), t.TempDir()
 	input := HookInput{Session: "chat", Turn: "turn", CWD: dir, Event: "PreToolUse", Tool: "edit", Input: json.RawMessage(`{"secret":"PRIVATE_CONTENT"}`), Prompt: "PRIVATE_PROMPT"}
 	raw, _ := json.Marshal(input)
-	Hook(context.Background(), root, Config{Directories: []string{dir}}, strings.NewReader(string(raw)), io.Discard)
+	hookForTest(context.Background(), root, Config{Directories: []string{dir}}, strings.NewReader(string(raw)), io.Discard)
 	var d hookDiagnostic
 	if err := Read(filepath.Join(root, "hook-diagnostics", Key("chatPreToolUse")+".json"), &d); err != nil {
 		t.Fatal(err)

@@ -16,6 +16,11 @@ import (
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 )
 
+// Hook behavior tests supply readiness independently of real network access.
+func hookForTest(ctx context.Context, root string, cfg Config, in io.Reader, out io.Writer, agents ...string) {
+	hookWithReadiness(ctx, root, cfg, in, out, func(context.Context) bool { return true }, agents...)
+}
+
 func repository(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -95,7 +100,7 @@ func TestHookOwnedDeliveryAndResponseCollection(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		var out strings.Builder
-		Hook(ctx, root, cfg, strings.NewReader(string(b)), &out)
+		hookForTest(ctx, root, cfg, strings.NewReader(string(b)), &out)
 		return out.String()
 	}
 	base := HookInput{Session: "chat-a", Turn: "turn-a", CWD: dir, Event: "UserPromptSubmit", Prompt: "change it"}
@@ -160,7 +165,7 @@ func TestHookWithoutWatcherReturnsImmediately(t *testing.T) {
 	b, _ := json.Marshal(input)
 	start := time.Now()
 	var out strings.Builder
-	Hook(context.Background(), root, cfg, strings.NewReader(string(b)), &out)
+	hookForTest(context.Background(), root, cfg, strings.NewReader(string(b)), &out)
 	if strings.TrimSpace(out.String()) != "{}" || time.Since(start) > time.Second {
 		t.Fatal(out.String())
 	}
@@ -234,7 +239,7 @@ func TestAllRepositoryConsentAndDiscovery(t *testing.T) {
 	input := HookInput{Session: "chat", Turn: "turn", CWD: dir, Event: "UserPromptSubmit"}
 	b, _ := json.Marshal(input)
 	var out strings.Builder
-	Hook(context.Background(), root, cfg, strings.NewReader(string(b)), &out)
+	hookForTest(context.Background(), root, cfg, strings.NewReader(string(b)), &out)
 	var discovered string
 	if Read(filepath.Join(root, "discovered", Key(dir)+".json"), &discovered) != nil || discovered != dir {
 		t.Fatal("agent repository was not discovered")
@@ -396,7 +401,7 @@ func TestAgentEditCanTriggerReviewWithExistingDirtyFiles(t *testing.T) {
 	input := HookInput{Session: "chat", Turn: "turn", CWD: dir, Event: "UserPromptSubmit", Prompt: "edit this"}
 	run := func() {
 		b, _ := json.Marshal(input)
-		Hook(context.Background(), root, Config{Directories: []string{dir}}, strings.NewReader(string(b)), io.Discard)
+		hookForTest(context.Background(), root, Config{Directories: []string{dir}}, strings.NewReader(string(b)), io.Discard)
 	}
 	run()
 	fingerprint, _ := snapshotDigest(context.Background(), dir)
@@ -424,7 +429,7 @@ func TestHookRecordsExplicitCodingAgent(t *testing.T) {
 			cfg := Config{Directories: []string{dir}}
 			input := HookInput{Session: "session", Turn: "turn", CWD: dir, Event: "UserPromptSubmit", Prompt: "Update docs"}
 			raw, _ := json.Marshal(input)
-			Hook(context.Background(), root, cfg, strings.NewReader(string(raw)), io.Discard, agent)
+			hookForTest(context.Background(), root, cfg, strings.NewReader(string(raw)), io.Discard, agent)
 			var turn Turn
 			if err := Read(TurnPath(root, "session"), &turn); err != nil {
 				t.Fatal(err)
@@ -458,7 +463,7 @@ func TestHookWaitsOnlyOncePerEditButStopStillWaits(t *testing.T) {
 		raw, _ := json.Marshal(HookInput{Session: owner.Session, Turn: owner.Turn, CWD: dir, Event: event, Tool: "read_file", ToolID: "read"})
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		Hook(ctx, root, cfg, strings.NewReader(string(raw)), io.Discard)
+		hookForTest(ctx, root, cfg, strings.NewReader(string(raw)), io.Discard)
 		return ctx.Err()
 	}
 	if err := run("PostToolUse", 200*time.Millisecond); !errors.Is(err, context.DeadlineExceeded) {

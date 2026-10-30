@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -42,8 +43,18 @@ func snapshotDigest(ctx context.Context, path string) (string, error) {
 // Hook always emits valid, nonblocking JSON on missing state, network outages,
 // unknown ownership or timeout. Only actionable new leads continue the agent.
 func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Writer, agents ...string) {
+	hookWithReadiness(ctx, root, cfg, in, out, func(ctx context.Context) bool { return hookServiceReady(ctx, root, cfg) }, agents...)
+}
+
+func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reader, out io.Writer, ready func(context.Context) bool, agents ...string) {
 	response := map[string]any{}
 	responsesRecorded := false
+	waiting := false
+	defer func() {
+		if waiting && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			recordHookReadiness(root, cfg, false)
+		}
+	}()
 	defer func() { _ = json.NewEncoder(out).Encode(response) }()
 	var input HookInput
 	if json.NewDecoder(io.LimitReader(in, 1<<20)).Decode(&input) != nil || input.Session == "" {
@@ -135,6 +146,11 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 		})
 	}
 	if input.Event == "Stop" {
+		// Do this before finish captures the tree. A dead service should not
+		// make ending the turn wait for either a snapshot or a review.
+		if !watcherAlive(root) || !ready(ctx) {
+			return
+		}
 		finish(root, path, owner, ctx)
 	}
 	if input.Event == "PreToolUse" || input.Event == "PostToolUse" {
@@ -251,9 +267,9 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 			return nil
 		})
 	}
+	lastReadiness := time.Time{}
 	for {
-		var heartbeat time.Time
-		if Read(filepath.Join(root, "heartbeat.json"), &heartbeat) != nil || time.Since(heartbeat) > 5*time.Second {
+		if !watcherAlive(root) {
 			return
 		}
 		var state State
@@ -264,6 +280,17 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 			if op.Owner != owner {
 				return
 			}
+		}
+		var feed Feed
+		hasFeed := Read(FeedPath(root, path), &feed) == nil && feed.Owner == owner && feed.Fingerprint == state.Fingerprint && time.Since(feed.Updated) < 24*time.Hour
+		if hasFeed && (feed.AssessmentStatus != "ready" || len(feed.Leads) == 0) {
+			return
+		}
+		if !hasFeed && time.Since(lastReadiness) >= hookReadyTTL {
+			if !ready(ctx) {
+				return
+			}
+			lastReadiness = time.Now()
 		}
 		if !state.HypothesesSubmitted && time.Since(state.RequestedAt) < hypothesisGrace {
 			message, _ := requestHypotheses(root, path, cfg, state)
@@ -276,8 +303,7 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 			}
 			return
 		}
-		var feed Feed
-		if Read(FeedPath(root, path), &feed) == nil && feed.Owner == owner && feed.Fingerprint == state.Fingerprint && time.Since(feed.Updated) < 24*time.Hour {
+		if hasFeed {
 			if feed.AssessmentStatus != "ready" || len(feed.Leads) == 0 {
 				return
 			}
@@ -338,6 +364,7 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 		if !allowWait {
 			return
 		}
+		waiting = true
 		select {
 		case <-ctx.Done():
 			return

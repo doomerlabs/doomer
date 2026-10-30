@@ -37,7 +37,7 @@ func TestHookRecordsTurnAndEditWhenChatIsOutsideRepository(t *testing.T) {
 	input := HookInput{Session: "chat", Turn: "turn", CWD: parent, Event: "UserPromptSubmit", Prompt: "edit readme"}
 	run := func() {
 		raw, _ := json.Marshal(input)
-		Hook(context.Background(), root, cfg, bytes.NewReader(raw), io.Discard)
+		hookForTest(context.Background(), root, cfg, bytes.NewReader(raw), io.Discard)
 	}
 	run()
 	input.Event = "PreToolUse"
