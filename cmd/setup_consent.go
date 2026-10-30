@@ -5,9 +5,9 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"net"
 	"net/http"
@@ -22,18 +22,16 @@ import (
 // Only the selected profile's destination and requested scope enter the browser.
 // Login credentials stay in the CLI, and approval exists only for this invocation.
 type setupConsent struct {
-	Version         int      `json:"version"`
 	Profile         string   `json:"profile"`
 	API             string   `json:"api"`
 	AllRepositories bool     `json:"allRepositories"`
 	Directories     []string `json:"directories"`
 	Agents          []string `json:"agents"`
-	Callback        string   `json:"callback"`
 	Nonce           string   `json:"nonce"`
 }
 
 func (s setupConsent) print(w io.Writer) {
-	fmt.Fprintln(w, "Connect Doomer to your coding agent\n\nWhile doomer watch is running, Doomer can review repositories you work on.")
+	fmt.Fprintln(w, "Allow Doomer to review this repo?\n\nDoomer sends code from this repo, along with the task prompt and the agent’s review responses, to Doomer’s servers for analysis. You’ll get free initial feedback in your coding chat. No account required.")
 	fmt.Fprintf(w, "\nProfile:      %s\nDestination:  %s\nHooks:        %s\n", s.Profile, s.API, strings.Join(s.Agents, ", "))
 	if s.AllRepositories {
 		fmt.Fprintln(w, "Access:       Repositories your coding agent edits, including future checkouts.")
@@ -43,7 +41,7 @@ func (s setupConsent) print(w io.Writer) {
 			fmt.Fprintln(w, "              "+dir)
 		}
 	}
-	fmt.Fprintln(w, "Sends:        Source files (including files outside your changes) the user request behind an agent edit, and agent review responses.\n\nRepositories are discovered through your coding agent; Doomer does not scan your whole disk.\nSetup installs hooks. Uploads begin only while you run doomer watch.")
+	fmt.Fprintln(w, "Sends:        Base and current source snapshots (including files outside your changes), the task prompt behind an agent edit, and agent review responses.\n\nRepositories are discovered through your coding agent; Doomer does not scan your whole disk.\nSetup installs hooks. Uploads begin only while the watcher runs. See the destination’s privacy policy for retention; expiry of a review link does not delete uploaded source.")
 }
 
 func setupDesktop(goos string, getenv func(string) string) bool {
@@ -53,23 +51,9 @@ func setupDesktop(goos string, getenv func(string) string) bool {
 	return goos == "darwin" || (goos == "linux" && (getenv("DISPLAY") != "" || getenv("WAYLAND_DISPLAY") != ""))
 }
 
-var errBrowserLaunch = errors.New("could not open setup in a browser")
+var openSetupBrowser = openBrowser
 
-func setupConsentURL(s setupConsent) (string, error) {
-	u, err := url.Parse(s.API)
-	if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return "", fmt.Errorf("invalid profile API URL")
-	}
-	u.Path = strings.TrimSuffix(strings.TrimRight(u.Path, "/"), "/api") + "/cli/setup"
-	u.RawPath, u.RawQuery = "", ""
-	data, err := json.Marshal(s)
-	if err != nil {
-		return "", err
-	}
-	// Fragments aren't sent to the SaaS server or included in HTTP referrers.
-	u.Fragment = string(data)
-	return u.String(), nil
-}
+var errBrowserLaunch = errors.New("could not open setup in a browser")
 
 func setupApprovalHandler(s setupConsent, host string, result chan<- bool) http.Handler {
 	var mu sync.Mutex
@@ -77,8 +61,17 @@ func setupApprovalHandler(s setupConsent, host string, result chan<- bool) http.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
-		if r.Host != host || r.Method != http.MethodGet || r.URL.Path != "/complete" || subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("nonce")), []byte(s.Nonce)) != 1 {
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'")
+		if r.Host != host || r.Method != http.MethodGet || subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("nonce")), []byte(s.Nonce)) != 1 {
+			http.Error(w, "Invalid setup request.", http.StatusForbidden)
+			return
+		}
+		if r.URL.Path == "/consent" {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_ = setupPage.Execute(w, s)
+			return
+		}
+		if r.URL.Path != "/complete" {
 			http.Error(w, "Invalid setup request.", http.StatusForbidden)
 			return
 		}
@@ -101,6 +94,10 @@ func setupApprovalHandler(s setupConsent, host string, result chan<- bool) http.
 }
 
 func browserSetupConsent(ctx context.Context, s setupConsent, out io.Writer, open func(context.Context, string) error) (bool, error) {
+	destination, err := url.Parse(s.API)
+	if err != nil || destination.Host == "" || destination.User != nil || (destination.Scheme != "http" && destination.Scheme != "https") {
+		return false, fmt.Errorf("invalid profile API URL")
+	}
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		return false, fmt.Errorf("%w: %v", errBrowserLaunch, err)
@@ -110,11 +107,8 @@ func browserSetupConsent(ctx context.Context, s setupConsent, out io.Writer, ope
 	if _, err = rand.Read(nonce); err != nil {
 		return false, err
 	}
-	s.Version, s.Callback, s.Nonce = 1, "http://"+listener.Addr().String()+"/complete", hex.EncodeToString(nonce)
-	link, err := setupConsentURL(s)
-	if err != nil {
-		return false, err
-	}
+	s.Nonce = hex.EncodeToString(nonce)
+	link := "http://" + listener.Addr().String() + "/consent?nonce=" + url.QueryEscape(s.Nonce)
 	result := make(chan bool, 1)
 	server := &http.Server{Handler: setupApprovalHandler(s, listener.Addr().String(), result), ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}
 	defer func() {
@@ -163,4 +157,34 @@ func terminalSetupConsent(ctx context.Context, input io.Reader) bool {
 	case approved := <-answer:
 		return approved && ctx.Err() == nil
 	}
+}
+
+// This screen is served by the local CLI so its disclosure matches the installed
+// version. No repository content or credentials are sent to render it.
+var setupPage = template.Must(template.New("consent").Parse(`<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Allow Doomer to review this repo?</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;color:#202020;background:#f6f5f2;margin:0;padding:48px 20px}main{max-width:680px;margin:auto;background:white;padding:32px;border:1px solid #ddd;border-radius:16px}h1{line-height:1.2;font-size:28px}code{overflow-wrap:anywhere}details{border-top:1px solid #ddd;border-bottom:1px solid #ddd;padding:16px 0;margin:24px 0}summary,button{cursor:pointer}button{font:inherit;border:1px solid #ccc;border-radius:8px;padding:10px 18px;background:white;margin:4px}button[value=allow]{background:#222;color:white;border-color:#222}a{color:inherit}</style>
+<main>
+<h1>Allow Doomer to review this repo?</h1>
+<p>Doomer sends code from this repo, along with the task prompt and the agent’s review responses, to Doomer’s servers for analysis. You’ll get free initial feedback in your coding chat. No account required.</p>
+<ul>{{range .Directories}}<li><code>{{.}}</code></li>{{end}}</ul>
+<p>Destination: <code>{{.API}}</code><br>Profile: <code>{{.Profile}}</code></p>
+<details><summary>What gets sent?</summary>
+<p>Base and current repository snapshots, including tracked and non-ignored source files outside the changed lines, the task prompt behind an agent edit, and the agent’s review responses. Unchanged files may be reused from previous uploads. Approval also covers this repository’s linked Git worktrees.</p>
+<p>Uploaded source is retained under the <a href="{{.PrivacyURL}}" target="_blank" rel="noreferrer">service’s privacy policy</a>. Expiry of a review link does not delete the uploaded source.</p>
+<p>Setup installs {{range .Agents}}{{.}} {{end}}hooks. Your coding agent may separately ask you to trust them. The watcher uploads only after approval and an attributable agent edit. You can pause watching or revoke approval from the CLI.</p>
+</details>
+<form method="get" action="/complete"><input type="hidden" name="nonce" value="{{.Nonce}}">
+<button name="decision" value="allow">Allow for this repo</button>
+<button name="decision" value="cancel">Not now</button></form>
+</main></html>`))
+
+func (s setupConsent) PrivacyURL() string {
+	u, err := url.Parse(s.API)
+	if err != nil {
+		return ""
+	}
+	u.Path, u.RawPath, u.RawQuery, u.Fragment = "/privacy", "", "", ""
+	return u.String()
 }

@@ -93,3 +93,38 @@ func HookFile(home, agent string) string {
 	}
 	return filepath.Join(base, "hooks.json")
 }
+
+// Installed checks each required lifecycle event without modifying hook definitions.
+func Installed(file, marker string) (bool, error) {
+	data, err := os.ReadFile(file)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var config struct {
+		Hooks map[string][]struct {
+			Hooks []struct {
+				Command string `json:"command"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return false, fmt.Errorf("invalid hook settings: %s: %w", file, err)
+	}
+	for _, event := range []string{"UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"} {
+		found := false
+		for _, group := range config.Hooks[event] {
+			for _, h := range group.Hooks {
+				if strings.Contains(h.Command, marker) {
+					found = true
+				}
+			}
+		}
+		if !found {
+			return false, nil
+		}
+	}
+	return true, nil
+}

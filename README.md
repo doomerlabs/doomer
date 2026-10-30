@@ -31,37 +31,50 @@ go build -o bin/doomer .
 ./bin/doomer watch
 ```
 
-Run `watch` in a terminal. For anonymous use, invoking the command authorizes
-source uploads and installs the integration. Signed-in profiles retain their
-existing upload-approval flow. For signed-in setup, a Mac or Linux desktop opens a browser to explain
-what is shared and ask you to allow or cancel. Over SSH or on a headless server,
-it asks in the terminal. If the browser cannot open, it falls back to the terminal.
+For a coding agent, use `watch start` to approve the current repository and
+start or reuse a detached watcher. The CLI opens a local consent page on macOS
+and Linux desktops. Anonymous users must approve uploads too; invoking a command,
+installing hooks, or having an anonymous identity is not upload permission.
 
 ```sh
-./bin/doomer watch --no-browser      # terminal approval, including over SSH
-./bin/doomer watch --browser         # explicitly choose browser approval
-./bin/doomer watch --yes             # explicitly approve and install without prompting
-./bin/doomer --profile local watch   # local profile and API only
+./bin/doomer watch start --browser  # human approves in browser; no terminal input needed
+./bin/doomer watch status --json    # consent, installed hooks, pause state and watcher health
+./bin/doomer watch stop             # pause this profile, preserving upload approval
+./bin/doomer watch start --resume   # explicitly resume after a pause
+./bin/doomer watch revoke .         # revoke this repo and its linked worktrees
+./bin/doomer watch --no-browser     # foreground watcher with terminal approval, including SSH
 ```
 
-Noninteractive setup requires `--yes`; it never treats piped input as approval.
-`--yes` approves the same source uploads and hook installation described by the
-interactive flow. Setup prints the profile, destination, and scope before saving.
-Without directory arguments, first-time setup allows automatic discovery of repositories
-your agent edits. Use `watch /path/to/repo` on first use to limit upload approval to
-named repositories. Hooks discover repositories as you work; Doomer does not
-scan the whole disk. Base and current source snapshots, including files outside
-the diff, and agent review responses may be uploaded while `watch` is running.
+With no directory argument, new setup is limited to the current Git repository
+and its linked worktrees. Adding a different repository asks again. Approved
+repositories do not ask again unless approval is revoked or the profile's
+identity changes. Older anonymous configurations that treated invocation as
+approval require a fresh human decision. Existing signed-in approvals are retained.
+Base and current source snapshots, including files outside the diff, the task
+prompt behind an agent edit, and agent review responses may be uploaded.
 
-Browser setup uses `/cli/setup` at the selected profile's API origin. It passes
-setup details in a URL fragment, never login credentials. Approval returns to a
-one-time loopback callback on the same machine; remote terminals should use
-`--no-browser`. Browser login does not change the selected CLI account/profile.
-Approval expires after five minutes, and cancelling leaves existing settings alone.
+Browser consent is served on a one-time loopback listener by the CLI itself.
+It shows the exact repository scope and API destination; rendering it sends no
+code or credentials to the service. Approval expires after five minutes and
+cancelling leaves existing settings alone. The listener validates the nonce and
+host, and accepts only one decision. On a remote server use `--no-browser` in an
+interactive terminal. Piped text never counts as terminal approval. `--yes` remains
+available for a human deliberately choosing unattended setup; a coding agent must
+never pass it on the user's behalf.
 
-In Codex, open `/hooks` and review/trust the new definitions. The command preserves
-unrelated hooks and backs up existing settings. It does not automatically grant
-Codex permissions or start a background process.
+In Codex, open `/hooks` and review/trust the new definitions. Installing hooks
+does not grant that trust. Setup preserves unrelated hooks; repeated startup
+reuses installed definitions. `status --json` deliberately reports hook trust as
+`user_managed`, since installed hooks alone do not prove they have been trusted.
+
+`watch start` maintains one watcher per API endpoint/profile, with private local
+logs. It reuses a running watcher or restarts it after new repository approval.
+The child has detached input/output and survives the launching agent command.
+It does not install an OS service or restart after reboot; a later `watch start`
+can restore it. `watch stop` persists a pause, which ordinary `watch start` refuses
+to undo without `--resume`. Revocation cancels the running watcher; restart it
+from a remaining approved repository if needed. A running foreground watcher can
+be reused only for repositories it already covers.
 
 `watch` prints each repository it watches, detected changes, uploads, and initial
 assessment progress. Starting the watcher never uploads existing changes. Only
@@ -70,10 +83,10 @@ manual edits and prompts without edits do not. Existing dirty files remain part
 of the reviewed snapshot once an agent edit triggers it. Direct/manual review is
 not part of this watch workflow.
 
-With no directories, it immediately includes the current
-Git checkout if approved for this profile. With all-repository approval, it also
-continues discovering repositories through the coding-agent hooks. Outside a
-Git checkout it waits for discovery. Use `doomer watch .` to watch only the current
+With no directories, a foreground watcher includes the current Git checkout
+if approved for this profile. Legacy all-repository approvals also allow discovery
+through coding-agent hooks. New setup outside a Git checkout requires an explicit
+repository path. Use `doomer watch .` to watch only the current
 checkout for this run, or `doomer watch --debug` for scan, discovery, and review-status details.
 Diagnostics do not print source contents, prompts, review responses, or credentials.
 
@@ -115,11 +128,11 @@ a 20 MiB per-file limit, and a separate 16 MiB diff limit. These are separate fr
 the smaller legacy embedded-upload limits below. Uploads still send only missing
 content blobs; unchanged files are reused.
 
-Keep `watch` running in a separate terminal, then edit the approved repository
+Start with `watch start` (or keep foreground `watch` running), then edit the approved repository
 in Codex. After files settle, Doomer uploads a bounded snapshot and starts the
 hosted workspace review. The synchronous hook waits at most 30 seconds for the
-initial assessment and otherwise releases the agent silently. The deep review
-continues on the service; it is never waited on by the hook. New leads include a
+initial assessment and otherwise releases the agent silently. For an entitled signed-in profile, any deep review continues on the service;
+it is never waited on by the hook. Anonymous watching runs only free Look Closer. New leads include a
 link to the web review and instructions to investigate within your task's scope.
 Outcome lines in the agent's final reply are captured locally and uploaded by the
 running watcher. Missing agent outcomes are never invented.
@@ -164,7 +177,7 @@ The triggering user request is included as review context; it is not attributed
 to every changed line. This version does not yet carry prompt-to-line provenance or associate
 commits with PR reviews. Treat this as a local test build, not an unattended
 system service. Authentication/network failures remain visible in the watcher
-terminal; they do not block the coding agent.
+terminal or private background log; they do not block the coding agent.
 
 ## Finding evidence
 
@@ -514,7 +527,7 @@ configuration directory.
 
 ### Anonymous reviews
 
-No login is required for `review` or `watch`. Command invocation authorizes sending
+No login is required for `review` or `watch`. Direct `review` invocation authorizes sending
 source code and review context to the selected service. Anonymous runs always use
 Look Closer only, even when Deep review is requested. By default the CLI waits for
 Look Closer; `--wait=none` still returns immediately. Existing signed-in profiles
@@ -530,7 +543,7 @@ To test locally without changing your existing login:
 
 ```sh
 ./bin/doomer --profile anonymous-local --api-url http://localhost:3000/api review --path /path/to/repo
-./bin/doomer --profile anonymous-local --api-url http://localhost:3000/api watch --agent both
+./bin/doomer --profile anonymous-local --api-url http://localhost:3000/api watch start --browser --agent both
 ```
 
 Codex still manages hook trust in `/hooks`. Agent feedback keeps using the same

@@ -14,6 +14,7 @@ import (
 )
 
 type Config struct {
+	ExplicitConsent bool      `json:"explicit_consent,omitempty"`
 	AllRepositories bool      `json:"all_repositories,omitempty"`
 	Version         int       `json:"version"`
 	AccountKey      string    `json:"account_key"`
@@ -139,6 +140,12 @@ func StatePath(root, path string) string {
 }
 func FeedPath(root, path string) string    { return filepath.Join(root, "reviews", Key(path)+".json") }
 func TurnPath(root, session string) string { return filepath.Join(root, "turns", Key(session)+".json") }
+
+// ConsentValid rejects legacy anonymous configurations that treated invocation as consent.
+func ConsentValid(cfg Config, api, profile, token string) bool {
+	return cfg.Version == 1 && cfg.API == api && cfg.Profile == profile && !cfg.ConsentedAt.IsZero() && cfg.AccountKey == Key(token) && (!adversarylabs.IsAnonymousToken(token) || cfg.ExplicitConsent)
+}
+
 func Allowed(cfg Config, path string) bool {
 	if cfg.AllRepositories {
 		return true
