@@ -29,9 +29,31 @@ func watchPaths(api, profile string) (string, string, error) {
 			return "", "", err
 		}
 	}
-	root := filepath.Join(dir, "watch", watching.Key(api+"\x00"+profile))
+	absolute, err := filepath.Abs(dir)
+	if err != nil {
+		return "", "", err
+	}
+	root := filepath.Join(absolute, "watch", watching.Key(api+"\x00"+profile))
 	return root, filepath.Join(root, "config.json"), nil
 }
+
+// Keep hook repair and readiness checks tied to this executable and destination.
+func watchHookCommand(api, profile, root string) (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	prefix := ""
+	if dir := os.Getenv("DOOMER_CONFIG_DIR"); dir != "" {
+		absolute, err := filepath.Abs(dir)
+		if err != nil {
+			return "", err
+		}
+		prefix = "env DOOMER_CONFIG_DIR=" + watching.Quote(absolute) + " "
+	}
+	return prefix + watching.Quote(exe) + " --profile " + watching.Quote(profile) + " --api-url " + watching.Quote(api) + " watch hook --state " + watching.Quote(root), nil
+}
+
 func watchAuth(app *application.App, api, profile string) (adversarylabs.Auth, error) {
 	return reviewAuth(app, api, profile)
 }
@@ -44,9 +66,11 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 			return err
 		}
 		var cfg watching.Config
-		if e := watching.Read(file, &cfg); e != nil && !os.IsNotExist(e) {
-			return fmt.Errorf("invalid watch configuration: %w", e)
+		initialReadErr := watching.Read(file, &cfg)
+		if initialReadErr != nil && !os.IsNotExist(initialReadErr) {
+			return fmt.Errorf("invalid watch configuration: %w", initialReadErr)
 		}
+		initialConfig := cfg
 		if status {
 			fmt.Fprintf(c.OutOrStdout(), "Profile: %s\nService: %s\n", *profile, *api)
 			if cfg.AllRepositories {
@@ -55,7 +79,7 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 			for _, p := range cfg.Directories {
 				fmt.Fprintln(c.OutOrStdout(), p)
 			}
-			fmt.Fprintln(c.OutOrStdout(), "Codex hook trust is managed in /hooks. Run watch in a separate terminal.")
+			fmt.Fprintln(c.OutOrStdout(), "Codex hook trust is managed in /hooks. Use watch status for readiness and watch start to run in the background.")
 			return nil
 		}
 		home, err := os.UserHomeDir()
@@ -71,6 +95,11 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		}
 		marker := "watch hook --state " + watching.Quote(root)
 		if uninstall {
+			lock, err := lifecycleLock(c.Context(), root)
+			if err != nil {
+				return err
+			}
+			defer lock.Close()
 			if !c.Flags().Changed("agent") {
 				selected = []string{"codex", "claude"}
 			}
@@ -92,7 +121,13 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		if err != nil {
 			return err
 		}
-		allRepositories := len(args) == 0
+		if !watching.ConsentValid(cfg, *api, *profile, auth.Token) {
+			cfg = watching.Config{}
+		}
+		if len(args) == 0 {
+			args = []string{"."}
+		}
+		allRepositories := false
 		directories := []string{}
 		seen := map[string]bool{}
 		requested := args
@@ -113,12 +148,12 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		f, ok := c.InOrStdin().(*os.File)
 		interactive := ok && term.IsTerminal(int(f.Fd()))
 		anonymous := adversarylabs.IsAnonymousToken(auth.Token)
-		approved := yes || anonymous
-		if !yes && !anonymous && !interactive {
-			return fmt.Errorf("setup requires approval: run it in an interactive terminal, or pass --yes to allow source uploads and install hooks for this profile")
+		approved := yes
+		if !yes && !interactive && !browser && !defaultSetupBrowser() {
+			return fmt.Errorf("setup requires approval: use --browser for a human decision, or run in an interactive terminal; agents must not supply --yes")
 		}
-		if !yes && !anonymous && !noBrowser && (browser || defaultSetupBrowser()) {
-			approved, err = browserSetupConsent(c.Context(), consent, c.OutOrStdout(), openBrowser)
+		if !yes && !noBrowser && (browser || defaultSetupBrowser()) {
+			approved, err = browserSetupConsent(c.Context(), consent, c.OutOrStdout(), openSetupBrowser)
 			if err != nil && !errors.Is(err, errBrowserLaunch) {
 				return err
 			}
@@ -129,6 +164,9 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 			}
 		}
 		if !approved {
+			if !interactive {
+				return fmt.Errorf("setup requires approval in an interactive terminal; no upload consent saved")
+			}
 			consent.print(c.OutOrStdout())
 			fmt.Fprint(c.OutOrStdout(), "\nInstall hooks and allow these uploads? Type yes to continue: ")
 			if !terminalSetupConsent(c.Context(), f) {
@@ -152,7 +190,22 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		if c.Context().Err() != nil {
 			return fmt.Errorf("setup cancelled; no upload consent saved")
 		}
-		cfg = watching.Config{AllRepositories: allRepositories, Version: 1, API: *api, Profile: *profile, Directories: directories, ConsentedAt: time.Now(), AccountKey: watching.Key(auth.Token)}
+		// A human may revoke or replace approval while the browser is open.
+		// Serialize the short commit phase and refuse to restore stale consent.
+		approvalLock, err := lifecycleLock(c.Context(), root)
+		if err != nil {
+			return err
+		}
+		defer approvalLock.Close()
+		var latest watching.Config
+		latestErr := watching.Read(file, &latest)
+		if latestErr != nil && !os.IsNotExist(latestErr) {
+			return latestErr
+		}
+		if (initialReadErr == nil) != (latestErr == nil) || !latest.ConsentedAt.Equal(initialConfig.ConsentedAt) || latest.AccountKey != initialConfig.AccountKey {
+			return fmt.Errorf("upload approval changed during setup; run setup again")
+		}
+		cfg = watching.Config{ExplicitConsent: true, AllRepositories: allRepositories, Version: 1, API: *api, Profile: *profile, Directories: directories, ConsentedAt: time.Now(), AccountKey: watching.Key(auth.Token)}
 		for _, path := range directories {
 			id, e := watching.RepositoryIdentity(c.Context(), path)
 			if e != nil {
@@ -160,20 +213,10 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 			}
 			cfg.RepositoryIDs = append(cfg.RepositoryIDs, id)
 		}
-		exe, err := os.Executable()
+		command, err := watchHookCommand(*api, *profile, root)
 		if err != nil {
 			return err
 		}
-		// Shell fallback is silent if the binary or profile is temporarily unavailable.
-		prefix := ""
-		if dir := os.Getenv("DOOMER_CONFIG_DIR"); dir != "" {
-			absolute, e := filepath.Abs(dir)
-			if e != nil {
-				return e
-			}
-			prefix = "env DOOMER_CONFIG_DIR=" + watching.Quote(absolute) + " "
-		}
-		command := prefix + watching.Quote(exe) + " --profile " + watching.Quote(*profile) + " --api-url " + watching.Quote(*api) + " watch hook --state " + watching.Quote(root)
 		if err = watching.Write(file, cfg); err != nil {
 			return err
 		}
@@ -182,11 +225,11 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 				return err
 			}
 		}
-		fmt.Fprintln(c.OutOrStdout(), "Integration saved. In Codex, open /hooks and trust the Doomer CLI hooks. Keep watch running in its own terminal. Use watch ls to manage watched checkouts or watch uninstall to remove the integration.")
+		fmt.Fprintln(c.OutOrStdout(), "Integration saved. In Codex, open /hooks and trust the Doomer CLI hooks. Use watch start to run in the background. Use watch ls to manage watched checkouts or watch uninstall to remove the integration.")
 		return nil
 	}}
 	c.Flags().BoolVar(&yes, "yes", false, "approve uploads and hook installation for the selected profile without prompting")
-	c.Flags().BoolVar(&browser, "browser", false, "open browser setup (interactive terminal required)")
+	c.Flags().BoolVar(&browser, "browser", false, "open browser setup for a human decision (also works from an agent)")
 	c.Flags().BoolVar(&noBrowser, "no-browser", false, "approve setup in the terminal instead of a browser")
 	c.MarkFlagsMutuallyExclusive("yes", "browser", "no-browser")
 	c.Flags().StringVar(&agents, "agent", "codex", "install codex, claude, or both integrations")
@@ -225,6 +268,7 @@ func initialWatchDirectories(ctx context.Context, cfg watching.Config, cwd strin
 func newWatchCommand(app *application.App, api, profile *string) *cobra.Command {
 	var config, base string
 	var debug bool
+	var managedSession string
 	var interval time.Duration
 	c := &cobra.Command{Use: "watch [directories...]", Short: "Set up and watch repositories with your coding agent", Args: cobra.ArbitraryArgs, RunE: func(c *cobra.Command, args []string) error {
 		root, file, err := watchPaths(*api, *profile)
@@ -250,7 +294,19 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			}
 			args = selection.Directories
 		}
-		cfg, auth, err := prepareWatch(c, app, api, profile, args)
+		var cfg watching.Config
+		var auth adversarylabs.Auth
+		if managedSession != "" {
+			auth, err = watchAuth(app, *api, *profile)
+			if err == nil {
+				err = watching.Read(file, &cfg)
+			}
+			if err == nil && !watching.ConsentValid(cfg, *api, *profile, auth.Token) {
+				err = fmt.Errorf("upload approval is required before starting a managed watcher")
+			}
+		} else {
+			cfg, auth, err = prepareWatch(c, app, api, profile, args)
+		}
 		if err != nil {
 			return err
 		}
@@ -290,6 +346,9 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			return fmt.Errorf("a watcher for this profile is already running")
 		}
 		defer lock.Close()
+		if paused(root) {
+			return fmt.Errorf("watching is paused; use watch start --resume to resume")
+		}
 		watchStarted := time.Now()
 		watchSession := watchStarted.UTC().Format(time.RFC3339Nano)
 		if err := watching.Write(filepath.Join(root, "watch-session.json"), watchSession); err != nil {
@@ -300,6 +359,11 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 		heartbeat := filepath.Join(root, "heartbeat.json")
 		_ = watching.Write(heartbeat, time.Now())
 		defer os.Remove(heartbeat)
+		process := watchProcess{PID: os.Getpid(), Session: watchSession, ManagedSession: managedSession, ConsentedAt: cfg.ConsentedAt, Directories: args}
+		if err := watching.Write(filepath.Join(root, "process.json"), process); err != nil {
+			return err
+		}
+		defer os.Remove(filepath.Join(root, "process.json"))
 		// Revocation stops all in-flight uploads, including during initial assessment.
 		go func() {
 			ticker := time.NewTicker(500 * time.Millisecond)
@@ -312,7 +376,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 					_ = watching.Write(heartbeat, time.Now())
 					var current watching.Config
 					active, e := watchAuth(app, *api, *profile)
-					if e != nil || watching.Key(active.Token) != cfg.AccountKey || watching.Read(file, &current) != nil || current.AccountKey != cfg.AccountKey || !current.ConsentedAt.Equal(cfg.ConsentedAt) {
+					if paused(root) || e != nil || watching.Read(file, &current) != nil || !watching.ConsentValid(current, *api, *profile, active.Token) || !current.ConsentedAt.Equal(cfg.ConsentedAt) {
 						cancel()
 						return
 					}
@@ -459,6 +523,9 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	}}
 	addWatchSetupFlags(c)
 	addWatchRepositoryCommands(c, app, api, profile)
+	addWatchLifecycleCommands(c, app, api, profile)
+	c.Flags().StringVar(&managedSession, "managed-session", "", "internal background startup identity")
+	_ = c.Flags().MarkHidden("managed-session")
 	c.Flags().BoolVar(&debug, "debug", false, "show repository discovery, scans, uploads, and review status (no source contents)")
 	c.Flags().StringVar(&config, "config", "", "JSON file listing already-approved directories")
 	c.Flags().StringVar(&base, "base", "", "local baseline ref")
@@ -476,7 +543,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			return nil
 		}
 		auth, e := watchAuth(app, *api, *profile)
-		if e != nil || cfg.AccountKey != watching.Key(auth.Token) || cfg.API != *api || cfg.Profile != *profile || cfg.ConsentedAt.IsZero() {
+		if e != nil || !watching.ConsentValid(cfg, *api, *profile, auth.Token) || paused(state) {
 			fmt.Fprint(c.OutOrStdout(), "{}")
 			return nil
 		}

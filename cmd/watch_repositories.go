@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/doomerlabs/doomer/internal/application"
@@ -27,7 +26,10 @@ func prepareWatch(c *cobra.Command, app *application.App, api, profile *string, 
 	if err != nil && !os.IsNotExist(err) {
 		return cfg, auth, fmt.Errorf("read watch configuration: %w", err)
 	}
-	valid := err == nil && cfg.Version == 1 && cfg.API == *api && cfg.Profile == *profile && !cfg.ConsentedAt.IsZero() && cfg.AccountKey == watching.Key(auth.Token)
+	valid := err == nil && watching.ConsentValid(cfg, *api, *profile, auth.Token)
+	if len(dirs) == 0 && (!valid || !cfg.AllRepositories) {
+		dirs = []string{"."}
+	}
 	approved := valid
 	for _, dir := range dirs {
 		path, e := watching.Root(c.Context(), dir)
@@ -65,10 +67,16 @@ func prepareWatch(c *cobra.Command, app *application.App, api, profile *string, 
 		return cfg, auth, err
 	}
 	installed := true
-	marker := "watch hook --state " + watching.Quote(root)
+	command, err := watchHookCommand(*api, *profile, root)
+	if err != nil {
+		return cfg, auth, err
+	}
 	for _, agent := range selected {
-		data, e := os.ReadFile(watching.HookFile(home, agent))
-		installed = installed && e == nil && strings.Count(string(data), marker) >= 4
+		present, e := watching.Installed(watching.HookFile(home, agent), command+" --agent "+watching.Quote(agent))
+		if e != nil {
+			return cfg, auth, e
+		}
+		installed = installed && present
 	}
 	if approved && installed {
 		return cfg, auth, nil

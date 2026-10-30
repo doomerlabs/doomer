@@ -47,28 +47,28 @@ func TestAnonymousReviewIdentityIsPersistentIsolatedAndPrefersLogin(t *testing.T
 		t.Fatal("anonymous identity replaced a login")
 	}
 }
-func TestAnonymousWatchInvocationInstallsWithoutExtraUploadPrompt(t *testing.T) {
+func TestAnonymousWatchRequiresHumanUploadApproval(t *testing.T) {
 	store := isolate(t)
 	t.Setenv("HOME", t.TempDir())
 	app := &application.App{Deps: application.Dependencies{Auth: store}}
 	api, profile := "https://example.test/api", "guest"
 	c := newWatchCommand(app, &api, &profile)
 	c.SetContext(context.Background())
-	c.SetIn(strings.NewReader(""))
+	c.SetIn(strings.NewReader("yes\n"))
+	_ = c.Flags().Set("no-browser", "true")
 	var output bytes.Buffer
 	c.SetOut(&output)
-	cfg, auth, err := prepareWatch(c, app, &api, &profile, nil)
-	if err != nil {
-		t.Fatal(err)
+	repo := newWatchTestRepo(t)
+	_, _, err := prepareWatch(c, app, &api, &profile, []string{repo})
+	if err == nil || !strings.Contains(err.Error(), "requires approval") {
+		t.Fatalf("anonymous upload was approved: %v", err)
 	}
-	if !adversarylabs.IsAnonymousToken(auth.Token) || cfg.AccountKey != watching.Key(auth.Token) || !cfg.AllRepositories {
-		t.Fatal("anonymous watch configuration missing")
-	}
-	if !strings.Contains(output.String(), "Source code") || strings.Contains(output.String(), auth.Token) {
-		t.Fatal("disclosure or secret handling incorrect")
+	_, file, _ := watchPaths(api, profile)
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Fatal("unapproved configuration saved")
 	}
 	home, _ := os.UserHomeDir()
-	if _, err = os.Stat(watching.HookFile(home, "codex")); err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(watching.HookFile(home, "codex")); !os.IsNotExist(err) {
+		t.Fatal("unapproved hooks installed")
 	}
 }

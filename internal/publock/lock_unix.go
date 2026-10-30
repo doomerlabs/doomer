@@ -3,6 +3,7 @@
 package publock
 
 import (
+	"errors"
 	"golang.org/x/sys/unix"
 	"os"
 )
@@ -23,3 +24,6 @@ func tryLockFile(f *os.File, shared bool) error {
 	}
 	return unix.Flock(int(f.Fd()), mode|unix.LOCK_NB)
 }
+
+// Busy reports an OS lock held by another process.
+func Busy(err error) bool { return errors.Is(err, unix.EWOULDBLOCK) || errors.Is(err, unix.EAGAIN) }

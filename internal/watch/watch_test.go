@@ -486,3 +486,22 @@ func TestDiffLimitRemainsIndependentOfRepositorySize(t *testing.T) {
 		t.Fatal("diff must remain bounded to 16 MiB")
 	}
 }
+
+func TestConsentValidRejectsImplicitAnonymousApproval(t *testing.T) {
+	token := adversarylabs.AnonymousTokenPrefix + strings.Repeat("A", 43)
+	cfg := Config{Version: 1, API: "https://example.test/api", Profile: "dev", AccountKey: Key(token), ConsentedAt: time.Now()}
+	if ConsentValid(cfg, cfg.API, cfg.Profile, token) {
+		t.Fatal("implicit anonymous approval accepted")
+	}
+	cfg.ExplicitConsent = true
+	if !ConsentValid(cfg, cfg.API, cfg.Profile, token) {
+		t.Fatal("explicit approval rejected")
+	}
+	if ConsentValid(cfg, "https://other.test/api", cfg.Profile, token) || ConsentValid(cfg, cfg.API, "other", token) || ConsentValid(cfg, cfg.API, cfg.Profile, "other") {
+		t.Fatal("approval crossed service, profile or identity")
+	}
+	cfg.ConsentedAt = time.Time{}
+	if ConsentValid(cfg, cfg.API, cfg.Profile, token) {
+		t.Fatal("missing approval accepted")
+	}
+}

@@ -41,9 +41,10 @@ func TestWatchFirstUseRequiresUploadApproval(t *testing.T) {
 	c := newWatchCommand(app, &api, &profile)
 	c.SetContext(context.Background())
 	c.SetIn(strings.NewReader("yes\n"))
+	_ = c.Flags().Set("no-browser", "true")
 	var output bytes.Buffer
 	c.SetOut(&output)
-	_, _, err := prepareWatch(c, app, &api, &profile, nil)
+	_, _, err := prepareWatch(c, app, &api, &profile, []string{newWatchTestRepo(t)})
 	if err == nil || !strings.Contains(err.Error(), "requires approval") {
 		t.Fatalf("first use bypassed approval: %v", err)
 	}

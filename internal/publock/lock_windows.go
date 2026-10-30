@@ -3,6 +3,7 @@
 package publock
 
 import (
+	"errors"
 	"golang.org/x/sys/windows"
 	"os"
 )
@@ -28,3 +29,6 @@ func tryLockFile(f *os.File, shared bool) error {
 	var o windows.Overlapped
 	return windows.LockFileEx(windows.Handle(f.Fd()), flags, 0, 1, 0, &o)
 }
+
+// Busy reports an OS lock held by another process.
+func Busy(err error) bool { return errors.Is(err, windows.ERROR_LOCK_VIOLATION) }

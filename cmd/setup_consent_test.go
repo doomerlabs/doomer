@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,24 +30,21 @@ func TestSetupDesktopModes(t *testing.T) {
 	}
 }
 
-func TestSetupURLRespectsProfileOriginAndKeepsDetailsInFragment(t *testing.T) {
-	s := setupConsent{Version: 1, API: "http://localhost:3000/api", Profile: "local", AllRepositories: true, Nonce: strings.Repeat("a", 64)}
-	link, err := setupConsentURL(s)
-	if err != nil {
-		t.Fatal(err)
+func TestSetupPrivacyURLFollowsDestination(t *testing.T) {
+	for _, api := range []string{"http://localhost:3000/api", "https://doomer.ai/api"} {
+		s := setupConsent{API: api}
+		if got := s.PrivacyURL(); got != strings.TrimSuffix(api, "/api")+"/privacy" {
+			t.Fatal(got)
+		}
 	}
-	u, _ := url.Parse(link)
-	if u.Scheme != "http" || u.Host != "localhost:3000" || u.Path != "/cli/setup" || u.RawQuery != "" {
-		t.Fatal(link)
-	}
-	var got setupConsent
-	if err := json.Unmarshal([]byte(u.Fragment), &got); err != nil || got.Profile != "local" || got.API != s.API {
-		t.Fatalf("%+v %v", got, err)
-	}
-	s.API = "https://doomer.ai/api"
-	link, _ = setupConsentURL(s)
-	if !strings.HasPrefix(link, "https://doomer.ai/cli/setup#") {
-		t.Fatal(link)
+}
+
+func TestBrowserSetupRejectsInvalidDestination(t *testing.T) {
+	for _, api := range []string{"", "file:///tmp/service", "https://user:password@example.test/api"} {
+		_, err := browserSetupConsent(context.Background(), setupConsent{API: api}, io.Discard, func(context.Context, string) error { t.Fatal("opened browser for invalid destination"); return nil })
+		if err == nil {
+			t.Fatalf("accepted %q", api)
+		}
 	}
 }
 
@@ -91,16 +87,21 @@ func TestBrowserSetupRoundTrip(t *testing.T) {
 	s := setupConsent{API: "http://localhost:3000/api", Profile: "local", AllRepositories: true}
 	approved, err := browserSetupConsent(context.Background(), s, &out, func(ctx context.Context, link string) error {
 		u, _ := url.Parse(link)
-		var request setupConsent
-		if err := json.Unmarshal([]byte(u.Fragment), &request); err != nil {
+		if u.Hostname() != "127.0.0.1" || u.Path != "/consent" || u.Query().Get("nonce") == "" {
+			return fmt.Errorf("unexpected consent URL: %s", link)
+		}
+		page, err := http.Get(link)
+		if err != nil {
 			return err
 		}
-		if request.Profile != "local" || request.API != s.API {
-			return fmt.Errorf("profile changed")
+		body, err := io.ReadAll(page.Body)
+		page.Body.Close()
+		if err != nil || !strings.Contains(string(body), "http://localhost:3000/api") || !strings.Contains(string(body), "task prompt") {
+			return fmt.Errorf("missing disclosure: %s", body)
 		}
-		callback, _ := url.Parse(request.Callback)
+		callback := *u
+		callback.Path = "/complete"
 		q := callback.Query()
-		q.Set("nonce", request.Nonce)
 		q.Set("decision", "allow")
 		callback.RawQuery = q.Encode()
 		response, err := http.Get(callback.String())
