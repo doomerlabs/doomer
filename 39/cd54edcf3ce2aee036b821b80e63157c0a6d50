@@ -1,0 +1,57 @@
+README.md
+  s_c5a06ffaad29b7::t_69b3f2406a911c 34-37,40-45,48-77,86-89,131,134-135,180,530,546
+cmd/review_auth_test.go
+  s_c5a06ffaad29b7::t_7369720faca0f0 50,57-58,61-64,66-68,71-72
+cmd/setup_consent.go
+  s_c5a06ffaad29b7::t_43b9eff05fb456 10,34,44,54,56,64-74,97-100,110-111,161-190
+cmd/setup_consent_test.go
+  s_c5a06ffaad29b7::t_ecc22678cfcc86 33-38,40-47,90-94,97-100,102-103
+cmd/watch.go
+  s_c5a06ffaad29b7::t_75c03b1744f30b 32-36,39-56,69-71,73,82,98-102,124-130,151-153,155-156,167-169,193-208,216,228,232,271,297-309,349-351,362-366,379,526-528,546
+cmd/watch_lifecycle.go
+  s_c5a06ffaad29b7::t_db5844bf152965 1-383
+cmd/watch_lifecycle_test.go
+  s_c5a06ffaad29b7::t_1fe0f023b54cc9 1-376
+cmd/watch_process_unix.go
+  s_c5a06ffaad29b7::t_43dc09918c018f 1-27
+cmd/watch_process_windows.go
+  s_c5a06ffaad29b7::t_85d4ab49e7bdba 1-12
+cmd/watch_repositories.go
+  s_c5a06ffaad29b7::t_68f53a9663b1db 29-32,70-73,75-79
+cmd/watch_repositories_test.go
+  s_c5a06ffaad29b7::t_dfafb9313ec8ac 44,47
+internal/publock/lock_unix.go
+  s_c5a06ffaad29b7::t_4c276533a6e4c2 6,27-29
+internal/publock/lock_windows.go
+  s_c5a06ffaad29b7::t_e84f28b0e06f3e 6,32-34
+internal/watch/install.go
+  s_c5a06ffaad29b7::t_40a5ff639feeac 96-130
+internal/watch/store.go
+  s_c5a06ffaad29b7::t_3fa4bd75a4a24b 17,143-148
+internal/watch/watch_test.go
+  s_f38809330d16e0::t_2ab744e55f7634 489-507
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "39cd54edcf3ce2aee036b821b80e63157c0a6d50",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    },
+    "s_f38809330d16e0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18d90-edb1-7981-8ef1-15e94f440216",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
