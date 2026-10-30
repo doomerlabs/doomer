@@ -15,3 +15,11 @@ func lockFile(f *os.File, shared bool) error {
 	return unix.Flock(int(f.Fd()), mode)
 }
 func unlockFile(f *os.File) error { return unix.Flock(int(f.Fd()), unix.LOCK_UN) }
+
+func tryLockFile(f *os.File, shared bool) error {
+	mode := unix.LOCK_EX
+	if shared {
+		mode = unix.LOCK_SH
+	}
+	return unix.Flock(int(f.Fd()), mode|unix.LOCK_NB)
+}
