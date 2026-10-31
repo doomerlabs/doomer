@@ -195,13 +195,13 @@ func (f *fakeClient) StartWorkspace(_ context.Context, _ string, in adversarylab
 	f.starts++
 	f.input = in
 	if f.noAssessment {
-		return adversarylabs.WorkspaceReview{ID: "review", Status: f.reviewStatus}, nil
+		return adversarylabs.WorkspaceReview{ID: "review", URL: "https://example.com/look-closer/org/repo/" + strings.Repeat("a", 64), Status: f.reviewStatus}, nil
 	}
 	status := f.assessmentStatus
 	if status == "" {
 		status = "ready"
 	}
-	return adversarylabs.WorkspaceReview{ID: "review", Status: "running", Early: &adversarylabs.WorkspaceAssessment{Status: status}}, nil
+	return adversarylabs.WorkspaceReview{ID: "review", URL: "https://example.com/look-closer/org/repo/" + strings.Repeat("a", 64), Status: "running", Early: &adversarylabs.WorkspaceAssessment{Status: status}}, nil
 }
 func (f *fakeClient) GetWorkspace(context.Context, string, string) (adversarylabs.WorkspaceReview, error) {
 	panic("unexpected poll")
@@ -258,7 +258,7 @@ func TestWatchReportsDetectionAndGatesDiagnostics(t *testing.T) {
 			t.Fatal(err)
 		}
 		log := output.String()
-		for _, message := range []string{"change detected", "preparing local checkout contents", "look closer review requested", "look closer review completed", "https://example.com/worktree/reviews/review"} {
+		for _, message := range []string{"change detected", "preparing local checkout contents", "look closer review requested", "look closer review completed", "https://example.com/look-closer/org/repo/" + strings.Repeat("a", 64)} {
 			if !strings.Contains(log, message) {
 				t.Fatalf("missing %q: %s", message, log)
 			}
@@ -466,7 +466,8 @@ func TestHookWaitsOnlyOncePerEditButStopStillWaits(t *testing.T) {
 		hookForTest(ctx, root, cfg, strings.NewReader(string(raw)), io.Discard)
 		return ctx.Err()
 	}
-	if err := run("PostToolUse", 200*time.Millisecond); !errors.Is(err, context.DeadlineExceeded) {
+	// Leave time for the real Git snapshot before exercising the inline wait.
+	if err := run("PostToolUse", 2*time.Second); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("first inline hook should wait: %v", err)
 	}
 	if err := run("PostToolUse", 2*time.Second); err != nil {
