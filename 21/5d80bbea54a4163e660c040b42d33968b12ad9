@@ -1,0 +1,29 @@
+internal/watch/hook.go
+  s_c5a06ffaad29b7::t_dc384397396fc3 85-102
+internal/watch/interrupted_turn.go
+  s_c5a06ffaad29b7::t_faa67af0c9a32c 1-45
+internal/watch/interrupted_turn_test.go
+  s_c5a06ffaad29b7::t_28ba94cdc98597 1-141
+internal/watch/watch_test.go
+  s_c5a06ffaad29b7::t_5ac5df95cdb39e 198,204,261,469-470
+pkg/adversarylabs/anonymous.go
+  s_c5a06ffaad29b7::t_3de545c5557586 6,19-21,26,30,32-33
+pkg/adversarylabs/anonymous_test.go
+  s_c5a06ffaad29b7::t_4d9ed2c3be8561 12,17,20-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "215d80bbea54a4163e660c040b42d33968b12ad9",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
