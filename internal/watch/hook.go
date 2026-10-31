@@ -82,6 +82,24 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 		if owner.Turn == "" {
 			owner.Turn = rand.Text()
 		}
+		// A canceled tool can miss both its completion event and Stop. Recover
+		// every previously visited, still-approved checkout before replacing
+		// the session's turn record (the new prompt may start elsewhere).
+		paths := append([]string{}, turn.Repositories...)
+		if allowed {
+			paths = append(paths, path)
+		}
+		seen := map[string]bool{}
+		for _, previousPath := range paths {
+			if seen[previousPath] || !Allowed(cfg, previousPath) || RepositoryRemoved(root, previousPath) {
+				continue
+			}
+			seen[previousPath] = true
+			if err := retireInterruptedTurn(root, previousPath, owner); err != nil {
+				diagnostic.Status = "interrupted turn recovery failed: " + err.Error()
+				return
+			}
+		}
 		prompt := ""
 		// Retain only the active turn's prompt. With all-repository consent,
 		// a turn may begin outside Git before creating/selecting its checkout.
