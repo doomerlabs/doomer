@@ -63,7 +63,7 @@ func TestReviewReturnsLookCloserAndPreservesFullReviewChoice(t *testing.T) {
 					if err := json.NewDecoder(r.Body).Decode(&submitted); err != nil {
 						t.Error(err)
 					}
-					json.NewEncoder(w).Encode(map[string]any{"anonymous": guest, "url": "http://" + r.Host + "/look-closer/review#private", "id": "review", "status": "running", "look_closer_enabled": mode.look, "look_closer_threshold": submitted.LookCloserThreshold, "full_review": map[string]any{"enabled": mode.full, "status": "running"}})
+					json.NewEncoder(w).Encode(map[string]any{"anonymous": guest, "url": "http://" + r.Host + "/look-closer/org/repo/" + strings.Repeat("a", 64) + "#private", "id": "review", "status": "running", "look_closer_enabled": mode.look, "look_closer_threshold": submitted.LookCloserThreshold, "full_review": map[string]any{"enabled": mode.full, "status": "running"}})
 				case "/v1/reviews/workspace/review":
 					polls++
 					status := "running"
@@ -77,7 +77,7 @@ func TestReviewReturnsLookCloserAndPreservesFullReviewChoice(t *testing.T) {
 					if r.URL.Query().Get("results") == "full" {
 						full["result"] = map[string]any{"conclusion": "success", "summary": "Deep review finished", "findings": []any{}}
 					}
-					json.NewEncoder(w).Encode(map[string]any{"anonymous": guest, "url": "http://" + r.Host + "/look-closer/review#private", "id": "review", "status": status, "look_closer_enabled": mode.look, "look_closer_threshold": submitted.LookCloserThreshold, "full_review": full, "early_assessment": map[string]any{"status": "ready", "leads": []map[string]any{{"path": "file.txt", "line": 1, "concern": "Check the new value", "check": "Compare the expected output"}}}})
+					json.NewEncoder(w).Encode(map[string]any{"anonymous": guest, "url": "http://" + r.Host + "/look-closer/org/repo/" + strings.Repeat("a", 64) + "#private", "id": "review", "status": status, "look_closer_enabled": mode.look, "look_closer_threshold": submitted.LookCloserThreshold, "full_review": full, "early_assessment": map[string]any{"status": "ready", "leads": []map[string]any{{"path": "file.txt", "line": 1, "concern": "Check the new value", "check": "Compare the expected output"}}}})
 				default:
 					t.Errorf("unexpected route %s", r.URL.Path)
 					w.WriteHeader(404)
@@ -145,7 +145,7 @@ func TestReviewReturnsLookCloserAndPreservesFullReviewChoice(t *testing.T) {
 			if submitted.ReviewScope != "diff" || submitted.FullReview == nil || *submitted.FullReview != mode.full || len(submitted.Project) != 0 || submitted.LookCloser == nil || *submitted.LookCloser != mode.look || !strings.Contains(submitted.Diff, "+after") {
 				t.Fatalf("wrong submission: %+v", submitted)
 			}
-			if guest && (!result.Data.Anonymous || result.Data.URL != "http://"+strings.TrimPrefix(server.URL, "http://")+"/look-closer/review#private") {
+			if guest && (!result.Data.Anonymous || result.Data.URL != "http://"+strings.TrimPrefix(server.URL, "http://")+"/look-closer/org/repo/"+strings.Repeat("a", 64)+"#private") {
 				t.Fatal("anonymous link missing")
 			}
 			if mode.wait && (result.Data.Full == nil || result.Data.Full.Result == nil) {
