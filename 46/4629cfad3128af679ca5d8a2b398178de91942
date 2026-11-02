@@ -1,0 +1,21 @@
+internal/watch/install.go
+  s_c5a06ffaad29b7::t_9e48bece906b87 70-80
+internal/watch/watch_test.go
+  s_c5a06ffaad29b7::t_9e48bece906b87 64-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "464629cfad3128af679ca5d8a2b398178de91942",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
