@@ -1,0 +1,29 @@
+.depot/workflows/release.yml
+  s_c5a06ffaad29b7::t_d4cb9a25196d48 140-185
+docs/release.md
+  s_c5a06ffaad29b7::t_8997f3490eb0aa 64-90
+scripts/publish-r2.py
+  s_c5a06ffaad29b7::t_a7e8866408cad8 1-145
+scripts/test-publish-r2.py
+  s_c5a06ffaad29b7::t_32554bbbe2ae6c 1-110
+scripts/test-release-contract.sh
+  s_c5a06ffaad29b7::t_aca9bdc5acca8f 11
+scripts/verify-ci-contract.go
+  s_c5a06ffaad29b7::t_4df4fa43c6e8dd 440-452
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6dc1a4feade8d56ab7c1c410a76bf9cc3630e244",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
