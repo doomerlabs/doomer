@@ -72,7 +72,7 @@ the `release` environment, and `release.yml`. The object read/write credential
 must be scoped only to `doomer-cli-releases`; it needs no account administration
 or other bucket access.
 
-The custom domain `downloads.doomer.ai` serves that bucket. Versioned assets live
+The custom domain `cli.doomer.ai` serves that bucket. Versioned assets live
 under `releases/VERSION/` with immutable cache headers. Existing keys are created
 conditionally and can only be reused if their bytes match. The job verifies all
 public downloads before promoting `stable.json` (stable tags) or `beta.json`
