@@ -1,0 +1,16 @@
+docs/release.md
+  h_aa44c3b5b60dec 75
+scripts/publish-r2.py
+  h_aa44c3b5b60dec 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c696d0f60a7beef55b737e50de960149c42f7a4c",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
