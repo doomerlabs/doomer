@@ -8,7 +8,8 @@ from pathlib import Path
 import re
 import urllib.request
 
-BASE_URL = 'https://cli.doomer.ai'
+BASE_URL = 'https://downloads.doomer.ai/cli'
+OBJECT_PREFIX = 'cli/'
 TAG = re.compile(r'^20\d{2}\.\d{1,2}\.\d{1,2}(?:-beta\.\d+)?$')
 
 
@@ -82,7 +83,7 @@ def version_key(version):
 
 
 def promote(client, bucket, pointer):
-    key = 'beta.json' if '-beta.' in pointer['version'] else 'stable.json'
+    key = OBJECT_PREFIX + ('beta.json' if '-beta.' in pointer['version'] else 'stable.json')
     data = (json.dumps(pointer, sort_keys=True, indent=2) + '\n').encode()
     for _ in range(5):
         try:
@@ -115,7 +116,7 @@ def promote(client, bucket, pointer):
 def publish(client, bucket, directory, version, verify_public):
     files, pointer = release_bundle(directory, version)
     for name, data in files.items():
-        put_immutable(client, bucket, f'releases/{version}/{name}', data)
+        put_immutable(client, bucket, f'{OBJECT_PREFIX}releases/{version}/{name}', data)
     # Publish a discoverable channel only after every public artifact is readable.
     for name, data in files.items():
         verify_public(f'{BASE_URL}/releases/{version}/{name}', data)
