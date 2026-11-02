@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import urllib.request
 
-BASE_URL = 'https://downloads.doomer.ai'
+BASE_URL = 'https://cli.doomer.ai'
 TAG = re.compile(r'^20\d{2}\.\d{1,2}\.\d{1,2}(?:-beta\.\d+)?$')
 
 
