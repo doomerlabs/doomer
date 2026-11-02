@@ -54,14 +54,17 @@ class PublicationTests(unittest.TestCase):
             path = Path(directory)
             files = self.fixture(path)
             store = Store()
+            store.data['stable.json'] = b'existing Mac manifest'
             checked = []
             def verify(url, data):
-                self.assertNotIn('stable.json', store.data)
-                self.assertEqual(store.data[url.removeprefix(publisher.BASE_URL + '/')], data)
+                self.assertNotIn('cli/stable.json', store.data)
+                self.assertEqual(store.data[url.removeprefix('https://downloads.doomer.ai/')], data)
                 checked.append(url)
             publisher.publish(store, 'bucket', path, '2026.11.2', verify)
             self.assertEqual(len(checked), len(files))
-            self.assertEqual(store.writes[-1], 'stable.json')
+            self.assertEqual(store.writes[-1], 'cli/stable.json')
+            self.assertEqual(store.data['stable.json'], b'existing Mac manifest')
+            self.assertTrue(all(key.startswith('cli/') for key in store.writes))
             writes = len(store.writes)
             publisher.publish(store, 'bucket', path, '2026.11.2', lambda *args: None)
             self.assertEqual(len(store.writes), writes)
@@ -75,8 +78,8 @@ class PublicationTests(unittest.TestCase):
                 raise RuntimeError('not publicly available')
             with self.assertRaises(RuntimeError):
                 publisher.publish(store, 'bucket', path, '2026.11.2', fail)
-            self.assertNotIn('stable.json', store.data)
-            key = 'releases/2026.11.2/doomer.rb'
+            self.assertNotIn('cli/stable.json', store.data)
+            key = 'cli/releases/2026.11.2/doomer.rb'
             store.data[key] = b'wrong'
             with self.assertRaises(ValueError):
                 publisher.publish(store, 'bucket', path, '2026.11.2', lambda *args: None)
@@ -88,22 +91,22 @@ class PublicationTests(unittest.TestCase):
     def test_beta_and_older_releases_do_not_change_stable(self):
         store = Store()
         publisher.promote(store, 'bucket', {'version': '2026.11.3'})
-        stable = store.data['stable.json']
+        stable = store.data['cli/stable.json']
         publisher.promote(store, 'bucket', {'version': '2026.11.2'})
         publisher.promote(store, 'bucket', {'version': '2026.11.4-beta.1'})
-        self.assertEqual(store.data['stable.json'], stable)
-        self.assertIn('beta.json', store.data)
+        self.assertEqual(store.data['cli/stable.json'], stable)
+        self.assertIn('cli/beta.json', store.data)
 
     def test_conditional_update_rechecks_concurrent_newer_release(self):
         class RacingStore(Store):
             def put_object(self, **kwargs):
-                if kwargs['Key'] == 'stable.json' and 'IfMatch' in kwargs:
-                    self.data['stable.json'] = json.dumps({'version': '2026.11.4'}).encode()
+                if kwargs['Key'] == 'cli/stable.json' and 'IfMatch' in kwargs:
+                    self.data['cli/stable.json'] = json.dumps({'version': '2026.11.4'}).encode()
                 return super().put_object(**kwargs)
         store = RacingStore()
         publisher.promote(store, 'bucket', {'version': '2026.11.1'})
         publisher.promote(store, 'bucket', {'version': '2026.11.2'})
-        self.assertEqual(json.loads(store.data['stable.json'])['version'], '2026.11.4')
+        self.assertEqual(json.loads(store.data['cli/stable.json'])['version'], '2026.11.4')
 
 
 if __name__ == '__main__':

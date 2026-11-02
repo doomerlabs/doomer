@@ -69,13 +69,14 @@ After GitHub publication, `publish-r2` verifies the same release bundle before
 receiving its R2 credentials. Configure Depot secrets `R2_ACCOUNT_ID`,
 `R2_BUCKET`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` for this repository,
 the `release` environment, and `release.yml`. The object read/write credential
-must be scoped only to `doomer-cli-releases`; it needs no account administration
+must be scoped only to `doomer-macos-releases`; it needs no account administration
 or other bucket access.
 
-The custom domain `cli.doomer.ai` serves that bucket. Versioned assets live
-under `releases/VERSION/` with immutable cache headers. Existing keys are created
+The existing custom domain `downloads.doomer.ai` serves that bucket. CLI
+publication only writes under `cli/`, preserving all Mac app release objects.
+Versioned CLI assets live under `cli/releases/VERSION/` with immutable cache headers. Existing keys are created
 conditionally and can only be reused if their bytes match. The job verifies all
-public downloads before promoting `stable.json` (stable tags) or `beta.json`
+public downloads before promoting `cli/stable.json` (stable tags) or `cli/beta.json`
 (beta tags). Channel pointers use `no-store` cache headers and conditional writes
 so concurrent releases and retries cannot replace a newer version with an older
 one. The pointers contain a schema version, release version, commit, and each
