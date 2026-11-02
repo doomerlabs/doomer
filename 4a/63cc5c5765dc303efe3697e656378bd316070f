@@ -1,0 +1,23 @@
+docs/release.md
+  s_c5a06ffaad29b7::t_ec392544404537 72,75-77,79
+scripts/publish-r2.py
+  s_c5a06ffaad29b7::t_0abc795a0e63f2 11-12,86,119
+scripts/test-publish-r2.py
+  s_c5a06ffaad29b7::t_cfde716db1af99 57,60-61,65-67,81-82,94,97-98,103-104,109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4a63cc5c5765dc303efe3697e656378bd316070f",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
