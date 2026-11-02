@@ -437,6 +437,19 @@ func validateRelease(workflow *yaml.Node) {
 	validatePublicationOrder(homebrew, "publish-homebrew", finalName)
 	validateSecretBoundary(homebrew, "publish-homebrew", "HOMEBREW_TAP_TOKEN", finalName)
 	requireNoPublicationCredentials(findStep(homebrew, "Verify exact Homebrew publication state"), "Homebrew pre-publication verification step")
+
+	r2 := requiredValue(jobs, "publish-r2")
+	requireExactSet(value(r2, "needs"), "publish-r2 dependencies", "publish-github")
+	requirePermissions(r2, "publish-r2 job", map[string]string{"contents": "read"})
+	requireJobEnvironment(r2, "publish-r2")
+	if hasCredentialReferenceBeyondEmptyOverride(r2, "GITHUB_TOKEN") || hasCredentialReferenceBeyondEmptyOverride(r2, "GH_TOKEN") || hasCredentialReferenceBeyondEmptyOverride(r2, "HOMEBREW_TAP_TOKEN") || nodeContains(r2, "github.token") {
+		fail("R2 publication job must not receive GitHub or tap publication authority")
+	}
+	validatePublicationOrder(r2, "publish-r2", "Publish public release downloads")
+	for _, secret := range []string{"R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"} {
+		validateSecretBoundary(r2, "publish-r2", secret, "Publish public release downloads")
+	}
+	requireNoPublicationCredentials(findStep(r2, "Verify exact R2 publication state"), "R2 pre-publication verification step")
 }
 
 func main() {

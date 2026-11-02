@@ -61,3 +61,30 @@ Building/verification require no publication credentials. The contract tests
 exercise both publication channels using fake GitHub/Git commands, including
 retry, tampered-asset rejection, and authority isolation. GNU tar is required
 for deterministic archives (`gtar` on macOS).
+
+
+## Public CLI downloads (R2)
+
+After GitHub publication, `publish-r2` verifies the same release bundle before
+receiving its R2 credentials. Configure Depot secrets `R2_ACCOUNT_ID`,
+`R2_BUCKET`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` for this repository,
+the `release` environment, and `release.yml`. The object read/write credential
+must be scoped only to `doomer-cli-releases`; it needs no account administration
+or other bucket access.
+
+The custom domain `downloads.doomer.ai` serves that bucket. Versioned assets live
+under `releases/VERSION/` with immutable cache headers. Existing keys are created
+conditionally and can only be reused if their bytes match. The job verifies all
+public downloads before promoting `stable.json` (stable tags) or `beta.json`
+(beta tags). Channel pointers use `no-store` cache headers and conditional writes
+so concurrent releases and retries cannot replace a newer version with an older
+one. The pointers contain a schema version, release version, commit, and each
+supported platform's archive URL and SHA-256. No GitHub API access is needed by
+an installing skill.
+
+A failed R2 publication does not remove the GitHub release or update the channel
+pointer. Retry the failed job with the same immutable tag. To backfill an existing
+release, download its exact published bundle, verify it with the release bundle
+verifier, then run `scripts/publish-r2.py --dir PATH --version VERSION` using the
+same bucket-scoped environment variables. Never rebuild or overwrite that tag's
+published assets.
