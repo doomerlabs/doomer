@@ -61,6 +61,21 @@ func TestInstallPreservesOtherHooksAndUninstallsOnlyOwn(t *testing.T) {
 	if strings.Count(string(b), "other-command") != 1 || strings.Count(string(b), "doomer watch hook") != 4 {
 		t.Fatal(string(b))
 	}
+	for _, groups := range got["hooks"].(map[string]any) {
+		for _, group := range groups.([]any) {
+			for _, raw := range group.(map[string]any)["hooks"].([]any) {
+				handler := raw.(map[string]any)
+				if strings.HasPrefix(handler["command"].(string), "doomer ") {
+					label, _ := handler["statusMessage"].(string)
+					if !strings.HasPrefix(label, "Doomer: ") {
+						t.Fatalf("Doomer hook has no recognizable label: %v", handler)
+					}
+				} else if _, changed := handler["statusMessage"]; changed {
+					t.Fatal("unrelated hook was relabeled")
+				}
+			}
+		}
+	}
 	if e := Install(file, "", "watch hook --state '/own'", true); e != nil {
 		t.Fatal(e)
 	}

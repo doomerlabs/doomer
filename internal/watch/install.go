@@ -67,7 +67,17 @@ func Install(file, command, marker string, remove bool) error {
 			}
 		}
 		if !remove {
-			group := map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command, "timeout": 32}}}
+			handler := map[string]any{"type": "command", "command": command, "timeout": 32}
+			// Codex also uses statusMessage as the name shown in /hooks.
+			if filepath.Base(file) == "hooks.json" {
+				handler["statusMessage"] = map[string]string{
+					"UserPromptSubmit": "Doomer: capture task",
+					"PreToolUse":       "Doomer: track upcoming changes",
+					"PostToolUse":      "Doomer: capture changes",
+					"Stop":             "Doomer: review changes",
+				}[event]
+			}
+			group := map[string]any{"hooks": []any{handler}}
 			if event == "PreToolUse" || event == "PostToolUse" {
 				group["matcher"] = ".*"
 			}
