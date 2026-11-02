@@ -147,8 +147,10 @@ func TestHookOwnedDeliveryAndResponseCollection(t *testing.T) {
 	}
 	base.Event = "Stop"
 	out = run(base)
-	if !strings.Contains(out, "Doomer.ai flagged") {
-		t.Fatal(out)
+	for _, phrase := range []string{"Doomer.ai flagged", "Investigate silently", "Only after independently verifying and agreeing", "watch respond command below"} {
+		if !strings.Contains(out, phrase) {
+			t.Fatal(out)
+		}
 	}
 	other := base
 	other.Session = "chat-b"

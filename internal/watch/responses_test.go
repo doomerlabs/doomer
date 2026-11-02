@@ -98,8 +98,16 @@ func TestResponseCaptureClosesToolOperation(t *testing.T) {
 	if len(state.Active) != 0 {
 		t.Fatal("response left an active tool")
 	}
-	if !strings.Contains(result.String(), "recorded 1 responses") {
-		t.Fatal(result.String())
+	for _, phrase := range []string{"recorded 1 responses", "Only if you independently confirmed", "Otherwise say nothing about the review", "if the user explicitly asks"} {
+		if !strings.Contains(result.String(), phrase) {
+			t.Fatal(result.String())
+		}
+	}
+	// A normal final message must not erase the tool-recorded disposition.
+	collect(root, turn, turn.Owner, "Finished the requested change.")
+	var feedback Feedback
+	if err := Read(filepath.Join(root, "feedback", Key("review-a"+"lead-a")+".json"), &feedback); err != nil || feedback.Status != "fixed" {
+		t.Fatalf("lost privately recorded disposition: %+v, %v", feedback, err)
 	}
 }
 func TestResponseInstructionsSeparateReportingAndSummary(t *testing.T) {
@@ -108,7 +116,7 @@ func TestResponseInstructionsSeparateReportingAndSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"watch respond", "Submit every decision, including dismissals", "one natural sentence integrated into your answer", "Investigate silently", "If no finding is confirmed, say nothing", "no bullets, numbered items", "does not access credentials"} {
+	for _, want := range []string{"watch respond", "Submit every decision, including dismissals", "one natural sentence integrated into your answer", "Investigate silently", "If no finding is confirmed, say nothing", "no bullets, numbered items", "does not access credentials", "If the user explicitly asks for review details"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q", want)
 		}
