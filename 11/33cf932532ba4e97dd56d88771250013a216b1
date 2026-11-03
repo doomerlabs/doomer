@@ -1,0 +1,40 @@
+cmd/watch_lifecycle.go
+  s_c5a06ffaad29b7::t_028b1e4a75c9b5 271-272
+cmd/watch.go
+  s_c5a06ffaad29b7::t_028b1e4a75c9b5 82,228
+cmd/onboard.go
+  s_c5a06ffaad29b7::t_1a09e4cc111dfc 22,29-31,76,79-84,88-89,98-109
+  s_c5a06ffaad29b7::t_47d40669277bc9 110-120
+internal/watch/agent_instructions.go
+  s_c5a06ffaad29b7::t_1a09e4cc111dfc 29-35,39,50-55,59
+  s_c5a06ffaad29b7::t_3d2a21b34f1b56 28
+internal/watch/install.go
+  s_c5a06ffaad29b7::t_028b1e4a75c9b5 14-21,42,89,134
+internal/watch/hook.go
+  s_c5a06ffaad29b7::t_028b1e4a75c9b5 27,52,60-67,76-88
+  s_c5a06ffaad29b7::t_cac566462f4758 90
+README.md
+  s_c5a06ffaad29b7::t_224ab273079e8c 26,34-41,48
+cmd/onboard_test.go
+  s_c5a06ffaad29b7::t_513705c1752ec1 18-86,88-100,102-107,109,111-112
+internal/watch/agent_instructions_test.go
+  s_c5a06ffaad29b7::t_273247b541920b 14,21,33,40-87
+internal/watch/claude_test.go
+  s_c5a06ffaad29b7::t_21fee7206d25d5 1-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1133cf932532ba4e97dd56d88771250013a216b1",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
