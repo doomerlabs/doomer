@@ -109,6 +109,19 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(store.data['cli/stable.json'], stable)
         self.assertIn('cli/beta.json', store.data)
 
+    def test_daily_sequence_order_and_manifest(self):
+        for earlier, later in [('2026.11.2', '2026.11.2.1'), ('2026.11.2.1', '2026.11.2.2'), ('2026.11.2.9', '2026.11.2.10'), ('2026.11.2.10', '2026.11.3.1')]:
+            self.assertLess(publisher.version_key(earlier), publisher.version_key(later))
+        for invalid in ['2026.11.2.0', '2026.11.2.01', '2026.11.2.1.2']:
+            with self.assertRaises(ValueError):
+                publisher.version_key(invalid)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            self.fixture(path, '2026.11.2.1')
+            _, pointer = publisher.release_bundle(path, '2026.11.2.1')
+            self.assertEqual(pointer['version'], '2026.11.2.1')
+            self.assertIn('/2026.11.2.1/', pointer['assets']['darwin_arm64']['url'])
+
     def test_conditional_update_rechecks_concurrent_newer_release(self):
         class RacingStore(Store):
             def put_object(self, **kwargs):

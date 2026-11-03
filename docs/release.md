@@ -1,7 +1,9 @@
 # Release operations
 
-The Depot release workflow runs on CalVer tag pushes: `YYYY.M.D` or
-`YYYY.M.D-beta.N`. Tags must point to commits reachable from `origin/main` and
+The Depot release workflow runs on CalVer tag pushes: `YYYY.M.D.N` or
+`YYYY.M.D.N-beta.B`. New stable releases always include a daily sequence, starting
+at `.1` and incrementing for each release that day. Legacy three-component tags
+remain valid for retries and comparisons. Tags must point to commits reachable from `origin/main` and
 must never move after publication. A release tag starts a read-only build/test
 job that cross-builds macOS and Linux amd64/arm64, validates SPDX 2.3 metadata,
 and produces deterministic archives, checksums, and a release manifest.
@@ -40,8 +42,8 @@ reviewers and tag restrictions in the connected platform.
 After Depot CI passes for `main`:
 
 ```sh
-git tag -a 2026.10.3 -m 'Release 2026.10.3'
-git push origin 2026.10.3
+git tag -a 2026.11.2.1 -m 'Release 2026.11.2.1'
+git push origin 2026.11.2.1
 ```
 
 Use a new CalVer tag for corrections. Release retries validate existing assets
