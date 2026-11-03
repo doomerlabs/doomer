@@ -305,7 +305,16 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 			return
 		}
 		var state State
-		if Read(StatePath(root, path), &state) != nil || state.Owner != owner || state.Ambiguous {
+		if Read(StatePath(root, path), &state) != nil {
+			return
+		}
+		var feed Feed
+		ownedFeed := Read(FeedPath(root, path), &feed) == nil && feed.Owner == owner && !feed.Updated.IsZero() && time.Since(feed.Updated) >= 0 && time.Since(feed.Updated) < 24*time.Hour
+		// An external change can reset the live baseline without invalidating a
+		// completed review of this turn. Deliver that result as an older snapshot;
+		// never restore edit ownership or claim that the new baseline was reviewed.
+		olderSnapshot := state.Owner == (Owner{}) && !state.Ambiguous && len(state.Active) == 0 && ownedFeed && feed.AssessmentStatus == "ready"
+		if !olderSnapshot && (state.Owner != owner || state.Ambiguous) {
 			return
 		}
 		for _, op := range state.Active {
@@ -313,8 +322,7 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 				return
 			}
 		}
-		var feed Feed
-		hasFeed := Read(FeedPath(root, path), &feed) == nil && feed.Owner == owner && feed.Fingerprint == state.Fingerprint && time.Since(feed.Updated) < 24*time.Hour
+		hasFeed := ownedFeed && (feed.Fingerprint == state.Fingerprint || olderSnapshot)
 		if hasFeed && feed.AssessmentStatus != "ready" {
 			return
 		}
@@ -340,7 +348,7 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 				return
 			}
 			fingerprint, e := snapshotDigest(ctx, path)
-			if e != nil || fingerprint != feed.Fingerprint {
+			if e != nil || (fingerprint != feed.Fingerprint && !olderSnapshot) {
 				return
 			}
 			var message string
@@ -354,18 +362,25 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 						return nil
 					}
 				}
+				snapshotLabel := "latest edit"
+				snapshotNote := ""
+				if olderSnapshot {
+					snapshotLabel = "earlier snapshot from this turn"
+					snapshotNote = "The checkout changed after that snapshot. This does not confirm review of the current code. Verify each lead against the current code before acting. "
+				}
 				if len(feed.Leads) == 0 {
 					turn.Delivered = append(turn.Delivered, feed.ReviewID)
 					if err := Write(turnFile, turn); err != nil {
 						return err
 					}
-					message = fmt.Sprintf("Doomer completed the assessment of the latest edit: no areas to check. It is no longer pending. Include [Doomer review](%s) once in your final answer; preserve the full URL. Do not repeat this internal handoff or claim the absence of all bugs.", feed.URL)
+					message = fmt.Sprintf("Doomer completed the assessment of the %s: no areas to check. It is no longer pending. %sInclude [Doomer review](%s) once in your final answer; preserve the full URL. Do not repeat this internal handoff or claim the absence of all bugs.", snapshotLabel, snapshotNote, feed.URL)
 					return nil
 				}
 				if turn.Next < 1 {
 					turn.Next = 1
 				}
 				var text strings.Builder
+				text.WriteString(snapshotNote)
 				areaWord := "areas"
 				if len(feed.Leads) == 1 {
 					areaWord = "area"
