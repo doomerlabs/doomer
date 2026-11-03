@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	_ "embed"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -68,7 +69,7 @@ func setupApprovalHandler(s setupConsent, host string, result chan<- bool) http.
 		}
 		if r.URL.Path == "/consent" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_ = setupPage.Execute(w, s)
+			_ = setupPage.ExecuteTemplate(w, "consent", s)
 			return
 		}
 		if r.URL.Path != "/complete" {
@@ -88,7 +89,10 @@ func setupApprovalHandler(s setupConsent, host string, result chan<- bool) http.
 		}
 		used = true
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, "<!doctype html><title>Doomer setup</title><h1>Return to your terminal</h1><p>Your choice was received. The terminal will show whether setup completed.</p>")
+		_ = setupPage.ExecuteTemplate(w, "complete", struct {
+			Consent  setupConsent
+			Approved bool
+		}{s, decision == "allow"})
 		result <- decision == "allow"
 	})
 }
@@ -161,24 +165,11 @@ func terminalSetupConsent(ctx context.Context, input io.Reader) bool {
 
 // This screen is served by the local CLI so its disclosure matches the installed
 // version. No repository content or credentials are sent to render it.
-var setupPage = template.Must(template.New("consent").Parse(`<!doctype html>
-<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Allow Doomer to review this repo?</title>
-<style>body{font:16px/1.6 system-ui,sans-serif;color:#202020;background:#f6f5f2;margin:0;padding:48px 20px}main{max-width:680px;margin:auto;background:white;padding:32px;border:1px solid #ddd;border-radius:16px}h1{line-height:1.2;font-size:28px}code{overflow-wrap:anywhere}details{border-top:1px solid #ddd;border-bottom:1px solid #ddd;padding:16px 0;margin:24px 0}summary,button{cursor:pointer}button{font:inherit;border:1px solid #ccc;border-radius:8px;padding:10px 18px;background:white;margin:4px}button[value=allow]{background:#222;color:white;border-color:#222}a{color:inherit}</style>
-<main>
-<h1>Allow Doomer to review this repo?</h1>
-<p>Doomer sends code from this repo, along with the task prompt and the agent’s review responses, to Doomer’s servers for analysis. You’ll get free initial feedback in your coding chat. No account required.</p>
-<ul>{{range .Directories}}<li><code>{{.}}</code></li>{{end}}</ul>
-<p>Destination: <code>{{.API}}</code><br>Profile: <code>{{.Profile}}</code></p>
-<details><summary>What gets sent?</summary>
-<p>Base and current repository snapshots, including tracked and non-ignored source files outside the changed lines, the task prompt behind an agent edit, and the agent’s review responses. Unchanged files may be reused from previous uploads. Approval also covers this repository’s linked Git worktrees.</p>
-<p>Uploaded source is retained under the <a href="{{.PrivacyURL}}" target="_blank" rel="noreferrer">service’s privacy policy</a>. Expiry of a review link does not delete the uploaded source.</p>
-<p>Setup installs {{range .Agents}}{{.}} {{end}}hooks. Your coding agent may separately ask you to trust them. The watcher uploads only after approval and an attributable agent edit. You can pause watching or revoke approval from the CLI.</p>
-</details>
-<form method="get" action="/complete"><input type="hidden" name="nonce" value="{{.Nonce}}">
-<button name="decision" value="allow">Allow for this repo</button>
-<button name="decision" value="cancel">Not now</button></form>
-</main></html>`))
+//
+//go:embed setup_page.html
+var setupPageHTML string
+
+var setupPage = template.Must(template.New("setup").Parse(setupPageHTML))
 
 func (s setupConsent) PrivacyURL() string {
 	u, err := url.Parse(s.API)
@@ -187,4 +178,16 @@ func (s setupConsent) PrivacyURL() string {
 	}
 	u.Path, u.RawPath, u.RawQuery, u.Fragment = "/privacy", "", "", ""
 	return u.String()
+}
+
+// ServiceURL presents the service's web address without its API suffix.
+// The actual API destination remains unchanged in the consent configuration.
+func (s setupConsent) ServiceURL() string {
+	u, err := url.Parse(s.API)
+	if err != nil {
+		return ""
+	}
+	u.Path = strings.TrimSuffix(strings.TrimRight(u.Path, "/"), "/api")
+	u.RawPath, u.RawQuery, u.Fragment = "", "", ""
+	return strings.TrimRight(u.String(), "/")
 }
