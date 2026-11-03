@@ -32,3 +32,32 @@ func TestRecentAgentDiffUsesPreEditContentsNotGitBase(t *testing.T) {
 		t.Fatal("pre-edit snapshot was retained")
 	}
 }
+
+func TestTimedOutDiffRetainsSnapshotForWatcherRecovery(t *testing.T) {
+	entry := func(body string) sourcesnapshot.Entry {
+		return sourcesnapshot.Entry{Path: "a.go", Hash: sourcesnapshot.Digest([]byte(body)), Mode: "100644"}
+	}
+	old, next := entry("old\n"), entry("new\n")
+	before := sourcesnapshot.Manifest{Version: 1, Scope: "worktree", Base: []sourcesnapshot.Entry{old}, Target: []sourcesnapshot.Entry{next}, Blobs: map[string][]byte{old.Hash: []byte("old\n"), next.Hash: []byte("new\n")}}
+	raw, _ := json.Marshal(before)
+	file := filepath.Join(t.TempDir(), "before.json")
+	if err := saveOperationSnapshot(file, raw); err != nil {
+		t.Fatal(err)
+	}
+	after := before
+	after.Target = []sourcesnapshot.Entry{old}
+	// Keep a valid changed target for decoding while canceling the diff process.
+	after.Base = []sourcesnapshot.Entry{next}
+	target, _ := json.Marshal(after)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if got := recentAgentDiff(ctx, file, sourcesnapshot.Digest(raw), sourcesnapshot.Capture{Bytes: target}); got != "" {
+		t.Fatal("canceled diff unexpectedly succeeded")
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Fatal("lost retry snapshot", err)
+	}
+	if got := recentAgentDiff(context.Background(), file, sourcesnapshot.Digest(raw), sourcesnapshot.Capture{Bytes: target}); !strings.Contains(got, "-new") || !strings.Contains(got, "+old") {
+		t.Fatal("could not recover exact edit", got)
+	}
+}

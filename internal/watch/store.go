@@ -56,6 +56,7 @@ type Feed struct {
 	ReviewID         string
 	URL              string
 	AssessmentStatus string
+	FailureCode      string
 	Leads            []Lead
 	Updated          time.Time
 }

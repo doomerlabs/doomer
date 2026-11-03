@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -80,5 +81,45 @@ func TestUnsupportedPackProtocolDoesNotUploadOldBlobs(t *testing.T) {
 	_, err := c.UploadWorkspaceIncremental(context.Background(), "token", "repo", []sourcesnapshot.Entry{{Path: "a", Hash: hash, Mode: "100644"}}, map[string][]byte{hash: data}, nil, nil)
 	if err == nil || requests != 1 {
 		t.Fatalf("expected protocol error, got %v after %d requests", err, requests)
+	}
+}
+
+func TestWorkspacePacksBoundRetryWorkForLargeUploads(t *testing.T) {
+	blobs := map[string][]byte{}
+	files := []workspaceMissing{}
+	// Incompressible content exercises the compressed transfer limit.
+	random := rand.New(rand.NewSource(1))
+	for range 3 {
+		body := make([]byte, 2<<20+1)
+		random.Read(body)
+		hash := sourcesnapshot.Digest(body)
+		blobs[hash] = body
+		files = append(files, workspaceMissing{SHA: hash, Size: len(body)})
+	}
+	count, entries := 0, 0
+	err := visitWorkspacePacks(files, blobs, func(pack workspacePack) error {
+		count++
+		entries += len(pack.Entries)
+		if len(pack.Data) > 4<<20 {
+			t.Fatal("retry would resend an oversized batch")
+		}
+		for _, entry := range pack.Entries {
+			reader, err := gzip.NewReader(bytes.NewReader(pack.Data[entry.Offset : entry.Offset+entry.Length]))
+			if err != nil {
+				return err
+			}
+			body, err := io.ReadAll(reader)
+			reader.Close()
+			if err != nil {
+				return err
+			}
+			if sourcesnapshot.Digest(body) != entry.SHA {
+				t.Fatal("batching changed content")
+			}
+		}
+		return nil
+	})
+	if err != nil || count != 3 || entries != len(files) {
+		t.Fatalf("packs=%d entries=%d err=%v", count, entries, err)
 	}
 }

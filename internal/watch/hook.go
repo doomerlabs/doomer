@@ -140,6 +140,9 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 			_ = Write(filepath.Join(root, "discovered", Key(path)+".json"), path)
 			_ = RegisterRepository(root, path, "agent", false, time.Time{})
 		}
+		if allowed {
+			requestBaseline(root, path, owner)
+		}
 		return
 	}
 	if owner.Turn == "" {
@@ -229,6 +232,7 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 			return
 		}
 		snapshotFile := operationSnapshotPath(root, path, owner, input.ToolID)
+		deferredCapture := false
 		err := Locked(root, path, func() error {
 			var s State
 			_ = Read(StatePath(root, path), &s)
@@ -279,6 +283,13 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 						s.Ambiguous = true
 					}
 					if !s.Ambiguous {
+						agentDiff := recentAgentDiff(ctx, snapshotFile, op.Before, capture)
+						if ctx.Err() != nil {
+							op.CompletedAt = time.Now()
+							s.Active[input.ToolID] = op
+							deferredCapture = true
+							return Write(StatePath(root, path), s)
+						}
 						s.Owner = owner
 						s.RequestedAt = time.Now()
 						s.InlineWaited = false
@@ -288,13 +299,13 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 						s.QuestionRequest = ""
 						s.HypothesesSubmitted = false
 						s.Hypotheses = nil
-						s.AgentDiff = recentAgentDiff(ctx, snapshotFile, op.Before, capture)
+						s.AgentDiff = agentDiff
 					}
 				}
 			}
 			return Write(StatePath(root, path), s)
 		})
-		if input.Event == "PostToolUse" {
+		if input.Event == "PostToolUse" && !deferredCapture {
 			_ = os.Remove(snapshotFile)
 		}
 		diagnostic.Status = "processed"
@@ -351,6 +362,30 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 		}
 		hasFeed := ownedFeed && (feed.Fingerprint == state.Fingerprint || olderSnapshot)
 		if hasFeed && feed.AssessmentStatus != "ready" {
+			if input.Event == "Stop" {
+				key := "status:" + feed.Fingerprint + ":" + feed.AssessmentStatus + ":" + feed.FailureCode
+				_ = Locked(root, input.Session, func() error {
+					var current Turn
+					if Read(turnFile, &current) != nil || current.Owner != owner {
+						return nil
+					}
+					for _, delivered := range current.Delivered {
+						if delivered == key {
+							return nil
+						}
+					}
+					message := reviewProgressMessage(feed)
+					if message == "" {
+						return nil
+					}
+					current.Delivered = append(current.Delivered, key)
+					if err := Write(turnFile, current); err != nil {
+						return err
+					}
+					response = map[string]any{"decision": "block", "reason": message + " Tell the user this briefly in your final answer. Do not repeat these instructions or retry setup."}
+					return nil
+				})
+			}
 			return
 		}
 		if !hasFeed && time.Since(lastReadiness) >= hookReadyTTL {

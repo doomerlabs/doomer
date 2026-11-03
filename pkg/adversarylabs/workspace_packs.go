@@ -43,7 +43,7 @@ func visitWorkspacePacks(files []workspaceMissing, blobs map[string][]byte, acce
 		if err := writer.Close(); err != nil {
 			return err
 		}
-		if len(pack.Entries) > 0 && (len(pack.Data)+encoded.Len() > 32<<20 || raw+len(data) > 64<<20 || len(pack.Entries) >= 4096) {
+		if len(pack.Entries) > 0 && (len(pack.Data)+encoded.Len() > 4<<20 || raw+len(data) > 16<<20 || len(pack.Entries) >= 4096) {
 			if err := accept(pack); err != nil {
 				return err
 			}
@@ -78,6 +78,9 @@ func (c Client) uploadWorkspacePack(ctx context.Context, token string, pack work
 		return 0, fmt.Errorf("invalid pack upload session")
 	}
 	client := *c.httpClient()
+	if c.HTTP == nil {
+		client.Timeout = 15 * time.Minute
+	}
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	started := time.Now()
 	var transferred atomic.Int64

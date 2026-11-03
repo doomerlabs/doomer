@@ -46,7 +46,7 @@ func newFilesystemEvents(ctx context.Context, r Runner, path string) (*filesyste
 		}
 	}
 	// Hook state and response queues also wake a sleeping watcher.
-	for _, dir := range []string{r.Root, filepath.Join(r.Root, "repositories"), filepath.Join(r.Root, "feedback"), filepath.Join(r.Root, "hook-diagnostics")} {
+	for _, dir := range []string{r.Root, filepath.Join(r.Root, "repositories"), filepath.Join(r.Root, "preuploads"), filepath.Join(r.Root, "feedback"), filepath.Join(r.Root, "hook-diagnostics")} {
 		if err = os.MkdirAll(dir, 0700); err == nil {
 			err = watcher.Add(dir)
 		}
@@ -118,6 +118,12 @@ func (e *filesystemEvents) run(ctx context.Context) {
 				continue
 			}
 			parent := filepath.Dir(event.Name)
+			if parent == filepath.Join(e.stateRoot, "preuploads") {
+				if filepath.Base(event.Name) == Key(e.path)+".json" {
+					e.signal()
+				}
+				continue
+			}
 			if parent == filepath.Join(e.stateRoot, "hook-diagnostics") {
 				if e.runner.Debug {
 					lastDiagnostic = e.runner.logHookDiagnostics(e.path, lastDiagnostic)

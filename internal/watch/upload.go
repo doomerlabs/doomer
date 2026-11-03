@@ -17,6 +17,31 @@ type incrementalUploader interface {
 }
 type uploadCache struct{ Base, Head adversarylabs.WorkspaceTree }
 
+func (r Runner) uploadCachePath(path string) string {
+	return filepath.Join(r.Root, "uploads", Key(r.Config.API+"\x00"+r.Config.Profile+"\x00"+r.Token+"\x00"+path)+".json")
+}
+
+func (r Runner) uploadBaseline(ctx context.Context, path, repository string, manifest sourcesnapshot.Manifest) error {
+	uploader, ok := r.Client.(incrementalUploader)
+	if !ok {
+		// Older clients still upload at review time.
+		return nil
+	}
+	cachePath := r.uploadCachePath(path)
+	var cache uploadCache
+	_ = Read(cachePath, &cache)
+	display := uploadProgressDisplay{log: r.logf, label: filepath.Base(path), lastReport: time.Now()}
+	progress := func(stage string, files, bytes int, elapsed time.Duration) {
+		display.update(stage, files, bytes, elapsed)
+	}
+	base, err := uploader.UploadWorkspaceIncremental(ctx, r.Token, repository, manifest.Base, manifest.Blobs, &cache.Base, progress)
+	if err != nil {
+		return err
+	}
+	cache.Base = base
+	return Write(cachePath, cache)
+}
+
 // UploadSnapshots shares the profile-scoped upload cache with explicit reviews.
 func (r Runner) UploadSnapshots(ctx context.Context, path, repository string, manifest sourcesnapshot.Manifest) (string, string, string, error) {
 	started := time.Now()
@@ -42,7 +67,7 @@ func (r Runner) UploadSnapshots(ctx context.Context, path, repository string, ma
 	}
 	// Isolate cached manifests by destination, profile, login, and checkout. A
 	// token replacement must never inherit another account's remote snapshot IDs.
-	cachePath := filepath.Join(r.Root, "uploads", Key(r.Config.API+"\x00"+r.Config.Profile+"\x00"+r.Token+"\x00"+path)+".json")
+	cachePath := r.uploadCachePath(path)
 	var cache uploadCache
 	_ = Read(cachePath, &cache)
 	uploadedFiles, uploadedBytes, completedReports := 0, 0, 0
@@ -64,6 +89,11 @@ func (r Runner) UploadSnapshots(ctx context.Context, path, repository string, ma
 	base, err := uploader.UploadWorkspaceIncremental(ctx, r.Token, repository, manifest.Base, manifest.Blobs, &cache.Base, progress("baseline"))
 	if err != nil {
 		return "", "", "", err
+	}
+	// Keep the completed baseline even when the current-tree upload fails.
+	cache.Base = base
+	if err := Write(cachePath, cache); err != nil {
+		r.debugf("%s: baseline cache could not be saved", path)
 	}
 	prior := &cache.Head
 	if prior.SnapshotID == "" {
