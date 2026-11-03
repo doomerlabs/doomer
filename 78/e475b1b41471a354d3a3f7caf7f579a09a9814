@@ -1,0 +1,14 @@
+pkg/sourcesnapshot/capture_test.go
+  h_aa44c3b5b60dec 323-325
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "78e475b1b41471a354d3a3f7caf7f579a09a9814",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
