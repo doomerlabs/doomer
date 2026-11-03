@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -372,5 +373,129 @@ func TestConsentCannotRestoreApprovalChangedWhileBrowserWasOpen(t *testing.T) {
 	}
 	if !saved.ConsentedAt.Equal(replacement.ConsentedAt) || len(saved.Directories) != 0 {
 		t.Fatal("concurrent revocation was overwritten")
+	}
+}
+
+func TestRefreshManagedWatcherPreservesConsentAndUserPause(t *testing.T) {
+	root := t.TempDir()
+	cfg := filepath.Join(root, "config.json")
+	original := []byte(`{"consent":"unchanged"}`)
+	if err := os.WriteFile(cfg, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Already-paused state is never cleared by an upgrade.
+	if err := watching.Write(filepath.Join(root, "paused.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := refreshManagedWatch(context.Background(), root, func(watchProcess) error { t.Fatal("started paused watcher"); return nil }); err == nil {
+		t.Fatal("resumed paused watcher")
+	}
+	if !paused(root) {
+		t.Fatal("removed user pause")
+	}
+	if err := os.Remove(filepath.Join(root, "paused.json")); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := publock.TryAcquire(root, "watcher")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var closeOnce sync.Once
+	closeLock := func() { closeOnce.Do(func() { _ = lock.Close() }) }
+	t.Cleanup(closeLock)
+	if err := watching.Write(filepath.Join(root, "process.json"), watchProcess{WorkingDirectory: root, ManagedSession: "managed", ConsentedAt: time.Now(), Directories: []string{"original-directory"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := watching.Write(filepath.Join(root, "heartbeat.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	released, stop := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(released)
+		defer closeLock()
+		ticker := time.NewTicker(time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				if paused(root) {
+					return
+				}
+			}
+		}
+	}()
+	t.Cleanup(func() { close(stop); <-released })
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	started := false
+	refreshed, err := refreshManagedWatch(ctx, root, func(previous watchProcess) error {
+		started = true
+		if previous.WorkingDirectory != root {
+			t.Error("replacement cwd did not come from original selection")
+		}
+		if len(previous.Directories) != 1 || previous.Directories[0] != "original-directory" {
+			t.Error("lost watcher selection")
+		}
+		return nil
+	})
+	if err != nil || !refreshed || !started {
+		t.Fatalf("refreshed=%t started=%t err=%v", refreshed, started, err)
+	}
+	<-released
+	if paused(root) {
+		t.Fatal("left refresh pause behind")
+	}
+	data, err := os.ReadFile(cfg)
+	if err != nil || string(data) != string(original) {
+		t.Fatal("changed consent")
+	}
+}
+
+func TestRefreshWorkingDirectoryUsesRecordedSelection(t *testing.T) {
+	original := t.TempDir()
+	got, err := refreshWorkingDirectory(watchProcess{WorkingDirectory: original, Directories: []string{t.TempDir()}})
+	if err != nil || got != original {
+		t.Fatalf("cwd=%q err=%v want=%q", got, err, original)
+	}
+}
+
+func TestRefreshInvalidDirectoryLeavesWatcherRunning(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "regular-file")
+	if err := os.WriteFile(file, []byte("not a directory"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, directory string }{
+		{"old record", ""}, {"deleted directory", filepath.Join(root, "deleted")},
+		{"regular file", file}, {"relative path", "relative"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lock, err := publock.TryAcquire(root, "watcher")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = lock.Close() })
+			// An approved seed/selection is not a substitute for the actual cwd.
+			if err := watching.Write(filepath.Join(root, "config.json"), watching.Config{Directories: []string{root}}); err != nil {
+				t.Fatal(err)
+			}
+			if err := watching.Write(filepath.Join(root, "process.json"), watchProcess{ManagedSession: "managed", WorkingDirectory: tc.directory, Directories: []string{root}}); err != nil {
+				t.Fatal(err)
+			}
+			if err := watching.Write(filepath.Join(root, "heartbeat.json"), time.Now()); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := refreshManagedWatch(context.Background(), root, func(watchProcess) error { t.Error("started replacement"); return nil }); err == nil {
+				t.Fatal("accepted invalid directory")
+			}
+			if paused(root) {
+				t.Fatal("paused original watcher")
+			}
+			if _, live, err := runningWatch(root); err != nil || !live {
+				t.Fatalf("original watcher lost: live=%t err=%v", live, err)
+			}
+		})
 	}
 }

@@ -359,7 +359,11 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 		heartbeat := filepath.Join(root, "heartbeat.json")
 		_ = watching.Write(heartbeat, time.Now())
 		defer os.Remove(heartbeat)
-		process := watchProcess{PID: os.Getpid(), Session: watchSession, ManagedSession: managedSession, ConsentedAt: cfg.ConsentedAt, Directories: args}
+		workingDirectory, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		process := watchProcess{WorkingDirectory: workingDirectory, PID: os.Getpid(), Session: watchSession, ManagedSession: managedSession, ConsentedAt: cfg.ConsentedAt, Directories: args}
 		if err := watching.Write(filepath.Join(root, "process.json"), process); err != nil {
 			return err
 		}

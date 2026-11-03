@@ -16,16 +16,20 @@ import (
 // There is no separate grant, implicit resume, or hook-trust bypass.
 func newOnboardCommand(app *application.App, api, profile *string) *cobra.Command {
 	var repo, agent, session string
-	var taskStdin, restartRequired, checkHooks bool
+	var taskStdin, restartRequired, checkHooks, refresh bool
 	c := &cobra.Command{Use: "onboard", Short: "Set up repository reviews and preserve a task across hook installation", Args: cobra.NoArgs}
 	c.Flags().StringVar(&repo, "repo", ".", "repository to review")
 	c.Flags().StringVar(&agent, "agent", "codex", "coding agent: codex or claude")
 	c.Flags().StringVar(&session, "session", "", "current coding-agent session (Codex defaults to CODEX_THREAD_ID)")
 	c.Flags().BoolVar(&taskStdin, "task-stdin", false, "read the original task from stdin for hook activation or restart")
+	c.Flags().BoolVar(&refresh, "refresh", false, "gracefully refresh a running managed watcher after a CLI update")
 	c.Flags().BoolVar(&restartRequired, "restart", false, "Codex: the CLI was installed during this turn and needs fresh prompt capture")
 	c.Flags().BoolVar(&checkHooks, "check-hooks", false, "verify live Claude hooks after onboarding returns")
 	c.MarkFlagsMutuallyExclusive("check-hooks", "task-stdin")
 	c.MarkFlagsMutuallyExclusive("check-hooks", "restart")
+	c.MarkFlagsMutuallyExclusive("check-hooks", "refresh")
+	c.MarkFlagsMutuallyExclusive("refresh", "restart")
+	c.MarkFlagsMutuallyExclusive("refresh", "task-stdin")
 	c.RunE = func(c *cobra.Command, _ []string) error {
 		if agent != "codex" && agent != "claude" {
 			return fmt.Errorf("--agent must be codex or claude")
@@ -36,6 +40,33 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 		path, err := watching.Root(c.Context(), repo)
 		if err != nil {
 			return err
+		}
+		if refresh {
+			if taskStdin || restartRequired {
+				return fmt.Errorf("--refresh cannot be combined with --task-stdin or --restart")
+			}
+			before, err := inspectWatch(app, *api, *profile, path)
+			if err != nil {
+				return err
+			}
+			if !before.Approved {
+				return fmt.Errorf("refresh requires existing approval; run normal onboarding first")
+			}
+			root, _, err := watchPaths(*api, *profile)
+			if err != nil {
+				return err
+			}
+			refreshed, err := refreshManagedWatch(c.Context(), root, func(previous watchProcess) error {
+				return startManagedWatch(c.Context(), root, previous.WorkingDirectory, *api, *profile, previous.Directories)
+			})
+			if err != nil {
+				return err
+			}
+			status := "not_running"
+			if refreshed {
+				status = "refreshed"
+			}
+			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]string{"status": status})
 		}
 		if checkHooks {
 			if agent != "claude" || session == "" {
@@ -66,6 +97,7 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 				return fmt.Errorf("task requires a session and 1–3000 characters of original request")
 			}
 		}
+
 		before, err := inspectWatch(app, *api, *profile, path)
 		if err != nil {
 			return err

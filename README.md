@@ -53,6 +53,23 @@ Trusted hooks deliver each completed revision once, including results with no
 leads, and preserve the complete review URL. Subsequent fixes may produce new
 revisions within the same turn. Upload consent does not grant coding-agent hook trust.
 
+## Skill-managed updates
+
+The skill can check and update its private CLI without changing Homebrew:
+
+```sh
+doomer self-update --check --version YYYY.M.D.N
+# After approving the update:
+doomer self-update --version YYYY.M.D.N
+```
+
+The version comes from the skill's pin. Ownership is verified from the stored
+path and binary checksum, not location alone. Updates verify the release and
+keep a backup. Unknown or modified installations require explicit adoption;
+newer managed versions are never downgraded. See [managed updates](docs/managed-updates.md).
+After replacing a CLI, the skill uses `onboard --refresh` to gracefully refresh
+a managed watcher without changing upload consent or resuming a paused watcher.
+
 ## Watch repositories while you code
 
 The CLI uses the same workspace review API as the Mac app. Without a login,
