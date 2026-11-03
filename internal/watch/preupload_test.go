@@ -129,3 +129,78 @@ func TestUploadAndAssessmentUseSeparateDeadlines(t *testing.T) {
 		t.Fatal("analysis did not get fresh bounded budget", client.analysisRemaining)
 	}
 }
+
+type incrementalBudgetClient struct{ budgetClient }
+
+func (c *incrementalBudgetClient) UploadWorkspaceIncremental(ctx context.Context, _ string, _ string, entries []sourcesnapshot.Entry, _ map[string][]byte, _ *adversarylabs.WorkspaceTree, _ adversarylabs.WorkspaceUploadProgress) (adversarylabs.WorkspaceTree, error) {
+	deadline, _ := ctx.Deadline()
+	c.uploadRemaining = time.Until(deadline)
+	return adversarylabs.WorkspaceTree{RepositoryID: "repo", SnapshotID: "snapshot", Entries: entries}, nil
+}
+func TestIncrementalUploadAndAssessmentUseSeparateDeadlines(t *testing.T) {
+	path := repository(t)
+	if err := os.WriteFile(filepath.Join(path, "file.txt"), []byte("updated\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	client := &incrementalBudgetClient{}
+	runner := Runner{Root: t.TempDir(), Client: client}
+	requestTestAgentReview(t, &runner, path)
+	capture, err := sourcesnapshot.CaptureWorktree(context.Background(), sourcesnapshot.CaptureOptions{Workspace: true, Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runner.review(context.Background(), path, capture); err != nil {
+		t.Fatal(err)
+	}
+	if client.uploadRemaining < 10*time.Minute {
+		t.Fatal("short incremental upload budget", client.uploadRemaining)
+	}
+	if client.analysisRemaining < 4*time.Minute || client.analysisRemaining > 5*time.Minute {
+		t.Fatal("invalid assessment budget", client.analysisRemaining)
+	}
+	owner := Owner{"warmup", "turn"}
+	if err := Write(TurnPath(runner.Root, owner.Session), Turn{Owner: owner}); err != nil {
+		t.Fatal(err)
+	}
+	runner.Config.Directories = []string{path}
+	requestBaseline(runner.Root, path, owner)
+	var completed Owner
+	client.uploadRemaining = 0
+	runner.prepareBaseline(context.Background(), path, time.Now().Add(-time.Minute), &completed)
+	if client.uploadRemaining < 10*time.Minute {
+		t.Fatal("short baseline upload budget", client.uploadRemaining)
+	}
+}
+
+// A warmup can overlap a separate explicit-review process, even though the
+// watcher's own warmup and review loop is serial.
+type overlappingBaselineClient struct {
+	incrementalFake
+	during func()
+}
+
+func (c *overlappingBaselineClient) UploadWorkspaceIncremental(ctx context.Context, token, repo string, entries []sourcesnapshot.Entry, blobs map[string][]byte, prior *adversarylabs.WorkspaceTree, progress adversarylabs.WorkspaceUploadProgress) (adversarylabs.WorkspaceTree, error) {
+	c.during()
+	return c.incrementalFake.UploadWorkspaceIncremental(ctx, token, repo, entries, blobs, prior, progress)
+}
+func TestBaselineCompletionRetainsConcurrentReviewHead(t *testing.T) {
+	r := Runner{Root: t.TempDir()}
+	path := r.uploadCachePath("/repo")
+	c := &overlappingBaselineClient{during: func() {
+		head := adversarylabs.WorkspaceTree{RepositoryID: "repo", SnapshotID: "new-head"}
+		if err := mergeUploadCache(path, nil, &head); err != nil {
+			t.Fatal(err)
+		}
+	}}
+	r.Client = c
+	if err := r.uploadBaseline(context.Background(), "/repo", "repo", sourcesnapshot.Manifest{Blobs: map[string][]byte{}}); err != nil {
+		t.Fatal(err)
+	}
+	var cache uploadCache
+	if err := Read(path, &cache); err != nil {
+		t.Fatal(err)
+	}
+	if cache.Head.SnapshotID != "new-head" || cache.Base.SnapshotID == "" {
+		t.Fatalf("lost completed uploads: %+v", cache)
+	}
+}

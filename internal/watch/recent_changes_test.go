@@ -1,8 +1,10 @@
 package watch
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,5 +61,41 @@ func TestTimedOutDiffRetainsSnapshotForWatcherRecovery(t *testing.T) {
 	}
 	if got := recentAgentDiff(context.Background(), file, sourcesnapshot.Digest(raw), sourcesnapshot.Capture{Bytes: target}); !strings.Contains(got, "-new") || !strings.Contains(got, "+old") {
 		t.Fatal("could not recover exact edit", got)
+	}
+}
+
+func TestReplayedPreToolUseRetainsOriginalSnapshot(t *testing.T) {
+	root, path := t.TempDir(), repository(t)
+	if err := os.WriteFile(filepath.Join(path, "file.txt"), []byte("prior dirty work\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	owner := Owner{"chat", "turn"}
+	input := HookInput{Session: owner.Session, Turn: owner.Turn, CWD: path, Event: "PreToolUse", Tool: "apply_patch", ToolID: "invocation-1"}
+	raw, _ := json.Marshal(input)
+	cfg := Config{Directories: []string{path}}
+	hookForTest(context.Background(), root, cfg, bytes.NewReader(raw), io.Discard)
+	snapshot := operationSnapshotPath(root, path, owner, input.ToolID)
+	before, err := os.ReadFile(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "file.txt"), []byte("after edit\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	deferCompletedEdit(root, path, owner, input.ToolID)
+	hookForTest(context.Background(), root, cfg, bytes.NewReader(raw), io.Discard)
+	after, err := os.ReadFile(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("replayed event replaced original snapshot")
+	}
+	var state State
+	if err := Read(StatePath(root, path), &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.Active[input.ToolID].CompletedAt.IsZero() {
+		t.Fatal("replayed event reset pending recovery")
 	}
 }

@@ -43,6 +43,8 @@ func visitWorkspacePacks(files []workspaceMissing, blobs map[string][]byte, acce
 		if err := writer.Close(); err != nil {
 			return err
 		}
+		// These are batching targets, not protocol limits. Keep an individual
+		// blob intact even when it exceeds the target (workspace files allow 20 MiB).
 		if len(pack.Entries) > 0 && (len(pack.Data)+encoded.Len() > 4<<20 || raw+len(data) > 16<<20 || len(pack.Entries) >= 4096) {
 			if err := accept(pack); err != nil {
 				return err
@@ -62,6 +64,10 @@ func visitWorkspacePacks(files []workspaceMissing, blobs map[string][]byte, acce
 	return nil
 }
 func (c Client) uploadWorkspacePack(ctx context.Context, token string, pack workspacePack, progress WorkspaceUploadProgress) (int, error) {
+	// Bound the whole operation even with a caller-supplied HTTP client.
+	// Preserve any shorter caller deadline or explicit HTTP timeout.
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	defer cancel()
 	var session struct {
 		ID      string            `json:"id"`
 		URL     string            `json:"upload_url"`

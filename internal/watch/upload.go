@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
+	"os"
 	"path/filepath"
 	"time"
 )
@@ -38,8 +39,7 @@ func (r Runner) uploadBaseline(ctx context.Context, path, repository string, man
 	if err != nil {
 		return err
 	}
-	cache.Base = base
-	return Write(cachePath, cache)
+	return mergeUploadCache(cachePath, &base, nil)
 }
 
 // UploadSnapshots shares the profile-scoped upload cache with explicit reviews.
@@ -92,7 +92,7 @@ func (r Runner) UploadSnapshots(ctx context.Context, path, repository string, ma
 	}
 	// Keep the completed baseline even when the current-tree upload fails.
 	cache.Base = base
-	if err := Write(cachePath, cache); err != nil {
+	if err := mergeUploadCache(cachePath, &base, nil); err != nil {
 		r.debugf("%s: baseline cache could not be saved", path)
 	}
 	prior := &cache.Head
@@ -106,7 +106,7 @@ func (r Runner) UploadSnapshots(ctx context.Context, path, repository string, ma
 	if base.RepositoryID != head.RepositoryID {
 		return "", "", "", errRepositoryMismatch
 	}
-	if err := Write(cachePath, uploadCache{Base: base, Head: head}); err != nil {
+	if err := mergeUploadCache(cachePath, &base, &head); err != nil {
 		r.debugf("%s: upload cache could not be saved", path)
 	}
 	if completedReports == 2 {
@@ -135,4 +135,22 @@ func formatUploadBytes(size int) string {
 		}
 	}
 	return ""
+}
+
+// Lock only the local merge, never a network upload. Explicit reviews and the
+// watcher may finish concurrently; a baseline warmup must retain a newer head.
+func mergeUploadCache(path string, base, head *adversarylabs.WorkspaceTree) error {
+	return Locked(filepath.Dir(path), filepath.Base(path), func() error {
+		var latest uploadCache
+		if err := Read(path, &latest); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if base != nil {
+			latest.Base = *base
+		}
+		if head != nil {
+			latest.Head = *head
+		}
+		return Write(path, latest)
+	})
 }

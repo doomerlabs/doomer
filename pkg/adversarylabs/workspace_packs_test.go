@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 )
 
 func handleTestPack(t *testing.T, w http.ResponseWriter, r *http.Request, accept func([]byte)) bool {
@@ -121,5 +122,71 @@ func TestWorkspacePacksBoundRetryWorkForLargeUploads(t *testing.T) {
 	})
 	if err != nil || count != 3 || entries != len(files) {
 		t.Fatalf("packs=%d entries=%d err=%v", count, entries, err)
+	}
+}
+
+func TestSingleLargeBlobRemainsIntactAboveBatchTarget(t *testing.T) {
+	large := make([]byte, 5<<20)
+	rand.New(rand.NewSource(2)).Read(large)
+	small := []byte("next file")
+	blobs := map[string][]byte{sourcesnapshot.Digest(large): large, sourcesnapshot.Digest(small): small}
+	files := []workspaceMissing{{SHA: sourcesnapshot.Digest(large), Size: len(large)}, {SHA: sourcesnapshot.Digest(small), Size: len(small)}}
+	count := 0
+	err := visitWorkspacePacks(files, blobs, func(p workspacePack) error {
+		if len(p.Entries) != 1 {
+			t.Fatal("large blob combined with next batch")
+		}
+		reader, err := gzip.NewReader(bytes.NewReader(p.Data))
+		if err != nil {
+			return err
+		}
+		data, err := io.ReadAll(reader)
+		reader.Close()
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(data, blobs[p.Entries[0].SHA]) {
+			t.Fatal("large blob was split or truncated")
+		}
+		count++
+		return nil
+	})
+	if err != nil || count != 2 {
+		t.Fatalf("packs=%d err=%v", count, err)
+	}
+}
+
+type deadlineTransport struct {
+	base     http.RoundTripper
+	t        *testing.T
+	max      time.Duration
+	requests int
+}
+
+func (d *deadlineTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	deadline, ok := r.Context().Deadline()
+	if !ok || time.Until(deadline) > d.max || time.Until(deadline) <= 0 {
+		d.t.Errorf("missing or invalid upload deadline: %v", deadline)
+	}
+	d.requests++
+	return d.base.RoundTrip(r)
+}
+func TestPackUploadBoundsCustomClientAndPreservesCallerDeadline(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handleTestPack(t, w, r, nil) }))
+	defer server.Close()
+	for _, limit := range []time.Duration{15 * time.Minute, time.Minute} {
+		transport := &deadlineTransport{base: http.DefaultTransport, t: t, max: limit}
+		client := NewClientWithBaseURL(ConfigStore{}, server.URL+"/api")
+		client.HTTP = &http.Client{Transport: transport}
+		ctx := context.Background()
+		cancel := func() {}
+		if limit == time.Minute {
+			ctx, cancel = context.WithTimeout(ctx, limit)
+		}
+		_, err := client.uploadWorkspacePack(ctx, "token", workspacePack{Data: []byte("packed"), Entries: []workspacePackEntry{}}, nil)
+		cancel()
+		if err != nil || transport.requests != 3 {
+			t.Fatalf("requests=%d err=%v", transport.requests, err)
+		}
 	}
 }

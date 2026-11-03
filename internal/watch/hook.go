@@ -247,6 +247,11 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 				}
 			}
 			if input.Event == "PreToolUse" {
+				// Replayed events for the same tool invocation must not replace
+				// the original baseline, including one awaiting diff recovery.
+				if op, exists := s.Active[input.ToolID]; exists && op.Owner == owner {
+					return nil
+				}
 				// Existing dirty files establish a baseline, not ownership.
 				// Only a subsequent attributable edit may request a review.
 				if len(s.Active) == 0 && s.Fingerprint != fingerprint {
