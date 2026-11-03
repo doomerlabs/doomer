@@ -1,0 +1,25 @@
+cmd/watch.go
+  s_c5a06ffaad29b7::t_c34140a3809464 598-628
+internal/watch/hook.go
+  s_c5a06ffaad29b7::t_41da09fcea4a6e 254
+internal/watch/task_handoff.go
+  s_c5a06ffaad29b7::t_224932b4db9cdd 1-69
+internal/watch/task_handoff_test.go
+  s_c5a06ffaad29b7::t_b418c55716b617 1-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "da61752bc159d2fd5bf8fa534eebb8cb90199219",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
