@@ -320,6 +320,9 @@ func TestInstalledSkillAliasDoesNotBlockWorktreeCapture(t *testing.T) {
 			found := map[string]bool{}
 			for _, entry := range m.Target {
 				found[entry.Path] = true
+				if scenario == "installer alias" && strings.HasPrefix(entry.Path, ".claude/skills/doomer-review/") {
+					t.Fatalf("followed installer alias into %q", entry.Path)
+				}
 			}
 			if !found["code.go"] || !found[".agents/skills/doomer-review/SKILL.md"] {
 				t.Fatal("omitted actual source or canonical skill")
