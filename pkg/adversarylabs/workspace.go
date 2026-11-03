@@ -19,8 +19,10 @@ type WorkspaceLead struct {
 	Check   string `json:"check"`
 }
 type WorkspaceAssessment struct {
-	Status string          `json:"status"`
-	Leads  []WorkspaceLead `json:"leads"`
+	Status      string          `json:"status"`
+	FailureCode string          `json:"failure_code,omitempty"`
+	Stage       string          `json:"stage,omitempty"`
+	Leads       []WorkspaceLead `json:"leads"`
 }
 type WorkspaceReview struct {
 	LookCloserThreshold *int                 `json:"look_closer_threshold,omitempty"`

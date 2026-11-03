@@ -251,3 +251,28 @@ func TestWorkspaceCapturesLargeRepositoryWithoutChangingEmbeddedLimits(t *testin
 		t.Fatal("embedded capture limits changed")
 	}
 }
+
+func TestTreeSizePreflightRejectsOversizedBlobBeforeLoadingContent(t *testing.T) {
+	dir, _ := sourceRepo(t)
+	sourceFile(t, dir, "large.bin", strings.Repeat("a", (2<<20)+1))
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-m", "oversized blob")
+	blobs := map[string][]byte{}
+	_, err := (gitReader{ctx: context.Background(), dir: dir}).readTree("HEAD", blobs)
+	if err == nil || !strings.Contains(err.Error(), "baseline file exceeds") {
+		t.Fatalf("expected preflight rejection: %v", err)
+	}
+	if len(blobs) != 0 {
+		t.Fatal("loaded content before rejecting oversized tree")
+	}
+}
+func TestTreeSizePreflightAggregateAndFraming(t *testing.T) {
+	for _, data := range []string{"a blob 6\nb blob 6\n", "a blob 11\nb blob 0\n", "a tree 1\nb blob 1\n", "b blob 1\na blob 1\n", "a blob 1\n"} {
+		if err := validateTreeSizes([]byte(data), []string{"a", "b"}, 10, 10); err == nil {
+			t.Fatalf("accepted invalid or oversized tree %q", data)
+		}
+	}
+	if err := validateTreeSizes([]byte("a blob 6\nb blob 4\n"), []string{"a", "b"}, 10, 10); err != nil {
+		t.Fatal(err)
+	}
+}

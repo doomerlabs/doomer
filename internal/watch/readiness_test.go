@@ -106,7 +106,7 @@ func TestOfflineStopReturnsEmptyBeforeCapturingRepository(t *testing.T) {
 	}
 }
 
-func TestWaitingHookReleasesOnFailedReviewFeed(t *testing.T) {
+func TestWaitingHookReportsFailedReviewOnce(t *testing.T) {
 	dir, root := repository(t), t.TempDir()
 	owner := Owner{"chat", "turn"}
 	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte("changed\n"), 0600); err != nil {
@@ -131,8 +131,13 @@ func TestWaitingHookReleasesOnFailedReviewFeed(t *testing.T) {
 		}
 		return true
 	})
-	if ctx.Err() != nil || strings.TrimSpace(output.String()) != "{}" {
-		t.Fatal("failed review did not release hook quietly", output.String())
+	if ctx.Err() != nil || !strings.Contains(output.String(), "Doomer review failed") {
+		t.Fatal("failed review was not reported", output.String())
+	}
+	output.Reset()
+	hookWithReadiness(ctx, root, Config{Directories: []string{dir}}, bytes.NewReader(raw), &output, func(context.Context) bool { return true })
+	if strings.TrimSpace(output.String()) != "{}" {
+		t.Fatal("failure was repeated", output.String())
 	}
 }
 

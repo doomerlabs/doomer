@@ -43,7 +43,9 @@ func visitWorkspacePacks(files []workspaceMissing, blobs map[string][]byte, acce
 		if err := writer.Close(); err != nil {
 			return err
 		}
-		if len(pack.Entries) > 0 && (len(pack.Data)+encoded.Len() > 32<<20 || raw+len(data) > 64<<20 || len(pack.Entries) >= 4096) {
+		// These are batching targets, not protocol limits. Keep an individual
+		// blob intact even when it exceeds the target (workspace files allow 20 MiB).
+		if len(pack.Entries) > 0 && (len(pack.Data)+encoded.Len() > 4<<20 || raw+len(data) > 16<<20 || len(pack.Entries) >= 4096) {
 			if err := accept(pack); err != nil {
 				return err
 			}
@@ -62,6 +64,10 @@ func visitWorkspacePacks(files []workspaceMissing, blobs map[string][]byte, acce
 	return nil
 }
 func (c Client) uploadWorkspacePack(ctx context.Context, token string, pack workspacePack, progress WorkspaceUploadProgress) (int, error) {
+	// Bound the whole operation even with a caller-supplied HTTP client.
+	// Preserve any shorter caller deadline or explicit HTTP timeout.
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	defer cancel()
 	var session struct {
 		ID      string            `json:"id"`
 		URL     string            `json:"upload_url"`
@@ -78,6 +84,9 @@ func (c Client) uploadWorkspacePack(ctx context.Context, token string, pack work
 		return 0, fmt.Errorf("invalid pack upload session")
 	}
 	client := *c.httpClient()
+	if c.HTTP == nil {
+		client.Timeout = 15 * time.Minute
+	}
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	started := time.Now()
 	var transferred atomic.Int64

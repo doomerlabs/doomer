@@ -121,7 +121,7 @@ func TestRetryCannotFollowAnotherEditOrConversation(t *testing.T) {
 		{"different conversation", func(s *State) { s.Owner.Session = "other" }, "contents"},
 		{"different turn", func(s *State) { s.Owner.Turn = "other" }, "contents"},
 		{"new request", func(s *State) { s.RequestedAt = s.RequestedAt.Add(time.Second) }, "contents"},
-		{"edit in progress", func(s *State) { s.Active = map[string]Operation{"edit": {}} }, "contents"},
+		{"edit in progress", func(s *State) { s.Active = map[string]Operation{"edit": {Attributable: true}} }, "contents"},
 		{"ambiguous owner", func(s *State) { s.Ambiguous = true }, "contents"},
 	}
 	for _, tc := range cases {
@@ -135,5 +135,23 @@ func TestRetryCannotFollowAnotherEditOrConversation(t *testing.T) {
 				t.Fatal("superseded or unsafe retry accepted")
 			}
 		})
+	}
+}
+
+func TestRetryCanRunWhileNonMutatingToolIsActive(t *testing.T) {
+	root, path := t.TempDir(), "/repo"
+	original := State{Owner: Owner{"chat", "turn"}, Fingerprint: "snapshot", RequestedAt: time.Now()}
+	current := original
+	current.Active = map[string]Operation{"test": {Owner: original.Owner, Attributable: false}}
+	if err := Write(StatePath(root, path), current); err != nil {
+		t.Fatal(err)
+	}
+	if !retryReviewRequested(root, path, "snapshot", original) {
+		t.Fatal("read-only tool stalled the retry")
+	}
+	current.Active["edit"] = Operation{Owner: original.Owner, Attributable: true}
+	Write(StatePath(root, path), current)
+	if retryReviewRequested(root, path, "snapshot", original) {
+		t.Fatal("retry ignored an active edit")
 	}
 }

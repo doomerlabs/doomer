@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
+	"os"
 	"path/filepath"
 	"time"
 )
@@ -16,6 +17,30 @@ type incrementalUploader interface {
 	UploadWorkspaceIncremental(context.Context, string, string, []sourcesnapshot.Entry, map[string][]byte, *adversarylabs.WorkspaceTree, adversarylabs.WorkspaceUploadProgress) (adversarylabs.WorkspaceTree, error)
 }
 type uploadCache struct{ Base, Head adversarylabs.WorkspaceTree }
+
+func (r Runner) uploadCachePath(path string) string {
+	return filepath.Join(r.Root, "uploads", Key(r.Config.API+"\x00"+r.Config.Profile+"\x00"+r.Token+"\x00"+path)+".json")
+}
+
+func (r Runner) uploadBaseline(ctx context.Context, path, repository string, manifest sourcesnapshot.Manifest) error {
+	uploader, ok := r.Client.(incrementalUploader)
+	if !ok {
+		// Older clients still upload at review time.
+		return nil
+	}
+	cachePath := r.uploadCachePath(path)
+	var cache uploadCache
+	_ = Read(cachePath, &cache)
+	display := uploadProgressDisplay{log: r.logf, label: filepath.Base(path), lastReport: time.Now()}
+	progress := func(stage string, files, bytes int, elapsed time.Duration) {
+		display.update(stage, files, bytes, elapsed)
+	}
+	base, err := uploader.UploadWorkspaceIncremental(ctx, r.Token, repository, manifest.Base, manifest.Blobs, &cache.Base, progress)
+	if err != nil {
+		return err
+	}
+	return mergeUploadCache(cachePath, &base, nil)
+}
 
 // UploadSnapshots shares the profile-scoped upload cache with explicit reviews.
 func (r Runner) UploadSnapshots(ctx context.Context, path, repository string, manifest sourcesnapshot.Manifest) (string, string, string, error) {
@@ -42,7 +67,7 @@ func (r Runner) UploadSnapshots(ctx context.Context, path, repository string, ma
 	}
 	// Isolate cached manifests by destination, profile, login, and checkout. A
 	// token replacement must never inherit another account's remote snapshot IDs.
-	cachePath := filepath.Join(r.Root, "uploads", Key(r.Config.API+"\x00"+r.Config.Profile+"\x00"+r.Token+"\x00"+path)+".json")
+	cachePath := r.uploadCachePath(path)
 	var cache uploadCache
 	_ = Read(cachePath, &cache)
 	uploadedFiles, uploadedBytes, completedReports := 0, 0, 0
@@ -65,6 +90,11 @@ func (r Runner) UploadSnapshots(ctx context.Context, path, repository string, ma
 	if err != nil {
 		return "", "", "", err
 	}
+	// Keep the completed baseline even when the current-tree upload fails.
+	cache.Base = base
+	if err := mergeUploadCache(cachePath, &base, nil); err != nil {
+		r.debugf("%s: baseline cache could not be saved", path)
+	}
 	prior := &cache.Head
 	if prior.SnapshotID == "" {
 		prior = &base
@@ -76,7 +106,7 @@ func (r Runner) UploadSnapshots(ctx context.Context, path, repository string, ma
 	if base.RepositoryID != head.RepositoryID {
 		return "", "", "", errRepositoryMismatch
 	}
-	if err := Write(cachePath, uploadCache{Base: base, Head: head}); err != nil {
+	if err := mergeUploadCache(cachePath, &base, &head); err != nil {
 		r.debugf("%s: upload cache could not be saved", path)
 	}
 	if completedReports == 2 {
@@ -105,4 +135,22 @@ func formatUploadBytes(size int) string {
 		}
 	}
 	return ""
+}
+
+// Lock only the local merge, never a network upload. Explicit reviews and the
+// watcher may finish concurrently; a baseline warmup must retain a newer head.
+func mergeUploadCache(path string, base, head *adversarylabs.WorkspaceTree) error {
+	return Locked(filepath.Dir(path), filepath.Base(path), func() error {
+		var latest uploadCache
+		if err := Read(path, &latest); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if base != nil {
+			latest.Base = *base
+		}
+		if head != nil {
+			latest.Head = *head
+		}
+		return Write(path, latest)
+	})
 }

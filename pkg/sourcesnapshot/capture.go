@@ -432,7 +432,17 @@ func (g gitReader) readTree(commit string, blobs map[string][]byte) ([]Entry, er
 	}
 	hashes := map[string]string{}
 	if len(ids) > 0 {
-		data, err := g.run([]byte(strings.Join(ids, "\n")+"\n"), "cat-file", "--batch")
+		input := []byte(strings.Join(ids, "\n") + "\n")
+		// Reject oversized trees before buffering blob contents. Git object sizes
+		// are immutable; validate the content framing again below as well.
+		sizes, err := g.run(input, "cat-file", "--batch-check")
+		if err != nil {
+			return nil, err
+		}
+		if err := validateTreeSizes(sizes, ids, limitsForWorkspace(g.workspace).file, limitsForWorkspace(g.workspace).content); err != nil {
+			return nil, err
+		}
+		data, err := g.run(input, "cat-file", "--batch")
 		if err != nil {
 			return nil, err
 		}
@@ -501,4 +511,27 @@ func repositoryIdentity(remote string) string {
 		return ""
 	}
 	return identity
+}
+
+func validateTreeSizes(data []byte, ids []string, fileLimit, contentLimit int) error {
+	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	if len(lines) != len(ids) {
+		return fmt.Errorf("incomplete baseline object sizes")
+	}
+	total := 0
+	for i, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) != 3 || fields[0] != ids[i] || fields[1] != "blob" {
+			return fmt.Errorf("invalid baseline object size")
+		}
+		size, err := strconv.Atoi(fields[2])
+		if err != nil || size < 0 || size > fileLimit {
+			return fmt.Errorf("baseline file exceeds %d MiB", fileLimit>>20)
+		}
+		if size > contentLimit-total {
+			return fmt.Errorf("baseline content exceeds %d MiB", contentLimit>>20)
+		}
+		total += size
+	}
+	return nil
 }

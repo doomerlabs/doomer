@@ -82,6 +82,9 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 	var last, observed string
 	var nextRetry time.Time
 	var retryRequest *State
+	var retryCapture sourcesnapshot.Capture
+	var retryAttempts int
+	var baselineOwner Owner
 	var lastHookDiagnostic time.Time
 	if r.Interval <= 0 {
 		r.Interval = time.Minute
@@ -107,6 +110,34 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 		var nextWake time.Duration
 		if ctx.Err() != nil || RepositoryRemoved(r.Root, path) {
 			return nil
+		}
+		if retryRequest != nil && time.Now().After(nextRetry) {
+			var current State
+			if Read(StatePath(r.Root, path), &current) != nil || !sameReviewRequest(current, *retryRequest) || current.Ambiguous {
+				retryRequest = nil
+				retryAttempts = 0
+			} else if retryReviewRequested(r.Root, path, retryCapture.Digest, *retryRequest) {
+				r.logf("%s: retrying the pending review.", filepath.Base(path))
+				err := r.reviewForRequest(ctx, path, retryCapture, retryRequest)
+				retryAttempts++
+				if err == nil || errors.Is(err, errReviewTerminal) || retryAttempts >= 3 {
+					last = retryCapture.Digest
+					retryRequest = nil
+					if err != nil {
+						r.logf("%s: review failed after %d attempts (%s).", filepath.Base(path), retryAttempts, err)
+					}
+				} else {
+					nextRetry = time.Now().Add(15 * time.Second)
+					r.markRetrying(path)
+				}
+				if !events.wait(ctx, r.Interval, 15*time.Second) {
+					return nil
+				}
+				continue
+			}
+		}
+		if !once && retryRequest == nil {
+			r.prepareBaseline(ctx, path, started, &baselineOwner)
 		}
 		if r.Debug && events == nil {
 			lastHookDiagnostic = r.logHookDiagnostics(path, lastHookDiagnostic)
@@ -192,9 +223,7 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 				if retryRequest != nil {
 					r.logf("%s: retrying the pending review.", filepath.Base(path))
 				}
-				reviewCtx, stop := context.WithTimeout(ctx, 2*time.Minute)
-				err = r.reviewForRequest(reviewCtx, path, capture, &attempt)
-				stop()
+				err = r.reviewForRequest(ctx, path, capture, &attempt)
 				if ctx.Err() != nil {
 					return nil
 				}
@@ -210,9 +239,12 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 					r.logf("%s: %s. Waiting for a new change.", filepath.Base(path), err)
 				} else {
 					retryRequest = &attempt
+					retryCapture = capture
+					retryAttempts = 1
 					r.logf("%s: review unavailable; retrying in 15 seconds while watching for edits (%s)", path, err)
 					nextRetry = time.Now().Add(15 * time.Second)
 					nextWake = 15 * time.Second
+					r.markRetrying(path)
 				}
 				if once {
 					return err
@@ -239,20 +271,26 @@ func (r Runner) review(ctx context.Context, path string, capture sourcesnapshot.
 
 func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourcesnapshot.Capture, expected *State) (err error) {
 	reviewStarted := time.Now()
+	phase := "upload"
 	var requestState State
 	if Read(StatePath(r.Root, path), &requestState) != nil || requestState.Fingerprint != capture.Digest || requestState.Ambiguous {
 		return fmt.Errorf("agent request changed before review")
 	}
-	if expected != nil && (!sameReviewRequest(requestState, *expected) || len(requestState.Active) > 0) {
+	if expected != nil && (!sameReviewRequest(requestState, *expected) || hasActiveEdit(requestState)) {
 		return fmt.Errorf("agent request changed before review")
 	}
 	defer func() {
 		if err != nil {
 			// Release a hook immediately on upload/request failure. The feed
 			// belongs only to this edit; a successful retry can replace it.
-			_ = Write(FeedPath(r.Root, path), Feed{Owner: requestState.Owner, Fingerprint: capture.Digest, Updated: time.Now(), AssessmentStatus: "unavailable"})
+			code := phase + "_failed"
+			if errors.Is(err, context.DeadlineExceeded) {
+				code = phase + "_timeout"
+			}
+			_ = Write(FeedPath(r.Root, path), Feed{Owner: requestState.Owner, Fingerprint: capture.Digest, Updated: time.Now(), AssessmentStatus: "unavailable", FailureCode: code})
 		}
 	}()
+	_ = Write(FeedPath(r.Root, path), Feed{Owner: requestState.Owner, Fingerprint: capture.Digest, Updated: time.Now(), AssessmentStatus: "uploading"})
 	manifest, err := sourcesnapshot.DecodeWorkspace(capture.Bytes)
 	if err != nil {
 		return err
@@ -266,11 +304,18 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 		repo = "local/" + filepath.Base(path)
 	}
 	uploadStarted := time.Now()
-	baseRepo, baseID, headID, err := r.uploadSnapshots(ctx, path, repo, manifest)
+	uploadCtx, uploadCancel := context.WithTimeout(ctx, workspaceUploadTimeout)
+	baseRepo, baseID, headID, err := r.uploadSnapshots(uploadCtx, path, repo, manifest)
+	uploadCancel()
 	if err != nil {
 		return err
 	}
 	r.logf("%s: upload completed in %.1f seconds.", filepath.Base(path), time.Since(uploadStarted).Seconds())
+	phase = "analysis"
+	_ = Write(FeedPath(r.Root, path), Feed{Owner: requestState.Owner, Fingerprint: capture.Digest, Updated: time.Now(), AssessmentStatus: "analyzing"})
+	// Uploading a new repository must not consume the assessment's budget.
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
 
 	var rev revision
 	revPath := filepath.Join(r.Root, "revisions", Key(path)+".json")
@@ -303,10 +348,13 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 		earlyStatus := "pending"
 		if current.Early != nil {
 			earlyStatus = current.Early.Status
+			if earlyStatus == "running" && current.Early.Stage == "repository_context" {
+				_ = Write(FeedPath(r.Root, path), Feed{Owner: requestState.Owner, Fingerprint: capture.Digest, ReviewID: current.ID, URL: link, Updated: time.Now(), AssessmentStatus: "preparing"})
+			}
 		}
 		r.debugf("%s: review status=%s, look closer review=%s", path, current.Status, earlyStatus)
 		if current.Early != nil && (current.Early.Status == "ready" || current.Early.Status == "unavailable") {
-			feed := Feed{Owner: requestState.Owner, Fingerprint: capture.Digest, ReviewID: current.ID, URL: link, Updated: time.Now(), AssessmentStatus: current.Early.Status, Anonymous: current.Anonymous}
+			feed := Feed{Owner: requestState.Owner, Fingerprint: capture.Digest, ReviewID: current.ID, URL: link, Updated: time.Now(), AssessmentStatus: current.Early.Status, FailureCode: current.Early.FailureCode, Anonymous: current.Anonymous}
 			for _, l := range current.Early.Leads {
 				_, idErr := hex.DecodeString(l.ID)
 				if len(feed.Leads) >= 10 {

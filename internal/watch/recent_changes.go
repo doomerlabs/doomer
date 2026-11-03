@@ -41,7 +41,13 @@ func saveOperationSnapshot(file string, data []byte) error {
 	return os.Rename(temp.Name(), file)
 }
 func recentAgentDiff(ctx context.Context, file, beforeDigest string, after sourcesnapshot.Capture) string {
-	defer os.Remove(file)
+	defer func() {
+		// A hook deadline is not a completed capture. Keep the immutable
+		// pre-edit snapshot so the watcher can recover the exact edit later.
+		if ctx.Err() == nil {
+			_ = os.Remove(file)
+		}
+	}()
 	current, err := sourcesnapshot.DecodeWorkspace(after.Bytes)
 	if err != nil {
 		return ""
