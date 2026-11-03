@@ -58,7 +58,7 @@ class PublicationTests(unittest.TestCase):
             checked = []
             def verify(url, data):
                 self.assertNotIn('cli/stable.json', store.data)
-                self.assertEqual(store.data[url.removeprefix('https://downloads.doomer.ai/')], data)
+                self.assertEqual(store.data[publisher.OBJECT_PREFIX + url.removeprefix(publisher.BASE_URL + '/')], data)
                 checked.append(url)
             publisher.publish(store, 'bucket', path, '2026.11.2', verify)
             self.assertEqual(len(checked), len(files))
@@ -74,16 +74,23 @@ class PublicationTests(unittest.TestCase):
             path = Path(directory)
             self.fixture(path)
             store = Store()
+            store.data['stable.json'] = b'existing Mac manifest'
+            store.data['cli/stable.json'] = b'existing CLI manifest'
             def fail(*args):
                 raise RuntimeError('not publicly available')
             with self.assertRaises(RuntimeError):
                 publisher.publish(store, 'bucket', path, '2026.11.2', fail)
-            self.assertNotIn('cli/stable.json', store.data)
+            self.assertEqual(store.data['cli/stable.json'], b'existing CLI manifest')
+            self.assertEqual(store.data['stable.json'], b'existing Mac manifest')
+            self.assertTrue(all(key.startswith('cli/') for key in store.writes))
             key = 'cli/releases/2026.11.2/doomer.rb'
             store.data[key] = b'wrong'
             with self.assertRaises(ValueError):
                 publisher.publish(store, 'bucket', path, '2026.11.2', lambda *args: None)
             self.assertEqual(store.data[key], b'wrong')
+            self.assertEqual(store.data['stable.json'], b'existing Mac manifest')
+            self.assertEqual(store.data['cli/stable.json'], b'existing CLI manifest')
+            self.assertTrue(all(key.startswith('cli/') for key in store.writes))
             (path / 'doomer.rb').write_bytes(b'tampered')
             with self.assertRaises(ValueError):
                 publisher.release_bundle(path, '2026.11.2')

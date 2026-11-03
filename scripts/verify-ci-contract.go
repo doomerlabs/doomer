@@ -446,8 +446,11 @@ func validateRelease(workflow *yaml.Node) {
 		fail("R2 publication job must not receive GitHub or tap publication authority")
 	}
 	validatePublicationOrder(r2, "publish-r2", "Publish public release downloads")
-	for _, secret := range []string{"R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"} {
+	for _, secret := range []string{"R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"} {
 		validateSecretBoundary(r2, "publish-r2", secret, "Publish public release downloads")
+	}
+	if scalar(value(value(findStep(r2, "Publish public release downloads"), "env"), "R2_BUCKET")) != "doomer-macos-releases" {
+		fail("R2 publication must use the shared release bucket")
 	}
 	requireNoPublicationCredentials(findStep(r2, "Verify exact R2 publication state"), "R2 pre-publication verification step")
 }
