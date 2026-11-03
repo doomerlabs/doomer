@@ -1,0 +1,28 @@
+cmd/onboard_test.go
+  s_c5a06ffaad29b7::t_0b05e8c3205563 153-156,192-193
+  s_c5a06ffaad29b7::t_044d2b0b8b5f83 119-152,157-191,194-196
+docs/managed-updates.md
+  s_c5a06ffaad29b7::t_36e6c7fc31c73a 30-36
+cmd/onboard.go
+  s_c5a06ffaad29b7::t_a372dd189d2a80 31-32,44-70,100
+cmd/watch_lifecycle.go
+  s_c5a06ffaad29b7::t_472f49bed83883 244,366,369,373,377,380,384,387-421,423
+cmd/watch_lifecycle_test.go
+  s_c5a06ffaad29b7::t_f854c71a836df2 17,390,396-398,403-412,415-426,429,432-441
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f2ecd6fb3bd748c4e27db784cd7bdbbe00df354a",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
