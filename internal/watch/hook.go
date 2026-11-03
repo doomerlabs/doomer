@@ -228,6 +228,9 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 			diagnostic.Status = "capture failed: " + e.Error()
 			if input.Event == "PostToolUse" {
 				deferCompletedEdit(root, path, owner, input.ToolID)
+				if message := captureFailureNotice(root, turnFile, owner, e); message != "" {
+					response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "PostToolUse", "additionalContext": message}}
+				}
 			}
 			return
 		}

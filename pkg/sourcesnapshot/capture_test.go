@@ -276,3 +276,60 @@ func TestTreeSizePreflightAggregateAndFraming(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestInstalledSkillAliasDoesNotBlockWorktreeCapture(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary")
+	}
+	for _, scenario := range []string{"installer alias", "other target", "tracked alias", "ordinary directory"} {
+		t.Run(scenario, func(t *testing.T) {
+			dir, base := sourceRepo(t)
+			sourceFile(t, dir, ".agents/skills/doomer-review/SKILL.md", "canonical skill\n")
+			alias := filepath.Join(dir, ".claude/skills/doomer-review")
+			if err := os.MkdirAll(filepath.Dir(alias), 0755); err != nil {
+				t.Fatal(err)
+			}
+			target := "../../.agents/skills/doomer-review"
+			if scenario == "other target" {
+				target = "../../outside"
+			}
+			if scenario == "ordinary directory" {
+				sourceFile(t, dir, ".claude/skills/doomer-review/SKILL.md", "real source\n")
+			} else if err := os.Symlink(target, alias); err != nil {
+				t.Fatal(err)
+			}
+			if scenario == "tracked alias" {
+				git(t, dir, "add", ".")
+				git(t, dir, "commit", "-m", "tracked link")
+			}
+			sourceFile(t, dir, "code.go", "new code\n")
+			captured, err := CaptureWorktree(context.Background(), CaptureOptions{Path: dir, Base: base, Workspace: true})
+			if scenario == "other target" || scenario == "tracked alias" {
+				if err == nil {
+					t.Fatal("unsupported symlink accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			m, err := DecodeWorkspace(captured.Bytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := map[string]bool{}
+			for _, entry := range m.Target {
+				found[entry.Path] = true
+			}
+			if !found["code.go"] || !found[".agents/skills/doomer-review/SKILL.md"] {
+				t.Fatal("omitted actual source or canonical skill")
+			}
+			if found[".claude/skills/doomer-review"] {
+				t.Fatal("captured installer symlink")
+			}
+			if scenario == "ordinary directory" && !found[".claude/skills/doomer-review/SKILL.md"] {
+				t.Fatal("omitted regular directory")
+			}
+		})
+	}
+}
