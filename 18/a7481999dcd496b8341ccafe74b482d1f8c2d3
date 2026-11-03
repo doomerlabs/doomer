@@ -1,0 +1,31 @@
+.depot/workflows/ci.yml
+  s_c5a06ffaad29b7::t_90671fa273a027 55-60
+scripts/publish-r2.py
+  s_c5a06ffaad29b7::t_8569f79b01a71a 138-139
+workers/cli-downloads/README.md
+  s_c5a06ffaad29b7::t_b6bb727ce5cda1 1-49
+workers/cli-downloads/downloads.sql
+  s_c5a06ffaad29b7::t_dc0ebdd08b2487 1-13
+workers/cli-downloads/worker.mjs
+  s_c5a06ffaad29b7::t_50d0e6e628e843 1-26
+workers/cli-downloads/worker.test.mjs
+  s_c5a06ffaad29b7::t_24f6bb9dbff589 1-38
+workers/cli-downloads/wrangler.toml
+  s_c5a06ffaad29b7::t_c84183c9257689 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "18a7481999dcd496b8341ccafe74b482d1f8c2d3",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
