@@ -179,7 +179,7 @@ jobs:
       - name: Publish public release downloads
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_BUCKET: doomer-macos-releases
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: /tmp/doomer-r2-venv/bin/python scripts/publish-r2.py

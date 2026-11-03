@@ -10,6 +10,7 @@ import urllib.request
 
 BASE_URL = 'https://downloads.doomer.ai/cli'
 OBJECT_PREFIX = 'cli/'
+RELEASE_BUCKET = 'doomer-macos-releases'
 TAG = re.compile(r'^20\d{2}\.\d{1,2}\.\d{1,2}(?:-beta\.\d+)?$')
 
 
@@ -124,12 +125,19 @@ def publish(client, bucket, directory, version, verify_public):
     print('Published ' + version + ' to ' + BASE_URL)
 
 
+def validate_bucket(bucket):
+    if bucket != RELEASE_BUCKET:
+        raise ValueError('R2_BUCKET must be ' + RELEASE_BUCKET)
+    return bucket
+
+
 def main():
     import boto3
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dir', type=Path, default=Path('dist'))
     parser.add_argument('--version', default=os.environ.get('GITHUB_REF_NAME'))
     args = parser.parse_args()
+    bucket = validate_bucket(os.environ['R2_BUCKET'])
     account = os.environ['R2_ACCOUNT_ID']
     if not re.fullmatch(r'[0-9a-f]{32}', account):
         raise ValueError('Invalid R2 account ID')
@@ -139,7 +147,7 @@ def main():
         with urllib.request.urlopen(url, timeout=60) as response:
             if digest(response.read()) != digest(data):
                 raise ValueError('Public artifact checksum mismatch')
-    publish(client, os.environ['R2_BUCKET'], args.dir, args.version, verify)
+    publish(client, bucket, args.dir, args.version, verify)
 
 
 if __name__ == '__main__':

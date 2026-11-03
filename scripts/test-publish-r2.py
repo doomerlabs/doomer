@@ -37,6 +37,11 @@ class Store:
 
 
 class PublicationTests(unittest.TestCase):
+    def test_bucket_must_match_public_download_origin(self):
+        self.assertEqual(publisher.validate_bucket('doomer-macos-releases'), 'doomer-macos-releases')
+        with self.assertRaises(ValueError):
+            publisher.validate_bucket('doomer-cli-releases')
+
     def fixture(self, path, version='2026.11.2'):
         files = {f'doomer_{version}_{s}_{a}.tar.gz': b'archive' for s in ('darwin', 'linux') for a in ('amd64', 'arm64')}
         files[f'doomer_{version}.spdx.json'] = b'{}'

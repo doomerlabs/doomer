@@ -67,9 +67,9 @@ for deterministic archives (`gtar` on macOS).
 
 After GitHub publication, `publish-r2` verifies the same release bundle before
 receiving its R2 credentials. Configure Depot secrets `R2_ACCOUNT_ID`,
-`R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` for this repository,
-the `release` environment, and `release.yml`. The bucket name is fixed in the
-workflow and checked by the CI contract. The object read/write credential
+`R2_BUCKET`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` for this repository,
+the `release` environment, and `release.yml`. Set `R2_BUCKET=doomer-macos-releases`; the publisher rejects any other bucket
+before uploading. The object read/write credential
 must be scoped only to `doomer-macos-releases`; it needs no account administration
 or other bucket access.
 
@@ -88,5 +88,6 @@ A failed R2 publication does not remove the GitHub release or update the channel
 pointer. Retry the failed job with the same immutable tag. To backfill an existing
 release, download its exact published bundle, verify it with the release bundle
 verifier, then run `scripts/publish-r2.py --dir PATH --version VERSION` using the
-same bucket-scoped environment variables. Never rebuild or overwrite that tag's
+same bucket-scoped environment variables, including
+`R2_BUCKET=doomer-macos-releases`. Never rebuild or overwrite that tag's
 published assets.
