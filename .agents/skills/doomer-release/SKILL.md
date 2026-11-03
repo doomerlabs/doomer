@@ -64,6 +64,9 @@ outputs are:
   won a concurrent promotion, report it rather than regressing the channel.
 - The generated `doomerlabs/homebrew-tap` PR merged by Doomer, its formula on
   the tap's default branch, and the publication job successful.
+- For stable releases, the public installer skill in `doomerlabs/skills` updated
+  to install this exact version. Follow the installer update below; publishing
+  the CLI alone does not update a pinned skill.
 
 The bucket is shared with Mac app releases. CLI writes belong only under `cli/`
 in `doomer-macos-releases`. Preserve other objects and use the existing scoped
@@ -76,6 +79,23 @@ public channel manifest, not just GitHub success. Send
 requests do not inflate customer download analytics. If useful, run the native
 archive's version command from a temporary directory without installing it.
 
+## Update the public installer skill
+
+After a stable release's public assets are verified, update
+`skills/doomer-review/SKILL.md` and the version description in `README.md` in
+`doomerlabs/skills`. Keep the installer pinned to the published version and its
+immutable `releases/VERSION/release-manifest.json`, including matching schema,
+archive filenames, URLs, and checksum lookup. Preserve consent, hook trust,
+and installation safeguards. Do not replace the pin with a beta or local build.
+
+Validate the skill and fetch the public manifest to verify all four platform
+entries. Commit and publish through that repository's authorized workflow;
+push directly to main only when the user has authorized it. Confirm the remote
+main contains the update before reporting the installer ready. If publication
+is waiting on review or authorization, report that pending step explicitly.
+Existing users refresh with `npx skills update`; new users install with
+`npx skills add doomerlabs/skills --skill doomer-review`.
+
 ## Failures and review comments
 
 - Inspect the failed job's logs before retrying. Retry a recoverable failure on
@@ -87,7 +107,9 @@ archive's version command from a temporary directory without installing it.
   through a new branch and PR; recovery must preserve already-published bytes.
 - A Cloudflare 403/1010 can come from Browser Integrity Check rejecting a client
   such as Python's default user agent. Compare the failing request with a normal
-  public download before concluding assets are absent. Do not disable security
+  public download before concluding assets are absent. The scoped production
+  configuration is documented in `docs/release.md`; verify it still exists.
+  Do not disable security
   controls or change credential scopes without the necessary user authorization.
 - Read new Doomer comments on the generated tap PR. Fix confirmed defects on
   that branch with relevant checks, or reply with concrete evidence before

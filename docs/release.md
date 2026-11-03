@@ -98,3 +98,30 @@ verifier, then run `scripts/publish-r2.py --dir PATH --version VERSION` using th
 same bucket-scoped environment variables, including
 `R2_BUCKET=doomer-macos-releases`. Never rebuild or overwrite that tag's
 published assets.
+
+### Cloudflare download-client compatibility
+
+The active configuration rule **Allow public CLI download clients** disables
+Browser Integrity Check only when this expression matches:
+
+```text
+(http.host eq "downloads.doomer.ai" and starts_with(http.request.uri.path, "/cli/") and http.request.method in {"GET" "HEAD"})
+```
+
+Rule ID: `99093c11887e471f8caba13f84d8b3a3` in the `doomer.ai` zone, Replicated
+account. Other paths, methods, and protections are unchanged. The rule is
+required because Browser Integrity Check rejected the release publisher's
+Python client with HTTP 403 / error 1010 even when normal curl downloads worked.
+Do not broaden it to the whole site. Verify the saved configuration if that
+failure returns; changing security settings requires appropriate authorization.
+The existing approved rule does not require a new permission prompt on every
+release. Release verification requests should carry
+`X-Doomer-Release-Verification: 1` to exclude them from download analytics.
+
+### Public installer skill
+
+Stable release completion also includes updating the pinned version and
+immutable manifest URL in `doomerlabs/skills`'s
+`skills/doomer-review/SKILL.md`, plus its README version. Validate the public
+manifest and skill before publishing that change. CLI publication alone does
+not update a pin. See the release skill for the full handoff.
