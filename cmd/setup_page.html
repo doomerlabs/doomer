@@ -15,7 +15,7 @@
 <section class="scope" aria-label="Repository access"><p class="label">{{if .AllRepositories}}Repositories your agent works in{{else}}Repository access{{end}}</p>
 {{if .AllRepositories}}<p>Includes future checkouts your coding agent edits. Doomer does not scan your whole disk.</p>{{else}}<ul class="repos">{{range .Directories}}<li><code>{{.}}</code></li>{{end}}</ul>{{end}}
 </section>
-<dl class="meta"><dt>Send code to</dt><dd><code>{{.API}}</code></dd><dt>Profile</dt><dd><code>{{.Profile}}</code></dd></dl>
+<dl class="meta"><dt>Send code to</dt><dd><a href="{{.ServiceURL}}" target="_blank" rel="noreferrer">{{.ServiceURL}}</a></dd><dt>Profile</dt><dd><code>{{.Profile}}</code></dd></dl>
 <details><summary>What gets sent?</summary>
 <p>Base and current repository snapshots, including tracked and non-ignored source files outside the changed lines, the task prompt behind an agent edit, and the agent’s review responses. Unchanged files may be reused from previous uploads. Approval also covers linked Git worktrees.</p>
 <p>Uploaded source is retained under the <a href="{{.PrivacyURL}}" target="_blank" rel="noreferrer">service’s privacy policy</a>. Expiry of a review link does not delete uploaded source.</p>

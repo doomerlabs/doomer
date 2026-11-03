@@ -179,3 +179,15 @@ func (s setupConsent) PrivacyURL() string {
 	u.Path, u.RawPath, u.RawQuery, u.Fragment = "/privacy", "", "", ""
 	return u.String()
 }
+
+// ServiceURL presents the service's web address without its API suffix.
+// The actual API destination remains unchanged in the consent configuration.
+func (s setupConsent) ServiceURL() string {
+	u, err := url.Parse(s.API)
+	if err != nil {
+		return ""
+	}
+	u.Path = strings.TrimSuffix(strings.TrimRight(u.Path, "/"), "/api")
+	u.RawPath, u.RawQuery, u.Fragment = "", "", ""
+	return strings.TrimRight(u.String(), "/")
+}

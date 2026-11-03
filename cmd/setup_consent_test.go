@@ -96,7 +96,7 @@ func TestBrowserSetupRoundTrip(t *testing.T) {
 		}
 		body, err := io.ReadAll(page.Body)
 		page.Body.Close()
-		if err != nil || !strings.Contains(string(body), "http://localhost:3000/api") || !strings.Contains(string(body), "task prompt") {
+		if err != nil || !strings.Contains(string(body), "http://localhost:3000") || !strings.Contains(string(body), "task prompt") {
 			return fmt.Errorf("missing disclosure: %s", body)
 		}
 		callback := *u
@@ -187,6 +187,29 @@ func TestSetupPagesPreserveScopeAndApprovalMeaning(t *testing.T) {
 		}
 		if !approved && (!strings.Contains(out.String(), "haven’t granted permission") || strings.Contains(out.String(), "Permission received")) {
 			t.Fatal("decline incorrectly claims approval")
+		}
+	}
+}
+
+func TestSetupServiceURLHidesOnlyAPISuffix(t *testing.T) {
+	for _, tc := range []struct{ api, want string }{
+		{"https://doomer.ai/api", "https://doomer.ai"},
+		{"http://localhost:3000/api", "http://localhost:3000"},
+		{"https://example.com/service/api/", "https://example.com/service"},
+	} {
+		s := setupConsent{API: tc.api}
+		if got := s.ServiceURL(); got != tc.want {
+			t.Fatalf("%s: %s", tc.api, got)
+		}
+		var page bytes.Buffer
+		if err := setupPage.ExecuteTemplate(&page, "consent", s); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(page.String(), `href="`+tc.want+`"`) || strings.Contains(page.String(), tc.api+`</`) {
+			t.Fatal("page shows internal API endpoint")
+		}
+		if s.API != tc.api {
+			t.Fatal("changed API destination")
 		}
 	}
 }
