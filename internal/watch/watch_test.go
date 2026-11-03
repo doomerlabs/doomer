@@ -158,8 +158,12 @@ func TestHookOwnedDeliveryAndResponseCollection(t *testing.T) {
 	other := base
 	other.Session = "chat-b"
 	other.Event = "Stop"
-	if out = run(other); strings.Contains(out, "Record every lead") {
-		t.Fatal("cross-chat delivery")
+	var otherResponse map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(run(other)), &otherResponse); err != nil {
+		t.Fatal(err)
+	}
+	if len(otherResponse) != 0 {
+		t.Fatalf("cross-chat delivery: %v", otherResponse)
 	}
 	base.Event = "Stop"
 	base.Message = "Doomer 1 — Dismissed: Verified behavior is intentional."

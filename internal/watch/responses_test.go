@@ -98,7 +98,7 @@ func TestResponseCaptureClosesToolOperation(t *testing.T) {
 	if len(state.Active) != 0 {
 		t.Fatal("response left an active tool")
 	}
-	for _, phrase := range []string{"recorded 1 responses", "Explain only confirmed fixes", "Always include the complete Doomer review link", "unless asked"} {
+	for _, phrase := range []string{"recorded 1 responses", "Explain only confirmed fixes", "Always include the complete Doomer review link", "unless asked", "including unfixed, deferred, and dismissed findings"} {
 		if !strings.Contains(result.String(), phrase) {
 			t.Fatal(result.String())
 		}
@@ -116,7 +116,7 @@ func TestResponseInstructionsSeparateReportingAndSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"watch respond", "Submit every decision, including dismissals", "Investigate silently", "Always include the complete Doomer review link", "even with no confirmed findings", "pending_hook is not server delivery", "keep dismissals private unless asked"} {
+	for _, want := range []string{"watch respond", "Submit every decision, including dismissals", "Investigate silently", "Always include the complete Doomer review link", "even with no confirmed findings", "pending_hook is not server delivery", "keep dismissals private unless asked", "including unfixed, deferred, and dismissed findings"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q", want)
 		}

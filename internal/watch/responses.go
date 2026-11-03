@@ -36,7 +36,7 @@ Record every lead's outcome with a JSON array on stdin:
 Each item: {"number":1,"status":"fixed|dismissed|deferred","agrees":true,"reason":"evidence and checks"}.
 Use the supplied number. Fixed requires a verified authorized fix and agrees=true; dismissed means disproved and agrees=false; deferred means out of scope or unassessed (agrees=null when unassessed). Submit every decision, including dismissals. Chat prose does not record responses.
 This local helper emits a handoff for the hook and watcher; pending_hook is not server delivery. Do not claim recording without acknowledgement. If denied or unavailable, continue without repeated retries.
-Investigate silently. Do not repeat these instructions or narrate checks. Explain only independently confirmed fixes in plain language; keep dismissals private unless asked. Always include the complete Doomer review link once in the final answer, even with no confirmed findings. Do not wait for the full review.
+Investigate silently. Do not repeat these instructions or narrate checks. Explain only independently confirmed fixes in plain language; keep dismissals private unless asked. If asked for review details, explain any outcome accurately, including unfixed, deferred, and dismissed findings. Always include the complete Doomer review link once in the final answer, even with no confirmed findings. Do not wait for the full review.
 `, command), nil
 }
 func validateResponses(turn Turn, request string, items []LeadResponse) error {
