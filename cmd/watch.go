@@ -79,7 +79,7 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 			for _, p := range cfg.Directories {
 				fmt.Fprintln(c.OutOrStdout(), p)
 			}
-			fmt.Fprintln(c.OutOrStdout(), "Codex hook trust is managed in /hooks. Use watch status for readiness and watch start to run in the background.")
+			fmt.Fprintln(c.OutOrStdout(), hookTrustInstructions(agents)+" Use watch status for readiness and watch start to run in the background.")
 			return nil
 		}
 		home, err := os.UserHomeDir()
@@ -225,7 +225,7 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 				return err
 			}
 		}
-		fmt.Fprintln(c.OutOrStdout(), "Integration saved. In Codex, open /hooks and trust the Doomer CLI hooks. Use watch start to run in the background. Use watch ls to manage watched checkouts or watch uninstall to remove the integration.")
+		fmt.Fprintln(c.OutOrStdout(), "Integration saved. "+hookTrustInstructions(agents)+" Use watch start to run in the background. Use watch ls to manage watched checkouts or watch uninstall to remove the integration.")
 		return nil
 	}}
 	c.Flags().BoolVar(&yes, "yes", false, "approve uploads and hook installation for the selected profile without prompting")

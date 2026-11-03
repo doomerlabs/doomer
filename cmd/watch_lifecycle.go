@@ -268,7 +268,8 @@ func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api,
 			}
 			fmt.Fprintln(c.OutOrStdout(), "Background watcher started.")
 		}
-		fmt.Fprintf(c.OutOrStdout(), "Repository: %s\nService: %s\nLog: %s\nCodex hook trust remains a user action in /hooks.\n", path, *api, filepath.Join(root, "watch.log"))
+		agent, _ := c.Flags().GetString("agent")
+		fmt.Fprintf(c.OutOrStdout(), "Repository: %s\nService: %s\nLog: %s\n%s\n", path, *api, filepath.Join(root, "watch.log"), hookTrustInstructions(agent))
 		return nil
 	}}
 	addWatchSetupFlags(start)
