@@ -1,5 +1,10 @@
 # Release operations
 
+Coding agents should use the repository's
+[`doomer-release` skill](../.agents/skills/doomer-release/SKILL.md) for release
+requests. It records version selection, publication gates, recovery, and the
+checks required before reporting a release complete.
+
 The Depot release workflow runs on CalVer tag pushes: `YYYY.M.D.N` or
 `YYYY.M.D.N-beta.B`. New stable releases always include a daily sequence, starting
 at `.1` and incrementing for each release that day. Legacy three-component tags
@@ -55,8 +60,8 @@ version `dev`; release archives and Homebrew contain explicitly stamped builds.
 
 ```sh
 make ci
-RELEASE_MODE=build scripts/publish-homebrew.sh 2099.1.2
-RELEASE_MODE=verify scripts/publish-homebrew.sh 2099.1.2
+RELEASE_MODE=build scripts/publish-homebrew.sh 2099.1.2.1
+RELEASE_MODE=verify scripts/publish-homebrew.sh 2099.1.2.1
 ```
 
 Building/verification require no publication credentials. The contract tests
