@@ -29,11 +29,21 @@ rereads the updated instructions before selecting the pin. Declining preserves
 the existing pair. Updating software does not authorize repository uploads,
 change saved consent, or bypass coding-agent hook trust. After replacement, run
 `onboard --repo REPO --refresh` separately to replace an existing managed watcher
-using its original directory selection. Refresh never runs onboarding, opens a
+using its original directory selection. `--repo` defaults to the current directory;
+it identifies an already-approved checkout and the replacement process's working
+directory, not a new watch selection. Passing a different approved checkout does
+not retarget the watcher; an unapproved checkout is rejected. Refresh never runs onboarding, opens a
 consent page, changes hooks, or replaces saved task/activation state. It cannot
 be combined with `--restart`, `--task-stdin`, or `--check-hooks`. An absent watcher
 returns `not_running`; paused or foreground watchers are left alone and reported
 as errors. Normal onboarding remains a separate operation for new setups.
+
+Replacing the executable at the same absolute path does not change the installed
+hook commands, so an already-loaded, trusted integration needs no new activation
+solely for this refresh. Refresh does not prove hook trust or live delivery. If
+hooks are missing, changed, untrusted, or have not loaded in the current agent
+session, complete normal onboarding and that agent's activation/trust flow
+separately. Never treat watcher replacement as hook activation.
 
 Older release binaries do not have `self-update`. The skill retains its verified
 bootstrap path for them until the pinned release includes the updater. Do not
