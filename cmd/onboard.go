@@ -57,7 +57,7 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 				return err
 			}
 			refreshed, err := refreshManagedWatch(c.Context(), root, func(previous watchProcess) error {
-				return startManagedWatch(c.Context(), root, path, *api, *profile, previous.Directories)
+				return startManagedWatch(c.Context(), root, previous.WorkingDirectory, *api, *profile, previous.Directories)
 			})
 			if err != nil {
 				return err

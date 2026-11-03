@@ -20,11 +20,12 @@ import (
 )
 
 type watchProcess struct {
-	PID            int       `json:"pid"`
-	Session        string    `json:"session"`
-	ManagedSession string    `json:"managed_session,omitempty"`
-	ConsentedAt    time.Time `json:"consented_at"`
-	Directories    []string  `json:"directories,omitempty"`
+	PID              int       `json:"pid"`
+	Session          string    `json:"session"`
+	ManagedSession   string    `json:"managed_session,omitempty"`
+	ConsentedAt      time.Time `json:"consented_at"`
+	Directories      []string  `json:"directories,omitempty"`
+	WorkingDirectory string    `json:"working_directory,omitempty"`
 }
 
 type watchStatus struct {
@@ -379,6 +380,10 @@ func refreshManagedWatch(ctx context.Context, root string, start func(watchProce
 	if current.ManagedSession == "" {
 		return false, fmt.Errorf("a foreground watcher is running; stop it before refreshing")
 	}
+	current.WorkingDirectory, err = refreshWorkingDirectory(root, current)
+	if err != nil {
+		return false, err
+	}
 	marker := filepath.Join(root, "paused.json")
 	if err := watching.Write(marker, time.Now()); err != nil {
 		return false, err
@@ -393,6 +398,25 @@ func refreshManagedWatch(ctx context.Context, root string, start func(watchProce
 		return false, fmt.Errorf("old watcher stopped, but its replacement did not start: %w", err)
 	}
 	return true, nil
+}
+
+// Older watcher records predate WorkingDirectory. Their explicit selection, or
+// the profile's approved discovery seeds, provides a stable replacement cwd.
+func refreshWorkingDirectory(root string, previous watchProcess) (string, error) {
+	if previous.WorkingDirectory != "" {
+		return previous.WorkingDirectory, nil
+	}
+	if len(previous.Directories) > 0 {
+		return previous.Directories[0], nil
+	}
+	var cfg watching.Config
+	if err := watching.Read(filepath.Join(root, "config.json"), &cfg); err != nil {
+		return "", fmt.Errorf("read original watcher selection: %w", err)
+	}
+	if len(cfg.Directories) == 0 {
+		return "", fmt.Errorf("original watcher working directory is unavailable; stop and restart it explicitly")
+	}
+	return cfg.Directories[0], nil
 }
 
 func startManagedWatch(ctx context.Context, root, path, api, profile string, directories []string) error {

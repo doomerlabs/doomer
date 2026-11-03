@@ -432,6 +432,9 @@ func TestRefreshManagedWatcherPreservesConsentAndUserPause(t *testing.T) {
 	started := false
 	refreshed, err := refreshManagedWatch(ctx, root, func(previous watchProcess) error {
 		started = true
+		if previous.WorkingDirectory != "original-directory" {
+			t.Error("replacement cwd did not come from original selection")
+		}
 		if len(previous.Directories) != 1 || previous.Directories[0] != "original-directory" {
 			t.Error("lost watcher selection")
 		}
@@ -447,5 +450,34 @@ func TestRefreshManagedWatcherPreservesConsentAndUserPause(t *testing.T) {
 	data, err := os.ReadFile(cfg)
 	if err != nil || string(data) != string(original) {
 		t.Fatal("changed consent")
+	}
+}
+
+func TestRefreshWorkingDirectoryUsesRecordedSelection(t *testing.T) {
+	root := t.TempDir()
+	if err := watching.Write(filepath.Join(root, "config.json"), watching.Config{Directories: []string{"/original-discovery-seed"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name     string
+		previous watchProcess
+		want     string
+	}{
+		{"recorded cwd", watchProcess{WorkingDirectory: "/original-cwd", Directories: []string{"/watched"}}, "/original-cwd"},
+		{"legacy explicit selection", watchProcess{Directories: []string{"/original-watched", "/other"}}, "/original-watched"},
+		{"legacy discovery", watchProcess{}, "/original-discovery-seed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := refreshWorkingDirectory(root, tc.previous)
+			if err != nil || got != tc.want {
+				t.Fatalf("cwd=%q err=%v want=%q", got, err, tc.want)
+			}
+		})
+	}
+	if err := watching.Write(filepath.Join(root, "config.json"), watching.Config{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := refreshWorkingDirectory(root, watchProcess{}); err == nil {
+		t.Fatal("accepted unknown original directory")
 	}
 }
