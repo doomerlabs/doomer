@@ -123,5 +123,8 @@ release. Release verification requests should carry
 Stable release completion also includes updating the pinned version and
 immutable manifest URL in `doomerlabs/skills`'s
 `skills/doomer-review/SKILL.md`, plus its README version. Validate the public
-manifest and skill before publishing that change. CLI publication alone does
+manifest and skill before publishing that change. Use the verified current
+stable channel if a concurrent release has advanced it; never downgrade a
+newer verified stable pin. Beta releases do not update this stable installer.
+CLI publication alone does
 not update a pin. See the release skill for the full handoff.

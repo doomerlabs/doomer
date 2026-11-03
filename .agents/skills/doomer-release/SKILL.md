@@ -15,11 +15,12 @@ tools rather than replacing them with a second publisher.
 - New stable tags always use `YYYY.M.D.N`, with unpadded month/day and a positive
   daily sequence: `.1` for the first release, `.2` for the second, and so on.
   Example: `2026.11.2.1`, then `2026.11.2.2`. Never omit the fourth component.
-- A beta uses `YYYY.M.D.N-beta.B`; `-1` is not a stable-release suffix.
+- New beta tags use `YYYY.M.D.N-beta.B`; `-1` is not a stable-release suffix.
 - Honor an explicitly requested version. Otherwise use the user's local date
   and inspect remote tags/releases to choose the next unused daily sequence.
   Do not use the CI runner's UTC date to change the requested release date.
-- Legacy three-component tags remain valid historical releases. Never rename,
+- Legacy three-component tags, stable or beta, remain valid for recovery,
+  retries, and comparisons. Never rename,
   move, delete, or overwrite an existing tag or its published artifacts.
 - A request to prepare or discuss a release does not authorize pushing its tag.
   A request to publish a release does. Ask only for missing decisions or actions
@@ -56,7 +57,9 @@ outputs are:
 
 - A published, non-draft GitHub release in `doomerlabs/doomer`, with the correct
   stable/prerelease flag, four macOS/Linux archives, checksums, SPDX metadata,
-  release manifest, and the channel's formula.
+  release manifest, and the generated `doomer.rb` (stable) or `doomer-beta.rb`
+  (beta) asset. `scripts/publish-homebrew.sh` includes this formula in the
+  verified release bundle; the tap receives it separately through its PR.
 - Public files under `https://downloads.doomer.ai/cli/releases/VERSION/` whose
   bytes match the GitHub release and SHA-256 checksums.
 - `https://downloads.doomer.ai/cli/stable.json` or `beta.json` pointing to that
@@ -65,7 +68,8 @@ outputs are:
 - The generated `doomerlabs/homebrew-tap` PR merged by Doomer, its formula on
   the tap's default branch, and the publication job successful.
 - For stable releases, the public installer skill in `doomerlabs/skills` updated
-  to install this exact version. Follow the installer update below; publishing
+  to the verified current stable channel, respecting concurrent newer releases
+  as described below. Publishing
   the CLI alone does not update a pinned skill.
 
 The bucket is shared with Mac app releases. CLI writes belong only under `cli/`
@@ -81,16 +85,26 @@ archive's version command from a temporary directory without installing it.
 
 ## Update the public installer skill
 
-After a stable release's public assets are verified, update
+After a stable release's public assets are verified, fetch `cli/stable.json`
+again from the public download service. Use its current stable version for
+the installer pin, even if a concurrent release advanced it past the release
+being monitored. Verify that version's immutable release manifest, commit,
+archive URLs, and checksums agree with the channel before proceeding. Do not
+regress the channel or an existing newer, verified stable installer pin.
+
+Update
 `skills/doomer-review/SKILL.md` and the version description in `README.md` in
-`doomerlabs/skills`. Keep the installer pinned to the published version and its
+`doomerlabs/skills`. Keep the installer pinned to that verified version and its
 immutable `releases/VERSION/release-manifest.json`, including matching schema,
 archive filenames, URLs, and checksum lookup. Preserve consent, hook trust,
 and installation safeguards. Do not replace the pin with a beta or local build.
 
 Validate the skill and fetch the public manifest to verify all four platform
 entries. Commit and publish through that repository's authorized workflow;
-push directly to main only when the user has authorized it. Confirm the remote
+push directly to main only when the user has authorized it. Fetch the skill
+repository's main branch again before publishing; if another release updated
+the pin, reconcile against the current channel rather than overwriting it with
+an older pin. Confirm the remote
 main contains the update before reporting the installer ready. If publication
 is waiting on review or authorization, report that pending step explicitly.
 Existing users refresh with `npx skills update`; new users install with
