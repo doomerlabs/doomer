@@ -326,6 +326,11 @@ func (g gitReader) worktreeFiles() (worktreeInventory, error) {
 	}
 	for _, name := range bytes.Split(untracked, []byte{0}) {
 		if len(name) > 0 {
+			// skills add installs this untracked alias to the canonical skill.
+			// Omit the alias only; never follow it or relax source symlink checks.
+			if g.installedSkillAlias(string(name)) {
+				continue
+			}
 			names[string(name)] = true
 		}
 	}
@@ -534,4 +539,19 @@ func validateTreeSizes(data []byte, ids []string, fileLimit, contentLimit int) e
 		total += size
 	}
 	return nil
+}
+
+// Only the exact untracked alias produced by skills add is installer metadata.
+// Tracked links and every other symlink still fail the normal capture checks.
+func (g gitReader) installedSkillAlias(name string) bool {
+	if name != ".claude/skills/doomer-review" {
+		return false
+	}
+	root, err := os.OpenRoot(g.dir)
+	if err != nil {
+		return false
+	}
+	defer root.Close()
+	target, err := root.Readlink(filepath.FromSlash(name))
+	return err == nil && filepath.ToSlash(filepath.Clean(target)) == "../../.agents/skills/doomer-review"
 }

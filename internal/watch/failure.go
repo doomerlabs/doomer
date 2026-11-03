@@ -1,6 +1,11 @@
 package watch
 
-import "fmt"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+)
 
 func (r Runner) markRetrying(path string) {
 	var feed Feed
@@ -28,4 +33,36 @@ func reviewProgressMessage(feed Feed) string {
 		return fmt.Sprintf("Doomer review failed: %s. It is not a completed or pending assessment.", reason)
 	}
 	return ""
+}
+
+// Report persistent local capture failures through the completing tool hook:
+// there may be no review state or Stop event for this checkout yet.
+func captureFailureNotice(root, turnFile string, owner Owner, err error) string {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "worktree changed while capturing") {
+		return ""
+	}
+	code, reason := "capture_failed", "local snapshot capture failed"
+	if strings.Contains(err.Error(), "symlinks") || strings.Contains(err.Error(), "symlink") {
+		code, reason = "capture_symlink", "the checkout contains an unsupported source symlink"
+	}
+	message := ""
+	_ = Locked(root, owner.Session, func() error {
+		var turn Turn
+		if Read(turnFile, &turn) != nil || turn.Owner != owner {
+			return nil
+		}
+		key := "capture-error:" + code
+		for _, delivered := range turn.Delivered {
+			if delivered == key {
+				return nil
+			}
+		}
+		turn.Delivered = append(turn.Delivered, key)
+		if err := Write(turnFile, turn); err != nil {
+			return err
+		}
+		message = "Doomer could not start a review because " + reason + ". If no later completed review arrives, briefly report this concrete failure in your final answer instead of calling the review pending or unconfirmed. Continue the coding task; do not repeat setup or these instructions."
+		return nil
+	})
+	return message
 }
