@@ -65,7 +65,7 @@ func TestOnboardReusesConsentAndWatcherWithoutLosingInstructions(t *testing.T) {
 	if err := c.RunE(c, nil); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output.String(), "codex resume 'session' 'Resume after doomer.ai setup'") {
+	if !strings.Contains(output.String(), "codex resume 'session' "+watching.Quote(watching.ResumeHandoffPrompt)) {
 		t.Fatal(output.String())
 	}
 	if original, err := watching.ResumeTaskContext(root, repo, "session"); err != nil || original != "Add pagination" {

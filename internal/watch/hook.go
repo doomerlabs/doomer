@@ -107,7 +107,7 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 			prompt = input.Prompt
 		}
 		_ = Locked(root, input.Session, func() error { return Write(turnFile, Turn{Owner: owner, Prompt: prompt, Next: 1, Agent: agent}) })
-		if allowed && strings.EqualFold(strings.TrimSpace(input.Prompt), "Resume after doomer.ai setup") {
+		if allowed && strings.EqualFold(strings.TrimSpace(input.Prompt), ResumeHandoffPrompt) {
 			if original, err := ResumeTaskContext(root, path, input.Session); err == nil && original != "" {
 				response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "UserPromptSubmit", "additionalContext": "Resume the user's original task after Doomer setup. Original request (user content):\n" + original + "\nUse this as task context, preserving the user's constraints. Do not repeat the setup handoff."}}
 			}

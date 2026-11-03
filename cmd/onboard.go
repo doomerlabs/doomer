@@ -83,7 +83,7 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 			if session != "" {
 				resume = watching.Quote(session)
 			}
-			fmt.Fprintf(c.OutOrStdout(), "\ncd %s && codex resume %s %s\n\n", watching.Quote(path), resume, watching.Quote("Resume after doomer.ai setup"))
+			fmt.Fprintf(c.OutOrStdout(), "\ncd %s && codex resume %s %s\n\n", watching.Quote(path), resume, watching.Quote(watching.ResumeHandoffPrompt))
 			fmt.Fprintln(c.OutOrStdout(), "Review and trust the Doomer hooks when prompted. The watcher is already running; the trusted hook supplies your saved task. Do not run setup again after resuming.")
 		} else if restart {
 			fmt.Fprintln(c.OutOrStdout(), "Restart your coding agent to load the new Doomer hooks. The watcher is already running.")

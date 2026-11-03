@@ -52,7 +52,7 @@ func TestCleanReviewDeliveredOnceWithFullLinkAndOnlyCurrentSnapshot(t *testing.T
 func TestSavedTaskProvidedByPromptHookOnce(t *testing.T) {
 	root, dir := t.TempDir(), repository(t)
 	SaveTaskHandoff(root, dir, "session", strings.NewReader("Add pagination. Keep the UI unchanged."))
-	raw, _ := json.Marshal(HookInput{Session: "session", Turn: "resume", CWD: dir, Event: "UserPromptSubmit", Prompt: "Resume after doomer.ai setup"})
+	raw, _ := json.Marshal(HookInput{Session: "session", Turn: "resume", CWD: dir, Event: "UserPromptSubmit", Prompt: ResumeHandoffPrompt})
 	run := func() string {
 		var out strings.Builder
 		hookForTest(context.Background(), root, Config{Directories: []string{dir}}, strings.NewReader(string(raw)), &out)
@@ -64,7 +64,7 @@ func TestSavedTaskProvidedByPromptHookOnce(t *testing.T) {
 	if strings.Contains(run(), "Add pagination") {
 		t.Fatal("task handoff repeated")
 	}
-	if got := handoffPrompt(root, dir, Owner{"session", "resume"}, "Resume after doomer.ai setup"); !strings.Contains(got, "Add pagination") {
+	if got := handoffPrompt(root, dir, Owner{"session", "resume"}, ResumeHandoffPrompt); !strings.Contains(got, "Add pagination") {
 		t.Fatal("review lost original task")
 	}
 }

@@ -8,6 +8,9 @@ import (
 	"time"
 )
 
+// ResumeHandoffPrompt is the command/hook contract for restoring a saved task.
+const ResumeHandoffPrompt = "Resume after doomer.ai setup"
+
 type taskHandoff struct {
 	Repository       string
 	Session          string
