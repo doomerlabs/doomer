@@ -1,0 +1,23 @@
+cmd/setup_consent.go
+  s_c5a06ffaad29b7::t_902d585efee0af 7,72,92-95,168-172
+cmd/setup_consent_test.go
+  s_c5a06ffaad29b7::t_c2c9d6288d92f8 154-192
+cmd/setup_page.html
+  s_c5a06ffaad29b7::t_0fcacc0cfb7b55 1-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7bee38b11e4b49c39868c04bc07ce82cc8e702f7",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
