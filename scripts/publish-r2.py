@@ -135,7 +135,8 @@ def main():
     client = boto3.client('s3', endpoint_url=f'https://{account}.r2.cloudflarestorage.com', region_name='auto',
                           aws_access_key_id=os.environ['R2_ACCESS_KEY_ID'], aws_secret_access_key=os.environ['R2_SECRET_ACCESS_KEY'])
     def verify(url, data):
-        with urllib.request.urlopen(url, timeout=60) as response:
+        request = urllib.request.Request(url, headers={'X-Doomer-Release-Verification': '1'})
+        with urllib.request.urlopen(request, timeout=60) as response:
             if digest(response.read()) != digest(data):
                 raise ValueError('Public artifact checksum mismatch')
     publish(client, os.environ['R2_BUCKET'], args.dir, args.version, verify)

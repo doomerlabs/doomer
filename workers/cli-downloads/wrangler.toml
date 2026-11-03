@@ -1,0 +1,11 @@
+name = "doomer-cli-downloads"
+main = "worker.mjs"
+compatibility_date = "2026-11-02"
+account_id = "c2592895222dce604580569f98ef7094"
+workers_dev = false
+preview_urls = false
+routes = [{ pattern = "downloads.doomer.ai/cli/releases/*", zone_name = "doomer.ai" }]
+
+[[analytics_engine_datasets]]
+binding = "DOWNLOADS"
+dataset = "doomer_cli_downloads"
