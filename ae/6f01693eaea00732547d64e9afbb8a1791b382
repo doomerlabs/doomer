@@ -1,0 +1,33 @@
+docs/release.md
+  s_c5a06ffaad29b7::t_528eb5e8c3b49d 3-6,45-46
+scripts/publish-homebrew.sh
+  s_c5a06ffaad29b7::t_c3831a20d1a430 291
+scripts/publish-r2.py
+  s_c5a06ffaad29b7::t_0648d4311f02d9 12,81-82
+scripts/test-publish-r2.py
+  s_c5a06ffaad29b7::t_5007dbc768aead 97-109
+scripts/test-release-tags.sh
+  s_c5a06ffaad29b7::t_4c72c1d0d01a74 11,16,18,23
+scripts/verify-release-ref.sh
+  s_c5a06ffaad29b7::t_fa963572d2fc79 7
+workers/cli-downloads/worker.mjs
+  s_c5a06ffaad29b7::t_5b08a95d6210fa 3
+workers/cli-downloads/worker.test.mjs
+  s_c5a06ffaad29b7::t_7593c5b010b87b 27-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ae6f01693eaea00732547d64e9afbb8a1791b382",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
