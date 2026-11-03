@@ -52,6 +52,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
+      - name: Set up Node for download worker tests
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Test download analytics
+        run: node --test workers/cli-downloads/worker.test.mjs
       - name: Run quality contract
         run: scripts/ci-verify.sh quality
 
