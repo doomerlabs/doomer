@@ -24,6 +24,10 @@ test('excludes metadata, Mac assets, mismatched versions, failed requests and ve
   assert.deepEqual(await run({ method: 'HEAD' }), []);
   assert.deepEqual(await run({ headers: { 'X-Doomer-Release-Verification': '1' } }), []);
 });
+test('accepts stable daily sequence archives', () => {
+  assert.deepEqual(archive('/cli/releases/2026.11.2.1/doomer_2026.11.2.1_linux_arm64.tar.gz'), { version: '2026.11.2.1', os: 'linux', arch: 'arm64' });
+});
+
 test('tracks partial transfers separately and never counts them as full downloads', async () => {
   for (const options of [{ status: 206 }, { headers: { Range: 'bytes=0-1' } }]) assert.equal((await run(options))[0].blobs[3], 'range');
 });

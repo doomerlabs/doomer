@@ -9,7 +9,7 @@ import re
 import urllib.request
 
 BASE_URL = 'https://downloads.doomer.ai'
-TAG = re.compile(r'^20\d{2}\.\d{1,2}\.\d{1,2}(?:-beta\.\d+)?$')
+TAG = re.compile(r'^20\d{2}\.\d{1,2}\.\d{1,2}(?:\.[1-9][0-9]*)?(?:-beta\.\d+)?$')
 
 
 def digest(data):
@@ -78,7 +78,8 @@ def version_key(version):
     if not TAG.fullmatch(version):
         raise ValueError('Invalid channel version')
     main, _, beta = version.partition('-beta.')
-    return tuple(map(int, main.split('.'))) + (int(beta) if beta else 0,)
+    parts = tuple(map(int, main.split('.')))
+    return parts + (0,) * (4 - len(parts)) + (int(beta) if beta else 0,)
 
 
 def promote(client, bucket, pointer):
