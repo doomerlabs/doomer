@@ -382,3 +382,31 @@ func containsPath(paths []string, path string) bool {
 	}
 	return false
 }
+
+// Refresh uses the existing graceful pause protocol understood by older CLIs.
+// Never resumes a user-paused watcher or terminates an unrelated/foreground PID.
+func refreshManagedWatch(ctx context.Context, root string) error {
+	lock, err := lifecycleLock(ctx, root)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if paused(root) {
+		return fmt.Errorf("watching is paused; an update does not resume it")
+	}
+	current, running, err := runningWatch(root)
+	if err != nil || !running {
+		return err
+	}
+	if current.ManagedSession == "" {
+		return fmt.Errorf("a foreground watcher is running; stop it before refreshing")
+	}
+	marker := filepath.Join(root, "paused.json")
+	if err := watching.Write(marker, time.Now()); err != nil {
+		return err
+	}
+	if err := waitWatch(ctx, func() (bool, error) { _, live, e := runningWatch(root); return !live, e }); err != nil {
+		return fmt.Errorf("watcher refresh could not stop the old process; watching remains paused: %w", err)
+	}
+	return os.Remove(marker)
+}

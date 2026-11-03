@@ -374,3 +374,50 @@ func TestConsentCannotRestoreApprovalChangedWhileBrowserWasOpen(t *testing.T) {
 		t.Fatal("concurrent revocation was overwritten")
 	}
 }
+
+func TestRefreshManagedWatcherPreservesConsentAndUserPause(t *testing.T) {
+	root := t.TempDir()
+	cfg := filepath.Join(root, "config.json")
+	original := []byte(`{"consent":"unchanged"}`)
+	if err := os.WriteFile(cfg, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Already-paused state is never cleared by an upgrade.
+	if err := watching.Write(filepath.Join(root, "paused.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := refreshManagedWatch(context.Background(), root); err == nil {
+		t.Fatal("resumed paused watcher")
+	}
+	if !paused(root) {
+		t.Fatal("removed user pause")
+	}
+	os.Remove(filepath.Join(root, "paused.json"))
+	lock, err := publock.TryAcquire(root, "watcher")
+	if err != nil {
+		t.Fatal(err)
+	}
+	watching.Write(filepath.Join(root, "process.json"), watchProcess{ManagedSession: "managed", ConsentedAt: time.Now()})
+	watching.Write(filepath.Join(root, "heartbeat.json"), time.Now())
+	released := make(chan struct{})
+	go func() {
+		defer close(released)
+		for !paused(root) {
+			time.Sleep(time.Millisecond)
+		}
+		lock.Close()
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := refreshManagedWatch(ctx, root); err != nil {
+		t.Fatal(err)
+	}
+	<-released
+	if paused(root) {
+		t.Fatal("left refresh pause behind")
+	}
+	data, err := os.ReadFile(cfg)
+	if err != nil || string(data) != string(original) {
+		t.Fatal("changed consent")
+	}
+}
