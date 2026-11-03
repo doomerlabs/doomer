@@ -9,11 +9,12 @@ import (
 )
 
 type taskHandoff struct {
-	Repository string
-	Session    string
-	Prompt     string
-	BoundTurn  string
-	Created    time.Time
+	Repository       string
+	Session          string
+	Prompt           string
+	ContextDelivered bool
+	BoundTurn        string
+	Created          time.Time
 }
 
 func taskHandoffPath(root, repository, session string) string {
@@ -66,4 +67,27 @@ func handoffPrompt(root, repository string, owner Owner, current string) string 
 		return nil
 	})
 	return result
+}
+
+// ResumeTaskContext hands the saved request to one resumed prompt. The original
+// remains scoped to the first editing turn for review attribution.
+func ResumeTaskContext(root, repository, session string) (string, error) {
+	var prompt string
+	err := Locked(root, "task-handoff-"+Key(repository+"\x00"+session), func() error {
+		file := taskHandoffPath(root, repository, session)
+		var saved taskHandoff
+		if err := Read(file, &saved); err != nil {
+			return nil
+		}
+		if saved.Repository != repository || saved.Session != session || saved.ContextDelivered || saved.BoundTurn != "" || saved.Created.IsZero() || time.Since(saved.Created) < 0 || time.Since(saved.Created) > 24*time.Hour {
+			return nil
+		}
+		saved.ContextDelivered = true
+		if err := Write(file, saved); err != nil {
+			return err
+		}
+		prompt = saved.Prompt
+		return nil
+	})
+	return prompt, err
 }
