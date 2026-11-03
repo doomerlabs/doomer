@@ -1,0 +1,29 @@
+README.md
+  s_c5a06ffaad29b7::t_f4ec14adc6155d 40-48
+cmd/onboard.go
+  s_c5a06ffaad29b7::t_88208cf316b821 4,19,24-28,40-57,89,101-104,106-115,123-124,148
+cmd/onboard_test.go
+  s_c5a06ffaad29b7::t_4f8b4f996517c1 75-79
+internal/watch/claude_activation.go
+  s_c5a06ffaad29b7::t_203cc2d65bd181 1-133
+internal/watch/claude_activation_test.go
+  s_c5a06ffaad29b7::t_d8add7fd7882d2 1-115
+internal/watch/hook.go
+  s_c5a06ffaad29b7::t_c8e5c5682c5abd 131-133,148-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0192968effe80ac528e21a605c7c39f8e4aac6d8",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
