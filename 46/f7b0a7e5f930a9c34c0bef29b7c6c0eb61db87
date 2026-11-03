@@ -1,0 +1,38 @@
+pkg/adversarylabs/workspace_packs.go
+  s_c5a06ffaad29b7::t_aef6e21adf9f5b 46-47,67-70
+pkg/sourcesnapshot/capture.go
+  s_c5a06ffaad29b7::t_aef6e21adf9f5b 435-445,515-536
+  s_c5a06ffaad29b7::t_c128590284dbb8 537
+internal/watch/upload.go
+  s_c5a06ffaad29b7::t_aef6e21adf9f5b 42,95,109,139-155
+  s_c5a06ffaad29b7::t_981dfbaca826b0 9,156
+internal/watch/hook.go
+  s_c5a06ffaad29b7::t_1b3b5bacafd95a 250-254
+internal/watch/recent_changes_test.go
+  s_c5a06ffaad29b7::t_1b3b5bacafd95a 4,7,66-100
+  s_c5a06ffaad29b7::t_49ab6ba7deeff1 101
+internal/watch/preupload_test.go
+  s_c5a06ffaad29b7::t_fbb5ad3a15f1d8 132-206
+pkg/adversarylabs/workspace_packs_test.go
+  s_c5a06ffaad29b7::t_02860b50b100e1 15,127-192
+pkg/sourcesnapshot/baseline_test.go
+  s_c5a06ffaad29b7::t_9d4bd845b1a6d8 1-44
+pkg/sourcesnapshot/capture_test.go
+  s_c5a06ffaad29b7::t_ee947e74ef21d4 254-278
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "46f7b0a7e5f930a9c34c0bef29b7c6c0eb61db87",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
