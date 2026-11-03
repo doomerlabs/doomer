@@ -1,0 +1,22 @@
+.depot/workflows/release.yml
+  h_aa44c3b5b60dec 182
+docs/release.md
+  h_aa44c3b5b60dec 70-72,91-92
+scripts/publish-r2.py
+  h_aa44c3b5b60dec 13,128-133,140,150
+scripts/test-publish-r2.py
+  h_aa44c3b5b60dec 40-44
+scripts/verify-ci-contract.go
+  h_aa44c3b5b60dec 449
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2778b627bbaf998af2574712a7bf3599435e2b79",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
