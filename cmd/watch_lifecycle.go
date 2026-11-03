@@ -241,30 +241,8 @@ func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api,
 			}
 			fmt.Fprintln(c.OutOrStdout(), "Reusing the running watcher.")
 		} else {
-			exe, err := os.Executable()
-			if err != nil {
+			if err := startManagedWatch(c.Context(), root, path, *api, *profile, nil); err != nil {
 				return err
-			}
-			session := rand.Text()
-			child := exec.Command(exe, "--api-url", *api, "--profile", *profile, "watch", "--managed-session", session)
-			child.Dir = path
-			// Resolve an explicitly relative config directory before changing
-			// the child's working directory to another approved repository.
-			for _, entry := range os.Environ() {
-				if !strings.HasPrefix(entry, "DOOMER_CONFIG_DIR=") {
-					child.Env = append(child.Env, entry)
-				}
-			}
-			child.Env = append(child.Env, "DOOMER_CONFIG_DIR="+filepath.Dir(filepath.Dir(root)))
-			if err := startWatchProcess(child, filepath.Join(root, "watch.log")); err != nil {
-				return err
-			}
-			err = waitWatch(c.Context(), func() (bool, error) {
-				p, live, err := runningWatch(root)
-				return live && p.ManagedSession == session, err
-			})
-			if err != nil {
-				return fmt.Errorf("background watcher did not become ready: %w; inspect %s", err, filepath.Join(root, "watch.log"))
 			}
 			fmt.Fprintln(c.OutOrStdout(), "Background watcher started.")
 		}
@@ -385,28 +363,62 @@ func containsPath(paths []string, path string) bool {
 
 // Refresh uses the existing graceful pause protocol understood by older CLIs.
 // Never resumes a user-paused watcher or terminates an unrelated/foreground PID.
-func refreshManagedWatch(ctx context.Context, root string) error {
+func refreshManagedWatch(ctx context.Context, root string, start func(watchProcess) error) (bool, error) {
 	lock, err := lifecycleLock(ctx, root)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer lock.Close()
 	if paused(root) {
-		return fmt.Errorf("watching is paused; an update does not resume it")
+		return false, fmt.Errorf("watching is paused; an update does not resume it")
 	}
 	current, running, err := runningWatch(root)
 	if err != nil || !running {
-		return err
+		return false, err
 	}
 	if current.ManagedSession == "" {
-		return fmt.Errorf("a foreground watcher is running; stop it before refreshing")
+		return false, fmt.Errorf("a foreground watcher is running; stop it before refreshing")
 	}
 	marker := filepath.Join(root, "paused.json")
 	if err := watching.Write(marker, time.Now()); err != nil {
-		return err
+		return false, err
 	}
 	if err := waitWatch(ctx, func() (bool, error) { _, live, e := runningWatch(root); return !live, e }); err != nil {
-		return fmt.Errorf("watcher refresh could not stop the old process; watching remains paused: %w", err)
+		return false, fmt.Errorf("watcher refresh could not stop the old process; watching remains paused: %w", err)
 	}
-	return os.Remove(marker)
+	if err := os.Remove(marker); err != nil {
+		return false, err
+	}
+	if err := start(current); err != nil {
+		return false, fmt.Errorf("old watcher stopped, but its replacement did not start: %w", err)
+	}
+	return true, nil
+}
+
+func startManagedWatch(ctx context.Context, root, path, api, profile string, directories []string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	session := rand.Text()
+	args := []string{"--api-url", api, "--profile", profile, "watch", "--managed-session", session}
+	args = append(args, directories...)
+	child := exec.Command(exe, args...)
+	child.Dir = path
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "DOOMER_CONFIG_DIR=") {
+			child.Env = append(child.Env, entry)
+		}
+	}
+	child.Env = append(child.Env, "DOOMER_CONFIG_DIR="+filepath.Dir(filepath.Dir(root)))
+	if err := startWatchProcess(child, filepath.Join(root, "watch.log")); err != nil {
+		return err
+	}
+	if err := waitWatch(ctx, func() (bool, error) {
+		p, live, err := runningWatch(root)
+		return live && p.ManagedSession == session, err
+	}); err != nil {
+		return fmt.Errorf("background watcher did not become ready: %w; inspect %s", err, filepath.Join(root, "watch.log"))
+	}
+	return nil
 }

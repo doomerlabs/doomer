@@ -28,6 +28,8 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 	c.MarkFlagsMutuallyExclusive("check-hooks", "task-stdin")
 	c.MarkFlagsMutuallyExclusive("check-hooks", "restart")
 	c.MarkFlagsMutuallyExclusive("check-hooks", "refresh")
+	c.MarkFlagsMutuallyExclusive("refresh", "restart")
+	c.MarkFlagsMutuallyExclusive("refresh", "task-stdin")
 	c.RunE = func(c *cobra.Command, _ []string) error {
 		if agent != "codex" && agent != "claude" {
 			return fmt.Errorf("--agent must be codex or claude")
@@ -38,6 +40,33 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 		path, err := watching.Root(c.Context(), repo)
 		if err != nil {
 			return err
+		}
+		if refresh {
+			if taskStdin || restartRequired {
+				return fmt.Errorf("--refresh cannot be combined with --task-stdin or --restart")
+			}
+			before, err := inspectWatch(app, *api, *profile, path)
+			if err != nil {
+				return err
+			}
+			if !before.Approved {
+				return fmt.Errorf("refresh requires existing approval; run normal onboarding first")
+			}
+			root, _, err := watchPaths(*api, *profile)
+			if err != nil {
+				return err
+			}
+			refreshed, err := refreshManagedWatch(c.Context(), root, func(previous watchProcess) error {
+				return startManagedWatch(c.Context(), root, path, *api, *profile, previous.Directories)
+			})
+			if err != nil {
+				return err
+			}
+			status := "not_running"
+			if refreshed {
+				status = "refreshed"
+			}
+			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]string{"status": status})
 		}
 		if checkHooks {
 			if agent != "claude" || session == "" {
@@ -68,15 +97,7 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 				return fmt.Errorf("task requires a session and 1–3000 characters of original request")
 			}
 		}
-		if refresh {
-			root, _, err := watchPaths(*api, *profile)
-			if err != nil {
-				return err
-			}
-			if err := refreshManagedWatch(c.Context(), root); err != nil {
-				return err
-			}
-		}
+
 		before, err := inspectWatch(app, *api, *profile, path)
 		if err != nil {
 			return err

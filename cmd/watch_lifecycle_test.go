@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -386,31 +387,58 @@ func TestRefreshManagedWatcherPreservesConsentAndUserPause(t *testing.T) {
 	if err := watching.Write(filepath.Join(root, "paused.json"), time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if err := refreshManagedWatch(context.Background(), root); err == nil {
+	if _, err := refreshManagedWatch(context.Background(), root, func(watchProcess) error { t.Fatal("started paused watcher"); return nil }); err == nil {
 		t.Fatal("resumed paused watcher")
 	}
 	if !paused(root) {
 		t.Fatal("removed user pause")
 	}
-	os.Remove(filepath.Join(root, "paused.json"))
+	if err := os.Remove(filepath.Join(root, "paused.json")); err != nil {
+		t.Fatal(err)
+	}
 	lock, err := publock.TryAcquire(root, "watcher")
 	if err != nil {
 		t.Fatal(err)
 	}
-	watching.Write(filepath.Join(root, "process.json"), watchProcess{ManagedSession: "managed", ConsentedAt: time.Now()})
-	watching.Write(filepath.Join(root, "heartbeat.json"), time.Now())
-	released := make(chan struct{})
+	var closeOnce sync.Once
+	closeLock := func() { closeOnce.Do(func() { _ = lock.Close() }) }
+	t.Cleanup(closeLock)
+	if err := watching.Write(filepath.Join(root, "process.json"), watchProcess{ManagedSession: "managed", ConsentedAt: time.Now(), Directories: []string{"original-directory"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := watching.Write(filepath.Join(root, "heartbeat.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	released, stop := make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(released)
-		for !paused(root) {
-			time.Sleep(time.Millisecond)
+		defer closeLock()
+		ticker := time.NewTicker(time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				if paused(root) {
+					return
+				}
+			}
 		}
-		lock.Close()
 	}()
+	t.Cleanup(func() { close(stop); <-released })
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := refreshManagedWatch(ctx, root); err != nil {
-		t.Fatal(err)
+	started := false
+	refreshed, err := refreshManagedWatch(ctx, root, func(previous watchProcess) error {
+		started = true
+		if len(previous.Directories) != 1 || previous.Directories[0] != "original-directory" {
+			t.Error("lost watcher selection")
+		}
+		return nil
+	})
+	if err != nil || !refreshed || !started {
+		t.Fatalf("refreshed=%t started=%t err=%v", refreshed, started, err)
 	}
 	<-released
 	if paused(root) {

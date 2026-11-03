@@ -116,3 +116,81 @@ func TestClaudeDoesNotInheritCodexSession(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestOnboardRefreshDoesNotRewriteTaskHooksOrConsent(t *testing.T) {
+	store := isolate(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CODEX_HOME", t.TempDir())
+	api, profile := "http://localhost:3000/api", "refresh-test"
+	app := &application.App{Deps: application.Dependencies{Auth: store}}
+	repo := newWatchTestRepo(t)
+	setup := newWatchCommand(app, &api, &profile)
+	setup.SetContext(context.Background())
+	setup.SetOut(&bytes.Buffer{})
+	if err := setup.Flags().Set("yes", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := setup.Flags().Set("agent", "claude"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := prepareWatch(setup, app, &api, &profile, []string{repo}); err != nil {
+		t.Fatal(err)
+	}
+	root, config, err := watchPaths(api, profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := watching.SaveTaskHandoff(root, repo, "session", strings.NewReader("original task")); err != nil {
+		t.Fatal(err)
+	}
+	if err := watching.BeginClaudeActivation(root, repo, "session", "original task"); err != nil {
+		t.Fatal(err)
+	}
+	guidance := filepath.Join(repo, "CLAUDE.md")
+	if err := os.WriteFile(guidance, []byte("keep instructions"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	paths := []string{config, guidance,
+		filepath.Join(root, "task-handoffs", watching.Key(repo+"\x00session")+".json"),
+		filepath.Join(root, "onboarding", watching.Key(repo+"\x00session")+".json"),
+		watching.HookFile(os.Getenv("HOME"), "claude"),
+	}
+	snapshots := map[string][]byte{}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshots[path] = data
+	}
+	oldBrowser := openSetupBrowser
+	t.Cleanup(func() { openSetupBrowser = oldBrowser })
+	openSetupBrowser = func(context.Context, string) error { t.Fatal("refresh reopened consent"); return nil }
+	c := newOnboardCommand(app, &api, &profile)
+	var out bytes.Buffer
+	c.SetOut(&out)
+	c.SetArgs([]string{"--repo", repo, "--agent", "claude", "--session", "session", "--refresh"})
+	if err := c.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "not_running") || strings.Contains(out.String(), "restart") {
+		t.Fatal(out.String())
+	}
+	for path, before := range snapshots {
+		after, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(before, after) {
+			t.Fatalf("refresh changed %s: %v", path, err)
+		}
+	}
+}
+func TestOnboardRefreshRejectsTaskAndRestartModes(t *testing.T) {
+	for _, flag := range []string{"--restart", "--task-stdin", "--check-hooks"} {
+		c := newOnboardCommand(&application.App{}, new(string), new(string))
+		c.SetArgs([]string{"--refresh", flag})
+		c.SetOut(&bytes.Buffer{})
+		c.SetErr(&bytes.Buffer{})
+		if err := c.Execute(); err == nil || !strings.Contains(err.Error(), "none of the others") {
+			t.Fatalf("accepted refresh with %s or wrong error: %v", flag, err)
+		}
+	}
+}

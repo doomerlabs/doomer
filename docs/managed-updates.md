@@ -27,9 +27,13 @@ The skill checks its own source updates once per coding session using the skills
 package manager, offers one update for the skill and matching managed CLI, and
 rereads the updated instructions before selecting the pin. Declining preserves
 the existing pair. Updating software does not authorize repository uploads,
-change saved consent, or bypass coding-agent hook trust. Rerun onboarding with `--refresh` after
-a binary replacement to refresh the managed watcher; retain existing consent and follow
-the agent-specific hook activation flow.
+change saved consent, or bypass coding-agent hook trust. After replacement, run
+`onboard --repo REPO --refresh` separately to replace an existing managed watcher
+using its original directory selection. Refresh never runs onboarding, opens a
+consent page, changes hooks, or replaces saved task/activation state. It cannot
+be combined with `--restart`, `--task-stdin`, or `--check-hooks`. An absent watcher
+returns `not_running`; paused or foreground watchers are left alone and reported
+as errors. Normal onboarding remains a separate operation for new setups.
 
 Older release binaries do not have `self-update`. The skill retains its verified
 bootstrap path for them until the pinned release includes the updater. Do not
