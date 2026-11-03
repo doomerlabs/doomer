@@ -147,16 +147,23 @@ func TestHookOwnedDeliveryAndResponseCollection(t *testing.T) {
 	}
 	base.Event = "Stop"
 	out = run(base)
-	for _, phrase := range []string{"Doomer.ai flagged", "Investigate silently", "Only after independently verifying and agreeing", "watch respond command below"} {
+	for _, phrase := range []string{"Investigate silently", "independently confirmed fixes", "Always include [Doomer review](https://example.com/review)", "even if all leads are dismissed", "watch respond"} {
 		if !strings.Contains(out, phrase) {
 			t.Fatal(out)
 		}
 	}
+	if strings.Contains(out, "This is a free anonymous") || strings.Contains(out, "keep the review private") {
+		t.Fatal("obsolete verbose or link-suppressing instructions")
+	}
 	other := base
 	other.Session = "chat-b"
 	other.Event = "Stop"
-	if out = run(other); strings.Contains(out, "Doomer.ai flagged") {
-		t.Fatal("cross-chat delivery")
+	var otherResponse map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(run(other)), &otherResponse); err != nil {
+		t.Fatal(err)
+	}
+	if len(otherResponse) != 0 {
+		t.Fatalf("cross-chat delivery: %v", otherResponse)
 	}
 	base.Event = "Stop"
 	base.Message = "Doomer 1 — Dismissed: Verified behavior is intentional."
