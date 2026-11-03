@@ -72,7 +72,11 @@ func TestOnboardReusesConsentAndWatcherWithoutLosingInstructions(t *testing.T) {
 			if err := c.RunE(c, nil); err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(output.String(), onboardingResumeCommand(repo, agent, "session")) {
+			expected := onboardingResumeCommand(repo, agent, "session")
+			if agent == "claude" {
+				expected = "--check-hooks"
+			}
+			if !strings.Contains(output.String(), expected) {
 				t.Fatal(output.String())
 			}
 			if original, err := watching.ResumeTaskContext(root, repo, "session"); err != nil || original != "Add pagination" {
