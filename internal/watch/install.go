@@ -11,6 +11,14 @@ import (
 
 func Quote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
 
+func hookEvents(file string) []string {
+	events := []string{"UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"}
+	if filepath.Base(file) == "settings.json" {
+		events = append(events, "PostToolUseFailure")
+	}
+	return events
+}
+
 // Preserve unrelated hooks and settings. Reinstall replaces only this exact
 // CLI profile's entries, and backs up the original settings before writing.
 func Install(file, command, marker string, remove bool) error {
@@ -31,7 +39,7 @@ func Install(file, command, marker string, remove bool) error {
 		}
 		hooks = map[string]any{}
 	}
-	for _, event := range []string{"UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"} {
+	for _, event := range hookEvents(file) {
 		var groups []any
 		if hooks[event] != nil {
 			var valid bool
@@ -78,7 +86,7 @@ func Install(file, command, marker string, remove bool) error {
 				}[event]
 			}
 			group := map[string]any{"hooks": []any{handler}}
-			if event == "PreToolUse" || event == "PostToolUse" {
+			if event == "PreToolUse" || event == "PostToolUse" || event == "PostToolUseFailure" {
 				group["matcher"] = ".*"
 			}
 			kept = append(kept, group)
@@ -123,7 +131,7 @@ func Installed(file, marker string) (bool, error) {
 	if err := json.Unmarshal(data, &config); err != nil {
 		return false, fmt.Errorf("invalid hook settings: %s: %w", file, err)
 	}
-	for _, event := range []string{"UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"} {
+	for _, event := range hookEvents(file) {
 		found := false
 		for _, group := range config.Hooks[event] {
 			for _, h := range group.Hooks {

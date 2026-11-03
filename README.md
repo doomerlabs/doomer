@@ -23,7 +23,7 @@ go build -o bin/doomer .
 
 After installing the CLI, the review skill uses one command to obtain browser
 consent, install matching hooks, start or reuse the watcher, and maintain its
-marked `AGENTS.md` guidance:
+marked repository guidance (`AGENTS.md` for Codex, `CLAUDE.md` for Claude Code):
 
 ```sh
 doomer onboard --repo . --agent codex --session "$CODEX_THREAD_ID" --task-stdin < original-task.txt
@@ -31,14 +31,21 @@ doomer onboard --repo . --agent codex --session "$CODEX_THREAD_ID" --task-stdin 
 
 The input is the user's original request, saved locally for the required hook
 restart. Add `--restart` when the CLI was installed during the current turn.
-The command prints the exact `codex resume` command. After restart and human
+Use `--agent claude --session "$claude_session_id"` for Claude Code. The skill
+passes Claude's expanded `${CLAUDE_SESSION_ID}`; it does not assume that value
+is exported to the shell. Claude's hooks live in `~/.claude/settings.json`;
+existing settings and unrelated hooks are preserved. A newly created
+`CLAUDE.md` imports an existing `AGENTS.md` so shared rules remain available.
+
+The command prints the exact `codex resume` or `claude --resume` command (with
+the current-directory fallback when no session ID is available). After restart and human
 hook trust, the prompt hook supplies the original task once. No Python helper,
 second watcher-start command, or internal-state polling is required. A paused
 watcher stays paused; only an explicit `watch start --resume` resumes it.
 
 Trusted hooks deliver each completed revision once, including results with no
 leads, and preserve the complete review URL. Subsequent fixes may produce new
-revisions within the same turn. Upload consent does not grant Codex hook trust.
+revisions within the same turn. Upload consent does not grant coding-agent hook trust.
 
 ## Watch repositories while you code
 

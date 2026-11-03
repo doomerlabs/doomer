@@ -24,6 +24,7 @@ type HookInput struct {
 
 	Session    string `json:"session_id"`
 	Turn       string `json:"turn_id"`
+	PromptID   string `json:"prompt_id"`
 	CWD        string `json:"cwd"`
 	Event      string `json:"hook_event_name"`
 	ToolID     string `json:"tool_use_id"`
@@ -48,6 +49,7 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 
 func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reader, out io.Writer, ready func(context.Context) bool, agents ...string) {
 	response := map[string]any{}
+	var event string
 	responsesRecorded := false
 	waiting := false
 	defer func() {
@@ -55,7 +57,14 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 			recordHookReadiness(root, cfg, false)
 		}
 	}()
-	defer func() { _ = json.NewEncoder(out).Encode(response) }()
+	defer func() {
+		if event == "PostToolUseFailure" {
+			if specific, ok := response["hookSpecificOutput"].(map[string]any); ok {
+				specific["hookEventName"] = event
+			}
+		}
+		_ = json.NewEncoder(out).Encode(response)
+	}()
 	var input HookInput
 	if json.NewDecoder(io.LimitReader(in, 1<<20)).Decode(&input) != nil || input.Session == "" {
 		return
@@ -64,9 +73,21 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 	if len(agents) > 0 && (agents[0] == "codex" || agents[0] == "claude") {
 		agent = agents[0]
 	}
-	diagnostic := hookDiagnostic{At: time.Now(), Event: input.Event, Tool: input.Tool, HasToolID: input.ToolID != "", Status: "received"}
+	event = input.Event
+	if agent == "claude" {
+		if input.Turn == "" {
+			input.Turn = input.PromptID
+		}
+		// Failed Claude tools do not emit PostToolUse. Close their tracked
+		// operation too, including any partial edit made before the failure.
+		if input.Event == "PostToolUseFailure" {
+			input.Event = "PostToolUse"
+			input.ToolResponse = nil
+		}
+	}
+	diagnostic := hookDiagnostic{At: time.Now(), Event: event, Tool: input.Tool, HasToolID: input.ToolID != "", Status: "received"}
 	defer func() {
-		_ = Write(filepath.Join(root, "hook-diagnostics", Key(input.Session+input.Event)+".json"), diagnostic)
+		_ = Write(filepath.Join(root, "hook-diagnostics", Key(input.Session+event)+".json"), diagnostic)
 	}()
 	path, pathErr := hookRepository(ctx, input)
 	diagnostic.Repository = path

@@ -25,12 +25,18 @@ uploads or hook trust on the user's behalf. Preserve a paused watcher.
 
 // Update only our marked block. Never follow a repository-provided symlink or
 // overwrite malformed markers that might enclose unrelated instructions.
-func EnsureAgentInstructions(repo string) error {
-	file := filepath.Join(repo, "AGENTS.md")
+func EnsureAgentInstructions(repo, agent string) error {
+	name := "AGENTS.md"
+	if agent == "claude" {
+		name = "CLAUDE.md"
+	} else if agent != "codex" {
+		return fmt.Errorf("unsupported coding agent: %s", agent)
+	}
+	file := filepath.Join(repo, name)
 	mode := os.FileMode(0644)
 	if info, err := os.Lstat(file); err == nil {
 		if !info.Mode().IsRegular() {
-			return fmt.Errorf("refusing to replace non-regular AGENTS.md")
+			return fmt.Errorf("refusing to replace non-regular %s", name)
 		}
 		mode = info.Mode().Perm()
 	} else if !os.IsNotExist(err) {
@@ -41,10 +47,16 @@ func EnsureAgentInstructions(repo string) error {
 		return err
 	}
 	text := string(data)
+	// A new CLAUDE.md must not hide existing shared repository instructions.
+	if os.IsNotExist(err) && agent == "claude" {
+		if info, statErr := os.Lstat(filepath.Join(repo, "AGENTS.md")); statErr == nil && info.Mode().IsRegular() {
+			text = "@AGENTS.md\n"
+		}
+	}
 	start, end := strings.Index(text, agentInstructionsStart), strings.Index(text, agentInstructionsEnd)
 	if start >= 0 || end >= 0 {
 		if start < 0 || end < start || strings.Count(text, agentInstructionsStart) != 1 || strings.Count(text, agentInstructionsEnd) != 1 {
-			return fmt.Errorf("AGENTS.md contains malformed Doomer markers")
+			return fmt.Errorf("%s contains malformed Doomer markers", name)
 		}
 		text = text[:start] + agentInstructions + text[end+len(agentInstructionsEnd):]
 	} else {
