@@ -1,0 +1,22 @@
+cmd/onboard.go
+  h_aa44c3b5b60dec 86
+cmd/onboard_test.go
+  h_aa44c3b5b60dec 68
+internal/watch/completion_test.go
+  h_aa44c3b5b60dec 55,67
+internal/watch/hook.go
+  h_aa44c3b5b60dec 110
+internal/watch/task_handoff.go
+  h_aa44c3b5b60dec 11-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "628ceeb786a2fdacc53f0c5e4171299da2e27796",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
