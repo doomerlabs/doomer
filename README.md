@@ -19,6 +19,27 @@ go build -o bin/doomer .
 ./bin/doomer --help
 ```
 
+## Coding-agent onboarding
+
+After installing the CLI, the review skill uses one command to obtain browser
+consent, install matching hooks, start or reuse the watcher, and maintain its
+marked `AGENTS.md` guidance:
+
+```sh
+doomer onboard --repo . --agent codex --session "$CODEX_THREAD_ID" --task-stdin < original-task.txt
+```
+
+The input is the user's original request, saved locally for the required hook
+restart. Add `--restart` when the CLI was installed during the current turn.
+The command prints the exact `codex resume` command. After restart and human
+hook trust, the prompt hook supplies the original task once. No Python helper,
+second watcher-start command, or internal-state polling is required. A paused
+watcher stays paused; only an explicit `watch start --resume` resumes it.
+
+Trusted hooks deliver each completed revision once, including results with no
+leads, and preserve the complete review URL. Subsequent fixes may produce new
+revisions within the same turn. Upload consent does not grant Codex hook trust.
+
 ## Watch repositories while you code
 
 The CLI uses the same workspace review API as the Mac app. Without a login,

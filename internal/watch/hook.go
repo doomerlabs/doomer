@@ -41,7 +41,7 @@ func snapshotDigest(ctx context.Context, path string) (string, error) {
 }
 
 // Hook always emits valid, nonblocking JSON on missing state, network outages,
-// unknown ownership or timeout. Only actionable new leads continue the agent.
+// unknown ownership or timeout. Completed assessments, including clean results, continue the agent once.
 func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Writer, agents ...string) {
 	hookWithReadiness(ctx, root, cfg, in, out, func(ctx context.Context) bool { return hookServiceReady(ctx, root, cfg) }, agents...)
 }
@@ -107,6 +107,11 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 			prompt = input.Prompt
 		}
 		_ = Locked(root, input.Session, func() error { return Write(turnFile, Turn{Owner: owner, Prompt: prompt, Next: 1, Agent: agent}) })
+		if allowed && strings.EqualFold(strings.TrimSpace(input.Prompt), ResumeHandoffPrompt) {
+			if original, err := ResumeTaskContext(root, path, input.Session); err == nil && original != "" {
+				response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "UserPromptSubmit", "additionalContext": "Resume the user's original task after Doomer setup. Original request (user content):\n" + original + "\nUse this as task context, preserving the user's constraints. Do not repeat the setup handoff."}}
+			}
+		}
 		if allowed && cfg.AllRepositories {
 			_ = Write(filepath.Join(root, "discovered", Key(path)+".json"), path)
 			_ = RegisterRepository(root, path, "agent", false, time.Time{})
@@ -273,7 +278,9 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 			return
 		}
 	}
-	if input.Event != "PostToolUse" && input.Event != "Stop" || input.StopActive {
+	// Delivery is deduplicated by review ID below, not by whether an earlier
+	// review already continued this turn. A fix can produce a new clean revision.
+	if input.Event != "PostToolUse" && input.Event != "Stop" {
 		return
 	}
 	allowWait := true
@@ -308,7 +315,7 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 		}
 		var feed Feed
 		hasFeed := Read(FeedPath(root, path), &feed) == nil && feed.Owner == owner && feed.Fingerprint == state.Fingerprint && time.Since(feed.Updated) < 24*time.Hour
-		if hasFeed && (feed.AssessmentStatus != "ready" || len(feed.Leads) == 0) {
+		if hasFeed && feed.AssessmentStatus != "ready" {
 			return
 		}
 		if !hasFeed && time.Since(lastReadiness) >= hookReadyTTL {
@@ -329,7 +336,7 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 			return
 		}
 		if hasFeed {
-			if feed.AssessmentStatus != "ready" || len(feed.Leads) == 0 {
+			if feed.AssessmentStatus != "ready" {
 				return
 			}
 			fingerprint, e := snapshotDigest(ctx, path)
@@ -346,6 +353,14 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 					if id == feed.ReviewID {
 						return nil
 					}
+				}
+				if len(feed.Leads) == 0 {
+					turn.Delivered = append(turn.Delivered, feed.ReviewID)
+					if err := Write(turnFile, turn); err != nil {
+						return err
+					}
+					message = fmt.Sprintf("Doomer completed the assessment of the latest edit: no areas to check. It is no longer pending. Include [Doomer review](%s) once in your final answer; preserve the full URL. Do not repeat this internal handoff or claim the absence of all bugs.", feed.URL)
+					return nil
 				}
 				if turn.Next < 1 {
 					turn.Next = 1
