@@ -251,7 +251,7 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 						s.RequestedAt = time.Now()
 						s.InlineWaited = false
 						s.Fingerprint = fingerprint
-						s.Prompt = turn.Prompt
+						s.Prompt = handoffPrompt(root, path, owner, turn.Prompt)
 						s.Agent = agent
 						s.QuestionRequest = ""
 						s.HypothesesSubmitted = false

@@ -595,5 +595,36 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	respond.Flags().StringVar(&responseRequest, "request", "", "turn-scoped response request")
 	c.AddCommand(respond)
 
+	var taskRepository, taskSession string
+	task := &cobra.Command{Use: "task", Short: "Preserve the original task across a coding-agent restart (stdin)", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
+		root, _, err := watchPaths(*api, *profile)
+		if err != nil {
+			return err
+		}
+		var cfg watching.Config
+		if err = watching.Read(filepath.Join(root, "config.json"), &cfg); err != nil {
+			return err
+		}
+		repository, err := filepath.Abs(taskRepository)
+		if err != nil {
+			return err
+		}
+		repository, err = filepath.EvalSymlinks(repository)
+		if err != nil {
+			return err
+		}
+		if taskRepository == "" || cfg.API != *api || cfg.Profile != *profile || cfg.ConsentedAt.IsZero() || !watching.Allowed(cfg, repository) || watching.RepositoryRemoved(root, repository) {
+			return fmt.Errorf("task repository is not approved for this profile")
+		}
+		if err = watching.SaveTaskHandoff(root, repository, taskSession, c.InOrStdin()); err != nil {
+			return err
+		}
+		fmt.Fprintln(c.OutOrStdout(), "Original task saved locally for the next editing turn; nothing uploaded.")
+		return nil
+	}}
+	task.Flags().StringVar(&taskRepository, "repo", "", "approved repository root")
+	task.Flags().StringVar(&taskSession, "session", "", "owning coding-agent session")
+	c.AddCommand(task)
+
 	return c
 }
