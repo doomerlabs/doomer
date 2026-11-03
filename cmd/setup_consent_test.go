@@ -151,3 +151,42 @@ func TestTerminalSetupConsentRequiresYes(t *testing.T) {
 		t.Fatal("accepted after cancellation")
 	}
 }
+
+func TestSetupPagesPreserveScopeAndApprovalMeaning(t *testing.T) {
+	s := setupConsent{API: "https://doomer.ai/api", Profile: "default", Nonce: strings.Repeat("a", 64), Directories: []string{"/repo/<script>alert(1)</script>"}, Agents: []string{"codex"}}
+	var out bytes.Buffer
+	if err := setupPage.ExecuteTemplate(&out, "consent", s); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "<script>alert(1)</script>") || !strings.Contains(out.String(), "&lt;script&gt;") {
+		t.Fatal("repository name was not escaped")
+	}
+	for _, text := range []string{"outside the changed lines", "task prompt", "review responses", "/privacy", "name=\"nonce\"", "value=\"cancel\""} {
+		if !strings.Contains(out.String(), text) {
+			t.Fatalf("missing disclosure/control %q", text)
+		}
+	}
+	s.AllRepositories = true
+	out.Reset()
+	if err := setupPage.ExecuteTemplate(&out, "consent", s); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "future checkouts") || !strings.Contains(out.String(), "Allow for these repositories") {
+		t.Fatal("all-repository scope hidden")
+	}
+	for _, approved := range []bool{true, false} {
+		out.Reset()
+		if err := setupPage.ExecuteTemplate(&out, "complete", struct {
+			Consent  setupConsent
+			Approved bool
+		}{s, approved}); err != nil {
+			t.Fatal(err)
+		}
+		if approved && (!strings.Contains(out.String(), "Permission received") || !strings.Contains(out.String(), "terminal will confirm whether setup finished")) {
+			t.Fatal("approval incorrectly claims completed setup")
+		}
+		if !approved && (!strings.Contains(out.String(), "haven’t granted permission") || strings.Contains(out.String(), "Permission received")) {
+			t.Fatal("decline incorrectly claims approval")
+		}
+	}
+}
