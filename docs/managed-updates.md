@@ -33,10 +33,10 @@ using its original directory selection. `--repo` defaults to the current directo
 it identifies an already-approved checkout for the permission check, not a new
 watch selection or working directory. Passing a different approved checkout does
 not retarget the watcher; an unapproved checkout is rejected. The replacement
-uses the watcher's recorded working directory. For older records, it uses the
-first explicit watched directory, or the first approved profile seed for an
-automatically discovered selection. If none is recorded, refresh fails before
-stopping the old watcher. Refresh never runs onboarding, opens a
+uses the watcher's recorded working directory, validated before stopping it.
+If that directory is missing, invalid, or absent from an older process record,
+refresh leaves the old watcher running and asks for an explicit stop/restart;
+it never guesses from the profile's approved repositories. Refresh never runs onboarding, opens a
 consent page, changes hooks, or replaces saved task/activation state. It cannot
 be combined with `--restart`, `--task-stdin`, or `--check-hooks`. An absent watcher
 returns `not_running`; paused or foreground watchers are left alone and reported

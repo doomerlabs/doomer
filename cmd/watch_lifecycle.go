@@ -380,7 +380,7 @@ func refreshManagedWatch(ctx context.Context, root string, start func(watchProce
 	if current.ManagedSession == "" {
 		return false, fmt.Errorf("a foreground watcher is running; stop it before refreshing")
 	}
-	current.WorkingDirectory, err = refreshWorkingDirectory(root, current)
+	current.WorkingDirectory, err = refreshWorkingDirectory(current)
 	if err != nil {
 		return false, err
 	}
@@ -400,23 +400,21 @@ func refreshManagedWatch(ctx context.Context, root string, start func(watchProce
 	return true, nil
 }
 
-// Older watcher records predate WorkingDirectory. Their explicit selection, or
-// the profile's approved discovery seeds, provides a stable replacement cwd.
-func refreshWorkingDirectory(root string, previous watchProcess) (string, error) {
-	if previous.WorkingDirectory != "" {
-		return previous.WorkingDirectory, nil
-	}
-	if len(previous.Directories) > 0 {
-		return previous.Directories[0], nil
-	}
-	var cfg watching.Config
-	if err := watching.Read(filepath.Join(root, "config.json"), &cfg); err != nil {
-		return "", fmt.Errorf("read original watcher selection: %w", err)
-	}
-	if len(cfg.Directories) == 0 {
+// Do not guess a missing historical cwd: it affects discovery of linked worktrees.
+// Validate before pausing so an invalid record leaves the old watcher running.
+func refreshWorkingDirectory(previous watchProcess) (string, error) {
+	path := previous.WorkingDirectory
+	if path == "" || !filepath.IsAbs(path) {
 		return "", fmt.Errorf("original watcher working directory is unavailable; stop and restart it explicitly")
 	}
-	return cfg.Directories[0], nil
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("original watcher working directory is unavailable: %w", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("original watcher working directory is not a directory: %s", path)
+	}
+	return path, nil
 }
 
 func startManagedWatch(ctx context.Context, root, path, api, profile string, directories []string) error {

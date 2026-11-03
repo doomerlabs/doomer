@@ -403,7 +403,7 @@ func TestRefreshManagedWatcherPreservesConsentAndUserPause(t *testing.T) {
 	var closeOnce sync.Once
 	closeLock := func() { closeOnce.Do(func() { _ = lock.Close() }) }
 	t.Cleanup(closeLock)
-	if err := watching.Write(filepath.Join(root, "process.json"), watchProcess{ManagedSession: "managed", ConsentedAt: time.Now(), Directories: []string{"original-directory"}}); err != nil {
+	if err := watching.Write(filepath.Join(root, "process.json"), watchProcess{WorkingDirectory: root, ManagedSession: "managed", ConsentedAt: time.Now(), Directories: []string{"original-directory"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := watching.Write(filepath.Join(root, "heartbeat.json"), time.Now()); err != nil {
@@ -432,7 +432,7 @@ func TestRefreshManagedWatcherPreservesConsentAndUserPause(t *testing.T) {
 	started := false
 	refreshed, err := refreshManagedWatch(ctx, root, func(previous watchProcess) error {
 		started = true
-		if previous.WorkingDirectory != "original-directory" {
+		if previous.WorkingDirectory != root {
 			t.Error("replacement cwd did not come from original selection")
 		}
 		if len(previous.Directories) != 1 || previous.Directories[0] != "original-directory" {
@@ -454,30 +454,48 @@ func TestRefreshManagedWatcherPreservesConsentAndUserPause(t *testing.T) {
 }
 
 func TestRefreshWorkingDirectoryUsesRecordedSelection(t *testing.T) {
+	original := t.TempDir()
+	got, err := refreshWorkingDirectory(watchProcess{WorkingDirectory: original, Directories: []string{t.TempDir()}})
+	if err != nil || got != original {
+		t.Fatalf("cwd=%q err=%v want=%q", got, err, original)
+	}
+}
+
+func TestRefreshInvalidDirectoryLeavesWatcherRunning(t *testing.T) {
 	root := t.TempDir()
-	if err := watching.Write(filepath.Join(root, "config.json"), watching.Config{Directories: []string{"/original-discovery-seed"}}); err != nil {
+	file := filepath.Join(root, "regular-file")
+	if err := os.WriteFile(file, []byte("not a directory"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range []struct {
-		name     string
-		previous watchProcess
-		want     string
-	}{
-		{"recorded cwd", watchProcess{WorkingDirectory: "/original-cwd", Directories: []string{"/watched"}}, "/original-cwd"},
-		{"legacy explicit selection", watchProcess{Directories: []string{"/original-watched", "/other"}}, "/original-watched"},
-		{"legacy discovery", watchProcess{}, "/original-discovery-seed"},
+	for _, tc := range []struct{ name, directory string }{
+		{"old record", ""}, {"deleted directory", filepath.Join(root, "deleted")},
+		{"regular file", file}, {"relative path", "relative"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := refreshWorkingDirectory(root, tc.previous)
-			if err != nil || got != tc.want {
-				t.Fatalf("cwd=%q err=%v want=%q", got, err, tc.want)
+			lock, err := publock.TryAcquire(root, "watcher")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = lock.Close() })
+			// An approved seed/selection is not a substitute for the actual cwd.
+			if err := watching.Write(filepath.Join(root, "config.json"), watching.Config{Directories: []string{root}}); err != nil {
+				t.Fatal(err)
+			}
+			if err := watching.Write(filepath.Join(root, "process.json"), watchProcess{ManagedSession: "managed", WorkingDirectory: tc.directory, Directories: []string{root}}); err != nil {
+				t.Fatal(err)
+			}
+			if err := watching.Write(filepath.Join(root, "heartbeat.json"), time.Now()); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := refreshManagedWatch(context.Background(), root, func(watchProcess) error { t.Error("started replacement"); return nil }); err == nil {
+				t.Fatal("accepted invalid directory")
+			}
+			if paused(root) {
+				t.Fatal("paused original watcher")
+			}
+			if _, live, err := runningWatch(root); err != nil || !live {
+				t.Fatalf("original watcher lost: live=%t err=%v", live, err)
 			}
 		})
-	}
-	if err := watching.Write(filepath.Join(root, "config.json"), watching.Config{}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := refreshWorkingDirectory(root, watchProcess{}); err == nil {
-		t.Fatal("accepted unknown original directory")
 	}
 }
