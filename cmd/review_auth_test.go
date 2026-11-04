@@ -72,3 +72,38 @@ func TestAnonymousWatchRequiresHumanUploadApproval(t *testing.T) {
 		t.Fatal("unapproved hooks installed")
 	}
 }
+
+func TestVersionedRuntimesRetainLegacyAnonymousIdentity(t *testing.T) {
+	store := isolate(t)
+	app := &application.App{Deps: application.Dependencies{Auth: store}}
+	original := activeRuntimeVersion
+	activeRuntimeVersion = func() string { return "" }
+	t.Cleanup(func() { activeRuntimeVersion = original })
+	api, profile := "https://example.test/api", "legacy"
+	legacyRoot, _, err := watchPaths(api, profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := adversarylabs.AnonymousTokenPrefix + strings.Repeat("A", 43)
+	if err := watching.Write(filepath.Join(legacyRoot, "anonymous.json"), map[string]string{"API": api, "Profile": profile, "Token": token}); err != nil {
+		t.Fatal(err)
+	}
+	for _, version := range []string{"2026.11.4.1", "2026.11.5.1"} {
+		activeRuntimeVersion = func() string { return version }
+		shared, _, err := consentPaths(api, profile)
+		if err != nil || shared != legacyRoot {
+			t.Fatal("changed legacy credential location", shared, legacyRoot, err)
+		}
+		auth, err := reviewAuth(app, api, profile)
+		if err != nil || auth.Token != token {
+			t.Fatal("lost legacy identity", err)
+		}
+		root, _, err := watchPaths(api, profile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "anonymous.json")); !os.IsNotExist(err) {
+			t.Fatal("created a second identity", err)
+		}
+	}
+}

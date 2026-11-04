@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,13 +16,16 @@ import (
 	"github.com/doomerlabs/doomer/internal/application"
 	"github.com/doomerlabs/doomer/internal/paths"
 	"github.com/doomerlabs/doomer/internal/publock"
+	"github.com/doomerlabs/doomer/internal/runtimeversion"
 	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
-func watchPaths(api, profile string) (string, string, error) {
+var activeRuntimeVersion = runtimeversion.Current
+
+func consentPaths(api, profile string) (string, string, error) {
 	dir := os.Getenv("DOOMER_CONFIG_DIR")
 	if dir == "" {
 		var err error
@@ -37,11 +42,40 @@ func watchPaths(api, profile string) (string, string, error) {
 	return root, filepath.Join(root, "config.json"), nil
 }
 
+func watchPaths(api, profile string) (string, string, error) {
+	root, file, err := consentPaths(api, profile)
+	if err == nil && activeRuntimeVersion() != "" {
+		root = filepath.Join(root, "runtimes", activeRuntimeVersion())
+	}
+	return root, file, err
+}
+
+func readWatchConfig(api, profile string, cfg *watching.Config) error {
+	_, file, err := consentPaths(api, profile)
+	if err != nil {
+		return err
+	}
+	return watching.Read(file, cfg)
+}
+
 // Keep hook repair and readiness checks tied to this executable and destination.
 func watchHookCommand(api, profile, root string) (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err
+	}
+	dispatch := ""
+	if activeRuntimeVersion() != "" {
+		home, e := os.UserHomeDir()
+		if e != nil {
+			return "", e
+		}
+		exe = filepath.Join(home, ".local", "bin", "doomer")
+		root, _, err = consentPaths(api, profile)
+		if err != nil {
+			return "", err
+		}
+		dispatch = " --dispatch"
 	}
 	prefix := ""
 	if dir := os.Getenv("DOOMER_CONFIG_DIR"); dir != "" {
@@ -51,7 +85,7 @@ func watchHookCommand(api, profile, root string) (string, error) {
 		}
 		prefix = "env DOOMER_CONFIG_DIR=" + watching.Quote(absolute) + " "
 	}
-	return prefix + watching.Quote(exe) + " --profile " + watching.Quote(profile) + " --api-url " + watching.Quote(api) + " watch hook --state " + watching.Quote(root), nil
+	return prefix + watching.Quote(exe) + " --profile " + watching.Quote(profile) + " --api-url " + watching.Quote(api) + " watch hook --state " + watching.Quote(root) + dispatch, nil
 }
 
 func watchAuth(app *application.App, api, profile string) (adversarylabs.Auth, error) {
@@ -93,7 +127,11 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		if agents == "both" {
 			selected = []string{"codex", "claude"}
 		}
-		marker := "watch hook --state " + watching.Quote(root)
+		consentRoot, _, err := consentPaths(*api, *profile)
+		if err != nil {
+			return err
+		}
+		marker := "watch hook --state " + watching.Quote(consentRoot)
 		if uninstall {
 			lock, err := lifecycleLock(c.Context(), root)
 			if err != nil {
@@ -144,7 +182,11 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 				seen[canonical] = true
 			}
 		}
-		consent := setupConsent{Profile: *profile, API: *api, AllRepositories: allRepositories, Directories: directories, Agents: selected}
+		repositories, err := setupRepositories(c.Context(), directories)
+		if err != nil {
+			return err
+		}
+		consent := setupConsent{Profile: *profile, API: *api, AllRepositories: allRepositories, Repositories: repositories, Agents: selected}
 		f, ok := c.InOrStdin().(*os.File)
 		interactive := ok && term.IsTerminal(int(f.Fd()))
 		anonymous := adversarylabs.IsAnonymousToken(auth.Token)
@@ -192,7 +234,7 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		}
 		// A human may revoke or replace approval while the browser is open.
 		// Serialize the short commit phase and refuse to restore stale consent.
-		approvalLock, err := lifecycleLock(c.Context(), root)
+		approvalLock, err := lifecycleLock(c.Context(), consentRoot)
 		if err != nil {
 			return err
 		}
@@ -311,6 +353,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			return err
 		}
 
+		cfg.RuntimeVersion = activeRuntimeVersion()
 		dirs := cfg.Directories
 		if len(args) == 0 {
 			dirs = initialWatchDirectories(c.Context(), cfg, ".")
@@ -540,14 +583,18 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	c.Flags().StringVar(&base, "base", "", "local baseline ref")
 	c.Flags().DurationVar(&interval, "interval", time.Minute, "fallback scan interval when filesystem events are missed")
 	var state, hookAgent string
+	var dispatch bool
 	hook := &cobra.Command{Use: "hook", Hidden: true, RunE: func(c *cobra.Command, _ []string) error {
+		if dispatch {
+			return dispatchRuntimeHooks(c, *api, *profile, state, hookAgent)
+		}
 		expected, _, err := watchPaths(*api, *profile)
 		if err != nil || state != expected {
 			fmt.Fprint(c.OutOrStdout(), "{}")
 			return nil
 		}
 		var cfg watching.Config
-		if watching.Read(filepath.Join(state, "config.json"), &cfg) != nil {
+		if readWatchConfig(*api, *profile, &cfg) != nil {
 			fmt.Fprint(c.OutOrStdout(), "{}")
 			return nil
 		}
@@ -556,11 +603,28 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			fmt.Fprint(c.OutOrStdout(), "{}")
 			return nil
 		}
+		cfg.RuntimeVersion = activeRuntimeVersion()
+		raw, err := io.ReadAll(io.LimitReader(c.InOrStdin(), (1<<20)+1))
+		if err != nil || len(raw) > 1<<20 {
+			return fmt.Errorf("invalid hook input")
+		}
+		if cfg.RuntimeVersion != "" {
+			var input watching.HookInput
+			if json.Unmarshal(raw, &input) == nil {
+				path, err := watching.HookRepository(c.Context(), input)
+				if err == nil && watching.Allowed(cfg, path) && !watching.RepositoryRemoved(state, path) {
+					if err := ensureRuntimeWatch(c.Context(), state, path, *api, *profile); err != nil {
+						return err
+					}
+				}
+			}
+		}
 		ctx, cancel := context.WithTimeout(c.Context(), 30*time.Second)
 		defer cancel()
-		watching.Hook(ctx, state, cfg, c.InOrStdin(), c.OutOrStdout(), hookAgent)
+		watching.Hook(ctx, state, cfg, bytes.NewReader(raw), c.OutOrStdout(), hookAgent)
 		return nil
 	}}
+	hook.Flags().BoolVar(&dispatch, "dispatch", false, "route events to isolated release runtimes")
 	hook.Flags().StringVar(&state, "state", "", "private watch state directory")
 	hook.Flags().StringVar(&hookAgent, "agent", "other", "coding agent identity")
 	c.AddCommand(hook)
@@ -571,7 +635,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			return fmt.Errorf("invalid integration state")
 		}
 		var cfg watching.Config
-		if err = watching.Read(filepath.Join(expected, "config.json"), &cfg); err != nil {
+		if err = readWatchConfig(*api, *profile, &cfg); err != nil {
 			return err
 		}
 		if cfg.AccountKey == "" || cfg.API != *api || cfg.Profile != *profile || cfg.ConsentedAt.IsZero() {
@@ -591,7 +655,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			return fmt.Errorf("invalid integration state")
 		}
 		var cfg watching.Config
-		if err = watching.Read(filepath.Join(expected, "config.json"), &cfg); err != nil {
+		if err = readWatchConfig(*api, *profile, &cfg); err != nil {
 			return err
 		}
 		if cfg.AccountKey == "" || cfg.API != *api || cfg.Profile != *profile || cfg.ConsentedAt.IsZero() {
@@ -611,7 +675,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			return err
 		}
 		var cfg watching.Config
-		if err = watching.Read(filepath.Join(root, "config.json"), &cfg); err != nil {
+		if err = readWatchConfig(*api, *profile, &cfg); err != nil {
 			return err
 		}
 		repository, err := filepath.Abs(taskRepository)

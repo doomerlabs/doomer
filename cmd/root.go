@@ -136,7 +136,7 @@ func newRootCommand(injected *application.App) *cobra.Command {
 		return nil
 	}
 	root.AddCommand(newLoginCommand(app, &apiURL, &profile, settings), newLogoutCommand(app, &apiURL, &profile), newProfileCommand(app, settings))
-	root.AddCommand(newVersionCommand(), newSelfUpdateCommand())
+	root.AddCommand(newVersionCommand(), newSelfUpdateCommand(), newRuntimeInfoCommand())
 	root.AddCommand(newWhoamiCommand(app, &apiURL, &profile))
 	root.AddCommand(newWatchCommand(app, &apiURL, &profile))
 	root.AddCommand(newOnboardCommand(app, &apiURL, &profile))

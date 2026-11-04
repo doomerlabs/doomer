@@ -41,10 +41,21 @@ type watchStatus struct {
 	Log              string          `json:"log"`
 }
 
+func sharedWatchRoot(root string) string {
+	if filepath.Base(filepath.Dir(root)) == "runtimes" {
+		return filepath.Dir(filepath.Dir(root))
+	}
+	return root
+}
+
 func paused(root string) bool {
-	_, err := os.Stat(filepath.Join(root, "paused.json"))
-	// Fail closed if the pause marker cannot be inspected.
-	return !os.IsNotExist(err)
+	for _, directory := range []string{root, sharedWatchRoot(root)} {
+		_, err := os.Stat(filepath.Join(directory, "paused.json"))
+		if !os.IsNotExist(err) {
+			return true
+		}
+	}
+	return false
 }
 
 // A fresh heartbeat alone is not evidence of a live process after a crash.
@@ -119,6 +130,11 @@ func watchStatusAuth(app *application.App, api, profile, root string) (adversary
 	if err != nil || ok && auth.Token != "" {
 		return auth, err
 	}
+	shared, _, err := consentPaths(api, profile)
+	if err != nil {
+		return auth, err
+	}
+	root = shared
 	var saved struct{ API, Profile, Token string }
 	if err := watching.Read(filepath.Join(root, "anonymous.json"), &saved); os.IsNotExist(err) {
 		return adversarylabs.Auth{}, nil
@@ -215,8 +231,10 @@ func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api,
 			return fmt.Errorf("watching was paused during setup; use watch start --resume when ready")
 		}
 		if resume {
-			if err := os.Remove(filepath.Join(root, "paused.json")); err != nil && !os.IsNotExist(err) {
-				return err
+			for _, directory := range []string{root, sharedWatchRoot(root)} {
+				if err := os.Remove(filepath.Join(directory, "paused.json")); err != nil && !os.IsNotExist(err) {
+					return err
+				}
 			}
 			if err := watching.SetRepositorySelection(root, path, false); err != nil {
 				return err
@@ -284,7 +302,7 @@ func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api,
 			return err
 		}
 		defer lock.Close()
-		if err := watching.Write(filepath.Join(root, "paused.json"), time.Now()); err != nil {
+		if err := watching.Write(filepath.Join(sharedWatchRoot(root), "paused.json"), time.Now()); err != nil {
 			return err
 		}
 		if err := waitWatch(c.Context(), func() (bool, error) { _, live, err := runningWatch(root); return !live, err }); err != nil {
@@ -432,7 +450,11 @@ func startManagedWatch(ctx context.Context, root, path, api, profile string, dir
 			child.Env = append(child.Env, entry)
 		}
 	}
-	child.Env = append(child.Env, "DOOMER_CONFIG_DIR="+filepath.Dir(filepath.Dir(root)))
+	shared, _, err := consentPaths(api, profile)
+	if err != nil {
+		return err
+	}
+	child.Env = append(child.Env, "DOOMER_CONFIG_DIR="+filepath.Dir(filepath.Dir(shared)))
 	if err := startWatchProcess(child, filepath.Join(root, "watch.log")); err != nil {
 		return err
 	}

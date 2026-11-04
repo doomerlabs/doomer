@@ -249,3 +249,66 @@ func TestCheckDoesNotCreateDirectories(t *testing.T) {
 		t.Fatal("read-only check wrote files")
 	}
 }
+
+func TestSideBySideInstallPreservesGlobalAndOtherReleases(t *testing.T) {
+	u, requests := fixture(t)
+	managed(t, u, "2026.11.3.4")
+	globalBefore, _ := os.ReadFile(filepath.Join(u.Home, binaryPath))
+	u.Versioned = true
+	result, err := u.Apply(context.Background(), release, false)
+	if err != nil || result.State != "ready" {
+		t.Fatal(result, err)
+	}
+	if result.Path == filepath.Join(u.Home, binaryPath) {
+		t.Fatal("versioned install replaced launcher")
+	}
+	globalAfter, _ := os.ReadFile(filepath.Join(u.Home, binaryPath))
+	if !bytes.Equal(globalBefore, globalAfter) {
+		t.Fatal("changed global CLI")
+	}
+	other := release + "1"
+	otherBinary, otherRecord := u.installPaths(other)
+	put(t, u, otherBinary, []byte("other release"))
+	rec, _ := json.Marshal(Record{1, "doomer-review", filepath.Join(u.Home, otherBinary), other, hash([]byte("other release"))})
+	put(t, u, otherRecord, rec)
+	if status, err := u.Check(other); err != nil || status.State != "ready" {
+		t.Fatal(status, err)
+	}
+	if _, err := u.Apply(context.Background(), release, false); err != nil {
+		t.Fatal(err)
+	}
+	if *requests != 2 {
+		t.Fatal("re-downloaded immutable release")
+	}
+	put(t, u, otherBinary, []byte("modified"))
+	if _, err := u.Apply(context.Background(), other, true); err == nil {
+		t.Fatal("replaced an immutable release")
+	}
+}
+
+func TestLauncherMigrationPreservesOldBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("versioned release execution supports macOS and Linux")
+	}
+	u, _ := fixture(t)
+	managed(t, u, "2026.11.3.4")
+	before, _ := os.ReadFile(filepath.Join(u.Home, binaryPath))
+	versioned := u
+	versioned.Versioned = true
+	binary, record := versioned.installPaths(release)
+	body := []byte("#!/bin/sh\nprintf '{\"protocol\":1}\\n'\n")
+	put(t, u, binary, body)
+	rec, _ := json.Marshal(Record{1, "doomer-review", filepath.Join(u.Home, binary), release, hash(body)})
+	put(t, u, record, rec)
+	result, err := versioned.InstallLauncher(release, false)
+	if err != nil || result.State != "ready" || result.Backup == "" {
+		t.Fatal(result, err)
+	}
+	backup, err := os.ReadFile(result.Backup)
+	if err != nil || !bytes.Equal(before, backup) {
+		t.Fatal("lost old CLI", err)
+	}
+	if got, err := versioned.Check(release); err != nil || got.State != "ready" {
+		t.Fatal("changed versioned release", got, err)
+	}
+}

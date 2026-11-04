@@ -14,9 +14,10 @@ import (
 var hookWorkdir = regexp.MustCompile(`(?:["']?(?:workdir|cwd)["']?)\s*:\s*("(?:[^"\\]|\\.)*"|'[^']*')`)
 var hookPatchPath = regexp.MustCompile(`(?:^|\n|\\n)\*\*\* (?:Update File|Add File|Delete File|Move to): ([^\r\n\\"']+)`)
 
+// HookRepository resolves the checkout touched by a hook.
 // Tool paths take precedence over the chat's directory. Wrapped tool calls are
 // inspected as text only; no command or JavaScript is evaluated here.
-func hookRepository(ctx context.Context, input HookInput) (string, error) {
+func HookRepository(ctx context.Context, input HookInput) (string, error) {
 	candidates := []string{}
 	var inspect func(any)
 	inspect = func(value any) {

@@ -50,10 +50,11 @@ type Status struct {
 	Backup          string `json:"backup,omitempty"`
 }
 type Updater struct {
-	Home     string
-	HTTP     *http.Client
-	BaseURL  string // Injected by tests; the CLI always uses the public download service.
-	OS, Arch string
+	Versioned bool // Install immutable releases side by side.
+	Home      string
+	HTTP      *http.Client
+	BaseURL   string // Injected by tests; the CLI always uses the public download service.
+	OS, Arch  string
 }
 
 func compare(a, b string) (int, error) {
@@ -78,6 +79,14 @@ func compare(a, b string) (int, error) {
 	}
 	return 0, nil
 }
+func (u Updater) installPaths(required string) (string, string) {
+	if u.Versioned {
+		dir := filepath.Join(".local/share/doomer/versions", required)
+		return filepath.Join(dir, "doomer"), filepath.Join(dir, "installation.json")
+	}
+	return binaryPath, recordPath
+}
+
 func (u Updater) root(create bool) (*os.Root, error) {
 	r, err := os.OpenRoot(u.Home)
 	if err != nil {
@@ -161,6 +170,7 @@ func (u Updater) InstallationStamp() (string, error) {
 }
 
 func (u Updater) status(r *os.Root, required string) (Status, error) {
+	binaryPath, recordPath := u.installPaths(required)
 	s := Status{Path: filepath.Join(u.Home, filepath.FromSlash(binaryPath)), RequiredVersion: required, State: "missing"}
 	if _, err := compare(required, required); err != nil {
 		return s, err
@@ -355,6 +365,9 @@ func (u Updater) Apply(ctx context.Context, required string, adopt bool) (Status
 	if before.State == "ready" {
 		return before, nil
 	}
+	if u.Versioned && before.State != "missing" {
+		return before, errors.New("versioned release already exists and failed verification; retain it for inspection")
+	}
 	if before.State == "newer_installed" {
 		return before, errors.New("refusing to downgrade a newer managed CLI")
 	}
@@ -373,6 +386,18 @@ func (u Updater) Apply(ctx context.Context, required string, adopt bool) (Status
 		return before, err
 	}
 	defer r.Close()
+	binaryPath, recordPath := u.installPaths(required)
+	if u.Versioned {
+		for _, dir := range []string{".local/share/doomer/versions", filepath.Dir(binaryPath)} {
+			if err := r.Mkdir(dir, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+				return before, err
+			}
+			st, err := r.Lstat(dir)
+			if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
+				return before, fmt.Errorf("invalid release directory %s", dir)
+			}
+		}
+	}
 	lock, err := publock.TryAcquire(filepath.Join(u.Home, ".local/share/doomer"), "installation")
 	if err != nil {
 		return before, err
@@ -400,7 +425,7 @@ func (u Updater) Apply(ctx context.Context, required string, adopt bool) (Status
 	if err := writeNew(r, recordNext, record, 0600); err != nil {
 		return before, err
 	}
-	backup, err := publish(r, next, recordNext, before.State != "missing")
+	backup, err := publishPaths(r, binaryPath, recordPath, next, recordNext, before.State != "missing")
 	if err != nil {
 		return before, err
 	}
@@ -412,11 +437,33 @@ func (u Updater) Apply(ctx context.Context, required string, adopt bool) (Status
 }
 
 func publish(r *os.Root, next, recordNext string, existing bool) (string, error) {
+	return publishPaths(r, binaryPath, recordPath, next, recordNext, existing)
+}
+
+func publishPaths(r *os.Root, binaryPath, recordPath, next, recordNext string, existing bool) (string, error) {
 	backup := ""
 	if existing {
 		backup = binaryPath + ".backup-" + rand.Text()
-		if err := r.Rename(binaryPath, backup); err != nil {
+		info, err := r.Lstat(binaryPath)
+		if err != nil {
 			return "", err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, err := r.Readlink(binaryPath)
+			if err != nil {
+				return "", err
+			}
+			if err := r.Symlink(target, backup); err != nil {
+				return "", err
+			}
+		} else {
+			data, err := readRegular(r, binaryPath, maxBinary)
+			if err != nil {
+				return "", err
+			}
+			if err := writeNew(r, backup, data, info.Mode().Perm()); err != nil {
+				return "", err
+			}
 		}
 	}
 	rollback := func(cause error) (string, error) {

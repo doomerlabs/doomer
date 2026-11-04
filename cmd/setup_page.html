@@ -10,19 +10,19 @@
 {{define "foot"}}</main><footer class="foot">Local setup · Your choice stays with this installation.</footer></div></body></html>{{end}}
 {{define "consent"}}{{template "head" .}}<main>
 <p class="eyebrow">Your code. Your permission.</p>
-<h1>{{if .AllRepositories}}Allow Doomer to review your repositories?{{else}}Allow Doomer to review this repo?{{end}}</h1>
+<h1>{{if .AllRepositories}}Allow Doomer to review your repositories?{{else}}Allow Doomer to review this repo and its worktrees?{{end}}</h1>
 <p class="lede">Doomer sends code from {{if .AllRepositories}}repositories your coding agent edits{{else}}this repo{{end}}, along with the task prompt and the agent’s review responses, to Doomer’s servers for analysis. You’ll get free initial feedback in your coding chat. No account required.</p>
 <section class="scope" aria-label="Repository access"><p class="label">{{if .AllRepositories}}Repositories your agent works in{{else}}Repository access{{end}}</p>
-{{if .AllRepositories}}<p>Includes future checkouts your coding agent edits. Doomer does not scan your whole disk.</p>{{else}}<ul class="repos">{{range .Directories}}<li><code>{{.}}</code></li>{{end}}</ul>{{end}}
+{{if .AllRepositories}}<p>Includes future checkouts your coding agent edits. Doomer does not scan your whole disk.</p>{{else}}<p>Includes the main checkout and all existing and future linked Git worktrees.</p><ul class="repos">{{range .Repositories}}<li>{{if .MainCheckout}}<span class="label">Main checkout</span><br><code>{{.MainCheckout}}</code>{{end}}{{if ne .Checkout .MainCheckout}}{{if .MainCheckout}}<br>{{end}}<span class="label">Setup checkout</span><br><code>{{.Checkout}}</code>{{end}}</li>{{end}}</ul>{{end}}
 </section>
 <dl class="meta"><dt>Send code to</dt><dd><a href="{{.ServiceURL}}" target="_blank" rel="noreferrer">{{.ServiceURL}}</a></dd><dt>Profile</dt><dd><code>{{.Profile}}</code></dd></dl>
 <details><summary>What gets sent?</summary>
-<p>Base and current repository snapshots, including tracked and non-ignored source files outside the changed lines, the task prompt behind an agent edit, and the agent’s review responses. Unchanged files may be reused from previous uploads. Approval also covers linked Git worktrees.</p>
+<p>Base and current repository snapshots, including tracked and non-ignored source files outside the changed lines, the task prompt behind an agent edit, and the agent’s review responses. Unchanged files may be reused from previous uploads.</p>
 <p>Uploaded source is retained under the <a href="{{.PrivacyURL}}" target="_blank" rel="noreferrer">service’s privacy policy</a>. Expiry of a review link does not delete uploaded source.</p>
 <p>Setup installs {{range .Agents}}{{.}} {{end}}hooks. Your coding agent may separately ask you to trust them. The watcher uploads only after approval and an attributable agent edit. You can pause watching or revoke approval from the CLI.</p>
 </details>
 <form class="actions" method="get" action="/complete"><input type="hidden" name="nonce" value="{{.Nonce}}">
-<button class="primary" name="decision" value="allow">{{if .AllRepositories}}Allow for these repositories{{else}}Allow for this repo{{end}}</button>
+<button class="primary" name="decision" value="allow">{{if .AllRepositories}}Allow for these repositories{{else}}Allow for repo and worktrees{{end}}</button>
 <button name="decision" value="cancel">Not now</button></form>
 <p class="note">Choosing “Not now” leaves your coding agent working normally.</p>
 {{template "foot" .}}{{end}}
@@ -30,7 +30,7 @@
 <div class="badge" aria-hidden="true">{{if .Approved}}✓{{else}}−{{end}}</div>
 <p class="eyebrow">{{if .Approved}}Permission received{{else}}Your choice is saved{{end}}</p>
 <h1>{{if .Approved}}Return to your coding agent{{else}}Keep coding, on your terms{{end}}</h1>
-{{if .Approved}}<p class="lede">You’ve allowed Doomer to review {{if .Consent.AllRepositories}}the repositories your coding agent edits{{else}}this repo and its linked worktrees{{end}}. Your terminal will confirm whether setup finished.</p>
+{{if .Approved}}<p class="lede">You’ve allowed Doomer to review {{if .Consent.AllRepositories}}the repositories your coding agent edits{{else}}this repo, including its main checkout and all existing and future linked Git worktrees{{end}}. Your terminal will confirm whether setup finished.</p>
 <ol class="next"><li><strong>Go back to your coding chat</strong><span>Follow the next step shown there to continue your task.</span></li><li><strong>Trust the Doomer hooks when asked</strong><span>If your agent needs a restart, use the resume command from your coding chat. Restarting alone doesn’t grant trust.</span></li><li><strong>Keep building</strong><span>Once setup is complete and the watcher is running, Doomer can review your agent’s edits.</span></li></ol>
 {{else}}<p class="lede">You haven’t granted permission to upload code in this setup. Return to your coding chat and continue without Doomer reviews.</p><p class="note">You can set up Doomer again whenever you’re ready.</p>{{end}}
 <p class="note">You can close this tab.</p>

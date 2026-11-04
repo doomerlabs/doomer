@@ -18,17 +18,36 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	watching "github.com/doomerlabs/doomer/internal/watch"
 )
+
+type setupRepository struct {
+	MainCheckout string
+	Checkout     string
+}
+
+func setupRepositories(ctx context.Context, directories []string) ([]setupRepository, error) {
+	repositories := make([]setupRepository, 0, len(directories))
+	for _, directory := range directories {
+		primary, err := watching.PrimaryCheckout(ctx, directory)
+		if err != nil {
+			return nil, err
+		}
+		repositories = append(repositories, setupRepository{MainCheckout: primary, Checkout: directory})
+	}
+	return repositories, nil
+}
 
 // Only the selected profile's destination and requested scope enter the browser.
 // Login credentials stay in the CLI, and approval exists only for this invocation.
 type setupConsent struct {
-	Profile         string   `json:"profile"`
-	API             string   `json:"api"`
-	AllRepositories bool     `json:"allRepositories"`
-	Directories     []string `json:"directories"`
-	Agents          []string `json:"agents"`
-	Nonce           string   `json:"nonce"`
+	Profile         string            `json:"profile"`
+	API             string            `json:"api"`
+	AllRepositories bool              `json:"allRepositories"`
+	Repositories    []setupRepository `json:"repositories"`
+	Agents          []string          `json:"agents"`
+	Nonce           string            `json:"nonce"`
 }
 
 func (s setupConsent) print(w io.Writer) {
@@ -37,9 +56,14 @@ func (s setupConsent) print(w io.Writer) {
 	if s.AllRepositories {
 		fmt.Fprintln(w, "Access:       Repositories your coding agent edits, including future checkouts.")
 	} else {
-		fmt.Fprintln(w, "Access:       Only these repositories and their linked worktrees:")
-		for _, dir := range s.Directories {
-			fmt.Fprintln(w, "              "+dir)
+		fmt.Fprintln(w, "Access:       These repositories, including their main checkouts and all existing and future linked Git worktrees:")
+		for _, repo := range s.Repositories {
+			if repo.MainCheckout != "" {
+				fmt.Fprintln(w, "Main checkout: "+repo.MainCheckout)
+			}
+			if repo.Checkout != repo.MainCheckout {
+				fmt.Fprintln(w, "Setup checkout: "+repo.Checkout)
+			}
 		}
 	}
 	fmt.Fprintln(w, "Sends:        Base and current source snapshots (including files outside your changes), the task prompt behind an agent edit, and agent review responses.\n\nRepositories are discovered through your coding agent; Doomer does not scan your whole disk.\nSetup installs hooks. Uploads begin only while the watcher runs. See the destination’s privacy policy for retention; expiry of a review link does not delete uploaded source.")

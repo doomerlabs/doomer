@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"runtime"
 
 	"github.com/doomerlabs/doomer/internal/version"
@@ -17,10 +18,13 @@ func newVersionCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			switch format {
 			case "text":
+				if source := os.Getenv("DOOMER_SELECTED_PIN"); source != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "Selected by %s\n", source)
+				}
 				_, err := fmt.Fprintf(cmd.OutOrStdout(), "doomer %s (commit %s, built %s, %s)\n", version.Version, version.Commit, version.BuildDate, runtime.Version())
 				return err
 			case "json":
-				return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]string{"version": version.Version, "commit": version.Commit, "buildDate": version.BuildDate, "goVersion": runtime.Version()})
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]string{"version": version.Version, "commit": version.Commit, "buildDate": version.BuildDate, "goVersion": runtime.Version(), "pinSource": os.Getenv("DOOMER_SELECTED_PIN")})
 			default:
 				return fmt.Errorf("unsupported format %q; use text or json", format)
 			}

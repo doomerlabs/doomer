@@ -1,0 +1,256 @@
+package cmd
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/doomerlabs/doomer/internal/paths"
+	"github.com/doomerlabs/doomer/internal/runtimeversion"
+	"github.com/doomerlabs/doomer/internal/selfupdate"
+	watching "github.com/doomerlabs/doomer/internal/watch"
+	"github.com/spf13/cobra"
+)
+
+// DispatchCLI only redirects the global launcher. Explicit versioned binaries
+// remain useful for installation, diagnostics, and releases being tested.
+var launcherExecutable = os.Executable
+
+func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr io.Writer) (bool, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false, err
+	}
+	exe, err := launcherExecutable()
+	if err != nil {
+		return false, err
+	}
+	if exe != filepath.Join(home, ".local", "bin", "doomer") {
+		return false, nil
+	}
+	path, err := os.Getwd()
+	if err != nil {
+		return false, err
+	}
+	for _, arg := range args {
+		if arg == "self-update" || arg == "--dispatch" || arg == "runtime-info" {
+			return false, nil
+		}
+	}
+	root := newRootCommand(nil)
+	command, rest, err := root.Find(args)
+	if err != nil {
+		return false, nil
+	}
+	if err := command.ParseFlags(rest); err != nil {
+		return false, nil
+	}
+	for _, key := range []string{"repo", "path"} {
+		if flag := command.Flags().Lookup(key); flag != nil {
+			path = flag.Value.String()
+		}
+	}
+	if command.Name() == "watch" || command.Name() == "setup" || (command.Parent() != nil && command.Parent().Name() == "watch") {
+		if paths := command.Flags().Args(); len(paths) > 0 {
+			path = paths[0]
+		}
+	}
+	repo, err := watching.Root(ctx, path)
+	if err != nil {
+		return false, nil
+	}
+	selected, source, err := runtimeversion.Pin(repo)
+	if err != nil {
+		return true, err
+	}
+	if selected == "" {
+		return false, nil
+	}
+	status, err := (selfupdate.Updater{Home: home, Versioned: true}).Check(selected)
+	if err != nil || status.State != "ready" {
+		return true, fmt.Errorf("checkout requires Doomer %s from %s; install that verified release with self-update --side-by-side --version %s", selected, source, selected)
+	}
+	if err := runtimeversion.Supports(ctx, status.Path); err != nil {
+		return true, err
+	}
+	child := exec.CommandContext(ctx, status.Path, args...)
+	child.Stdin, child.Stdout, child.Stderr = in, out, stderr
+	child.Env = append(runtimeversion.CleanEnvironment(os.Environ()), "DOOMER_SELECTED_PIN="+source)
+	return true, child.Run()
+}
+
+func newRuntimeInfoCommand() *cobra.Command {
+	return &cobra.Command{Use: "runtime-info", Hidden: true, Args: cobra.NoArgs, PersistentPreRunE: func(*cobra.Command, []string) error { return nil }, RunE: func(c *cobra.Command, _ []string) error {
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]int{"protocol": 1})
+	}}
+}
+
+func dispatchRuntimeHooks(c *cobra.Command, api, profile, state, agent string) error {
+	shared, _, err := consentPaths(api, profile)
+	if err != nil || state != shared {
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
+	}
+	raw, err := io.ReadAll(io.LimitReader(c.InOrStdin(), (1<<20)+1))
+	if err != nil || len(raw) > 1<<20 {
+		return fmt.Errorf("invalid hook input")
+	}
+	entries, err := os.ReadDir(filepath.Join(shared, "runtimes"))
+	if os.IsNotExist(err) {
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
+	}
+	if err != nil {
+		return err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(c.Context(), 28*time.Second)
+	defer cancel()
+	outputs := make([]map[string]any, len(entries))
+	var group sync.WaitGroup
+	for i, entry := range entries {
+		if !entry.IsDir() || !runtimeversion.Release.MatchString(entry.Name()) {
+			continue
+		}
+		status, e := (selfupdate.Updater{Home: home, Versioned: true}).Check(entry.Name())
+		if e != nil || status.State != "ready" {
+			outputs[i] = map[string]any{"systemMessage": "Doomer " + entry.Name() + " could not be verified. Rerun this checkout's setup."}
+			continue
+		}
+		group.Add(1)
+		go func(i int, release string, binary string) {
+			defer group.Done()
+			child := exec.CommandContext(ctx, binary, "--api-url", api, "--profile", profile, "watch", "hook", "--state", filepath.Join(shared, "runtimes", release), "--agent", agent)
+			child.Stdin = bytes.NewReader(raw)
+			data, err := child.Output()
+			if err != nil || json.Unmarshal(data, &outputs[i]) != nil {
+				outputs[i] = map[string]any{"systemMessage": "Doomer " + release + " hook failed. Check its runtime log."}
+			}
+		}(i, entry.Name(), status.Path)
+	}
+	group.Wait()
+	return json.NewEncoder(c.OutOrStdout()).Encode(mergeHookOutputs(outputs))
+}
+
+// Merge each runtime's context and blocking decisions without letting an empty
+// response from another version erase them. Input order is deterministic.
+func mergeHookOutputs(outputs []map[string]any) map[string]any {
+	result := map[string]any{}
+	for _, output := range outputs {
+		for _, key := range []string{"systemMessage", "reason", "stopReason"} {
+			if value, ok := output[key].(string); ok && value != "" {
+				if previous, ok := result[key].(string); ok && previous != "" {
+					value = previous + "\n\n" + value
+				}
+				result[key] = value
+			}
+		}
+		if output["decision"] == "block" {
+			result["decision"] = "block"
+		}
+		if output["continue"] == false {
+			result["continue"] = false
+		}
+		if specific, ok := output["hookSpecificOutput"].(map[string]any); ok {
+			merged, _ := result["hookSpecificOutput"].(map[string]any)
+			if merged == nil {
+				merged = map[string]any{}
+				result["hookSpecificOutput"] = merged
+			}
+			for key, value := range specific {
+				if key == "additionalContext" {
+					if previous, ok := merged[key].(string); ok && previous != "" {
+						value = previous + "\n\n" + fmt.Sprint(value)
+					}
+				}
+				merged[key] = value
+			}
+		}
+	}
+	return result
+}
+
+// Recover a stopped runtime on the next approved edit without changing consent.
+func ensureRuntimeWatch(ctx context.Context, root, path, api, profile string) error {
+	lock, err := lifecycleLock(ctx, root)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if paused(root) {
+		return nil
+	}
+	_, running, err := runningWatch(root)
+	if err != nil || running {
+		return err
+	}
+	return startManagedWatch(ctx, root, path, api, profile, nil)
+}
+
+// Switching the global executable also affects old hooks that referenced it.
+// Refuse that migration until every recorded checkout can use the dispatcher.
+func validateLauncherMigration(home string) error {
+	dir := os.Getenv("DOOMER_CONFIG_DIR")
+	if dir == "" {
+		var err error
+		dir, err = paths.ConfigDir()
+		if err != nil {
+			return err
+		}
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, "watch"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		var cfg watching.Config
+		err := watching.Read(filepath.Join(dir, "watch", entry.Name(), "config.json"), &cfg)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if err := compatibleRepositoryPins(home, cfg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func compatibleRepositoryPins(home string, cfg watching.Config) error {
+	if cfg.AllRepositories {
+		return fmt.Errorf("migrate legacy all-repository approval to explicit repositories before installing the versioned launcher")
+	}
+	for _, repo := range cfg.Directories {
+		pin, _, err := runtimeversion.Pin(repo)
+		if err != nil {
+			return err
+		}
+		if pin == "" {
+			return fmt.Errorf("%s has legacy setup without a CLI pin; update its skill before migrating the shared launcher", repo)
+		}
+		status, err := (selfupdate.Updater{Home: home, Versioned: true}).Check(pin)
+		if err != nil || status.State != "ready" {
+			return fmt.Errorf("install the pinned release %s for %s before migrating the shared launcher", pin, repo)
+		}
+		if err := runtimeversion.Supports(context.Background(), status.Path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
