@@ -79,6 +79,9 @@ func TestOnboardReusesConsentAndWatcherWithoutLosingInstructions(t *testing.T) {
 				expected = "--check-hooks"
 			} else if client.originator == "Codex Desktop" {
 				expected = "Review hooks beside the composer"
+				if !strings.Contains(output.String(), watching.ResumeHandoffPrompt) || !strings.Contains(output.String(), "Your task is saved") {
+					t.Fatal("missing in-chat task restoration instructions", output.String())
+				}
 				for _, unexpected := range []string{"One restart left", "Ctrl+C", "codex resume"} {
 					if strings.Contains(output.String(), unexpected) {
 						t.Fatalf("desktop setup includes terminal instructions: %s", output.String())
@@ -89,9 +92,6 @@ func TestOnboardReusesConsentAndWatcherWithoutLosingInstructions(t *testing.T) {
 				t.Fatal(output.String())
 			}
 			expectedTask := "Add pagination"
-			if client.originator == "Codex Desktop" {
-				expectedTask = ""
-			}
 			if original, err := watching.ResumeTaskContext(root, repo, "session"); err != nil || original != expectedTask {
 				t.Fatalf("lost restart task: %q %v", original, err)
 			}

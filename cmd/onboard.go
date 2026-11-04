@@ -119,7 +119,7 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 		}
 		desktop := agent == "codex" && codexDesktopSession()
 		restart := (restartRequired || !before.HooksInstalled[agent]) && !desktop
-		if (restart || agent == "claude") && taskStdin {
+		if taskStdin {
 			root, _, err := watchPaths(*api, *profile)
 			if err != nil {
 				return err
@@ -146,7 +146,10 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 		}
 		if desktop {
 			fmt.Fprintln(c.OutOrStdout(), "\nStay in this Codex desktop chat. Review and approve Doomer's hooks using Review hooks beside the composer, or open Settings > Hooks if that button is not visible.")
-			fmt.Fprintln(c.OutOrStdout(), "After approving, send a follow-up message in this chat so Doomer can verify live hook delivery. The watcher is running. Hook activation remains unverified until a current-session callback is received.")
+			fmt.Fprintf(c.OutOrStdout(), "After approving, send %q in this chat so Doomer can verify live hook delivery. The watcher is running. Hook activation remains unverified until a current-session callback is received.\n", watching.ResumeHandoffPrompt)
+			if taskStdin {
+				fmt.Fprintln(c.OutOrStdout(), "Your task is saved. The trusted hook restores it when you send that message in this chat.")
+			}
 		} else if restart && agent == "codex" {
 			name := "Codex"
 			message := "Your conversation stays in " + name + "."
