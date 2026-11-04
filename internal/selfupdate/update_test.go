@@ -287,6 +287,9 @@ func TestSideBySideInstallPreservesGlobalAndOtherReleases(t *testing.T) {
 }
 
 func TestLauncherMigrationPreservesOldBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("versioned release execution supports macOS and Linux")
+	}
 	u, _ := fixture(t)
 	managed(t, u, "2026.11.3.4")
 	before, _ := os.ReadFile(filepath.Join(u.Home, binaryPath))

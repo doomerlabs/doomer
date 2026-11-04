@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -46,6 +47,9 @@ func putPin(t *testing.T, repo, release string) {
 }
 
 func TestLauncherSelectsThreeRepositoryPins(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("versioned release execution supports macOS and Linux")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	original := launcherExecutable
@@ -120,6 +124,9 @@ func TestRuntimeMergePreservesAllReviewResults(t *testing.T) {
 }
 
 func TestLauncherRefusesMissingOrModifiedPinnedRelease(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("versioned release execution supports macOS and Linux")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	original := launcherExecutable
@@ -142,6 +149,9 @@ func TestLauncherRefusesMissingOrModifiedPinnedRelease(t *testing.T) {
 }
 
 func TestRuntimeDispatcherPreservesResultsFromThreeVersions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("versioned release execution supports macOS and Linux")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("DOOMER_CONFIG_DIR", t.TempDir())
@@ -195,6 +205,9 @@ func TestVersionedRuntimeHonorsLegacyPause(t *testing.T) {
 }
 
 func TestLauncherMigrationRequiresEveryConfiguredPin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("versioned release execution supports macOS and Linux")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	dir := t.TempDir()
