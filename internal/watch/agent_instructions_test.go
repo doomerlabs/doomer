@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"github.com/doomerlabs/doomer/internal/version"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,5 +87,29 @@ func TestClaudeInstructionsPreserveExistingRules(t *testing.T) {
 	os.Symlink(shared, file)
 	if EnsureAgentInstructions(dir, "claude") == nil {
 		t.Fatal("followed symlink")
+	}
+}
+
+func TestReleasedAgentInstructionsCarrySourceMarker(t *testing.T) {
+	previous := version.Commit
+	version.Commit = strings.Repeat("a", 40)
+	defer func() { version.Commit = previous }()
+	dir := t.TempDir()
+	if err := EnsureAgentInstructions(dir, "codex"); err != nil {
+		t.Fatal(err)
+	}
+	first, err := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(first), "package: doomerlabs/doomer\nrevision: "+version.Commit) || !strings.Contains(string(first), "source: internal/watch/templates/agent-instructions.md") {
+		t.Fatal(string(first))
+	}
+	if err := EnsureAgentInstructions(dir, "codex"); err != nil {
+		t.Fatal(err)
+	}
+	second, _ := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
+	if string(first) != string(second) {
+		t.Fatal("repeated onboarding changed marked instructions")
 	}
 }
