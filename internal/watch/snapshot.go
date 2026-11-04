@@ -24,7 +24,12 @@ func Root(ctx context.Context, path string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", p, "rev-parse", "--show-toplevel")
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("%s is not a Git worktree", path)
+		detail := ""
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			detail = strings.TrimSpace(string(exitErr.Stderr))
+		}
+		return "", fmt.Errorf("resolve Git worktree %s using %s: %w (%s)", path, cmd.Path, err, detail)
 	}
 	return filepath.EvalSymlinks(strings.TrimSpace(string(out)))
 }

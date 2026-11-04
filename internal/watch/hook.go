@@ -281,6 +281,9 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		finish(root, path, owner, ctx)
 	}
 	if input.Event == "PreToolUse" || input.Event == "PostToolUse" {
+		if agent == "codex" {
+			defer func() { recordCodexHook(root, path, owner, diagnostic.Status) }()
+		}
 		if input.ToolID == "" {
 			diagnostic.Status = "missing tool use ID"
 			return
