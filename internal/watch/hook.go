@@ -57,12 +57,16 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 	var event string
 	responsesRecorded := false
 	waiting := false
+	upgradeNotice := ""
 	defer func() {
 		if waiting && errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			recordHookReadiness(root, cfg, false)
 		}
 	}()
 	defer func() {
+		if upgradeNotice != "" {
+			response["hookSpecificOutput"] = map[string]any{"hookEventName": "PreToolUse", "additionalContext": upgradeNotice}
+		}
 		if event == "PostToolUseFailure" {
 			if specific, ok := response["hookSpecificOutput"].(map[string]any); ok {
 				specific["hookEventName"] = event
@@ -236,6 +240,9 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			diagnostic.Status = "repository not approved"
 		}
 		return
+	}
+	if input.Event == "PreToolUse" {
+		upgradeNotice = hookUpgradeNotice(root, path, input.Session)
 	}
 	if cfg.AllRepositories && input.Event == "PreToolUse" {
 		_ = Write(filepath.Join(root, "discovered", Key(path)+".json"), path)
