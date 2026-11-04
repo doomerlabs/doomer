@@ -143,7 +143,10 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 			fmt.Fprintln(c.OutOrStdout(), "Continue when status is ready; no restart or extra trust prompt is needed. If waiting_for_hooks, check once more after the next tool result. If still unconfirmed, inspect /hooks and any workspace trust or managed-policy restrictions; do not assume a restart is required.")
 			return nil
 		}
-		if restart && agent == "codex" {
+		if agent == "codex" && codexDesktopSession() {
+			fmt.Fprintln(c.OutOrStdout(), "\nStay in this Codex desktop chat. Review and approve Doomer's hooks using Review hooks beside the composer, or open Settings > Hooks if that button is not visible.")
+			fmt.Fprintln(c.OutOrStdout(), "After approving, send a follow-up message in this chat so Doomer can verify live hook delivery. The watcher is running. Hook activation remains unverified until a current-session callback is received.")
+		} else if restart && agent == "codex" {
 			name := "Codex"
 			message := "Your conversation stays in " + name + "."
 			if taskStdin {
@@ -160,6 +163,10 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 		return nil
 	}
 	return c
+}
+
+func codexDesktopSession() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("CODEX_INTERNAL_ORIGINATOR_OVERRIDE")), "Codex Desktop")
 }
 
 func onboardingResumeCommand(repo, agent, session string) string {
@@ -180,7 +187,10 @@ func hookTrustInstructions(agent string) string {
 		return "Claude uses workspace trust. Approve a trust prompt only if Claude shows one."
 	}
 	if agent == "both" {
-		return "Review Doomer's hooks in /hooks in each coding agent and approve its trust prompts yourself."
+		return "Review Doomer's hooks in Codex (Review hooks or Settings > Hooks on desktop, /hooks in the terminal) and Claude's /hooks, and approve any trust prompts yourself."
+	}
+	if codexDesktopSession() {
+		return "In Codex desktop, select Review hooks beside the composer or open Settings > Hooks, and approve Doomer's hooks."
 	}
 	return "In Codex, open /hooks and trust the Doomer CLI hooks."
 }

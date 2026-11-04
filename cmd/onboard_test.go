@@ -15,8 +15,10 @@ import (
 )
 
 func TestOnboardReusesConsentAndWatcherWithoutLosingInstructions(t *testing.T) {
-	for _, agent := range []string{"codex", "claude"} {
-		t.Run(agent, func(t *testing.T) {
+	for _, client := range []struct{ agent, originator string }{{"codex", "codex_cli_rs"}, {"codex", "Codex Desktop"}, {"claude", ""}} {
+		t.Run(client.agent+"/"+client.originator, func(t *testing.T) {
+			agent := client.agent
+			t.Setenv("CODEX_INTERNAL_ORIGINATOR_OVERRIDE", client.originator)
 			store := isolate(t)
 			t.Setenv("HOME", t.TempDir())
 			t.Setenv("CODEX_HOME", t.TempDir())
@@ -75,6 +77,13 @@ func TestOnboardReusesConsentAndWatcherWithoutLosingInstructions(t *testing.T) {
 			expected := onboardingResumeCommand(repo, agent, "session")
 			if agent == "claude" {
 				expected = "--check-hooks"
+			} else if client.originator == "Codex Desktop" {
+				expected = "Review hooks beside the composer"
+				for _, unexpected := range []string{"One restart left", "Ctrl+C", "codex resume"} {
+					if strings.Contains(output.String(), unexpected) {
+						t.Fatalf("desktop setup includes terminal instructions: %s", output.String())
+					}
+				}
 			}
 			if !strings.Contains(output.String(), expected) {
 				t.Fatal(output.String())
@@ -86,6 +95,21 @@ func TestOnboardReusesConsentAndWatcherWithoutLosingInstructions(t *testing.T) {
 			watching.Write(filepath.Join(root, "paused.json"), true)
 			if err := c.RunE(c, nil); err == nil {
 				t.Fatal("onboarding resumed a paused watcher")
+			}
+		})
+	}
+}
+
+func TestHookTrustInstructionsMatchCodexClient(t *testing.T) {
+	for _, originator := range []string{"", "codex_cli_rs", "Codex Desktop"} {
+		t.Run(originator, func(t *testing.T) {
+			t.Setenv("CODEX_INTERNAL_ORIGINATOR_OVERRIDE", originator)
+			want := "/hooks"
+			if originator == "Codex Desktop" {
+				want = "Settings > Hooks"
+			}
+			if got := hookTrustInstructions("codex"); !strings.Contains(got, want) {
+				t.Fatalf("missing %q in %q", want, got)
 			}
 		})
 	}
