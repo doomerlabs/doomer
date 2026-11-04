@@ -74,6 +74,51 @@ func TestCodexActivationReportsUnreadableReceipt(t *testing.T) {
 	}
 }
 
+func TestCodexActivationReportsReceiptWriteFailureAndRecovery(t *testing.T) {
+	repo, root := repository(t), t.TempDir()
+	input := HookInput{Session: "chat", Turn: "turn", CWD: repo, Event: "UserPromptSubmit", Prompt: "Inspect repository"}
+	run := func() map[string]any {
+		t.Helper()
+		raw, _ := json.Marshal(input)
+		var out bytes.Buffer
+		hookWithRepositories(context.Background(), root, Config{Directories: []string{repo}}, bytes.NewReader(raw), &out, func(context.Context) bool { return false }, true, "codex")
+		var result map[string]any
+		if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	run()
+	// A regular file makes receipt creation fail on every platform, even when
+	// the test runner has permission to write read-only directories.
+	dir := filepath.Join(root, "codex-hook-receipts")
+	if err := os.WriteFile(dir, []byte("blocked"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	input.Event, input.Tool, input.ToolID = "PreToolUse", "Bash", "read"
+	output := run()
+	if message, _ := output["systemMessage"].(string); !strings.Contains(message, "activation receipt failed:") {
+		t.Fatalf("write failure was hidden from the hook caller: %v", output)
+	}
+	if status, detail := CodexActivationStatus(root, repo, input.Session); status != "error" || !strings.Contains(detail, "activation receipt failed:") {
+		t.Fatalf("write failure was hidden by check: %s %s", status, detail)
+	}
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	input.Event = "PostToolUse"
+	run()
+	if status, detail := CodexActivationStatus(root, repo, input.Session); status != "ready" {
+		t.Fatalf("recovery did not clear the earlier error: %s %s", status, detail)
+	}
+	// Failure metadata from a previous task cannot poison the next task.
+	input.Event, input.Turn = "UserPromptSubmit", "next-task"
+	run()
+	if status, detail := CodexActivationStatus(root, repo, input.Session); status != "pending" {
+		t.Fatalf("old task affected the next activation: %s %s", status, detail)
+	}
+}
+
 func TestCodexActivationRejectsInvalidReceipts(t *testing.T) {
 	for _, tc := range []struct {
 		name, hookStatus, prompt, want string

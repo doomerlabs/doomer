@@ -14,6 +14,7 @@ type hookDiagnostic struct {
 	Repository string
 	HasToolID  bool
 	Status     string
+	Owner      Owner
 }
 
 func (r Runner) logHookDiagnostics(path string, after time.Time) time.Time {
