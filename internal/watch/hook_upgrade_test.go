@@ -135,3 +135,34 @@ func TestApprovedHookDeliversUpgradeWithoutRestart(t *testing.T) {
 		})
 	}
 }
+
+func TestUpgradeNegativeCheckIsCachedUntilInstallationChanges(t *testing.T) {
+	root, repo, updater := upgradeFixture(t)
+	writeSkillPin(t, repo, ".agents", "2026.11.3.5")
+	if got := localUpgradeNotice(root, repo, "chat", updater); got != "" {
+		t.Fatal(got)
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "upgrade-checks"))
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("missing negative cache: %v", err)
+	}
+	file := filepath.Join(root, "upgrade-checks", entries[0].Name())
+	var first, second upgradeCheck
+	Read(file, &first)
+	localUpgradeNotice(root, repo, "chat", updater)
+	Read(file, &second)
+	if first != second {
+		t.Fatal("unchanged install was checked again")
+	}
+	// A new ownership record must invalidate a ready result in the same chat.
+	var record selfupdate.Record
+	recordFile := filepath.Join(updater.Home, ".local/share/doomer/installation.json")
+	Read(recordFile, &record)
+	record.Version = "2026.11.3.4"
+	if err := Write(recordFile, record); err != nil {
+		t.Fatal(err)
+	}
+	if got := localUpgradeNotice(root, repo, "chat", updater); !strings.Contains(got, "2026.11.3.4") {
+		t.Fatal("changed install missed", got)
+	}
+}
