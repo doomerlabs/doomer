@@ -1,0 +1,28 @@
+internal/watch/codex_activation_test.go
+  s_19d08b7f01e7fd::t_b23ff49251cb85 77-121
+internal/watch/hook_diagnostics.go
+  s_19d08b7f01e7fd::t_425fabfcc496f1 17
+internal/watch/codex_activation.go
+  s_19d08b7f01e7fd::t_03d7551c7c4159 22-23,32,35-39,41-42,47-50,53
+  s_19d08b7f01e7fd::t_425fabfcc496f1 33-34,40,44-46,55-56
+  s_19d08b7f01e7fd::t_b23ff49251cb85 43
+internal/watch/hook.go
+  s_19d08b7f01e7fd::t_03d7551c7c4159 285-288,290-293
+  s_19d08b7f01e7fd::t_425fabfcc496f1 289
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8cb30cc70f0fc18bf7d98b82d301e0bc5b47c357",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
