@@ -1,0 +1,34 @@
+internal/watch/codex_activation_test.go
+  s_19d08b7f01e7fd::t_6809c6c7c0f556 1-48,56-59,74-119
+  s_19d08b7f01e7fd::t_e9cf4fb7ae42f4 49-55,60-73
+internal/watch/hook.go
+  s_19d08b7f01e7fd::t_6750174edd2de5 284-286
+cmd/onboard_test.go
+  s_19d08b7f01e7fd::t_808b78fac483bd 135-137,140
+  s_19d08b7f01e7fd::t_44c890fbb14038 6-7,109-134,138-139,141-166
+  s_19d08b7f01e7fd::t_bd6bb7288fef82 167-168
+internal/watch/snapshot.go
+  s_19d08b7f01e7fd::t_6750174edd2de5 27-32
+internal/watch/codex_activation.go
+  s_19d08b7f01e7fd::t_6750174edd2de5 1-54
+cmd/onboard.go
+  s_19d08b7f01e7fd::t_76d0921693d900 86-87,175-178
+  s_19d08b7f01e7fd::t_6750174edd2de5 27,72-73,83-85,88-90,92
+  s_19d08b7f01e7fd::t_b7f60cdf396219 179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "346732f9856899d3d9f2641c6ae1f7df2a2028f6",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
