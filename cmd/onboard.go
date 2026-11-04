@@ -24,7 +24,7 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 	c.Flags().BoolVar(&taskStdin, "task-stdin", false, "read the original task from stdin for hook activation or restart")
 	c.Flags().BoolVar(&refresh, "refresh", false, "gracefully refresh a running managed watcher after a CLI update")
 	c.Flags().BoolVar(&restartRequired, "restart", false, "Codex: the CLI was installed during this turn and needs fresh prompt capture")
-	c.Flags().BoolVar(&checkHooks, "check-hooks", false, "verify live Claude hooks after onboarding returns")
+	c.Flags().BoolVar(&checkHooks, "check-hooks", false, "verify live Codex or Claude hooks without changing setup")
 	c.MarkFlagsMutuallyExclusive("check-hooks", "task-stdin")
 	c.MarkFlagsMutuallyExclusive("check-hooks", "restart")
 	c.MarkFlagsMutuallyExclusive("check-hooks", "refresh")
@@ -69,8 +69,8 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]string{"status": status})
 		}
 		if checkHooks {
-			if agent != "claude" || session == "" {
-				return fmt.Errorf("--check-hooks requires --agent claude and --session")
+			if session == "" {
+				return fmt.Errorf("--check-hooks requires a current session ID")
 			}
 			root, _, err := watchPaths(*api, *profile)
 			if err != nil {
@@ -80,8 +80,16 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 			if err != nil {
 				return err
 			}
+			if agent == "codex" {
+				result, detail := watching.CodexActivationStatus(root, path, session)
+				if !status.Approved || status.Paused || !status.Running || !status.HooksInstalled[agent] || status.RepositoryStatus != "Watching" {
+					result = "error"
+					detail = fmt.Sprintf("Repository setup unavailable (approved=%t, paused=%t, hooks_installed=%t, watcher_running=%t, repository_status=%q)", status.Approved, status.Paused, status.HooksInstalled[agent], status.Running, status.RepositoryStatus)
+				}
+				return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"status": result, "detail": detail, "repository": path, "session": session})
+			}
 			result := watching.ClaudeActivationStatus(root, path, session)
-			if !status.Approved || status.Paused || !status.Running || !status.HooksInstalled["claude"] {
+			if !status.Approved || status.Paused || !status.Running || !status.HooksInstalled[agent] {
 				result = "setup_unavailable"
 			}
 			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"status": result})
@@ -163,6 +171,11 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 			fmt.Fprintln(c.OutOrStdout(), "Claude hooks are configured. A session ID was not supplied, so live delivery cannot be confirmed. Inspect /hooks if feedback does not arrive; restart only if the definitions have not loaded.")
 		} else {
 			fmt.Fprintln(c.OutOrStdout(), "Doomer is configured and the watcher is running. Hook trust remains a user choice; continue your task.")
+		}
+		if agent == "codex" && session != "" {
+			fmt.Fprintln(c.OutOrStdout(), "Verify live Codex hooks for this repository and session with:")
+			fmt.Fprintf(c.OutOrStdout(), "%s --profile %s --api-url %s onboard --repo %s --agent codex --session %s --check-hooks\n", watching.Quote(os.Args[0]), watching.Quote(*profile), watching.Quote(*api), watching.Quote(path), watching.Quote(session))
+			fmt.Fprintln(c.OutOrStdout(), "Continue when status is ready, even if the hook returned no chat message. If pending, run one read-only tool in this repository and check once more. Report any error without repeating hook approval solely because of silence.")
 		}
 		return nil
 	}

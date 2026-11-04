@@ -281,6 +281,17 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		finish(root, path, owner, ctx)
 	}
 	if input.Event == "PreToolUse" || input.Event == "PostToolUse" {
+		if agent == "codex" {
+			defer func() {
+				if err := recordCodexHook(root, path, owner, diagnostic.Status); err != nil {
+					diagnostic.Repository = path
+					diagnostic.At = time.Now()
+					diagnostic.Owner = owner
+					diagnostic.Status = "activation receipt failed: " + err.Error()
+					response["systemMessage"] = "Doomer " + diagnostic.Status
+				}
+			}()
+		}
 		if input.ToolID == "" {
 			diagnostic.Status = "missing tool use ID"
 			return

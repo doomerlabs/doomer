@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,6 +104,66 @@ func TestOnboardReusesConsentAndWatcherWithoutLosingInstructions(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCodexCheckHooksUsesRealReceiptWithoutChangingSetup(t *testing.T) {
+	store := isolate(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CODEX_HOME", t.TempDir())
+	t.Setenv("CODEX_THREAD_ID", "codex-session")
+	api, profile := "http://localhost:3000/api", "codex-check"
+	app := &application.App{Deps: application.Dependencies{Auth: store}}
+	repo := newWatchTestRepo(t)
+	setup := newWatchCommand(app, &api, &profile)
+	setup.SetContext(context.Background())
+	setup.SetOut(io.Discard)
+	setup.Flags().Set("yes", "true")
+	setup.Flags().Set("agent", "codex")
+	cfg, _, err := prepareWatch(setup, app, &api, &profile, []string{repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, config, _ := watchPaths(api, profile)
+	lock, err := publock.TryAcquire(root, "watcher")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	watching.Write(filepath.Join(root, "process.json"), watchProcess{PID: os.Getpid(), ConsentedAt: cfg.ConsentedAt})
+	watching.Write(filepath.Join(root, "heartbeat.json"), time.Now())
+	before, _ := os.ReadFile(config)
+	watching.Write(filepath.Join(root, "watch-session.json"), "watcher-session")
+	watching.RegisterRepository(root, repo, "explicit", true, time.Time{})
+	watching.SetWatchRuntime(root, repo, watching.WatchRuntime{Session: "watcher-session", Token: "token", Status: "Watching"})
+	check := func(want string) {
+		t.Helper()
+		watching.Write(filepath.Join(root, "heartbeat.json"), time.Now())
+		c := newOnboardCommand(app, &api, &profile)
+		var out bytes.Buffer
+		c.SetOut(&out)
+		c.SetArgs([]string{"--repo", repo, "--agent", "codex", "--check-hooks"})
+		if err := c.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		var result struct{ Status, Session, Repository string }
+		if err := json.Unmarshal(out.Bytes(), &result); err != nil || result.Status != want || result.Session != "codex-session" || result.Repository != repo {
+			t.Fatalf("got %s (%v), want %s", out.String(), err, want)
+		}
+		after, _ := os.ReadFile(config)
+		if !bytes.Equal(before, after) {
+			t.Fatal("activation check changed setup")
+		}
+	}
+	check("pending")
+	check("pending")
+	for _, event := range []string{"UserPromptSubmit", "PreToolUse"} {
+		input := watching.HookInput{Session: "codex-session", Turn: "turn", CWD: repo, Event: event, Prompt: "Inspect repository", Tool: "Bash", ToolID: "read"}
+		raw, _ := json.Marshal(input)
+		watching.Hook(context.Background(), root, cfg, bytes.NewReader(raw), io.Discard, "codex")
+	}
+	check("ready")
+	watching.Write(filepath.Join(root, "paused.json"), true)
+	check("error")
 }
 
 func TestHookTrustInstructionsMatchCodexClient(t *testing.T) {
