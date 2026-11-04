@@ -117,7 +117,8 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 		if err := start.RunE(start, []string{path}); err != nil {
 			return err
 		}
-		restart := restartRequired || !before.HooksInstalled[agent]
+		desktop := agent == "codex" && codexDesktopSession()
+		restart := (restartRequired || !before.HooksInstalled[agent]) && !desktop
 		if (restart || agent == "claude") && taskStdin {
 			root, _, err := watchPaths(*api, *profile)
 			if err != nil {
@@ -143,7 +144,7 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 			fmt.Fprintln(c.OutOrStdout(), "Continue when status is ready; no restart or extra trust prompt is needed. If waiting_for_hooks, check once more after the next tool result. If still unconfirmed, inspect /hooks and any workspace trust or managed-policy restrictions; do not assume a restart is required.")
 			return nil
 		}
-		if agent == "codex" && codexDesktopSession() {
+		if desktop {
 			fmt.Fprintln(c.OutOrStdout(), "\nStay in this Codex desktop chat. Review and approve Doomer's hooks using Review hooks beside the composer, or open Settings > Hooks if that button is not visible.")
 			fmt.Fprintln(c.OutOrStdout(), "After approving, send a follow-up message in this chat so Doomer can verify live hook delivery. The watcher is running. Hook activation remains unverified until a current-session callback is received.")
 		} else if restart && agent == "codex" {

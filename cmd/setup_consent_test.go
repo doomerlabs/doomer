@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 
 	watching "github.com/doomerlabs/doomer/internal/watch"
@@ -270,5 +271,24 @@ func TestSetupConsentFromBareRepositoryWorktree(t *testing.T) {
 	repos, err := setupRepositories(context.Background(), []string{linked})
 	if err != nil || len(repos) != 1 || repos[0].MainCheckout != "" || repos[0].Checkout != linked {
 		t.Fatalf("incorrect bare repository display: %+v, %v", repos, err)
+	}
+}
+
+func TestSetupConsentWithUnavailableMainCheckout(t *testing.T) {
+	main := filepath.Join(t.TempDir(), "main")
+	common := filepath.Join(t.TempDir(), "repository.git")
+	if err := os.MkdirAll(main, 0700); err != nil {
+		t.Fatal(err)
+	}
+	reviewGit(t, main, "init", "--separate-git-dir", common)
+	reviewGit(t, main, "commit", "--allow-empty", "-m", "initial")
+	linked := filepath.Join(t.TempDir(), "linked")
+	reviewGit(t, main, "worktree", "add", "--detach", linked)
+	if err := os.RemoveAll(main); err != nil {
+		t.Fatal(err)
+	}
+	repos, err := setupRepositories(context.Background(), []string{linked})
+	if err != nil || len(repos) != 1 || repos[0].MainCheckout != "" || repos[0].Checkout != linked {
+		t.Fatalf("unavailable display location blocked setup: %+v %v", repos, err)
 	}
 }

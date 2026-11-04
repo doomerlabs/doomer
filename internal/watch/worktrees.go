@@ -20,7 +20,7 @@ func PrimaryCheckout(ctx context.Context, path string) (string, error) {
 	primary := ""
 	for _, field := range bytes.Split(record, []byte{0}) {
 		text := string(field)
-		if text == "bare" {
+		if text == "bare" || strings.HasPrefix(text, "prunable") {
 			return "", nil
 		}
 		if strings.HasPrefix(text, "worktree ") {
@@ -30,7 +30,11 @@ func PrimaryCheckout(ctx context.Context, path string) (string, error) {
 	if !filepath.IsAbs(primary) {
 		return "", fmt.Errorf("Git did not report a main checkout for %s", path)
 	}
-	return Root(ctx, primary)
+	resolved, err := Root(ctx, primary)
+	if err != nil {
+		return "", ctx.Err()
+	}
+	return resolved, nil
 }
 
 // LinkedWorktrees asks Git for registered checkouts, never searches the disk.
