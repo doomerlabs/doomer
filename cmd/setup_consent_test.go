@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
+
+	watching "github.com/doomerlabs/doomer/internal/watch"
 	"strings"
 	"testing"
 	"time"
@@ -153,7 +156,7 @@ func TestTerminalSetupConsentRequiresYes(t *testing.T) {
 }
 
 func TestSetupPagesPreserveScopeAndApprovalMeaning(t *testing.T) {
-	s := setupConsent{API: "https://doomer.ai/api", Profile: "default", Nonce: strings.Repeat("a", 64), Directories: []string{"/repo/<script>alert(1)</script>"}, Agents: []string{"codex"}}
+	s := setupConsent{API: "https://doomer.ai/api", Profile: "default", Nonce: strings.Repeat("a", 64), Repositories: []setupRepository{{MainCheckout: "/repo/<script>alert(1)</script>", Checkout: "/linked/<script>alert(1)</script>"}}, Agents: []string{"codex"}}
 	var out bytes.Buffer
 	if err := setupPage.ExecuteTemplate(&out, "consent", s); err != nil {
 		t.Fatal(err)
@@ -161,7 +164,7 @@ func TestSetupPagesPreserveScopeAndApprovalMeaning(t *testing.T) {
 	if strings.Contains(out.String(), "<script>alert(1)</script>") || !strings.Contains(out.String(), "&lt;script&gt;") {
 		t.Fatal("repository name was not escaped")
 	}
-	for _, text := range []string{"outside the changed lines", "task prompt", "review responses", "/privacy", "name=\"nonce\"", "value=\"cancel\""} {
+	for _, text := range []string{"all existing and future linked Git worktrees", "Main checkout", "Setup checkout", "Allow for repo and worktrees", "outside the changed lines", "task prompt", "review responses", "/privacy", "name=\"nonce\"", "value=\"cancel\""} {
 		if !strings.Contains(out.String(), text) {
 			t.Fatalf("missing disclosure/control %q", text)
 		}
@@ -211,5 +214,61 @@ func TestSetupServiceURLHidesOnlyAPISuffix(t *testing.T) {
 		if s.API != tc.api {
 			t.Fatal("changed API destination")
 		}
+	}
+}
+
+func TestSetupConsentFromLinkedWorktree(t *testing.T) {
+	main := t.TempDir()
+	reviewGit(t, main, "init")
+	reviewGit(t, main, "commit", "--allow-empty", "-m", "initial")
+	linked := filepath.Join(t.TempDir(), "linked")
+	reviewGit(t, main, "worktree", "add", "-b", "linked", linked)
+	main, err := watching.Root(context.Background(), main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	linked, err = watching.Root(context.Background(), linked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mainRepos, err := setupRepositories(context.Background(), []string{main})
+	if err != nil || len(mainRepos) != 1 || mainRepos[0].MainCheckout != main || mainRepos[0].Checkout != main {
+		t.Fatalf("incorrect main checkout display: %+v, %v", mainRepos, err)
+	}
+	repos, err := setupRepositories(context.Background(), []string{linked})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(repos) != 1 || repos[0].MainCheckout != main || repos[0].Checkout != linked {
+		t.Fatalf("incorrect repository display: %+v", repos)
+	}
+	consent := setupConsent{Repositories: repos}
+	var page, terminal bytes.Buffer
+	if err := setupPage.ExecuteTemplate(&page, "consent", consent); err != nil {
+		t.Fatal(err)
+	}
+	consent.print(&terminal)
+	for _, text := range []string{main, linked, "all existing and future linked Git worktrees"} {
+		if !strings.Contains(page.String(), text) || !strings.Contains(terminal.String(), text) {
+			t.Fatalf("scope missing %q in browser or terminal", text)
+		}
+	}
+}
+
+func TestSetupConsentFromBareRepositoryWorktree(t *testing.T) {
+	main := t.TempDir()
+	reviewGit(t, main, "init")
+	reviewGit(t, main, "commit", "--allow-empty", "-m", "initial")
+	bare := filepath.Join(t.TempDir(), "repo.git")
+	reviewGit(t, main, "clone", "--bare", main, bare)
+	linked := filepath.Join(t.TempDir(), "linked")
+	reviewGit(t, bare, "worktree", "add", "--detach", linked)
+	linked, err := watching.Root(context.Background(), linked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repos, err := setupRepositories(context.Background(), []string{linked})
+	if err != nil || len(repos) != 1 || repos[0].MainCheckout != "" || repos[0].Checkout != linked {
+		t.Fatalf("incorrect bare repository display: %+v, %v", repos, err)
 	}
 }

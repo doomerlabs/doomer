@@ -144,7 +144,11 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 				seen[canonical] = true
 			}
 		}
-		consent := setupConsent{Profile: *profile, API: *api, AllRepositories: allRepositories, Directories: directories, Agents: selected}
+		repositories, err := setupRepositories(c.Context(), directories)
+		if err != nil {
+			return err
+		}
+		consent := setupConsent{Profile: *profile, API: *api, AllRepositories: allRepositories, Repositories: repositories, Agents: selected}
 		f, ok := c.InOrStdin().(*os.File)
 		interactive := ok && term.IsTerminal(int(f.Fd()))
 		anonymous := adversarylabs.IsAnonymousToken(auth.Token)

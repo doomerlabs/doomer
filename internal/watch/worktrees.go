@@ -3,10 +3,35 @@ package watch
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
 )
+
+// PrimaryCheckout returns the main checkout registered by Git. Bare repositories
+// have no main checkout, so their linked checkout remains the display location.
+func PrimaryCheckout(ctx context.Context, path string) (string, error) {
+	raw, err := filesystemGit(ctx, path, "worktree", "list", "--porcelain", "-z").Output()
+	if err != nil {
+		return "", err
+	}
+	record := bytes.SplitN(raw, []byte{0, 0}, 2)[0]
+	primary := ""
+	for _, field := range bytes.Split(record, []byte{0}) {
+		text := string(field)
+		if text == "bare" {
+			return "", nil
+		}
+		if strings.HasPrefix(text, "worktree ") {
+			primary = strings.TrimPrefix(text, "worktree ")
+		}
+	}
+	if !filepath.IsAbs(primary) {
+		return "", fmt.Errorf("Git did not report a main checkout for %s", path)
+	}
+	return Root(ctx, primary)
+}
 
 // LinkedWorktrees asks Git for registered checkouts, never searches the disk.
 // Consent is evaluated separately for every path; narrow directory approvals do
