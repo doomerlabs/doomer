@@ -126,13 +126,10 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 				return
 			}
 		}
-		prompt := ""
-		// Retain only the active turn's prompt. With all-repository consent,
-		// a turn may begin outside Git before creating/selecting its checkout.
-		if allowed || cfg.AllRepositories {
-			prompt = input.Prompt
-		}
-		_ = Locked(root, input.Session, func() error { return Write(turnFile, Turn{Owner: owner, Prompt: prompt, Next: 1, Agent: agent}) })
+		// The chat may start outside Git and select a repository in a later
+		// tool call. Keep this turn's prompt locally until then. The allowed
+		// repository checks below still gate capture and review submission.
+		_ = Locked(root, input.Session, func() error { return Write(turnFile, Turn{Owner: owner, Prompt: input.Prompt, Next: 1, Agent: agent}) })
 		if agent == "claude" && allowed {
 			advanceClaudeActivation(root, path, owner)
 		}
