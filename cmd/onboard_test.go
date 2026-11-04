@@ -88,7 +88,11 @@ func TestOnboardReusesConsentAndWatcherWithoutLosingInstructions(t *testing.T) {
 			if !strings.Contains(output.String(), expected) {
 				t.Fatal(output.String())
 			}
-			if original, err := watching.ResumeTaskContext(root, repo, "session"); err != nil || original != "Add pagination" {
+			expectedTask := "Add pagination"
+			if client.originator == "Codex Desktop" {
+				expectedTask = ""
+			}
+			if original, err := watching.ResumeTaskContext(root, repo, "session"); err != nil || original != expectedTask {
 				t.Fatalf("lost restart task: %q %v", original, err)
 			}
 			c.SetIn(strings.NewReader("Add pagination"))

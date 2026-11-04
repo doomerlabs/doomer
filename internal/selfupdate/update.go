@@ -444,8 +444,26 @@ func publishPaths(r *os.Root, binaryPath, recordPath, next, recordNext string, e
 	backup := ""
 	if existing {
 		backup = binaryPath + ".backup-" + rand.Text()
-		if err := r.Rename(binaryPath, backup); err != nil {
+		info, err := r.Lstat(binaryPath)
+		if err != nil {
 			return "", err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, err := r.Readlink(binaryPath)
+			if err != nil {
+				return "", err
+			}
+			if err := r.Symlink(target, backup); err != nil {
+				return "", err
+			}
+		} else {
+			data, err := readRegular(r, binaryPath, maxBinary)
+			if err != nil {
+				return "", err
+			}
+			if err := writeNew(r, backup, data, info.Mode().Perm()); err != nil {
+				return "", err
+			}
 		}
 	}
 	rollback := func(cause error) (string, error) {
