@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -48,6 +49,10 @@ func Hook(ctx context.Context, root string, cfg Config, in io.Reader, out io.Wri
 }
 
 func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reader, out io.Writer, ready func(context.Context) bool, agents ...string) {
+	hookWithRepositories(ctx, root, cfg, in, out, ready, true, agents...)
+}
+
+func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Reader, out io.Writer, ready func(context.Context) bool, dispatchStop bool, agents ...string) {
 	response := map[string]any{}
 	var event string
 	responsesRecorded := false
@@ -147,6 +152,54 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 	}
 	if owner.Turn == "" {
 		owner.Turn = turn.Owner.Turn
+	}
+	if dispatchStop && input.Event == "Stop" && owner == turn.Owner && len(turn.Repositories) > 0 {
+		// Stop has the chat's cwd, not the cwd of the last edited repository.
+		// Re-enter the single-repository handler only for this turn's approved
+		// checkouts. Each result retains its own snapshot and owner checks.
+		paths := []string{}
+		seen := map[string]bool{}
+		for _, candidate := range turn.Repositories {
+			if !seen[candidate] && Allowed(cfg, candidate) && !RepositoryRemoved(root, candidate) {
+				seen[candidate] = true
+				paths = append(paths, candidate)
+			}
+		}
+		// Deliver already-completed results before spending any wait budget.
+		completed := map[string]bool{}
+		for _, candidate := range paths {
+			var feed Feed
+			completed[candidate] = Read(FeedPath(root, candidate), &feed) == nil && feed.Owner == owner &&
+				feed.AssessmentStatus == "ready" && !feed.Updated.IsZero() &&
+				time.Since(feed.Updated) >= 0 && time.Since(feed.Updated) < 24*time.Hour
+		}
+		sort.SliceStable(paths, func(i, j int) bool { return completed[paths[i]] && !completed[paths[j]] })
+		messages := []string{}
+		for _, candidate := range paths {
+			if ctx.Err() != nil {
+				break
+			}
+			if len(messages) > 0 && !completed[candidate] {
+				break
+			}
+			child := input
+			child.CWD, child.Input = candidate, nil
+			raw, _ := json.Marshal(child)
+			var output strings.Builder
+			hookWithRepositories(ctx, root, cfg, strings.NewReader(string(raw)), &output, ready, false, agents...)
+			var result struct {
+				Decision string `json:"decision"`
+				Reason   string `json:"reason"`
+			}
+			if json.Unmarshal([]byte(output.String()), &result) == nil && result.Decision == "block" && result.Reason != "" {
+				messages = append(messages, result.Reason)
+			}
+		}
+		if len(messages) > 0 {
+			response = map[string]any{"decision": "block", "reason": strings.Join(messages, "\n\n")}
+		}
+		diagnostic.Status = "checked turn repositories"
+		return
 	}
 	if agent == "claude" && allowed {
 		activateClaudeHook(root, path, input, &turn, &owner)
@@ -356,10 +409,12 @@ func hookWithReadiness(ctx context.Context, root string, cfg Config, in io.Reade
 		}
 		var feed Feed
 		ownedFeed := Read(FeedPath(root, path), &feed) == nil && feed.Owner == owner && !feed.Updated.IsZero() && time.Since(feed.Updated) >= 0 && time.Since(feed.Updated) < 24*time.Hour
-		// An external change can reset the live baseline without invalidating a
-		// completed review of this turn. Deliver that result as an older snapshot;
+		// A commit or external change can invalidate edit ownership without
+		// invalidating a completed review of this turn. Deliver it as an older snapshot;
 		// never restore edit ownership or claim that the new baseline was reviewed.
-		olderSnapshot := state.Owner == (Owner{}) && !state.Ambiguous && len(state.Active) == 0 && ownedFeed && feed.AssessmentStatus == "ready"
+		olderSnapshot := ownedFeed && feed.AssessmentStatus == "ready" &&
+			(state.Owner == owner || state.Owner == (Owner{})) &&
+			(state.Owner == (Owner{}) || state.Ambiguous || state.Fingerprint != feed.Fingerprint)
 		if !olderSnapshot && (state.Owner != owner || state.Ambiguous) {
 			return
 		}
