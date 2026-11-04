@@ -134,6 +134,32 @@ func readRegular(r *os.Root, path string, limit int64) ([]byte, error) {
 	}
 	return data, nil
 }
+
+// InstallationStamp is a cheap cache key, not a substitute for Check. Hash
+// the small record so an update is detected even on coarse-clock filesystems.
+func (u Updater) InstallationStamp() (string, error) {
+	r, err := u.root(false)
+	if err != nil {
+		return "", err
+	}
+	defer r.Close()
+	binary := "missing"
+	info, err := r.Lstat(binaryPath)
+	if err == nil {
+		binary = fmt.Sprintf("%d:%d:%d", info.Size(), info.Mode(), info.ModTime().UnixNano())
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	record, err := readRegular(r, recordPath, 16<<10)
+	if os.IsNotExist(err) {
+		return binary + ":missing", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return binary + ":" + hash(record), nil
+}
+
 func (u Updater) status(r *os.Root, required string) (Status, error) {
 	s := Status{Path: filepath.Join(u.Home, filepath.FromSlash(binaryPath)), RequiredVersion: required, State: "missing"}
 	if _, err := compare(required, required); err != nil {

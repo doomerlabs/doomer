@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/doomerlabs/doomer/internal/selfupdate"
 )
@@ -139,6 +140,11 @@ func TestApprovedHookDeliversUpgradeWithoutRestart(t *testing.T) {
 func TestUpgradeNegativeCheckIsCachedUntilInstallationChanges(t *testing.T) {
 	root, repo, updater := upgradeFixture(t)
 	writeSkillPin(t, repo, ".agents", "2026.11.3.5")
+	recordFile := filepath.Join(updater.Home, ".local/share/doomer/installation.json")
+	timestamp := time.Unix(1700000000, 0)
+	if err := os.Chtimes(recordFile, timestamp, timestamp); err != nil {
+		t.Fatal(err)
+	}
 	if got := localUpgradeNotice(root, repo, "chat", updater); got != "" {
 		t.Fatal(got)
 	}
@@ -156,10 +162,12 @@ func TestUpgradeNegativeCheckIsCachedUntilInstallationChanges(t *testing.T) {
 	}
 	// A new ownership record must invalidate a ready result in the same chat.
 	var record selfupdate.Record
-	recordFile := filepath.Join(updater.Home, ".local/share/doomer/installation.json")
 	Read(recordFile, &record)
 	record.Version = "2026.11.3.4"
 	if err := Write(recordFile, record); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(recordFile, timestamp, timestamp); err != nil {
 		t.Fatal(err)
 	}
 	if got := localUpgradeNotice(root, repo, "chat", updater); !strings.Contains(got, "2026.11.3.4") {

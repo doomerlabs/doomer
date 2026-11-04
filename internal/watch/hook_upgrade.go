@@ -37,13 +37,10 @@ func localUpgradeNotice(root, repo, session string, updater selfupdate.Updater) 
 		if Read(receipt, &delivered) == nil && delivered {
 			return nil
 		}
-		stamp, err := upgradeInstallationStamp(updater.Home)
-		if err != nil {
-			return nil
-		}
+		stamp, stampErr := updater.InstallationStamp()
 		checkFile := filepath.Join(root, "upgrade-checks", key+".json")
 		var checked upgradeCheck
-		if Read(checkFile, &checked) == nil && checked.Stamp == stamp && time.Since(checked.At) >= 0 && time.Since(checked.At) < 5*time.Minute {
+		if stampErr == nil && Read(checkFile, &checked) == nil && checked.Stamp == stamp && time.Since(checked.At) >= 0 && time.Since(checked.At) < 5*time.Minute {
 			return nil
 		}
 		status, err := updater.Check(version)
@@ -51,7 +48,9 @@ func localUpgradeNotice(root, repo, session string, updater selfupdate.Updater) 
 			return nil
 		}
 		if status.State != "update_available" || !status.Managed {
-			_ = Write(checkFile, upgradeCheck{Stamp: stamp, At: time.Now()})
+			if stampErr == nil {
+				_ = Write(checkFile, upgradeCheck{Stamp: stamp, At: time.Now()})
+			}
 			return nil
 		}
 		if err := Write(receipt, true); err != nil {
@@ -66,24 +65,6 @@ func localUpgradeNotice(root, repo, session string, updater selfupdate.Updater) 
 type upgradeCheck struct {
 	Stamp string
 	At    time.Time
-}
-
-// Stat is cheap enough for each hook. Revalidate bytes when either file changes,
-// and periodically even if a replacement preserved its size and timestamps.
-func upgradeInstallationStamp(home string) (string, error) {
-	stamp := ""
-	for _, relative := range []string{".local/bin/doomer", ".local/share/doomer/installation.json"} {
-		info, err := os.Lstat(filepath.Join(home, filepath.FromSlash(relative)))
-		if os.IsNotExist(err) {
-			stamp += relative + ":missing;"
-			continue
-		}
-		if err != nil {
-			return "", err
-		}
-		stamp += fmt.Sprintf("%s:%d:%d:%d;", relative, info.Size(), info.Mode(), info.ModTime().UnixNano())
-	}
-	return stamp, nil
 }
 
 func repositorySkillPin(repo string) (string, string) {
