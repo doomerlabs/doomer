@@ -106,6 +106,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 	allowed := pathErr == nil && Allowed(cfg, path) && !RepositoryRemoved(root, path)
 	owner := Owner{input.Session, input.Turn}
 	turnFile := TurnPath(root, input.Session)
+	clearPendingPrompt(root, turnFile, time.Now(), input.Event == "Stop")
 	var turn Turn
 	_ = Read(turnFile, &turn)
 	if input.Event == "UserPromptSubmit" {
@@ -130,13 +131,16 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 				return
 			}
 		}
-		prompt := ""
-		// Retain only the active turn's prompt. With all-repository consent,
-		// a turn may begin outside Git before creating/selecting its checkout.
-		if allowed || cfg.AllRepositories {
-			prompt = input.Prompt
+		// The chat may start outside Git and select a repository in a later
+		// tool call. Keep this turn's prompt locally until then. The allowed
+		// repository checks below still gate capture and review submission.
+		pendingUntil := time.Time{}
+		if !allowed && !cfg.AllRepositories {
+			pendingUntil = time.Now().Add(time.Hour)
 		}
-		_ = Locked(root, input.Session, func() error { return Write(turnFile, Turn{Owner: owner, Prompt: prompt, Next: 1, Agent: agent}) })
+		_ = Locked(root, input.Session, func() error {
+			return Write(turnFile, Turn{Owner: owner, Prompt: input.Prompt, PendingPromptUntil: pendingUntil, Next: 1, Agent: agent})
+		})
 		if agent == "claude" && allowed {
 			advanceClaudeActivation(root, path, owner)
 		}
@@ -256,6 +260,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			if turn.Owner != owner {
 				turn = Turn{Owner: owner, Next: 1, Agent: agent}
 			}
+			turn.PendingPromptUntil = time.Time{}
 			for _, existing := range turn.Repositories {
 				if existing == path {
 					return nil
