@@ -1,0 +1,23 @@
+internal/selfupdate/update.go
+  s_c5a06ffaad29b7::t_64fd82758a61cd 137-162
+internal/watch/hook_upgrade.go
+  s_c5a06ffaad29b7::t_64fd82758a61cd 40,43,51-53
+internal/watch/hook_upgrade_test.go
+  s_c5a06ffaad29b7::t_64fd82758a61cd 13,143-147,170-172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "767017526105c3e0a89b9159a942e327c3ad2898",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
