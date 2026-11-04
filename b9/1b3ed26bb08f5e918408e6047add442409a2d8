@@ -1,0 +1,23 @@
+internal/watch/hook_upgrade_test.go
+  s_c5a06ffaad29b7::t_d5bccfaf5ed32c 138-168
+internal/watch/hook_upgrade.go
+  s_c5a06ffaad29b7::t_10c2eef21a2411 41-43,50-52,54,68,77-84,86
+  s_c5a06ffaad29b7::t_31965cea19050f 9,40,44-48,53,66-67,69-76,85,87
+  s_c5a06ffaad29b7::t_8f2b89e208a5e5 88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b91b3ed26bb08f5e918408e6047add442409a2d8",
+  "prompts": {},
+  "sessions": {
+    "s_c5a06ffaad29b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18f08-9c5f-7c13-a182-eaa9cddf8912",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
