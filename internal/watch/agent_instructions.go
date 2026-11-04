@@ -1,27 +1,30 @@
 package watch
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/doomerlabs/doomer/internal/version"
 )
 
 const agentInstructionsStart = "<!-- doomer-review:start -->"
 const agentInstructionsEnd = "<!-- doomer-review:end -->"
-const agentInstructions = `<!-- doomer-review:start -->
-## Doomer code review
 
-Use the installed doomer-review skill when editing code. Doomer's trusted hooks
-capture tasks and edits and deliver review results; do not poll review state or
-run setup on every edit. Investigate feedback privately, fix confirmed issues
-within the user's scope, and record each response using the hook's instructions.
-Include the complete Doomer review link once in the final answer, including when
-no issues remain. Only report completion when the hook confirms that revision.
-Repository upload consent and coding-agent hook trust are separate user choices.
-If setup is missing, follow the skill's onboarding instructions. Never approve
-uploads or hook trust on the user's behalf. Preserve a paused watcher.
-<!-- doomer-review:end -->`
+//go:embed templates/agent-instructions.md
+var agentInstructionsBody string
+
+var agentInstructions = agentInstructionsStart + "\n" + agentInstructionsBody + agentInstructionsEnd
+
+func installedAgentInstructions() string {
+	if len(version.Commit) != 40 || strings.IndexFunc(version.Commit, func(r rune) bool { return !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') }) >= 0 {
+		return agentInstructions
+	}
+	marker := fmt.Sprintf("<!-- doomer-managed\npackage: doomerlabs/doomer\nrevision: %s\nsource: internal/watch/templates/agent-instructions.md\nkind: block\n-->\n", version.Commit)
+	return agentInstructionsStart + "\n" + marker + agentInstructionsBody + "<!-- doomer-managed:end -->\n" + agentInstructionsEnd
+}
 
 // Update only our marked block. Never follow a repository-provided symlink or
 // overwrite malformed markers that might enclose unrelated instructions.
@@ -58,9 +61,9 @@ func EnsureAgentInstructions(repo, agent string) error {
 		if start < 0 || end < start || strings.Count(text, agentInstructionsStart) != 1 || strings.Count(text, agentInstructionsEnd) != 1 {
 			return fmt.Errorf("%s contains malformed Doomer markers", name)
 		}
-		text = text[:start] + agentInstructions + text[end+len(agentInstructionsEnd):]
+		text = text[:start] + installedAgentInstructions() + text[end+len(agentInstructionsEnd):]
 	} else {
-		text = strings.TrimRight(text, "\n") + "\n\n" + agentInstructions + "\n"
+		text = strings.TrimRight(text, "\n") + "\n\n" + installedAgentInstructions() + "\n"
 		text = strings.TrimLeft(text, "\n")
 	}
 	if text == string(data) {
