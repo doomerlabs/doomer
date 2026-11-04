@@ -98,7 +98,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 	defer func() {
 		_ = Write(filepath.Join(root, "hook-diagnostics", Key(input.Session+event)+".json"), diagnostic)
 	}()
-	path, pathErr := hookRepository(ctx, input)
+	path, pathErr := HookRepository(ctx, input)
 	diagnostic.Repository = path
 	if pathErr != nil {
 		diagnostic.Status = pathErr.Error()
@@ -246,7 +246,9 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		return
 	}
 	if input.Event == "PreToolUse" {
-		upgradeNotice = hookUpgradeNotice(root, path, input.Session)
+		if cfg.RuntimeVersion == "" {
+			upgradeNotice = hookUpgradeNotice(root, path, input.Session)
+		}
 	}
 	if cfg.AllRepositories && input.Event == "PreToolUse" {
 		_ = Write(filepath.Join(root, "discovered", Key(path)+".json"), path)

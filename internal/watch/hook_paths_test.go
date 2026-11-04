@@ -23,7 +23,7 @@ func TestHookRepositoryFindsEditedRepoOutsideChatDirectory(t *testing.T) {
 		map[string]any{"command": "*** Begin Patch\n*** Add File: " + filepath.Join(repo, "new-directory", "new.txt") + "\n+new\n*** End Patch"},
 	} {
 		raw, _ := json.Marshal(input)
-		got, err := hookRepository(context.Background(), HookInput{CWD: parent, Input: raw})
+		got, err := HookRepository(context.Background(), HookInput{CWD: parent, Input: raw})
 		if err != nil || got != repo {
 			t.Fatalf("input=%s root=%s error=%v", raw, got, err)
 		}

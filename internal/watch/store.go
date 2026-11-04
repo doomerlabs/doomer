@@ -9,11 +9,13 @@ import (
 	"time"
 
 	"github.com/doomerlabs/doomer/internal/publock"
+	"github.com/doomerlabs/doomer/internal/runtimeversion"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 )
 
 type Config struct {
+	RuntimeVersion  string    `json:"-"`
 	ExplicitConsent bool      `json:"explicit_consent,omitempty"`
 	AllRepositories bool      `json:"all_repositories,omitempty"`
 	Version         int       `json:"version"`
@@ -149,6 +151,12 @@ func ConsentValid(cfg Config, api, profile, token string) bool {
 }
 
 func Allowed(cfg Config, path string) bool {
+	if cfg.RuntimeVersion != "" {
+		pin, _, err := runtimeversion.Pin(path)
+		if err != nil || pin != cfg.RuntimeVersion {
+			return false
+		}
+	}
 	if cfg.AllRepositories {
 		return true
 	}

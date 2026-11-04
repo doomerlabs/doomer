@@ -23,7 +23,7 @@ func reviewAuth(app *application.App, api, profile string) (adversarylabs.Auth, 
 	if ok && strings.TrimSpace(auth.Token) != "" {
 		return auth, nil
 	}
-	root, _, err := watchPaths(api, profile)
+	root, _, err := consentPaths(api, profile)
 	if err != nil {
 		return auth, err
 	}
