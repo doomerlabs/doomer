@@ -457,9 +457,14 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			statusf("Agent discovery enabled; automatic checkouts become inactive after 14 days without an agent edit.")
 		}
 		lastWorktreeScan := time.Time{}
+		nextPromptCleanup := time.Time{}
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 		for ctx.Err() == nil {
+			if time.Now().After(nextPromptCleanup) {
+				watching.PrunePendingPrompts(root, time.Now())
+				nextPromptCleanup = time.Now().Add(time.Minute)
+			}
 			repos, e := watching.Repositories(root, cfg)
 			if e != nil {
 				cancel()

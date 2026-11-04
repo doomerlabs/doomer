@@ -73,14 +73,15 @@ type Pending struct {
 	ReviewID string
 }
 type Turn struct {
-	Agent         string   `json:"agent,omitempty"`
-	ResponseToken string   `json:"response_token,omitempty"`
-	Repositories  []string `json:"repositories,omitempty"`
-	Owner         Owner
-	Prompt        string
-	Next          int
-	Pending       []Pending
-	Delivered     []string
+	PendingPromptUntil time.Time `json:"pending_prompt_until,omitempty"`
+	Agent              string    `json:"agent,omitempty"`
+	ResponseToken      string    `json:"response_token,omitempty"`
+	Repositories       []string  `json:"repositories,omitempty"`
+	Owner              Owner
+	Prompt             string
+	Next               int
+	Pending            []Pending
+	Delivered          []string
 }
 type Feedback struct {
 	ID       string
