@@ -632,3 +632,25 @@ estimated remaining transfer time. Waiting for server confirmation is shown
 separately; upload estimates do not include the review itself. Human progress
 messages go to stderr for `review`, so `--format json` keeps stdout readable by
 other programs.
+
+### Support diagnostics
+
+Run `doomer doctor` from the affected checkout to save a private JSON diagnostic
+report and upload it to Doomer support. Python is not required.
+
+```sh
+doomer doctor --name "Pat" --email pat@example.com --tag case=123
+doomer doctor --repo /path/to/checkout --no-upload --output ./diagnostics.json
+```
+
+The report includes installed binary versions, skill hashes, hook command shape,
+watcher state, recent hook metadata, Git status counts and review correlation IDs.
+Home and checkout paths are redacted. Repository and branch names, installation,
+session and review IDs remain visible. Source files, diffs, changed filenames,
+raw logs, raw hook commands and credential files are excluded.
+
+Uploads use the selected API/profile and are private to support administrators.
+An authenticated account is identified by the server. Anonymous uploads use a
+hashed anonymous identity, and optional name/email/tags are self-reported.
+Use `--no-upload` for local inspection. A local report remains available when an
+upload fails, and `--output` refuses to overwrite an existing file.

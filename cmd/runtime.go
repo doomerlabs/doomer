@@ -49,6 +49,11 @@ func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr i
 	if err != nil {
 		return false, nil
 	}
+	// Doctor must run even when the checkout pins a missing, broken, or older
+	// release, since diagnosing that installation is its purpose.
+	if command.Name() == "doctor" {
+		return false, nil
+	}
 	if err := command.ParseFlags(rest); err != nil {
 		return false, nil
 	}
