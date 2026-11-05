@@ -2,7 +2,9 @@ package adversarylabs
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -176,5 +178,30 @@ func TestLoggedOutProfileNameCanBeReused(t *testing.T) {
 	}
 	if got, err := store.DefaultProject(work); err != nil || got != "personal-project" {
 		t.Fatalf("renamed project: %q %v", got, err)
+	}
+}
+
+func TestReadOnlyCredentialsPreservePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission modes")
+	}
+	dir := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(dir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, []byte(`{"auths":{"test":{"token":"saved"}}}`), 0640); err != nil {
+		t.Fatal(err)
+	}
+	store := ConfigStore{Path: path, ReadOnly: true}
+	cfg, err := store.Load()
+	if err != nil || cfg.Auths["test"].Token != "saved" {
+		t.Fatalf("load: %v %v", cfg, err)
+	}
+	for p, want := range map[string]os.FileMode{dir: 0750, path: 0640} {
+		info, err := os.Stat(p)
+		if err != nil || info.Mode().Perm() != want {
+			t.Fatalf("changed permissions for %s: %v", p, err)
+		}
 	}
 }

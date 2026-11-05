@@ -62,17 +62,12 @@ func paused(root string) bool {
 // The watcher holds this OS lock for its entire lifetime; it is never PID-killed.
 func runningWatch(root string) (watchProcess, bool, error) {
 	var p watchProcess
-	if _, err := os.Stat(root); os.IsNotExist(err) {
+	held, err := publock.Held(root, "watcher")
+	if err != nil {
+		return p, false, err
+	}
+	if !held {
 		return p, false, nil
-	} else if err != nil {
-		return p, false, err
-	}
-	lock, err := publock.TryAcquire(root, "watcher")
-	if err == nil {
-		return p, false, lock.Close()
-	}
-	if !publock.Busy(err) {
-		return p, false, err
 	}
 	var heartbeat time.Time
 	if e := watching.Read(filepath.Join(root, "process.json"), &p); e != nil {
