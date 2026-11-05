@@ -42,15 +42,17 @@ func setupRepositories(ctx context.Context, directories []string) ([]setupReposi
 // Only the selected profile's destination and requested scope enter the browser.
 // Login credentials stay in the CLI, and approval exists only for this invocation.
 type setupConsent struct {
-	Profile         string            `json:"profile"`
-	API             string            `json:"api"`
-	AllRepositories bool              `json:"allRepositories"`
-	Repositories    []setupRepository `json:"repositories"`
-	Agents          []string          `json:"agents"`
-	Nonce           string            `json:"nonce"`
+	ActivationReporting *bool             `json:"-"`
+	Profile             string            `json:"profile"`
+	API                 string            `json:"api"`
+	AllRepositories     bool              `json:"allRepositories"`
+	Repositories        []setupRepository `json:"repositories"`
+	Agents              []string          `json:"agents"`
+	Nonce               string            `json:"nonce"`
 }
 
 func (s setupConsent) print(w io.Writer) {
+	fmt.Fprintln(w, "Doomer also records basic installation information after hooks activate: a random installation ID, repository identifier, agent/client, OS/architecture, software versions, and activation time. It does not collect Git identity, computer names, or local paths in this event.")
 	fmt.Fprintln(w, "Allow Doomer to review this repo?\n\nDoomer sends code from this repo, along with the task prompt and the agent’s review responses, to Doomer’s servers for analysis. You’ll get free initial feedback in your coding chat. No account required.")
 	fmt.Fprintf(w, "\nProfile:      %s\nDestination:  %s\nHooks:        %s\n", s.Profile, s.API, strings.Join(s.Agents, ", "))
 	if s.AllRepositories {

@@ -186,7 +186,8 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		if err != nil {
 			return err
 		}
-		consent := setupConsent{Profile: *profile, API: *api, AllRepositories: allRepositories, Repositories: repositories, Agents: selected}
+		reportActivation := yes
+		consent := setupConsent{ActivationReporting: &reportActivation, Profile: *profile, API: *api, AllRepositories: allRepositories, Repositories: repositories, Agents: selected}
 		f, ok := c.InOrStdin().(*os.File)
 		interactive := ok && term.IsTerminal(int(f.Fd()))
 		anonymous := adversarylabs.IsAnonymousToken(auth.Token)
@@ -219,6 +220,7 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 			if !terminalSetupConsent(c.Context(), f) {
 				return fmt.Errorf("setup cancelled; no upload consent saved")
 			}
+			reportActivation = true
 		} else if anonymous && browserToken == nil {
 			fmt.Fprintln(c.OutOrStdout(), "Free anonymous Look Closer enabled. Source code and agent review responses are uploaded to "+*api+". Deep review requires signing in.")
 		} else if yes {
@@ -260,7 +262,11 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 			auth = saved
 			fmt.Fprintf(c.OutOrStdout(), "Signed in to Doomer using profile %s.\n", *profile)
 		}
-		cfg = watching.Config{ExplicitConsent: true, AllRepositories: allRepositories, Version: 1, API: *api, Profile: *profile, Directories: directories, ConsentedAt: time.Now(), AccountKey: watching.Key(auth.Token)}
+		installationID, err := watching.EnsureInstallationID(consentRoot)
+		if err != nil {
+			return err
+		}
+		cfg = watching.Config{ActivationReporting: reportActivation, InstallationID: installationID, ExplicitConsent: true, AllRepositories: allRepositories, Version: 1, API: *api, Profile: *profile, Directories: directories, ConsentedAt: time.Now(), AccountKey: watching.Key(auth.Token)}
 		for _, path := range directories {
 			id, e := watching.RepositoryIdentity(c.Context(), path)
 			if e != nil {

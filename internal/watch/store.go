@@ -15,16 +15,18 @@ import (
 )
 
 type Config struct {
-	RuntimeVersion  string    `json:"-"`
-	ExplicitConsent bool      `json:"explicit_consent,omitempty"`
-	AllRepositories bool      `json:"all_repositories,omitempty"`
-	Version         int       `json:"version"`
-	AccountKey      string    `json:"account_key"`
-	API             string    `json:"api_url"`
-	Profile         string    `json:"profile"`
-	Directories     []string  `json:"directories"`
-	RepositoryIDs   []string  `json:"repository_ids,omitempty"`
-	ConsentedAt     time.Time `json:"consented_at"`
+	ActivationReporting bool      `json:"activation_reporting,omitempty"`
+	InstallationID      string    `json:"installation_id,omitempty"`
+	RuntimeVersion      string    `json:"-"`
+	ExplicitConsent     bool      `json:"explicit_consent,omitempty"`
+	AllRepositories     bool      `json:"all_repositories,omitempty"`
+	Version             int       `json:"version"`
+	AccountKey          string    `json:"account_key"`
+	API                 string    `json:"api_url"`
+	Profile             string    `json:"profile"`
+	Directories         []string  `json:"directories"`
+	RepositoryIDs       []string  `json:"repository_ids,omitempty"`
+	ConsentedAt         time.Time `json:"consented_at"`
 }
 type Owner struct {
 	Session string `json:"session"`
