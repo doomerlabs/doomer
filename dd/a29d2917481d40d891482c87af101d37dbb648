@@ -1,0 +1,30 @@
+cmd/setup_hosted.go
+  s_19d08b7f01e7fd::t_7647a786e20661 7-141
+  s_19d08b7f01e7fd::t_c09f0c1d985a76 1-6
+cmd/watch_lifecycle_test.go
+  s_19d08b7f01e7fd::t_04e9f8474ba6d9 43-62,75-81,103,304,379
+cmd/setup_consent.go
+  s_19d08b7f01e7fd::t_bad38f3b694ea2 26-27
+cmd/setup_hosted_test.go
+  s_19d08b7f01e7fd::t_fe927aa24e862e 1-184
+cmd/watch.go
+  s_19d08b7f01e7fd::t_8d8dc381a99108 194-198,203,222,255-262
+pkg/adversarylabs/client.go
+  s_19d08b7f01e7fd::t_8721017dce8ca1 378-389
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dda29d2917481d40d891482c87af101d37dbb648",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
