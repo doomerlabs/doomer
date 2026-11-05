@@ -131,3 +131,34 @@ func TestCommitWithContentChangesStillReportsAmbiguousOwnership(t *testing.T) {
 		t.Fatalf("content changes treated as metadata: %s", got)
 	}
 }
+
+// A crash can leave a saved capture ahead of the state transaction. It is not
+// an ownership record: readers must reject it until the state binds its digest.
+func TestOrphanedCaptureCannotAcquireReviewOwnership(t *testing.T) {
+	root, repo := t.TempDir(), repository(t)
+	owner := Owner{"chat", "turn"}
+	os.WriteFile(filepath.Join(repo, "file.txt"), []byte("candidate edit\n"), 0600)
+	orphan, err := captureForReview(context.Background(), root, repo, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	Write(reviewCapturePath(root, repo), orphan)
+	Write(TurnPath(root, owner.Session), Turn{Owner: owner, Repositories: []string{repo}})
+	// This is the persisted state before the failed state commit.
+	Write(StatePath(root, repo), State{Owner: owner, Fingerprint: "previous snapshot", RequestedAt: time.Now()})
+	os.WriteFile(filepath.Join(repo, "file.txt"), []byte("later external edit\n"), 0600)
+	got, err := captureForReview(context.Background(), root, repo, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Digest == orphan.Digest || agentReviewRequested(root, repo, got.Digest, time.Time{}) {
+		t.Fatal("orphaned capture became an owned review")
+	}
+	// Even a matching digest cannot bypass the current turn identity.
+	Write(StatePath(root, repo), State{Owner: owner, Fingerprint: orphan.Digest, RequestedAt: time.Now()})
+	Write(TurnPath(root, owner.Session), Turn{Owner: Owner{owner.Session, "later turn"}})
+	got, err = captureForReview(context.Background(), root, repo, "")
+	if err != nil || got.Digest == orphan.Digest || agentReviewRequested(root, repo, got.Digest, time.Time{}) {
+		t.Fatal("stale turn capture was reused")
+	}
+}
