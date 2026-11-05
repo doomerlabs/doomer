@@ -9,7 +9,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func readCredentialFile(path string) ([]byte, error) {
+func readCredentialFile(path string, repairPermissions bool) ([]byte, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return nil, err
@@ -17,8 +17,10 @@ func readCredentialFile(path string) ([]byte, error) {
 	if !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("credential path %q is not regular", path)
 	}
-	if err := os.Chmod(path, 0600); err != nil {
-		return nil, err
+	if repairPermissions {
+		if err := os.Chmod(path, 0600); err != nil {
+			return nil, err
+		}
 	}
 	return os.ReadFile(path)
 }

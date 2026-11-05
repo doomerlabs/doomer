@@ -537,3 +537,44 @@ func TestRefreshInvalidDirectoryLeavesWatcherRunning(t *testing.T) {
 		})
 	}
 }
+
+func TestWatchStatusCommandPreservesLocalState(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission modes")
+	}
+	dir := t.TempDir()
+	t.Setenv("DOOMER_CONFIG_DIR", dir)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CODEX_HOME", t.TempDir())
+	config := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(config, []byte(`{"auths":{}}`), 0640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	root, _, err := watchPaths("https://doomer.ai/api", "default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	command := NewRootCommand()
+	command.SetOut(io.Discard)
+	command.SetErr(io.Discard)
+	command.SetArgs([]string{"--profile", "default", "--api-url", "https://doomer.ai/api", "watch", "status", "--json", newWatchTestRepo(t)})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]os.FileMode{dir: 0750, config: 0640} {
+		info, err := os.Stat(p)
+		if err != nil || info.Mode().Perm() != want {
+			t.Fatalf("status changed %s: %v", p, err)
+		}
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("status created watcher state: %v %v", entries, err)
+	}
+}

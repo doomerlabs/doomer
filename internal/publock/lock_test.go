@@ -1,6 +1,7 @@
 package publock
 
 import (
+	"os"
 	"testing"
 	"time"
 )
@@ -29,5 +30,32 @@ func TestSameDigestSerializes(t *testing.T) {
 		_ = second.Close()
 	case <-time.After(2 * time.Second):
 		t.Fatal("second publication remained blocked")
+	}
+}
+
+func TestHeldDoesNotCreateState(t *testing.T) {
+	root := t.TempDir()
+	held, err := Held(root, "watcher")
+	if err != nil || held {
+		t.Fatalf("missing lock: %t %v", held, err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("probe created state: %v %v", entries, err)
+	}
+	lock, err := Acquire(root, "watcher")
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, err = Held(root, "watcher")
+	if err != nil || !held {
+		t.Fatalf("active lock: %t %v", held, err)
+	}
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	held, err = Held(root, "watcher")
+	if err != nil || held {
+		t.Fatalf("released lock: %t %v", held, err)
 	}
 }

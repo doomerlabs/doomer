@@ -63,3 +63,33 @@ func (l *Lock) Close() error {
 	}
 	return closeErr
 }
+
+// Held inspects an existing lock without creating directories or lock files.
+func Held(root, key string) (bool, error) {
+	rooted, err := os.OpenRoot(root)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	defer rooted.Close()
+	path := filepath.ToSlash(filepath.Join(".publication-locks", fmt.Sprintf("%x.lock", sha256.Sum256([]byte(key)))))
+	f, err := rooted.Open(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	// A shared probe conflicts with the watcher's exclusive lifetime lock.
+	err = tryLockFile(f, true)
+	if Busy(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return false, unlockFile(f)
+}
