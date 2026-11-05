@@ -227,7 +227,7 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 				r.debugf("%s: waiting briefly for agent review hypotheses", path)
 				var state State
 				if Read(StatePath(r.Root, path), &state) == nil {
-					nextWake = time.Until(state.RequestedAt.Add(hypothesisGrace))
+					nextWake = time.Until(hypothesisDeadline(state))
 				}
 				if nextWake <= 0 {
 					nextWake = time.Millisecond

@@ -463,6 +463,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 						s.Prompt = handoffPrompt(root, path, owner, turn.Prompt)
 						s.Agent = agent
 						s.QuestionRequest = ""
+						s.HypothesisDeadline = time.Time{}
 						s.HypothesesSubmitted = false
 						s.Hypotheses = nil
 						s.AgentDiff = agentDiff
@@ -502,7 +503,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		allowWait = false
 		_ = Locked(root, path, func() error {
 			var state State
-			if Read(StatePath(root, path), &state) != nil || state.Owner != owner || state.InlineWaited || (!state.HypothesesSubmitted && time.Since(state.RequestedAt) < hypothesisGrace) {
+			if Read(StatePath(root, path), &state) != nil || state.Owner != owner || state.InlineWaited || (!state.HypothesesSubmitted && time.Now().Before(hypothesisDeadline(state))) {
 				return nil
 			}
 			state.InlineWaited = true
@@ -539,7 +540,14 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			}
 		}
 		hasFeed := ownedFeed && (feed.Fingerprint == state.Fingerprint || olderSnapshot)
-		if hasFeed && feed.AssessmentStatus != "ready" {
+		// Progress alone must never reopen the conversation. Keep a Stop hook
+		// waiting within its existing context budget for an actionable result.
+		if hasFeed && feed.AssessmentStatus != "ready" && feed.AssessmentStatus != "unavailable" {
+			if input.Event != "Stop" || !allowWait {
+				return
+			}
+		}
+		if hasFeed && feed.AssessmentStatus == "unavailable" {
 			if input.Event == "Stop" {
 				key := "status:" + feed.Fingerprint + ":" + feed.AssessmentStatus + ":" + feed.FailureCode + ":" + feed.FullReviewStatus
 				_ = Locked(root, input.Session, func() error {
@@ -572,21 +580,15 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			}
 			lastReadiness = time.Now()
 		}
-		if !state.HypothesesSubmitted && time.Since(state.RequestedAt) < hypothesisGrace {
+		// Hypothesis instructions belong in tool context, never a visible Stop prompt.
+		if input.Event == "PostToolUse" && !state.HypothesesSubmitted && time.Now().Before(hypothesisDeadline(state)) {
 			message, _ := requestHypotheses(root, path, cfg, state)
 			if message != "" {
-				if input.Event == "Stop" {
-					response = map[string]any{"decision": "block", "reason": message}
-				} else {
-					response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "PostToolUse", "additionalContext": message}}
-				}
+				response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "PostToolUse", "additionalContext": message}}
 			}
 			return
 		}
-		if hasFeed {
-			if feed.AssessmentStatus != "ready" {
-				return
-			}
+		if hasFeed && feed.AssessmentStatus == "ready" {
 			fingerprint, e := reviewSnapshotDigest(ctx, root, path)
 			if e != nil || (fingerprint != feed.Fingerprint && !olderSnapshot) {
 				return
