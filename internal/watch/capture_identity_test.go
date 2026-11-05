@@ -154,11 +154,15 @@ func TestOrphanedCaptureCannotAcquireReviewOwnership(t *testing.T) {
 	if got.Digest == orphan.Digest || agentReviewRequested(root, repo, got.Digest, time.Time{}) {
 		t.Fatal("orphaned capture became an owned review")
 	}
-	// Even a matching digest cannot bypass the current turn identity.
+	// Isolate the turn guard: the committed current tree exactly matches the
+	// cached capture, but no new turn is allowed to adopt the old request.
+	os.WriteFile(filepath.Join(repo, "file.txt"), []byte("candidate edit\n"), 0600)
+	commitCapturedFiles(t, repo)
+	Write(reviewCapturePath(root, repo), orphan)
 	Write(StatePath(root, repo), State{Owner: owner, Fingerprint: orphan.Digest, RequestedAt: time.Now()})
-	Write(TurnPath(root, owner.Session), Turn{Owner: Owner{owner.Session, "later turn"}})
+	Write(TurnPath(root, owner.Session), Turn{Owner: Owner{owner.Session, "later turn"}, Repositories: []string{repo}})
 	got, err = captureForReview(context.Background(), root, repo, "")
-	if err != nil || got.Digest == orphan.Digest || agentReviewRequested(root, repo, got.Digest, time.Time{}) {
-		t.Fatal("stale turn capture was reused")
+	if err == nil || !strings.Contains(err.Error(), "snapshot contains no changes") || got.Digest == orphan.Digest || agentReviewRequested(root, repo, orphan.Digest, time.Time{}) {
+		t.Fatalf("stale turn capture was reused: %v", err)
 	}
 }
