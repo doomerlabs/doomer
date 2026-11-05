@@ -12,9 +12,14 @@ import (
 type reportingScope struct{ enabled bool }
 
 func (s *reportingScope) SetActivationReporting(v bool) { s.enabled = v }
-func TestActivationDisclosureRequiresServerAcknowledgement(t *testing.T) {
+func TestActivationCapabilityRequiresAuthenticatedServerAcknowledgement(t *testing.T) {
 	for _, response := range []string{`{"url":"https://example.test/cli/setup"}`, `{"url":"https://example.test/cli/setup","activationReporting":true}`} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost || r.URL.Path != "/v1/setup/grants" || r.Header.Get("Authorization") != "Bearer token" {
+				t.Errorf("unexpected setup request: %s %s", r.Method, r.URL.Path)
+				http.Error(w, "invalid request", http.StatusUnauthorized)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(response))
 		}))
@@ -30,7 +35,7 @@ func TestActivationDisclosureRequiresServerAcknowledgement(t *testing.T) {
 	}
 }
 func TestActivationUsesAuthenticatedDedicatedEndpoint(t *testing.T) {
-	event := ActivationEvent{InstallationID: "random", Repository: "github.com/org/repo", Agent: "codex", Client: "codex-desktop", OS: "darwin", Architecture: "arm64", CLIVersion: "2026.11.5.2", ActivatedAt: "2026-11-05T12:00:00Z"}
+	event := ActivationEvent{Stage: "activated", InstallationID: "random", Repository: "github.com/org/repo", Agent: "codex", Client: "codex-desktop", OS: "darwin", Architecture: "arm64", CLIVersion: "2026.11.5.2", OccurredAt: "2026-11-05T12:00:00Z"}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/installations/activate" || r.Header.Get("Authorization") != "Bearer token" {
 			t.Errorf("unexpected request: %s", r.URL.Path)

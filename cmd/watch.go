@@ -281,6 +281,13 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		if err = watching.Write(file, cfg); err != nil {
 			return err
 		}
+		reportingConfig := cfg
+		reportingConfig.RuntimeVersion = activeRuntimeVersion()
+		for _, path := range directories {
+			for _, agent := range selected {
+				watching.QueueApproval(c.Context(), root, path, agent, reportingConfig)
+			}
+		}
 		for _, agent := range selected {
 			if err = watching.Install(watching.HookFile(home, agent), command+" --agent "+watching.Quote(agent)+" 2>/dev/null || printf '{}'", marker, false); err != nil {
 				return err

@@ -16,7 +16,6 @@
 {{if .AllRepositories}}<p>Includes future checkouts your coding agent edits. Doomer does not scan your whole disk.</p>{{else}}<p>Includes the main checkout and all existing and future linked Git worktrees.</p><ul class="repos">{{range .Repositories}}<li>{{if .MainCheckout}}<span class="label">Main checkout</span><br><code>{{.MainCheckout}}</code>{{end}}{{if ne .Checkout .MainCheckout}}{{if .MainCheckout}}<br>{{end}}<span class="label">Setup checkout</span><br><code>{{.Checkout}}</code>{{end}}</li>{{end}}</ul>{{end}}
 </section>
 <dl class="meta"><dt>Send code to</dt><dd><a href="{{.ServiceURL}}" target="_blank" rel="noreferrer">{{.ServiceURL}}</a></dd><dt>Profile</dt><dd><code>{{.Profile}}</code></dd></dl>
-<p>Doomer also records basic installation information when hooks activate: a random installation ID, repository identifier, agent/client, OS/architecture, software versions, and activation time. This event excludes Git identity, computer names, and local paths.</p>
 <details><summary>What gets sent?</summary>
 <p>Base and current repository snapshots, including tracked and non-ignored source files outside the changed lines, the task prompt behind an agent edit, and the agent’s review responses. Unchanged files may be reused from previous uploads.</p>
 <p>Uploaded source is retained under the <a href="{{.PrivacyURL}}" target="_blank" rel="noreferrer">service’s privacy policy</a>. Expiry of a review link does not delete uploaded source.</p>

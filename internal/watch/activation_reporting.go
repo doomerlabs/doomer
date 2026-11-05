@@ -55,12 +55,24 @@ type activationRecord struct {
 var revisionLine = regexp.MustCompile(`(?m)^revision: ([a-f0-9]{40})$`)
 
 func activationFile(root, identity, agent string) string {
-	return filepath.Join(activationRoot(root), "activations", Key(identity+"\x00"+agent)+".json")
+	return lifecycleFile(root, identity, agent, "activated")
+}
+
+func lifecycleFile(root, identity, agent, stage string) string {
+	return filepath.Join(activationRoot(root), "activations", Key(identity+"\x00"+agent+"\x00"+stage)+".json")
+}
+
+func QueueApproval(ctx context.Context, root, path, agent string, cfg Config) {
+	queueLifecycle(ctx, root, path, agent, "approved", "", cfg)
 }
 
 // Called only after a real successful tool hook, never by an activation check.
 // This writes a small local outbox record; it performs no network request.
 func queueActivation(ctx context.Context, root, path, agent string, cfg Config) {
+	queueLifecycle(ctx, root, path, agent, "activated", "", cfg)
+}
+
+func queueLifecycle(ctx context.Context, root, path, agent, stage, reviewID string, cfg Config) {
 	if !cfg.ActivationReporting || cfg.InstallationID == "" {
 		return
 	}
@@ -68,8 +80,8 @@ func queueActivation(ctx context.Context, root, path, agent string, cfg Config) 
 	if err != nil {
 		return
 	}
-	file := activationFile(root, identity, agent)
-	_ = Locked(activationRoot(root), "activation-"+Key(identity+agent), func() error {
+	file := lifecycleFile(root, identity, agent, stage)
+	_ = Locked(activationRoot(root), "activation-"+Key(identity+agent+stage), func() error {
 		var previous activationRecord
 		if err := Read(file, &previous); err == nil && previous.Event.InstallationID == cfg.InstallationID {
 			return nil
@@ -97,9 +109,9 @@ func queueActivation(ctx context.Context, root, path, agent string, cfg Config) 
 			}
 		}
 		return Write(file, activationRecord{Event: adversarylabs.ActivationEvent{
-			InstallationID: cfg.InstallationID, Repository: repository, Agent: agent, Client: client,
+			Stage: stage, ReviewID: reviewID, InstallationID: cfg.InstallationID, Repository: repository, Agent: agent, Client: client,
 			OS: runtime.GOOS, Architecture: runtime.GOARCH, CLIVersion: cfg.RuntimeVersion,
-			SkillRevision: revision, ActivatedAt: time.Now().UTC().Format(time.RFC3339),
+			SkillRevision: revision, OccurredAt: time.Now().UTC().Format(time.RFC3339),
 		}})
 	})
 }
@@ -134,40 +146,42 @@ func (r Runner) reportActivations(ctx context.Context, path string) {
 		return
 	}
 	for _, agent := range []string{"codex", "claude"} {
-		file := activationFile(r.Root, identity, agent)
-		var record activationRecord
-		send := false
-		// Never hold the hook's outbox lock over a network call.
-		_ = Locked(activationRoot(r.Root), "activation-"+Key(identity+agent), func() error {
-			if Read(file, &record) != nil || record.Sent || record.Attempts >= 3 || time.Now().Before(record.RetryAt) ||
-				record.Event.InstallationID != r.Config.InstallationID || RepositoryRemoved(r.Root, path) {
+		for _, stage := range []string{"approved", "activated", "first_review"} {
+			file := lifecycleFile(r.Root, identity, agent, stage)
+			var record activationRecord
+			send := false
+			// Never hold the hook's outbox lock over a network call.
+			_ = Locked(activationRoot(r.Root), "activation-"+Key(identity+agent+stage), func() error {
+				if Read(file, &record) != nil || record.Sent || record.Attempts >= 3 || time.Now().Before(record.RetryAt) ||
+					record.Event.InstallationID != r.Config.InstallationID || RepositoryRemoved(r.Root, path) {
+					return nil
+				}
+				record.Attempts++
+				record.RetryAt = time.Now().Add(5 * time.Minute)
+				if err := Write(file, record); err != nil {
+					return err
+				}
+				send = true
 				return nil
+			})
+			if !send {
+				continue
 			}
-			record.Attempts++
-			record.RetryAt = time.Now().Add(5 * time.Minute)
-			if err := Write(file, record); err != nil {
-				return err
+			request, cancel := context.WithTimeout(ctx, 3*time.Second)
+			err := client.ReportActivation(request, r.Token, record.Event)
+			cancel()
+			if err != nil {
+				continue
 			}
-			send = true
-			return nil
-		})
-		if !send {
-			continue
+			_ = Locked(activationRoot(r.Root), "activation-"+Key(identity+agent+stage), func() error {
+				var latest activationRecord
+				if Read(file, &latest) != nil || latest.Event != record.Event {
+					return nil
+				}
+				latest.Sent = true
+				return Write(file, latest)
+			})
 		}
-		request, cancel := context.WithTimeout(ctx, 3*time.Second)
-		err := client.ReportActivation(request, r.Token, record.Event)
-		cancel()
-		if err != nil {
-			continue
-		}
-		_ = Locked(activationRoot(r.Root), "activation-"+Key(identity+agent), func() error {
-			var latest activationRecord
-			if Read(file, &latest) != nil || latest.Event != record.Event {
-				return nil
-			}
-			latest.Sent = true
-			return Write(file, latest)
-		})
 	}
 }
 

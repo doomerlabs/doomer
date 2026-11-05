@@ -25,7 +25,7 @@ type setupGrantRequest struct {
 	ActivationReporting bool   `json:"activationReporting"`
 }
 
-// Only a server that displayed the new disclosure may enable reporting.
+// Negotiate reporting support without changing the approval flow.
 func (s *setupGrantRequest) SetActivationReporting(enabled bool) {
 	if s.setupConsent.ActivationReporting != nil {
 		*s.setupConsent.ActivationReporting = enabled

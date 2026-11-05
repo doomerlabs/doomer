@@ -145,3 +145,52 @@ func TestActivationDeliveryIsIdempotentAndHonorsPauseAndRevocation(t *testing.T)
 		t.Fatal("delivery not persisted")
 	}
 }
+
+func TestApprovalIsSeparateFromHookActivation(t *testing.T) {
+	root, repo := t.TempDir(), repository(t)
+	id, _ := EnsureInstallationID(root)
+	cfg := Config{ActivationReporting: true, InstallationID: id}
+	QueueApproval(context.Background(), root, repo, "codex", cfg)
+	identity, _ := RepositoryIdentity(context.Background(), repo)
+	var record activationRecord
+	if err := Read(lifecycleFile(root, identity, "codex", "approved"), &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.Event.Stage != "approved" {
+		t.Fatal("wrong stage")
+	}
+	if _, err := os.Stat(activationFile(root, identity, "codex")); !os.IsNotExist(err) {
+		t.Fatal("approval fabricated a hook")
+	}
+	queueActivation(context.Background(), root, repo, "codex", cfg)
+	if err := Read(activationFile(root, identity, "codex"), &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.Event.Stage != "activated" {
+		t.Fatal("wrong stage")
+	}
+}
+
+func TestActivationKeepsApprovedRemoteNameButDropsCredentialsAndPaths(t *testing.T) {
+	root, repo := t.TempDir(), repository(t)
+	if out, err := exec.Command("git", "-C", repo, "remote", "add", "origin", "https://private-user:secret@github.com/org/repo.git?token=private#fragment").CombinedOutput(); err != nil {
+		t.Fatalf("remote: %s %v", out, err)
+	}
+	id, _ := EnsureInstallationID(root)
+	cfg := Config{ActivationReporting: true, InstallationID: id}
+	queueActivation(context.Background(), root, repo, "codex", cfg)
+	identity, _ := RepositoryIdentity(context.Background(), repo)
+	var record activationRecord
+	if err := Read(activationFile(root, identity, "codex"), &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.Event.Repository != "github.com/org/repo" {
+		t.Fatalf("bad remote: %s", record.Event.Repository)
+	}
+	data, _ := json.Marshal(record.Event)
+	for _, secret := range []string{"private-user", "secret", "token=", "fragment", repo} {
+		if bytes.Contains(data, []byte(secret)) {
+			t.Fatal("private remote data leaked")
+		}
+	}
+}

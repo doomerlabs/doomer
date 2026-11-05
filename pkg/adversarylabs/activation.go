@@ -4,6 +4,8 @@ import "context"
 
 // ActivationEvent deliberately excludes source, prompts, Git identity and local paths.
 type ActivationEvent struct {
+	Stage          string `json:"stage"`
+	ReviewID       string `json:"reviewId,omitempty"`
 	InstallationID string `json:"installationId"`
 	Repository     string `json:"repository"`
 	Agent          string `json:"agent"`
@@ -12,7 +14,7 @@ type ActivationEvent struct {
 	Architecture   string `json:"architecture"`
 	CLIVersion     string `json:"cliVersion"`
 	SkillRevision  string `json:"skillRevision,omitempty"`
-	ActivatedAt    string `json:"activatedAt"`
+	OccurredAt     string `json:"occurredAt"`
 }
 
 func (c Client) ReportActivation(ctx context.Context, token string, event ActivationEvent) error {
