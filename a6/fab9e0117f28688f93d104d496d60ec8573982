@@ -1,0 +1,27 @@
+internal/watch/hook_paths_test.go
+  s_19d08b7f01e7fd::t_f9fcc2326788b0 133-168
+  s_19d08b7f01e7fd::t_ff365ce6c92559 131,174-247
+  s_19d08b7f01e7fd::t_bcad8fa0c296fe 127-130,132,169-173
+internal/watch/hook_paths.go
+  s_19d08b7f01e7fd::t_b914c976541dc4 21-24,88-94
+internal/watch/failure.go
+  s_19d08b7f01e7fd::t_5e9b32a7cae8d9 10-12,48-53
+internal/watch/hook.go
+  s_19d08b7f01e7fd::t_b914c976541dc4 101-116,254-258,330,334,415-419
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a6fab9e0117f28688f93d104d496d60ec8573982",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
