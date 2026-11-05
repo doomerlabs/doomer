@@ -18,6 +18,10 @@ var hookPatchPath = regexp.MustCompile(`(?:^|\n|\\n)\*\*\* (?:Update File|Add Fi
 // Tool paths take precedence over the chat's directory. Wrapped tool calls are
 // inspected as text only; no command or JavaScript is evaluated here.
 func HookRepository(ctx context.Context, input HookInput) (string, error) {
+	return hookRepository(ctx, input, "")
+}
+
+func hookRepository(ctx context.Context, input HookInput, fallback string) (string, error) {
 	candidates := []string{}
 	var inspect func(any)
 	inspect = func(value any) {
@@ -81,5 +85,11 @@ func HookRepository(ctx context.Context, input HookInput) (string, error) {
 	for root := range roots {
 		return root, nil
 	}
-	return Root(ctx, input.CWD)
+	root, err := Root(ctx, input.CWD)
+	// Only pathless events may reuse a repository selected earlier in this
+	// turn. Explicit paths must never be redirected to another checkout.
+	if err != nil && len(candidates) == 0 && fallback != "" {
+		return Root(ctx, fallback)
+	}
+	return root, err
 }

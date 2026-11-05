@@ -124,3 +124,124 @@ func TestParentPromptReachesOnlyApprovedRepositoryEdits(t *testing.T) {
 		})
 	}
 }
+
+func TestOrgTurnPathlessToolRetainsCapture(t *testing.T) {
+	repo, parent, root := repository(t), t.TempDir(), t.TempDir()
+	owner := Owner{"org-chat", "turn"}
+	cfg := Config{Directories: []string{repo}}
+	input := HookInput{Session: owner.Session, Turn: owner.Turn, CWD: parent, Event: "UserPromptSubmit", Prompt: "update file"}
+	ready := false
+	run := func() string {
+		t.Helper()
+		raw, _ := json.Marshal(input)
+		var out bytes.Buffer
+		hookWithRepositories(context.Background(), root, cfg, bytes.NewReader(raw), &out, func(context.Context) bool { return ready }, true, "codex")
+		return out.String()
+	}
+	run()
+	input.Event, input.Tool, input.ToolID = "PreToolUse", "Bash", "select"
+	input.Input = json.RawMessage(`{"workdir":` + quotedJSON(repo) + `,"command":"git status --short"}`)
+	run()
+	input.Event = "PostToolUse"
+	run()
+	input.Event, input.ToolID = "PreToolUse", "edit"
+	input.Input = json.RawMessage(`{"command":"printf changed > file.txt"}`)
+	run()
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("changed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	input.Event = "PostToolUse"
+	run()
+	fingerprint, err := snapshotDigest(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !agentReviewRequested(root, repo, fingerprint, time.Time{}) {
+		t.Fatal("pathless edit lost the current turn's selected repository")
+	}
+	var state State
+	if err := Read(StatePath(root, repo), &state); err != nil {
+		t.Fatal(err)
+	}
+	state.HypothesesSubmitted = true
+	Write(StatePath(root, repo), state)
+	ready = true
+	Write(filepath.Join(root, "heartbeat.json"), time.Now())
+	Write(FeedPath(root, repo), Feed{Owner: owner, Fingerprint: fingerprint, ReviewID: "review", URL: "https://example.com/review", AssessmentStatus: "ready", Updated: time.Now()})
+	input.Event = "Stop"
+	if output := run(); !bytes.Contains([]byte(output), []byte("https://example.com/review")) {
+		t.Fatalf("org-level Stop lost completed review: %s", output)
+	}
+}
+
+func TestOrgFallbackNeverGuessesRepository(t *testing.T) {
+	for _, scenario := range []string{"previous-turn", "multiple-repositories", "explicit-unapproved", "explicit-invalid"} {
+		t.Run(scenario, func(t *testing.T) {
+			repo, other, parent, root := repository(t), repository(t), t.TempDir(), t.TempDir()
+			owner := Owner{"chat", "current"}
+			turn := Turn{Owner: owner, Agent: "codex", Prompt: "edit", Repositories: []string{repo}}
+			input := HookInput{Session: owner.Session, Turn: owner.Turn, CWD: parent, Event: "PreToolUse", Tool: "Bash", ToolID: "edit", Input: json.RawMessage(`{"command":"printf changed > file.txt"}`)}
+			switch scenario {
+			case "previous-turn":
+				turn.Owner.Turn = "previous"
+			case "multiple-repositories":
+				turn.Repositories = append(turn.Repositories, other)
+			case "explicit-unapproved":
+				input.Input = json.RawMessage(`{"workdir":` + quotedJSON(other) + `,"command":"printf changed > file.txt"}`)
+			case "explicit-invalid":
+				input.Input = json.RawMessage(`{"workdir":` + quotedJSON(parent) + `,"command":"printf changed > file.txt"}`)
+			}
+			if err := Write(TurnPath(root, owner.Session), turn); err != nil {
+				t.Fatal(err)
+			}
+			raw, _ := json.Marshal(input)
+			var out bytes.Buffer
+			hookWithRepositories(context.Background(), root, Config{Directories: []string{repo}}, bytes.NewReader(raw), &out, func(context.Context) bool { return false }, true, "codex")
+			for _, candidate := range []string{repo, other} {
+				if _, err := os.Stat(StatePath(root, candidate)); !os.IsNotExist(err) {
+					t.Fatalf("unsafe fallback created state for %s: %v", candidate, err)
+				}
+			}
+			if scenario == "multiple-repositories" || scenario == "explicit-invalid" {
+				if !bytes.Contains(out.Bytes(), []byte("repository could not be identified")) {
+					t.Fatalf("missing routing diagnostic: %s", out.String())
+				}
+			}
+		})
+	}
+}
+
+func TestOverlappingChatsReportCaptureFailureOnce(t *testing.T) {
+	repo, root := repository(t), t.TempDir()
+	cfg := Config{Directories: []string{repo}}
+	input := HookInput{Session: "first", Turn: "turn", CWD: repo, Event: "UserPromptSubmit", Prompt: "edit"}
+	run := func() string {
+		t.Helper()
+		raw, _ := json.Marshal(input)
+		var out bytes.Buffer
+		hookWithRepositories(context.Background(), root, cfg, bytes.NewReader(raw), &out, func(context.Context) bool { return false }, true, "codex")
+		return out.String()
+	}
+	run()
+	input.Event, input.Tool, input.ToolID = "PreToolUse", "Bash", "first-edit"
+	input.Input = json.RawMessage(`{"command":"printf first > file.txt"}`)
+	run()
+	input.Session, input.Event = "second", "UserPromptSubmit"
+	run()
+	input.Event, input.ToolID = "PreToolUse", "second-edit"
+	if output := run(); !bytes.Contains([]byte(output), []byte("separate worktrees")) {
+		t.Fatalf("overlapping ownership was silent: %s", output)
+	}
+	if output := run(); bytes.Contains([]byte(output), []byte("separate worktrees")) {
+		t.Fatalf("repeated ownership warning: %s", output)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("changed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	input.Event = "PostToolUse"
+	run()
+	fingerprint, _ := snapshotDigest(context.Background(), repo)
+	if agentReviewRequested(root, repo, fingerprint, time.Time{}) {
+		t.Fatal("overlapping chats acquired upload ownership")
+	}
+}
