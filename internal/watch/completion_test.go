@@ -126,3 +126,68 @@ func TestCompletedReviewSurvivesExternalBaselineChangeWithoutClaimingCurrentCode
 		})
 	}
 }
+
+func TestStopProgressWaitsSilentlyForCompletedReview(t *testing.T) {
+	dir, root := repository(t), t.TempDir()
+	owner := Owner{"session", "turn"}
+	digest, err := snapshotDigest(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	Write(TurnPath(root, owner.Session), Turn{Owner: owner})
+	Write(StatePath(root, dir), State{Owner: owner, Fingerprint: digest, HypothesesSubmitted: true, RequestedAt: time.Now()})
+	Write(filepath.Join(root, "heartbeat.json"), time.Now())
+	feed := Feed{Owner: owner, Fingerprint: digest, ReviewID: "review", URL: "https://example.com/review", AssessmentStatus: "analyzing", Updated: time.Now()}
+	Write(FeedPath(root, dir), feed)
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		time.Sleep(50 * time.Millisecond)
+		feed.AssessmentStatus = "preparing"
+		Write(FeedPath(root, dir), feed)
+		time.Sleep(200 * time.Millisecond)
+		feed.AssessmentStatus = "ready"
+		Write(FeedPath(root, dir), feed)
+	}()
+	raw, _ := json.Marshal(HookInput{Session: owner.Session, Turn: owner.Turn, CWD: dir, Event: "Stop", StopActive: true})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	var out strings.Builder
+	hookForTest(ctx, root, Config{Directories: []string{dir}}, strings.NewReader(string(raw)), &out)
+	<-finished
+	if ctx.Err() != nil || !strings.Contains(out.String(), "no areas to check") || strings.Contains(out.String(), "no assessment is available") {
+		t.Fatal("progress interrupted final delivery", out.String())
+	}
+}
+
+func TestStopPendingReviewRespectsDeadlineWithoutFeedback(t *testing.T) {
+	for _, status := range []string{"uploading", "analyzing", "preparing", "retrying", ""} {
+		t.Run(status, func(t *testing.T) {
+			dir, root := repository(t), t.TempDir()
+			owner := Owner{"session", "turn"}
+			digest, err := snapshotDigest(context.Background(), dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			Write(TurnPath(root, owner.Session), Turn{Owner: owner})
+			Write(StatePath(root, dir), State{Owner: owner, Fingerprint: digest, RequestedAt: time.Now()})
+			Write(filepath.Join(root, "heartbeat.json"), time.Now())
+			if status != "" {
+				Write(FeedPath(root, dir), Feed{Owner: owner, Fingerprint: digest, AssessmentStatus: status, Updated: time.Now()})
+			}
+			raw, _ := json.Marshal(HookInput{Session: owner.Session, Turn: owner.Turn, CWD: dir, Event: "Stop"})
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
+			var out strings.Builder
+			hookForTest(ctx, root, Config{Directories: []string{dir}}, strings.NewReader(string(raw)), &out)
+			if strings.TrimSpace(out.String()) != "{}" {
+				t.Fatal("Stop exposed internal instructions or progress", out.String())
+			}
+			var state State
+			Read(StatePath(root, dir), &state)
+			if state.QuestionRequest != "" {
+				t.Fatal("Stop created an undelivered hypothesis request")
+			}
+		})
+	}
+}

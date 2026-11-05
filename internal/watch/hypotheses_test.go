@@ -87,3 +87,111 @@ func TestHypothesisHelperOnlyEmitsAndTrustedHookRecords(t *testing.T) {
 		t.Fatal("hook did not save submission")
 	}
 }
+
+func TestHypothesisDeadlineStartsAtDelivery(t *testing.T) {
+	dir, root := repository(t), t.TempDir()
+	digest, err := snapshotDigest(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := State{Owner: Owner{"session", "turn"}, Fingerprint: digest, RequestedAt: time.Now().Add(-15 * time.Second)}
+	Write(StatePath(root, dir), state)
+	cfg := Config{Directories: []string{dir}}
+	before := time.Now()
+	if _, err := requestHypotheses(root, dir, cfg, state); err != nil {
+		t.Fatal(err)
+	}
+	Read(StatePath(root, dir), &state)
+	if state.HypothesisDeadline.Before(before.Add(hypothesisResponseGrace)) {
+		t.Fatal("response window started before delivery", state.HypothesisDeadline)
+	}
+	// The edit's original grace expires while the delivered request remains valid.
+	var request hypothesisRequest
+	Read(hypothesisFile(root, state.QuestionRequest), &request)
+	state.RequestedAt = time.Now().Add(-hypothesisGrace - time.Second)
+	request.RequestedAt = state.RequestedAt
+	Write(StatePath(root, dir), state)
+	Write(hypothesisFile(root, state.QuestionRequest), request)
+	if !awaitingHypotheses(root, dir) {
+		t.Fatal("watcher ignored the delivered request's response window")
+	}
+	var output strings.Builder
+	if err := EmitHypotheses(context.Background(), root, state.QuestionRequest, cfg, strings.NewReader(`[]`), &output); err != nil {
+		t.Fatal(err)
+	}
+	if err := SubmitHypotheses(context.Background(), root, state.QuestionRequest, cfg, strings.NewReader(`[]`)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExpiredHypothesisDeliveryAndLegacyState(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		t.Run(map[bool]string{false: "delivered", true: "legacy"}[legacy], func(t *testing.T) {
+			dir, root := repository(t), t.TempDir()
+			digest, err := snapshotDigest(context.Background(), dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			state := State{Owner: Owner{"session", "turn"}, Fingerprint: digest, RequestedAt: time.Now()}
+			Write(StatePath(root, dir), state)
+			cfg := Config{Directories: []string{dir}}
+			if _, err := requestHypotheses(root, dir, cfg, state); err != nil {
+				t.Fatal(err)
+			}
+			Read(StatePath(root, dir), &state)
+			state.HypothesisDeadline = time.Now().Add(-time.Second)
+			if legacy {
+				state.HypothesisDeadline = time.Time{}
+				state.RequestedAt = time.Now().Add(-hypothesisGrace - time.Second)
+				var request hypothesisRequest
+				Read(hypothesisFile(root, state.QuestionRequest), &request)
+				request.RequestedAt = state.RequestedAt
+				Write(hypothesisFile(root, state.QuestionRequest), request)
+			}
+			Write(StatePath(root, dir), state)
+			if awaitingHypotheses(root, dir) {
+				t.Fatal("expired request still blocks watcher")
+			}
+			var output strings.Builder
+			if err := EmitHypotheses(context.Background(), root, state.QuestionRequest, cfg, strings.NewReader(`[]`), &output); err == nil {
+				t.Fatal("helper accepted expired request")
+			}
+			if err := SubmitHypotheses(context.Background(), root, state.QuestionRequest, cfg, strings.NewReader(`[]`)); err == nil {
+				t.Fatal("trusted hook accepted expired request")
+			}
+		})
+	}
+}
+
+func TestReplacedHypothesisRequestCannotUseNewDeadline(t *testing.T) {
+	dir, root := repository(t), t.TempDir()
+	digest, err := snapshotDigest(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := State{Owner: Owner{"session", "turn"}, Fingerprint: digest, RequestedAt: time.Now()}
+	Write(StatePath(root, dir), state)
+	cfg := Config{Directories: []string{dir}}
+	if _, err := requestHypotheses(root, dir, cfg, state); err != nil {
+		t.Fatal(err)
+	}
+	Read(StatePath(root, dir), &state)
+	oldRequest := state.QuestionRequest
+	state.QuestionRequest = ""
+	state.RequestedAt = time.Now()
+	Write(StatePath(root, dir), state)
+	if _, err := requestHypotheses(root, dir, cfg, state); err != nil {
+		t.Fatal(err)
+	}
+	Read(StatePath(root, dir), &state)
+	var output strings.Builder
+	if err := EmitHypotheses(context.Background(), root, oldRequest, cfg, strings.NewReader(`[]`), &output); err == nil {
+		t.Fatal("helper accepted superseded request")
+	}
+	if err := SubmitHypotheses(context.Background(), root, oldRequest, cfg, strings.NewReader(`[]`)); err == nil {
+		t.Fatal("trusted hook accepted superseded request")
+	}
+	if err := SubmitHypotheses(context.Background(), root, state.QuestionRequest, cfg, strings.NewReader(`[]`)); err != nil {
+		t.Fatal("replacement request failed", err)
+	}
+}

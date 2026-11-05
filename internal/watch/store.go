@@ -54,6 +54,7 @@ type State struct {
 	InlineWaited        bool
 	Agent               string `json:"agent,omitempty"`
 	QuestionRequest     string
+	HypothesisDeadline  time.Time `json:",omitempty"`
 	HypothesesSubmitted bool
 	Hypotheses          []adversarylabs.WorkspaceHypothesis
 	AgentDiff           string

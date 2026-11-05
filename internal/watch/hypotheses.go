@@ -15,7 +15,10 @@ import (
 	"time"
 )
 
-const hypothesisGrace = 20 * time.Second
+const (
+	hypothesisGrace         = 20 * time.Second
+	hypothesisResponseGrace = time.Minute
+)
 
 type hypothesisRequest struct {
 	Owner             Owner
@@ -26,9 +29,18 @@ type hypothesisRequest struct {
 func hypothesisFile(root, id string) string {
 	return filepath.Join(root, "hypothesis-requests", Key(id)+".json")
 }
+
+// Older state has no delivery deadline and retains the original edit-based grace.
+func hypothesisDeadline(state State) time.Time {
+	if state.QuestionRequest != "" && !state.HypothesisDeadline.IsZero() {
+		return state.HypothesisDeadline
+	}
+	return state.RequestedAt.Add(hypothesisGrace)
+}
+
 func awaitingHypotheses(root, path string) bool {
 	var state State
-	return Read(StatePath(root, path), &state) == nil && !state.HypothesesSubmitted && time.Since(state.RequestedAt) < hypothesisGrace
+	return Read(StatePath(root, path), &state) == nil && !state.HypothesesSubmitted && time.Now().Before(hypothesisDeadline(state))
 }
 
 func requestHypotheses(root, path string, cfg Config, state State) (string, error) {
@@ -47,6 +59,7 @@ func requestHypotheses(root, path string, cfg Config, state State) (string, erro
 			return err
 		}
 		current.QuestionRequest = id
+		current.HypothesisDeadline = time.Now().Add(hypothesisResponseGrace)
 		return Write(StatePath(root, path), current)
 	})
 	if err != nil || id == "" {
@@ -91,7 +104,7 @@ func SubmitHypotheses(ctx context.Context, root, id string, cfg Config, input io
 	}
 	return Locked(root, request.Path, func() error {
 		var state State
-		if Read(StatePath(root, request.Path), &state) != nil || state.Owner != request.Owner || state.Fingerprint != request.Fingerprint || !state.RequestedAt.Equal(request.RequestedAt) || state.QuestionRequest != id || state.HypothesesSubmitted || state.Ambiguous || activeHypothesisEdits(state) || time.Since(state.RequestedAt) >= hypothesisGrace {
+		if Read(StatePath(root, request.Path), &state) != nil || state.Owner != request.Owner || state.Fingerprint != request.Fingerprint || !state.RequestedAt.Equal(request.RequestedAt) || state.QuestionRequest != id || state.HypothesesSubmitted || state.Ambiguous || activeHypothesisEdits(state) || !time.Now().Before(hypothesisDeadline(state)) {
 			return errors.New("question request expired")
 		}
 		state.Hypotheses = hypotheses
@@ -129,7 +142,7 @@ func EmitHypotheses(ctx context.Context, root, id string, cfg Config, input io.R
 		return errors.New("question request unavailable")
 	}
 	var state State
-	if Read(StatePath(root, request.Path), &state) != nil || state.Owner != request.Owner || state.Fingerprint != request.Fingerprint || state.QuestionRequest != id || !state.RequestedAt.Equal(request.RequestedAt) || state.HypothesesSubmitted || state.Ambiguous || time.Since(state.RequestedAt) >= hypothesisGrace {
+	if Read(StatePath(root, request.Path), &state) != nil || state.Owner != request.Owner || state.Fingerprint != request.Fingerprint || state.QuestionRequest != id || !state.RequestedAt.Equal(request.RequestedAt) || state.HypothesesSubmitted || state.Ambiguous || !time.Now().Before(hypothesisDeadline(state)) {
 		return errors.New("question request expired")
 	}
 	fingerprint, err := reviewSnapshotDigest(ctx, root, request.Path)
