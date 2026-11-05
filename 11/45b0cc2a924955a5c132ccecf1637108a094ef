@@ -1,0 +1,21 @@
+internal/watch/capture_identity_test.go
+  s_19d08b7f01e7fd::t_5ea8a729b0fa12 134-164
+internal/watch/responses.go
+  s_19d08b7f01e7fd::t_5ea8a729b0fa12 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1145b0cc2a924955a5c132ccecf1637108a094ef",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
