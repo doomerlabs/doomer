@@ -13,7 +13,7 @@ type reportingScope struct{ enabled bool }
 
 func (s *reportingScope) SetActivationReporting(v bool) { s.enabled = v }
 func TestActivationCapabilityRequiresAuthenticatedServerAcknowledgement(t *testing.T) {
-	for _, response := range []string{`{"url":"https://example.test/cli/setup"}`, `{"url":"https://example.test/cli/setup","activationReporting":true}`} {
+	for _, response := range []string{`{"url":"https://example.test/cli/setup"}`, `{"url":"https://example.test/cli/setup","activationReporting":true}`, `{"url":"https://example.test/cli/setup","activationReporting":true,"activationReportingVersion":1}`, `{"url":"https://example.test/cli/setup","activationReporting":true,"activationReportingVersion":2}`, `{"url":"https://example.test/cli/setup","activationReporting":false,"activationReportingVersion":2}`} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost || r.URL.Path != "/v1/setup/grants" || r.Header.Get("Authorization") != "Bearer token" {
 				t.Errorf("unexpected setup request: %s %s", r.Method, r.URL.Path)
@@ -29,7 +29,7 @@ func TestActivationCapabilityRequiresAuthenticatedServerAcknowledgement(t *testi
 		if err != nil {
 			t.Fatal(err)
 		}
-		if scope.enabled != strings.Contains(response, `"activationReporting":true`) {
+		if scope.enabled != (strings.Contains(response, `"activationReporting":true`) && strings.Contains(response, `"activationReportingVersion":2`)) {
 			t.Fatalf("unexpected reporting acknowledgement: %s", response)
 		}
 	}
