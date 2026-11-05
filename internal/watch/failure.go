@@ -7,6 +7,9 @@ import (
 	"strings"
 )
 
+var errCaptureRepository = errors.New("unresolved edit repository")
+var errCaptureOwnership = errors.New("ambiguous edit ownership")
+
 func (r Runner) markRetrying(path string) {
 	var feed Feed
 	if Read(FeedPath(r.Root, path), &feed) == nil && feed.AssessmentStatus == "unavailable" {
@@ -42,7 +45,12 @@ func captureFailureNotice(root, turnFile string, owner Owner, err error) string 
 		return ""
 	}
 	code, reason := "capture_failed", "local snapshot capture failed"
-	if strings.Contains(err.Error(), "symlinks") || strings.Contains(err.Error(), "symlink") {
+	switch {
+	case errors.Is(err, errCaptureRepository):
+		code, reason = "capture_repository", "the edit's repository could not be identified. Set the tool's working directory or use explicit file paths in the target checkout"
+	case errors.Is(err, errCaptureOwnership):
+		code, reason = "capture_ownership", "the changed files could not be attributed to this chat. Use separate worktrees for parallel coding tasks"
+	case strings.Contains(err.Error(), "symlinks") || strings.Contains(err.Error(), "symlink"):
 		code, reason = "capture_symlink", "the checkout contains an unsupported source symlink"
 	}
 	message := ""

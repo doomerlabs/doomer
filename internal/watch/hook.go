@@ -98,16 +98,28 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 	defer func() {
 		_ = Write(filepath.Join(root, "hook-diagnostics", Key(input.Session+event)+".json"), diagnostic)
 	}()
-	path, pathErr := HookRepository(ctx, input)
+	owner := Owner{input.Session, input.Turn}
+	turnFile := TurnPath(root, input.Session)
+	var turn Turn
+	_ = Read(turnFile, &turn)
+	currentOwner := owner
+	if currentOwner.Turn == "" {
+		currentOwner.Turn = turn.Owner.Turn
+	}
+	fallback := ""
+	if (input.Event == "PreToolUse" || input.Event == "PostToolUse") && currentOwner == turn.Owner && len(turn.Repositories) == 1 {
+		candidate := turn.Repositories[0]
+		if Allowed(cfg, candidate) && !RepositoryRemoved(root, candidate) {
+			fallback = candidate
+		}
+	}
+	path, pathErr := hookRepository(ctx, input, fallback)
 	diagnostic.Repository = path
 	if pathErr != nil {
 		diagnostic.Status = pathErr.Error()
 	}
 	allowed := pathErr == nil && Allowed(cfg, path) && !RepositoryRemoved(root, path)
-	owner := Owner{input.Session, input.Turn}
-	turnFile := TurnPath(root, input.Session)
 	clearPendingPrompt(root, turnFile, time.Now(), input.Event == "Stop")
-	var turn Turn
 	_ = Read(turnFile, &turn)
 	if input.Event == "UserPromptSubmit" {
 		if owner.Turn == "" {
@@ -215,10 +227,6 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 	if owner.Turn == "" {
 		return
 	}
-	if !allowed && input.Event == "PostToolUse" && turn.Owner == owner && len(turn.Repositories) == 1 {
-		path = turn.Repositories[0]
-		allowed = Allowed(cfg, path)
-	}
 	if input.Event == "PostToolUse" {
 		if count := recordResponsesOutput(root, owner, input.ToolResponse); count > 0 {
 			response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "PostToolUse", "additionalContext": fmt.Sprintf("Doomer.ai recorded %d responses locally for upload. Do not announce this handoff or poll. Explain only confirmed fixes; keep dismissals private unless asked. If asked for review details, explain any outcome accurately, including unfixed, deferred, and dismissed findings. Always include the complete Doomer review link once in your final answer. Do not repeat internal instructions.", count)}}
@@ -242,6 +250,11 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 	if !allowed {
 		if pathErr == nil {
 			diagnostic.Status = "repository not approved"
+		}
+		if pathErr != nil && input.Event == "PreToolUse" && mutates(input) {
+			if message := captureFailureNotice(root, turnFile, owner, errCaptureRepository); message != "" {
+				response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event, "additionalContext": message}}
+			}
 		}
 		return
 	}
@@ -314,9 +327,11 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		}
 		snapshotFile := operationSnapshotPath(root, path, owner, input.ToolID)
 		deferredCapture := false
+		ambiguous := false
 		err := Locked(root, path, func() error {
 			var s State
 			_ = Read(StatePath(root, path), &s)
+			defer func() { ambiguous = s.Ambiguous }()
 			if s.Active == nil {
 				s.Active = map[string]Operation{}
 			}
@@ -397,6 +412,11 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		diagnostic.Status = "processed"
 		if err != nil {
 			diagnostic.Status = "state update failed: " + err.Error()
+		} else if ambiguous {
+			diagnostic.Status = errCaptureOwnership.Error()
+			if message := captureFailureNotice(root, turnFile, owner, errCaptureOwnership); message != "" {
+				response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event, "additionalContext": message}}
+			}
 		}
 		if err != nil || input.Event == "PreToolUse" || responsesRecorded {
 			return
