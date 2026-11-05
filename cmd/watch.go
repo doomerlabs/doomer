@@ -192,7 +192,7 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		anonymous := adversarylabs.IsAnonymousToken(auth.Token)
 		approved := yes
 		var browserToken *adversarylabs.TokenResponse
-		savedBefore, savedExisted, err := app.Dependencies().Auth.ExactAuthE(adversarylabs.AuthKey(*api, *profile))
+		savedBefore, savedExisted, err := app.Dependencies().Auth.StoredAuthE(adversarylabs.AuthKey(*api, *profile))
 		if err != nil {
 			return err
 		}

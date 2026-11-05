@@ -120,65 +120,74 @@ func TestHostedCallbackRejectsForgedAndRepeatedDecisions(t *testing.T) {
 }
 
 func TestHostedSetupSavesLoginAndConsentInSelectedProfile(t *testing.T) {
-	store := isolate(t)
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("CODEX_HOME", t.TempDir())
-	repo := newWatchTestRepo(t)
-	var grant setupGrantRequest
-	var service *httptest.Server
-	service = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/setup/grants") {
-			_ = json.NewDecoder(r.Body).Decode(&grant)
-			_ = json.NewEncoder(w).Encode(map[string]string{"url": service.URL + "/cli/setup#request=opaque"})
-		} else if strings.HasSuffix(r.URL.Path, "/auth/cli/exchange") {
-			_ = json.NewEncoder(w).Encode(adversarylabs.TokenResponse{Token: "adv_cli_test", ClientID: "client", Namespace: "alice"})
-		} else {
-			http.NotFound(w, r)
-		}
-	}))
-	defer service.Close()
-	api, profile := service.URL+"/api", "test-profile"
-	app := &application.App{Deps: application.Dependencies{Auth: store}}
-	other := adversarylabs.Auth{Token: "other-login"}
-	if err := store.SetAuth(adversarylabs.AuthKey(api, "other"), other); err != nil {
-		t.Fatal(err)
-	}
-	previous := openSetupBrowser
-	defer func() { openSetupBrowser = previous }()
-	openSetupBrowser = func(ctx context.Context, _ string) error {
-		callback, _ := url.Parse(grant.Callback)
-		q := callback.Query()
-		q.Set("decision", "allow")
-		q.Set("code", "code")
-		callback.RawQuery = q.Encode()
-		req, _ := http.NewRequestWithContext(ctx, "GET", callback.String(), nil)
-		response, err := http.DefaultClient.Do(req)
-		if err == nil {
-			response.Body.Close()
-		}
-		return err
-	}
-	command := newSetupCommand(app, &api, &profile)
-	command.SetContext(context.Background())
-	command.SetOut(io.Discard)
-	_ = command.Flags().Set("browser", "true")
-	if err := command.RunE(command, []string{repo}); err != nil {
-		t.Fatal(err)
-	}
-	auth, ok, err := store.ExactAuthE(adversarylabs.AuthKey(api, profile))
-	if err != nil || !ok || auth.Token != "adv_cli_test" || auth.Namespace != "alice" {
-		t.Fatalf("login not saved: %+v %v", auth, err)
-	}
-	_, file, _ := watchPaths(api, profile)
-	var cfg watching.Config
-	if err := watching.Read(file, &cfg); err != nil {
-		t.Fatal(err)
-	}
-	if !watching.ConsentValid(cfg, api, profile, auth.Token) {
-		t.Fatal("consent bound to old anonymous credential")
-	}
-	retained, _, _ := store.ExactAuthE(adversarylabs.AuthKey(api, "other"))
-	if retained != other {
-		t.Fatal("unrelated profile changed")
+	for _, expired := range []bool{false, true} {
+		t.Run(fmt.Sprintf("expired=%v", expired), func(t *testing.T) {
+			store := isolate(t)
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("CODEX_HOME", t.TempDir())
+			repo := newWatchTestRepo(t)
+			var grant setupGrantRequest
+			var service *httptest.Server
+			service = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/setup/grants") {
+					_ = json.NewDecoder(r.Body).Decode(&grant)
+					_ = json.NewEncoder(w).Encode(map[string]string{"url": service.URL + "/cli/setup#request=opaque"})
+				} else if strings.HasSuffix(r.URL.Path, "/auth/cli/exchange") {
+					_ = json.NewEncoder(w).Encode(adversarylabs.TokenResponse{Token: "adv_cli_test", ClientID: "client", Namespace: "alice"})
+				} else {
+					http.NotFound(w, r)
+				}
+			}))
+			defer service.Close()
+			api, profile := service.URL+"/api", "test-profile"
+			app := &application.App{Deps: application.Dependencies{Auth: store}}
+			if expired {
+				if err := store.SetAuth(adversarylabs.AuthKey(api, profile), adversarylabs.Auth{Token: "old-expired", ExpiresAt: "2000-01-01T00:00:00Z"}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			other := adversarylabs.Auth{Token: "other-login"}
+			if err := store.SetAuth(adversarylabs.AuthKey(api, "other"), other); err != nil {
+				t.Fatal(err)
+			}
+			previous := openSetupBrowser
+			defer func() { openSetupBrowser = previous }()
+			openSetupBrowser = func(ctx context.Context, _ string) error {
+				callback, _ := url.Parse(grant.Callback)
+				q := callback.Query()
+				q.Set("decision", "allow")
+				q.Set("code", "code")
+				callback.RawQuery = q.Encode()
+				req, _ := http.NewRequestWithContext(ctx, "GET", callback.String(), nil)
+				response, err := http.DefaultClient.Do(req)
+				if err == nil {
+					response.Body.Close()
+				}
+				return err
+			}
+			command := newSetupCommand(app, &api, &profile)
+			command.SetContext(context.Background())
+			command.SetOut(io.Discard)
+			_ = command.Flags().Set("browser", "true")
+			if err := command.RunE(command, []string{repo}); err != nil {
+				t.Fatal(err)
+			}
+			auth, ok, err := store.ExactAuthE(adversarylabs.AuthKey(api, profile))
+			if err != nil || !ok || auth.Token != "adv_cli_test" || auth.Namespace != "alice" {
+				t.Fatalf("login not saved: %+v %v", auth, err)
+			}
+			_, file, _ := watchPaths(api, profile)
+			var cfg watching.Config
+			if err := watching.Read(file, &cfg); err != nil {
+				t.Fatal(err)
+			}
+			if !watching.ConsentValid(cfg, api, profile, auth.Token) {
+				t.Fatal("consent bound to old anonymous credential")
+			}
+			retained, _, _ := store.ExactAuthE(adversarylabs.AuthKey(api, "other"))
+			if retained != other {
+				t.Fatal("unrelated profile changed")
+			}
+		})
 	}
 }
