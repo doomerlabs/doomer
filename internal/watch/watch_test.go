@@ -250,6 +250,45 @@ func TestWatchOnceUsesWorkspaceAndStableRetryIdentity(t *testing.T) {
 	}
 }
 
+func TestWatchOnceMigratesMatchingLegacyRetry(t *testing.T) {
+	dir := repository(t)
+	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte("changed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{}
+	runner := Runner{Root: t.TempDir(), Config: Config{API: "https://example.com/api"}, Client: client, Token: "token", Output: io.Discard, Interval: time.Second}
+	requestTestAgentReview(t, &runner, dir)
+	if err := runner.Run(context.Background(), dir, true); err != nil {
+		t.Fatal(err)
+	}
+	first := client.input
+	var state State
+	if err := Read(StatePath(runner.Root, dir), &state); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(runner.Root, "revisions", Key(dir+"\x00"+state.Owner.Session)+".json")
+	var saved revision
+	if err := Read(path, &saved); err != nil {
+		t.Fatal(err)
+	}
+	saved.Session = ""
+	if err := Write(filepath.Join(runner.Root, "revisions", Key(dir)+".json"), saved); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := runner.Run(context.Background(), dir, true); err != nil {
+		t.Fatal(err)
+	}
+	if client.input.ReviewID != first.ReviewID || client.input.GroupID != first.GroupID || client.input.Revision != first.Revision {
+		t.Fatal("legacy retry lost its identity")
+	}
+	if err := Read(path, &saved); err != nil || saved.Session != state.Owner.Session {
+		t.Fatal("migration not saved", err)
+	}
+}
+
 func TestAllRepositoryConsentAndDiscovery(t *testing.T) {
 	dir := repository(t)
 	root := t.TempDir()

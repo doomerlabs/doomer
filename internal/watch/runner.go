@@ -39,6 +39,7 @@ type Runner struct {
 	WatchToken   string
 }
 type revision struct {
+	Session    string
 	RequestKey string
 	ID         string
 
@@ -318,8 +319,12 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 	defer cancel()
 
 	var rev revision
-	revPath := filepath.Join(r.Root, "revisions", Key(path)+".json")
-	_ = Read(revPath, &rev)
+	revPath := filepath.Join(r.Root, "revisions", Key(path+"\x00"+requestState.Owner.Session)+".json")
+	if err := Read(revPath, &rev); os.IsNotExist(err) {
+		// The old path is reusable only when its request identity proves the
+		// same edit, including the owning session. Other legacy groups reset.
+		_ = Read(filepath.Join(r.Root, "revisions", Key(path)+".json"), &rev)
+	}
 	rev = revisionForEdit(rev, capture.Digest, requestState)
 
 	if err = Write(revPath, rev); err != nil {
@@ -439,6 +444,12 @@ func revisionForEdit(rev revision, digest string, state State) revision {
 		Hypotheses  []adversarylabs.WorkspaceHypothesis
 	}{digest, state.Owner, state.RequestedAt, state.AgentDiff, state.Prompt, state.Hypotheses})
 	key := Key(string(raw))
+	if rev.Session == "" && rev.RequestKey == key {
+		rev.Session = state.Owner.Session
+	}
+	if rev.Session != state.Owner.Session {
+		rev = revision{Session: state.Owner.Session}
+	}
 	if rev.Group == "" {
 		rev.Group = rand.Text()
 	}

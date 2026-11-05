@@ -40,6 +40,26 @@ func newWatchTestRepo(t *testing.T) string {
 	return canonical
 }
 
+// A hosted grant carries the loopback callback opaquely in this test server.
+func fakeSetupAPI(t *testing.T) string {
+	t.Helper()
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request setupGrantRequest
+		if r.URL.Path != "/api/v1/setup/grants" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"url": server.URL + "/cli/setup#" + url.Values{"callback": {request.Callback}}.Encode()})
+	}))
+	t.Cleanup(server.Close)
+	return server.URL + "/api"
+}
+
 func fakeSetupBrowser(t *testing.T, decision string, inspect func(string)) {
 	t.Helper()
 	previous := openSetupBrowser
@@ -51,6 +71,13 @@ func fakeSetupBrowser(t *testing.T, decision string, inspect func(string)) {
 		u, err := url.Parse(link)
 		if err != nil {
 			return err
+		}
+		if u.Path == "/cli/setup" {
+			fragment, _ := url.ParseQuery(u.Fragment)
+			u, err = url.Parse(fragment.Get("callback"))
+			if err != nil {
+				return err
+			}
 		}
 		u.Path = "/complete"
 		q := u.Query()
@@ -73,7 +100,7 @@ func TestAnonymousBrowserConsentIsExplicitAndRepoScoped(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("CODEX_HOME", t.TempDir())
 	app := &application.App{Deps: application.Dependencies{Auth: store}}
-	api, profile := "http://localhost:3000/api", "dev"
+	api, profile := fakeSetupAPI(t), "dev"
 	repo, other := newWatchTestRepo(t), newWatchTestRepo(t)
 	calls := 0
 	fakeSetupBrowser(t, "allow", func(_ string) { calls++ })
@@ -274,7 +301,7 @@ func TestDefaultWatchSetupScopesToCurrentRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Chdir(nested)
-	api, profile := "http://localhost:3000/api", "dev"
+	api, profile := fakeSetupAPI(t), "dev"
 	app := &application.App{Deps: application.Dependencies{Auth: store}}
 	c := newWatchCommand(app, &api, &profile)
 	c.SetContext(context.Background())
@@ -349,7 +376,7 @@ func TestConsentCannotRestoreApprovalChangedWhileBrowserWasOpen(t *testing.T) {
 	store := isolate(t)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("CODEX_HOME", t.TempDir())
-	api, profile := "http://localhost:3000/api", "dev"
+	api, profile := fakeSetupAPI(t), "dev"
 	app := &application.App{Deps: application.Dependencies{Auth: store}}
 	repo := newWatchTestRepo(t)
 	_, file, _ := watchPaths(api, profile)
