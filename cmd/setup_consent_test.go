@@ -165,7 +165,7 @@ func TestSetupPagesPreserveScopeAndApprovalMeaning(t *testing.T) {
 	if strings.Contains(out.String(), "<script>alert(1)</script>") || !strings.Contains(out.String(), "&lt;script&gt;") {
 		t.Fatal("repository name was not escaped")
 	}
-	for _, text := range []string{"all existing and future linked Git worktrees", "Main checkout", "Setup checkout", "Allow for repo and worktrees", "outside the changed lines", "task prompt", "review responses", "/privacy", "name=\"nonce\"", "value=\"cancel\""} {
+	for _, text := range []string{"all existing and future linked Git worktrees", "Allow for repo and worktrees", "outside the changed lines", "task prompt", "review responses", "/privacy", "name=\"nonce\"", "value=\"cancel\""} {
 		if !strings.Contains(out.String(), text) {
 			t.Fatalf("missing disclosure/control %q", text)
 		}
@@ -232,16 +232,27 @@ func TestSetupConsentFromLinkedWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mainRepos, err := setupRepositories(context.Background(), []string{main})
+	mainRepos, err := setupRepositories(context.Background(), []string{main}, watching.Config{})
 	if err != nil || len(mainRepos) != 1 || mainRepos[0].MainCheckout != main || mainRepos[0].Checkout != main {
 		t.Fatalf("incorrect main checkout display: %+v, %v", mainRepos, err)
 	}
-	repos, err := setupRepositories(context.Background(), []string{linked})
+	repos, err := setupRepositories(context.Background(), []string{linked}, watching.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(repos) != 1 || repos[0].MainCheckout != main || repos[0].Checkout != linked {
 		t.Fatalf("incorrect repository display: %+v", repos)
+	}
+	id, err := watching.RepositoryIdentity(context.Background(), main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	granted, err := setupRepositories(context.Background(), []string{linked}, watching.Config{RepositoryIDs: []string{id}})
+	if err != nil || !granted[0].AlreadyGranted {
+		t.Fatalf("linked grant missing: %+v %v", granted, err)
+	}
+	if repos[0].AlreadyGranted {
+		t.Fatal("unapproved checkout labeled granted")
 	}
 	consent := setupConsent{Repositories: repos}
 	var page, terminal bytes.Buffer
@@ -249,7 +260,7 @@ func TestSetupConsentFromLinkedWorktree(t *testing.T) {
 		t.Fatal(err)
 	}
 	consent.print(&terminal)
-	for _, text := range []string{main, linked, "all existing and future linked Git worktrees"} {
+	for _, text := range []string{main, "all existing and future linked Git worktrees"} {
 		if !strings.Contains(page.String(), text) || !strings.Contains(terminal.String(), text) {
 			t.Fatalf("scope missing %q in browser or terminal", text)
 		}
@@ -268,7 +279,7 @@ func TestSetupConsentFromBareRepositoryWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repos, err := setupRepositories(context.Background(), []string{linked})
+	repos, err := setupRepositories(context.Background(), []string{linked}, watching.Config{})
 	if err != nil || len(repos) != 1 || repos[0].MainCheckout != "" || repos[0].Checkout != linked {
 		t.Fatalf("incorrect bare repository display: %+v, %v", repos, err)
 	}
@@ -287,8 +298,27 @@ func TestSetupConsentWithUnavailableMainCheckout(t *testing.T) {
 	if err := os.RemoveAll(main); err != nil {
 		t.Fatal(err)
 	}
-	repos, err := setupRepositories(context.Background(), []string{linked})
+	repos, err := setupRepositories(context.Background(), []string{linked}, watching.Config{})
 	if err != nil || len(repos) != 1 || repos[0].MainCheckout != "" || repos[0].Checkout != linked {
 		t.Fatalf("unavailable display location blocked setup: %+v %v", repos, err)
+	}
+}
+
+func TestSetupPageSeparatesPreviousGrants(t *testing.T) {
+	s := setupConsent{Repositories: []setupRepository{
+		{MainCheckout: "/previous", Checkout: "/previous-setup", AlreadyGranted: true},
+		{MainCheckout: "/current", Checkout: "/current-setup"},
+	}}
+	var page bytes.Buffer
+	if err := setupPage.ExecuteTemplate(&page, "consent", s); err != nil {
+		t.Fatal(err)
+	}
+	html := page.String()
+	if strings.Contains(html, "-setup") || strings.Contains(html, "Setup checkout") {
+		t.Fatal("setup path displayed")
+	}
+	current, granted, previous := strings.Index(html, "/current"), strings.Index(html, "Already granted"), strings.Index(html, "/previous")
+	if current < 0 || granted < current || previous < granted {
+		t.Fatal("previous grants not separated below request")
 	}
 }

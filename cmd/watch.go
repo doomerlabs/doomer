@@ -182,7 +182,7 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 				seen[canonical] = true
 			}
 		}
-		repositories, err := setupRepositories(c.Context(), directories)
+		repositories, err := setupRepositories(c.Context(), directories, cfg)
 		if err != nil {
 			return err
 		}
