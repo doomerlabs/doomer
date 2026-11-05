@@ -85,7 +85,7 @@ func SubmitHypotheses(ctx context.Context, root, id string, cfg Config, input io
 			return errors.New("invalid review hypothesis")
 		}
 	}
-	fingerprint, err := snapshotDigest(ctx, request.Path)
+	fingerprint, err := reviewSnapshotDigest(ctx, root, request.Path)
 	if err != nil || fingerprint != request.Fingerprint {
 		return errors.New("edit changed; question request expired")
 	}
@@ -132,7 +132,7 @@ func EmitHypotheses(ctx context.Context, root, id string, cfg Config, input io.R
 	if Read(StatePath(root, request.Path), &state) != nil || state.Owner != request.Owner || state.Fingerprint != request.Fingerprint || state.QuestionRequest != id || !state.RequestedAt.Equal(request.RequestedAt) || state.HypothesesSubmitted || state.Ambiguous || time.Since(state.RequestedAt) >= hypothesisGrace {
 		return errors.New("question request expired")
 	}
-	fingerprint, err := snapshotDigest(ctx, request.Path)
+	fingerprint, err := reviewSnapshotDigest(ctx, root, request.Path)
 	if err != nil || fingerprint != request.Fingerprint {
 		return errors.New("edit changed; question request expired")
 	}

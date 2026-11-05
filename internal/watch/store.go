@@ -31,11 +31,13 @@ type Owner struct {
 	Turn    string `json:"turn"`
 }
 type Operation struct {
-	Owner        Owner
-	Before       string
-	Started      time.Time
-	Attributable bool
-	CompletedAt  time.Time
+	BaseRef        string
+	TargetTreeHash string
+	Owner          Owner
+	Before         string
+	Started        time.Time
+	Attributable   bool
+	CompletedAt    time.Time
 }
 type State struct {
 	InlineWaited        bool
