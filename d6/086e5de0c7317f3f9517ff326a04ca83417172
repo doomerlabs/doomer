@@ -1,0 +1,21 @@
+cmd/setup_hosted_test.go
+  s_19d08b7f01e7fd::t_d4049255065125 123-191
+cmd/watch.go
+  s_19d08b7f01e7fd::t_d4049255065125 195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d6086e5de0c7317f3f9517ff326a04ca83417172",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
