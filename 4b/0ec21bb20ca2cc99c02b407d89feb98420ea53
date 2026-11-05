@@ -1,0 +1,23 @@
+internal/watch/pending_capture.go
+  s_19d08b7f01e7fd::t_8148078b0cd81b 78,84-88
+internal/watch/recovery_failure_test.go
+  s_19d08b7f01e7fd::t_0f52515e72cde6 151-152,155-156,160-163,165-166,171,174
+  s_19d08b7f01e7fd::t_8148078b0cd81b 102-104,110-112
+  s_19d08b7f01e7fd::t_7c4c4cf1fc53e8 145-150,153-154,157-159,164,167-170,172-173,175
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4b0ec21bb20ca2cc99c02b407d89feb98420ea53",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
