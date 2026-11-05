@@ -1,0 +1,19 @@
+cmd/review_wait_test.go
+  s_75056610e0e763::t_8a4bd3239d5512 112-117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8009508006ce86feabdba989debe5a76d91ff8bf",
+  "prompts": {},
+  "sessions": {
+    "s_75056610e0e763": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1adfd-920a-7a32-b9ba-3e4b41e8f8a1",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
