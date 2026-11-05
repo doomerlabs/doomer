@@ -99,11 +99,17 @@ func TestRecoveryDiffFailuresAreBoundedAndCanRecover(t *testing.T) {
 				if state.Active["edit"].CaptureAttempts != attempt {
 					t.Fatal("attempt count not persisted")
 				}
+				if _, err := os.Stat(operationSnapshotPath(root, repo, Owner{"chat", "turn"}, "edit")); err != nil {
+					t.Fatal("retry lost its snapshot", err)
+				}
 			}
 			if recover {
 				t.Setenv("PATH", originalPath)
 			}
 			resumed, err := resumeCompletedEdit(context.Background(), root, repo, capture, since)
+			if _, statErr := os.Stat(operationSnapshotPath(root, repo, Owner{"chat", "turn"}, "edit")); !os.IsNotExist(statErr) {
+				t.Fatalf("finished recovery retained its snapshot: %v", statErr)
+			}
 			if recover {
 				if !resumed || err != nil {
 					t.Fatalf("transient failure did not recover: %v", err)
@@ -134,5 +140,36 @@ func TestCancelledRecoveryDoesNotConsumeAttempt(t *testing.T) {
 	}
 	if resumed, err := resumeCompletedEdit(context.Background(), root, repo, capture, since); !resumed || err != nil {
 		t.Fatalf("cancelled recovery could not resume: %v", err)
+	}
+}
+
+func TestNoopRecoveryRemovesOperationSnapshot(t *testing.T) {
+	root, repo, capture, since := pendingScopeFixture(t)
+	owner := Owner{"chat", "turn"}
+	snapshot := operationSnapshotPath(root, repo, owner, "edit")
+	if err := saveOperationSnapshot(snapshot, capture.Bytes); err != nil {
+		t.Fatal(err)
+	}
+	var state State
+	if err := Read(StatePath(root, repo), &state); err != nil {
+		t.Fatal(err)
+	}
+	op := state.Active["edit"]
+	op.Before = capture.Digest
+	state.Active["edit"] = op
+	state.DiffOwner, state.DiffBase = owner, capture.Digest
+	if err := saveOperationSnapshot(reviewBaselinePath(root, repo, owner), capture.Bytes); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(StatePath(root, repo), state); err != nil {
+		t.Fatal(err)
+	}
+	// A changed capture identity with identical file content yields an empty diff.
+	capture.Digest = "different-metadata"
+	if resumed, err := resumeCompletedEdit(context.Background(), root, repo, capture, since); resumed || err != nil {
+		t.Fatalf("no-op recovery: %v", err)
+	}
+	if _, err := os.Stat(snapshot); !os.IsNotExist(err) {
+		t.Fatalf("no-op snapshot retained: %v", err)
 	}
 }

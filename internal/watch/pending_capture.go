@@ -75,12 +75,17 @@ func resumeCompletedEdit(ctx context.Context, root, path string, capture sources
 					if err := Write(StatePath(root, path), state); err != nil {
 						return err
 					}
+					_ = os.Remove(operationSnapshotPath(root, path, op.Owner, id))
 					failure = diffErr
 					recordHookDiagnostic(root, op.Owner.Session, hookDiagnostic{At: time.Now(), Event: "CaptureRecovery", Repository: path, ToolID: id, HasToolID: true, Owner: op.Owner, Status: diffErr.Error()})
 					return nil
 				}
 				if agentDiff == "" {
-					return Write(StatePath(root, path), state)
+					if err := Write(StatePath(root, path), state); err != nil {
+						return err
+					}
+					_ = os.Remove(operationSnapshotPath(root, path, op.Owner, id))
+					return nil
 				}
 				if err := Write(reviewCapturePath(root, path), capture); err != nil {
 					return err
