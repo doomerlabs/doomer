@@ -191,11 +191,16 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		interactive := ok && term.IsTerminal(int(f.Fd()))
 		anonymous := adversarylabs.IsAnonymousToken(auth.Token)
 		approved := yes
+		var browserToken *adversarylabs.TokenResponse
+		savedBefore, savedExisted, err := app.Dependencies().Auth.ExactAuthE(adversarylabs.AuthKey(*api, *profile))
+		if err != nil {
+			return err
+		}
 		if !yes && !interactive && !browser && !defaultSetupBrowser() {
 			return fmt.Errorf("setup requires approval: use --browser for a human decision, or run in an interactive terminal; agents must not supply --yes")
 		}
 		if !yes && !noBrowser && (browser || defaultSetupBrowser()) {
-			approved, err = browserSetupConsent(c.Context(), consent, c.OutOrStdout(), openSetupBrowser)
+			approved, browserToken, err = hostedSetupConsent(c.Context(), consent, auth.Token, adversarylabs.Client{BaseURL: *api}, c.OutOrStdout(), openSetupBrowser)
 			if err != nil && !errors.Is(err, errBrowserLaunch) {
 				return err
 			}
@@ -214,7 +219,7 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 			if !terminalSetupConsent(c.Context(), f) {
 				return fmt.Errorf("setup cancelled; no upload consent saved")
 			}
-		} else if anonymous {
+		} else if anonymous && browserToken == nil {
 			fmt.Fprintln(c.OutOrStdout(), "Free anonymous Look Closer enabled. Source code and agent review responses are uploaded to "+*api+". Deep review requires signing in.")
 		} else if yes {
 			consent.print(c.OutOrStdout())
@@ -246,6 +251,14 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		}
 		if (initialReadErr == nil) != (latestErr == nil) || !latest.ConsentedAt.Equal(initialConfig.ConsentedAt) || latest.AccountKey != initialConfig.AccountKey {
 			return fmt.Errorf("upload approval changed during setup; run setup again")
+		}
+		if browserToken != nil {
+			saved := adversarylabs.Auth{Token: browserToken.Token, ClientID: browserToken.ClientID, ExpiresAt: browserToken.ExpiresAt, RegistryNamespace: browserToken.RegistryNamespace, Namespace: browserToken.Namespace, Team: browserToken.Team, RegistryHost: app.Dependencies().RegistryHost}
+			if err := app.Dependencies().Auth.SetAuthCAS(adversarylabs.AuthKey(*api, *profile), savedBefore, savedExisted, saved); err != nil {
+				return fmt.Errorf("save setup login: %w", err)
+			}
+			auth = saved
+			fmt.Fprintf(c.OutOrStdout(), "Signed in to Doomer using profile %s.\n", *profile)
 		}
 		cfg = watching.Config{ExplicitConsent: true, AllRepositories: allRepositories, Version: 1, API: *api, Profile: *profile, Directories: directories, ConsentedAt: time.Now(), AccountKey: watching.Key(auth.Token)}
 		for _, path := range directories {
