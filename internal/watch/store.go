@@ -33,13 +33,14 @@ type Owner struct {
 	Turn    string `json:"turn"`
 }
 type Operation struct {
-	BaseRef        string
-	TargetTreeHash string
-	Owner          Owner
-	Before         string
-	Started        time.Time
-	Attributable   bool
-	CompletedAt    time.Time
+	CaptureAttempts int `json:",omitempty"`
+	BaseRef         string
+	TargetTreeHash  string
+	Owner           Owner
+	Before          string
+	Started         time.Time
+	Attributable    bool
+	CompletedAt     time.Time
 }
 type AttributionConflict struct {
 	Reason      string
@@ -66,6 +67,8 @@ type State struct {
 	Prompt              string
 }
 type Feed struct {
+	FullReviewStatus string    `json:",omitempty"`
+	StatusCheckedAt  time.Time `json:",omitempty"`
 	BaseRef          string
 	TargetTreeHash   string
 	Anonymous        bool

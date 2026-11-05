@@ -131,7 +131,7 @@ func TestWaitingHookReportsFailedReviewOnce(t *testing.T) {
 		}
 		return true
 	})
-	if ctx.Err() != nil || !strings.Contains(output.String(), "Doomer review failed") {
+	if ctx.Err() != nil || !strings.Contains(output.String(), "Look Closer assessment failed") {
 		t.Fatal("failed review was not reported", output.String())
 	}
 	output.Reset()

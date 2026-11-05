@@ -1,6 +1,7 @@
 package adversarylabs
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -21,5 +22,13 @@ func TestResponseErrorExplainsUploadChecksumMismatchWithoutEchoingUnknownErrors(
 		if !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), tc.forbidden) {
 			t.Fatalf("unsafe or missing diagnostic: %v", err)
 		}
+	}
+}
+
+func TestMissingReviewScopeIsTypedAndRedacted(t *testing.T) {
+	response := &http.Response{StatusCode: http.StatusBadRequest, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"error":"missing_review_scope","message":"PRIVATE_SOURCE"}`))}
+	err := responseError(response, "secret")
+	if !errors.Is(err, ErrMissingReviewScope) || strings.Contains(err.Error(), "PRIVATE_SOURCE") {
+		t.Fatalf("scope error: %v", err)
 	}
 }

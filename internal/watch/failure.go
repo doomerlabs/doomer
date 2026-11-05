@@ -29,11 +29,19 @@ func reviewProgressMessage(feed Feed) string {
 	case "retrying":
 		return "Doomer could not complete the review and is retrying."
 	case "unavailable":
-		reason := map[string]string{"upload_timeout": "the repository upload timed out", "upload_failed": "the repository upload failed", "analysis_timeout": "analysis timed out", "repository_context": "the server could not prepare repository context", "repository_context_timeout": "repository context preparation timed out", "missing_review_scope": "the server could not identify the edited code to review", "timeout": "analysis timed out", "model_request_failed": "the analysis service failed", "model_configuration": "the analysis service is not configured"}[feed.FailureCode]
+		reason := map[string]string{"upload_timeout": "the repository upload timed out", "upload_failed": "the repository upload failed", "analysis_timeout": "analysis timed out", "repository_context": "the server could not prepare repository context", "repository_context_timeout": "repository context preparation timed out", "missing_review_scope": "the server could not identify the edited code to review", "capture_edit_scope": "the agent edit scope could not be captured", "timeout": "analysis timed out", "model_request_failed": "the analysis service failed", "model_configuration": "the analysis service is not configured"}[feed.FailureCode]
 		if reason == "" {
 			reason = "the review service was unavailable"
 		}
-		return fmt.Sprintf("Doomer review failed: %s. It is not a completed or pending assessment.", reason)
+		switch feed.FullReviewStatus {
+		case "completed":
+			return fmt.Sprintf("Doomer's Look Closer assessment failed because %s. The deeper review completed. See [Doomer review](%s) for its findings. Do not describe this as an overall review failure or assume there were no findings.", reason, feed.URL)
+		case "queued", "running", "uploading", "scoring":
+			return fmt.Sprintf("Doomer's Look Closer assessment failed because %s. The deeper review is still %s. [Doomer review](%s)", reason, feed.FullReviewStatus, feed.URL)
+		case "failed", "cancelled":
+			return fmt.Sprintf("Doomer's Look Closer assessment failed because %s. The deeper review also %s. [Doomer review](%s)", reason, feed.FullReviewStatus, feed.URL)
+		}
+		return fmt.Sprintf("Doomer's Look Closer assessment failed because %s. The Look Closer assessment did not complete.", reason)
 	}
 	return ""
 }
@@ -48,6 +56,8 @@ func captureFailureNotice(root, turnFile string, owner Owner, err error) string 
 	switch {
 	case errors.Is(err, errCaptureRepository):
 		code, reason = "capture_repository", "the edit's repository could not be identified. Set the tool's working directory or use explicit file paths in the target checkout"
+	case errors.Is(err, errCaptureEditScope):
+		code, reason = "capture_edit_scope", "the agent edit scope could not be captured. "+err.Error()
 	case errors.Is(err, errCaptureOwnership):
 		code, reason = "capture_ownership", "the changed files could not be attributed to this chat. Use separate worktrees for parallel coding tasks"
 	case strings.Contains(err.Error(), "symlinks") || strings.Contains(err.Error(), "symlink"):

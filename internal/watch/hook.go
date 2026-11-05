@@ -439,11 +439,18 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 						s.Conflict = &AttributionConflict{Reason: "changed_owner", ToolID: input.ToolID, OtherOwner: s.Owner}
 					}
 					if !s.Ambiguous {
-						agentDiff := capturedAgentDiff(ctx, root, path, s, owner, input.ToolID, op.Before, capture)
+						agentDiff, diffErr := capturedAgentDiff(ctx, root, path, s, owner, input.ToolID, op.Before, capture)
 						if ctx.Err() != nil {
 							op.CompletedAt = time.Now()
 							s.Active[input.ToolID] = op
 							deferredCapture = true
+							return Write(StatePath(root, path), s)
+						}
+						if diffErr != nil {
+							return errors.Join(diffErr, Write(StatePath(root, path), s))
+						}
+						if strings.TrimSpace(agentDiff) == "" {
+							quietTool = true
 							return Write(StatePath(root, path), s)
 						}
 						if err := Write(reviewCapturePath(root, path), capture); err != nil {
@@ -470,6 +477,11 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		diagnostic.Status = "processed"
 		if err != nil {
 			diagnostic.Status = "state update failed: " + err.Error()
+			if errors.Is(err, errCaptureEditScope) {
+				if message := captureFailureNotice(root, turnFile, owner, err); message != "" {
+					response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event, "additionalContext": message}}
+				}
+			}
 		} else if ambiguous {
 			diagnostic.Status = errCaptureOwnership.Error()
 			if message := captureFailureNotice(root, turnFile, owner, errCaptureOwnership); message != "" {
@@ -529,7 +541,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		hasFeed := ownedFeed && (feed.Fingerprint == state.Fingerprint || olderSnapshot)
 		if hasFeed && feed.AssessmentStatus != "ready" {
 			if input.Event == "Stop" {
-				key := "status:" + feed.Fingerprint + ":" + feed.AssessmentStatus + ":" + feed.FailureCode
+				key := "status:" + feed.Fingerprint + ":" + feed.AssessmentStatus + ":" + feed.FailureCode + ":" + feed.FullReviewStatus
 				_ = Locked(root, input.Session, func() error {
 					var current Turn
 					if Read(turnFile, &current) != nil || current.Owner != owner {

@@ -2,6 +2,7 @@ package watch
 
 import (
 	"context"
+	"errors"
 	"os"
 	"time"
 
@@ -30,9 +31,10 @@ func deferCompletedEdit(root, path string, owner Owner, toolID string) {
 	})
 }
 
-func resumeCompletedEdit(ctx context.Context, root, path string, capture sourcesnapshot.Capture, since time.Time) bool {
+func resumeCompletedEdit(ctx context.Context, root, path string, capture sourcesnapshot.Capture, since time.Time) (bool, error) {
 	resumed := false
-	_ = Locked(root, path, func() error {
+	var failure error
+	err := Locked(root, path, func() error {
 		var state State
 		if Read(StatePath(root, path), &state) != nil || state.Ambiguous || len(state.Active) != 1 {
 			return nil
@@ -50,6 +52,41 @@ func resumeCompletedEdit(ctx context.Context, root, path string, capture sources
 			}
 			delete(state.Active, id)
 			if capture.Digest != op.Before && !state.RequestedAt.After(op.CompletedAt) {
+				agentDiff, diffErr := capturedAgentDiff(ctx, root, path, state, op.Owner, id, op.Before, capture)
+				if diffErr != nil {
+					if ctx.Err() != nil {
+						return nil
+					}
+					op.CaptureAttempts++
+					if errors.Is(diffErr, errScopeDiff) && op.CaptureAttempts < 3 {
+						state.Active[id] = op
+						return Write(StatePath(root, path), state)
+					}
+					// Persist a failed outcome owned by this edit, without a new
+					// review request. Removing the operation makes this terminal.
+					state.Owner = op.Owner
+					state.Fingerprint = capture.Digest
+					state.RequestedAt = time.Time{}
+					state.AgentDiff = ""
+					feed := Feed{Owner: op.Owner, Fingerprint: capture.Digest, Updated: time.Now(), AssessmentStatus: "unavailable", FailureCode: "capture_edit_scope"}
+					if err := Write(FeedPath(root, path), feed); err != nil {
+						return err
+					}
+					if err := Write(StatePath(root, path), state); err != nil {
+						return err
+					}
+					_ = os.Remove(operationSnapshotPath(root, path, op.Owner, id))
+					failure = diffErr
+					recordHookDiagnostic(root, op.Owner.Session, hookDiagnostic{At: time.Now(), Event: "CaptureRecovery", Repository: path, ToolID: id, HasToolID: true, Owner: op.Owner, Status: diffErr.Error()})
+					return nil
+				}
+				if agentDiff == "" {
+					if err := Write(StatePath(root, path), state); err != nil {
+						return err
+					}
+					_ = os.Remove(operationSnapshotPath(root, path, op.Owner, id))
+					return nil
+				}
 				if err := Write(reviewCapturePath(root, path), capture); err != nil {
 					return err
 				}
@@ -62,7 +99,7 @@ func resumeCompletedEdit(ctx context.Context, root, path string, capture sources
 				state.QuestionRequest = ""
 				state.HypothesesSubmitted = false
 				state.Hypotheses = nil
-				state.AgentDiff = capturedAgentDiff(ctx, root, path, state, op.Owner, id, op.Before, capture)
+				state.AgentDiff = agentDiff
 				resumed = true
 			}
 			if err := Write(StatePath(root, path), state); err != nil {
@@ -73,5 +110,5 @@ func resumeCompletedEdit(ctx context.Context, root, path string, capture sources
 		}
 		return nil
 	})
-	return resumed
+	return resumed, errors.Join(failure, err)
 }

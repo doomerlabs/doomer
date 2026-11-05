@@ -42,7 +42,7 @@ func TestHookRetainsAllEditsInCurrentTurn(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if !resumeCompletedEdit(context.Background(), root, repo, capture, time.Now().Add(-time.Minute)) {
+					if resumed, err := resumeCompletedEdit(context.Background(), root, repo, capture, time.Now().Add(-time.Minute)); !resumed || err != nil {
 						t.Fatal("deferred edit was not recovered")
 					}
 					return

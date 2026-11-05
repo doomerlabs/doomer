@@ -2,6 +2,8 @@ package watch
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -9,10 +11,20 @@ import (
 )
 
 func TestFailedPostCaptureResumesWithoutAnotherHook(t *testing.T) {
-	root, path := t.TempDir(), "/repository"
+	root, path := t.TempDir(), repository(t)
 	owner := Owner{Session: "chat", Turn: "turn"}
 	since := time.Now().Add(-time.Second)
-	state := State{Fingerprint: "before", Active: map[string]Operation{"edit": {Owner: owner, Before: "before", Started: since, Attributable: true}}}
+	if err := os.WriteFile(filepath.Join(path, "file.txt"), []byte("prior dirty work\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := sourcesnapshot.CaptureWorktree(context.Background(), sourcesnapshot.CaptureOptions{Path: path, Workspace: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := saveOperationSnapshot(operationSnapshotPath(root, path, owner, "edit"), before.Bytes); err != nil {
+		t.Fatal(err)
+	}
+	state := State{Fingerprint: before.Digest, Active: map[string]Operation{"edit": {Owner: owner, Before: before.Digest, Started: since, Attributable: true}}}
 	if err := Write(StatePath(root, path), state); err != nil {
 		t.Fatal(err)
 	}
@@ -20,8 +32,14 @@ func TestFailedPostCaptureResumesWithoutAnotherHook(t *testing.T) {
 		t.Fatal(err)
 	}
 	deferCompletedEdit(root, path, owner, "edit")
-	capture := sourcesnapshot.Capture{Digest: "after"}
-	if !resumeCompletedEdit(context.Background(), root, path, capture, since) {
+	if err := os.WriteFile(filepath.Join(path, "file.txt"), []byte("agent change\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	capture, err := sourcesnapshot.CaptureWorktree(context.Background(), sourcesnapshot.CaptureOptions{Path: path, Workspace: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumed, err := resumeCompletedEdit(context.Background(), root, path, capture, since); !resumed || err != nil {
 		t.Fatal("completed edit was not resumed")
 	}
 	if !agentReviewRequested(root, path, capture.Digest, since) {
@@ -34,7 +52,7 @@ func TestFailedPostCaptureResumesWithoutAnotherHook(t *testing.T) {
 	if state.Agent != "codex" || state.Prompt != "fix it" || len(state.Active) != 0 {
 		t.Fatalf("lost edit identity: %+v", state)
 	}
-	if resumeCompletedEdit(context.Background(), root, path, capture, since) {
+	if resumed, err := resumeCompletedEdit(context.Background(), root, path, capture, since); resumed || err != nil {
 		t.Fatal("edit resumed twice")
 	}
 }
@@ -76,7 +94,7 @@ func TestCaptureRecoveryDoesNotGuessOwnership(t *testing.T) {
 			if err := Write(TurnPath(root, owner.Session), turn); err != nil {
 				t.Fatal(err)
 			}
-			if resumeCompletedEdit(context.Background(), root, path, capture, since) {
+			if resumed, err := resumeCompletedEdit(context.Background(), root, path, capture, since); resumed || err != nil {
 				t.Fatal("unattributable edit recovered")
 			}
 			if agentReviewRequested(root, path, capture.Digest, since) {

@@ -159,6 +159,7 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 			events.refreshedAt = time.Now()
 		}
 		r.flush(ctx)
+		r.refreshUnavailableReview(ctx, path)
 		r.debugf("%s: scanning working tree", path)
 		scanStarted := time.Now()
 		captureCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -189,7 +190,13 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 				return err
 			}
 		} else if capture.Source.Dirty || once {
-			if resumeCompletedEdit(ctx, r.Root, path, capture, started) {
+			resumed, recoveryErr := resumeCompletedEdit(ctx, r.Root, path, capture, started)
+			if errors.Is(recoveryErr, errCaptureEditScope) {
+				r.logf("%s: edit capture recovery failed: %s", filepath.Base(path), recoveryErr)
+			} else if recoveryErr != nil {
+				r.debugf("%s: could not update capture recovery: %s", path, recoveryErr)
+			}
+			if resumed {
 				r.logf("%s: files settled; resuming the agent review.", filepath.Base(path))
 			}
 			r.debugf("%s: snapshot captured in %s", path, time.Since(scanStarted).Round(time.Millisecond))
@@ -289,11 +296,20 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 	if expected != nil && (!sameReviewRequest(requestState, *expected) || hasActiveEdit(requestState)) {
 		return fmt.Errorf("agent request changed before review")
 	}
+	if strings.TrimSpace(requestState.AgentDiff) == "" {
+		if writeErr := Write(FeedPath(r.Root, path), Feed{Owner: requestState.Owner, Fingerprint: capture.Digest, Updated: time.Now(), AssessmentStatus: "unavailable", FailureCode: "capture_edit_scope"}); writeErr != nil {
+			return writeErr
+		}
+		return fmt.Errorf("%w: agent edit scope is empty", errReviewTerminal)
+	}
 	defer func() {
 		if err != nil {
 			// Release a hook immediately on upload/request failure. The feed
 			// belongs only to this edit; a successful retry can replace it.
 			code := phase + "_failed"
+			if errors.Is(err, adversarylabs.ErrMissingReviewScope) {
+				code = "missing_review_scope"
+			}
 			if errors.Is(err, context.DeadlineExceeded) {
 				code = phase + "_timeout"
 			}
@@ -354,6 +370,9 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 	r.debugf("%s: starting review revision %d", path, rev.Number)
 	submitStarted := time.Now()
 	current, err := r.Client.StartWorkspace(ctx, r.Token, input)
+	if errors.Is(err, adversarylabs.ErrMissingReviewScope) {
+		return fmt.Errorf("%w: %w", errReviewTerminal, err)
+	}
 	r.debugf("%s: review submission took %s; total preparation %s", path, time.Since(submitStarted).Round(time.Millisecond), time.Since(reviewStarted).Round(time.Millisecond))
 	if err != nil {
 		return err
@@ -374,7 +393,7 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 			queueLifecycle(ctx, r.Root, path, requestState.Agent, "first_review", current.ID, r.Config)
 		}
 		if current.Early != nil && (current.Early.Status == "ready" || current.Early.Status == "unavailable") {
-			feed := Feed{BaseRef: manifest.BaseRef, TargetTreeHash: capture.TargetTreeHash, Owner: requestState.Owner, Fingerprint: capture.Digest, ReviewID: current.ID, URL: link, Updated: time.Now(), AssessmentStatus: current.Early.Status, FailureCode: current.Early.FailureCode, Anonymous: current.Anonymous}
+			feed := Feed{BaseRef: manifest.BaseRef, TargetTreeHash: capture.TargetTreeHash, Owner: requestState.Owner, Fingerprint: capture.Digest, ReviewID: current.ID, URL: link, Updated: time.Now(), AssessmentStatus: current.Early.Status, FailureCode: current.Early.FailureCode, Anonymous: current.Anonymous, FullReviewStatus: workspaceFullStatus(current), StatusCheckedAt: time.Now()}
 			for _, l := range current.Early.Leads {
 				_, idErr := hex.DecodeString(l.ID)
 				if len(feed.Leads) >= 10 {

@@ -388,7 +388,19 @@ func requestTestAgentReview(t *testing.T, r *Runner, path string) {
 	if err := Write(TurnPath(r.Root, owner.Session), Turn{Owner: owner}); err != nil {
 		t.Fatal(err)
 	}
-	if err := Write(StatePath(r.Root, path), State{Owner: owner, Fingerprint: fingerprint, RequestedAt: time.Now()}); err != nil {
+	capture, err := sourcesnapshot.CaptureWorktree(context.Background(), sourcesnapshot.CaptureOptions{Path: path, Workspace: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := sourcesnapshot.DecodeWorkspace(capture.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	patch, err := Diff(context.Background(), manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(StatePath(r.Root, path), State{Owner: owner, Fingerprint: fingerprint, RequestedAt: time.Now(), AgentDiff: patch}); err != nil {
 		t.Fatal(err)
 	}
 }
