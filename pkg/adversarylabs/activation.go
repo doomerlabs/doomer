@@ -18,5 +18,5 @@ type ActivationEvent struct {
 }
 
 func (c Client) ReportActivation(ctx context.Context, token string, event ActivationEvent) error {
-	return c.postJSON(ctx, "/v1/installations/activate", event, token, nil)
+	return c.postJSON(ctx, "/v2/installations/activate", event, token, nil)
 }

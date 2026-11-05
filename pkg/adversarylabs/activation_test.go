@@ -37,7 +37,7 @@ func TestActivationCapabilityRequiresAuthenticatedServerAcknowledgement(t *testi
 func TestActivationUsesAuthenticatedDedicatedEndpoint(t *testing.T) {
 	event := ActivationEvent{Stage: "activated", InstallationID: "random", Repository: "github.com/org/repo", Agent: "codex", Client: "codex-desktop", OS: "darwin", Architecture: "arm64", CLIVersion: "2026.11.5.2", OccurredAt: "2026-11-05T12:00:00Z"}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/installations/activate" || r.Header.Get("Authorization") != "Bearer token" {
+		if r.URL.Path != "/v2/installations/activate" || r.Header.Get("Authorization") != "Bearer token" {
 			t.Errorf("unexpected request: %s", r.URL.Path)
 		}
 		var got ActivationEvent
