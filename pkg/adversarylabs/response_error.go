@@ -2,12 +2,16 @@ package adversarylabs
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"strings"
 )
+
+// ErrMissingReviewScope identifies a rejected submission with no usable edit scope.
+var ErrMissingReviewScope = errors.New("missing_review_scope")
 
 var requestIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 var validationFieldPattern = regexp.MustCompile(`^(body|repository|repository_id|pull_request|review_node_id|head_sha|comments(\[[0-9]{1,2}\](\.(adversary|package_name|package_version|finding_id|rule_id|path|body))?)?)$`)
@@ -16,6 +20,7 @@ var validationFieldPattern = regexp.MustCompile(`^(body|repository|repository_id
 // server can echo credentials and request bodies even in JSON error messages,
 // so arbitrary messages, headers, and raw response bodies must never be logged.
 func responseError(resp *http.Response, token string) error {
+	var cause error
 	message := fmt.Sprintf("request failed: %d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 	var body struct {
 		Error     string `json:"error"`
@@ -28,6 +33,9 @@ func responseError(resp *http.Response, token string) error {
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxErrorBytes+1))
 	if err == nil && len(data) <= maxErrorBytes && json.Unmarshal(data, &body) == nil {
 		switch body.Error {
+		case "missing_review_scope":
+			message += ": " + body.Error
+			cause = ErrMissingReviewScope
 		case "Content does not match SHA-256":
 			message += ": uploaded file checksum mismatch (the server may have received a truncated body)"
 		case "invalid_request", "invalid_json", "unauthorized", "insufficient_scope", "repository_mismatch",
@@ -77,6 +85,9 @@ func responseError(resp *http.Response, token string) error {
 	}
 	if token != "" {
 		message = strings.ReplaceAll(message, token, "[redacted]")
+	}
+	if cause != nil {
+		return fmt.Errorf("%w: %s", cause, message)
 	}
 	return fmt.Errorf("%s", message)
 }

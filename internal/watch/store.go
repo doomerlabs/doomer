@@ -66,6 +66,8 @@ type State struct {
 	Prompt              string
 }
 type Feed struct {
+	FullReviewStatus string    `json:",omitempty"`
+	StatusCheckedAt  time.Time `json:",omitempty"`
 	BaseRef          string
 	TargetTreeHash   string
 	Anonymous        bool

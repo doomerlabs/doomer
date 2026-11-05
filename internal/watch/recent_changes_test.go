@@ -26,8 +26,8 @@ func TestRecentAgentDiffUsesPreEditContentsNotGitBase(t *testing.T) {
 	if err := saveOperationSnapshot(file, raw); err != nil {
 		t.Fatal(err)
 	}
-	diff := recentAgentDiff(context.Background(), file, sourcesnapshot.Digest(raw), sourcesnapshot.Capture{Bytes: target})
-	if !strings.Contains(diff, "-prior dirty work") || !strings.Contains(diff, "+new edit") || strings.Contains(diff, "original") {
+	diff, err := recentAgentDiff(context.Background(), file, sourcesnapshot.Digest(raw), sourcesnapshot.Capture{Bytes: target})
+	if err != nil || !strings.Contains(diff, "-prior dirty work") || !strings.Contains(diff, "+new edit") || strings.Contains(diff, "original") {
 		t.Fatalf("wrong edit baseline: %s", diff)
 	}
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
@@ -53,13 +53,13 @@ func TestTimedOutDiffRetainsSnapshotForWatcherRecovery(t *testing.T) {
 	target, _ := json.Marshal(after)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if got := recentAgentDiff(ctx, file, sourcesnapshot.Digest(raw), sourcesnapshot.Capture{Bytes: target}); got != "" {
+	if got, err := recentAgentDiff(ctx, file, sourcesnapshot.Digest(raw), sourcesnapshot.Capture{Bytes: target}); got != "" || err == nil {
 		t.Fatal("canceled diff unexpectedly succeeded")
 	}
 	if _, err := os.Stat(file); err != nil {
 		t.Fatal("lost retry snapshot", err)
 	}
-	if got := recentAgentDiff(context.Background(), file, sourcesnapshot.Digest(raw), sourcesnapshot.Capture{Bytes: target}); !strings.Contains(got, "-new") || !strings.Contains(got, "+old") {
+	if got, err := recentAgentDiff(context.Background(), file, sourcesnapshot.Digest(raw), sourcesnapshot.Capture{Bytes: target}); err != nil || !strings.Contains(got, "-new") || !strings.Contains(got, "+old") {
 		t.Fatal("could not recover exact edit", got)
 	}
 }

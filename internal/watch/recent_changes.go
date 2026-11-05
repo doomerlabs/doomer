@@ -2,6 +2,8 @@ package watch
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -44,11 +46,14 @@ func saveOperationSnapshot(file string, data []byte) error {
 	}
 	return os.Rename(temp.Name(), file)
 }
-func recentAgentDiff(ctx context.Context, file, beforeDigest string, after sourcesnapshot.Capture) string {
+
+var errCaptureEditScope = errors.New("could not capture the agent edit scope")
+
+func recentAgentDiff(ctx context.Context, file, beforeDigest string, after sourcesnapshot.Capture) (diff string, err error) {
 	defer func() {
 		// A hook deadline is not a completed capture. Keep the immutable
 		// pre-edit snapshot so the watcher can recover the exact edit later.
-		if ctx.Err() == nil {
+		if err == nil {
 			_ = os.Remove(file)
 		}
 	}()
@@ -56,10 +61,10 @@ func recentAgentDiff(ctx context.Context, file, beforeDigest string, after sourc
 }
 
 // A turn baseline is retained across edits; per-operation snapshots are disposable.
-func snapshotAgentDiff(ctx context.Context, file, beforeDigest string, after sourcesnapshot.Capture) string {
+func snapshotAgentDiff(ctx context.Context, file, beforeDigest string, after sourcesnapshot.Capture) (string, error) {
 	current, err := sourcesnapshot.DecodeWorkspace(after.Bytes)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("%w: decode current snapshot: %v", errCaptureEditScope, err)
 	}
 	var before sourcesnapshot.Manifest
 	if beforeDigest == "clean" {
@@ -67,23 +72,32 @@ func snapshotAgentDiff(ctx context.Context, file, beforeDigest string, after sou
 		before.Blobs = current.Blobs
 	} else {
 		info, err := os.Stat(file)
-		if err != nil || info.Size() > sourcesnapshot.MaxEncodedWorkspaceBytes {
-			return ""
+		if err != nil {
+			return "", fmt.Errorf("%w: read baseline metadata: %v", errCaptureEditScope, err)
+		}
+		if info.Size() > sourcesnapshot.MaxEncodedWorkspaceBytes {
+			return "", fmt.Errorf("%w: baseline exceeds the snapshot size limit", errCaptureEditScope)
 		}
 		raw, err := os.ReadFile(file)
-		if err != nil || sourcesnapshot.Digest(raw) != beforeDigest {
-			return ""
+		if err != nil {
+			return "", fmt.Errorf("%w: read baseline: %v", errCaptureEditScope, err)
+		}
+		if sourcesnapshot.Digest(raw) != beforeDigest {
+			return "", fmt.Errorf("%w: baseline digest mismatch", errCaptureEditScope)
 		}
 		before, err = sourcesnapshot.DecodeWorkspace(raw)
 		if err != nil {
-			return ""
+			return "", fmt.Errorf("%w: decode baseline: %v", errCaptureEditScope, err)
 		}
 	}
 	diff, err := Diff(ctx, changedTrees(before, current))
-	if err != nil || len(diff) > 128<<10 {
-		return ""
+	if err != nil {
+		return "", fmt.Errorf("%w: generate diff: %w", errCaptureEditScope, err)
 	}
-	return diff
+	if len(diff) > 128<<10 {
+		return "", fmt.Errorf("%w: edit patch exceeds 128 KiB", errCaptureEditScope)
+	}
+	return diff, nil
 }
 func changedTrees(before, after sourcesnapshot.Manifest) sourcesnapshot.Manifest {
 	old, newEntries := map[string]sourcesnapshot.Entry{}, map[string]sourcesnapshot.Entry{}
@@ -109,7 +123,7 @@ func changedTrees(before, after sourcesnapshot.Manifest) sourcesnapshot.Manifest
 	return result
 }
 
-func capturedAgentDiff(ctx context.Context, root, path string, state State, owner Owner, toolID, before string, capture sourcesnapshot.Capture) string {
+func capturedAgentDiff(ctx context.Context, root, path string, state State, owner Owner, toolID, before string, capture sourcesnapshot.Capture) (string, error) {
 	if state.DiffOwner == owner && state.DiffBase != "" {
 		return snapshotAgentDiff(ctx, reviewBaselinePath(root, path, owner), state.DiffBase, capture)
 	}

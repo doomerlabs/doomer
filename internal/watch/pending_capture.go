@@ -50,6 +50,13 @@ func resumeCompletedEdit(ctx context.Context, root, path string, capture sources
 			}
 			delete(state.Active, id)
 			if capture.Digest != op.Before && !state.RequestedAt.After(op.CompletedAt) {
+				agentDiff, diffErr := capturedAgentDiff(ctx, root, path, state, op.Owner, id, op.Before, capture)
+				if diffErr != nil {
+					return diffErr
+				}
+				if agentDiff == "" {
+					return Write(StatePath(root, path), state)
+				}
 				if err := Write(reviewCapturePath(root, path), capture); err != nil {
 					return err
 				}
@@ -62,7 +69,7 @@ func resumeCompletedEdit(ctx context.Context, root, path string, capture sources
 				state.QuestionRequest = ""
 				state.HypothesesSubmitted = false
 				state.Hypotheses = nil
-				state.AgentDiff = capturedAgentDiff(ctx, root, path, state, op.Owner, id, op.Before, capture)
+				state.AgentDiff = agentDiff
 				resumed = true
 			}
 			if err := Write(StatePath(root, path), state); err != nil {
