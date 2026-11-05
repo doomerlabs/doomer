@@ -1,0 +1,43 @@
+cmd/watch_lifecycle.go
+  s_19d08b7f01e7fd::t_df8d5df49eaf89 65-66,69-70
+cmd/root.go
+  s_19d08b7f01e7fd::t_df8d5df49eaf89 127
+pkg/adversarylabs/lock_unix.go
+  s_19d08b7f01e7fd::t_df8d5df49eaf89 12,26-29
+cmd/watch_lifecycle_test.go
+  s_19d08b7f01e7fd::t_3bf1e9f5094859 540-580
+pkg/adversarylabs/lock_windows.go
+  s_19d08b7f01e7fd::t_df8d5df49eaf89 12,20-23
+internal/publock/lock.go
+  s_19d08b7f01e7fd::t_df8d5df49eaf89 66-95
+pkg/adversarylabs/config.go
+  s_19d08b7f01e7fd::t_df8d5df49eaf89 90-91,123-126,128,137
+internal/publock/lock_test.go
+  s_6a12f00e157355::t_fa4800d4c8d4f0 4,35-61
+pkg/adversarylabs/config_test.go
+  s_6a12f00e157355::t_9327792f7ba9bd 5,7,183-207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ec235cfa8ab903e765273de8aa15014292962d0",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    },
+    "s_6a12f00e157355": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1adf3-2c56-7b61-9471-13c62dcf0a93",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
