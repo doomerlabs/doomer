@@ -320,7 +320,11 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 
 	var rev revision
 	revPath := filepath.Join(r.Root, "revisions", Key(path+"\x00"+requestState.Owner.Session)+".json")
-	_ = Read(revPath, &rev)
+	if err := Read(revPath, &rev); os.IsNotExist(err) {
+		// The old path is reusable only when its request identity proves the
+		// same edit, including the owning session. Other legacy groups reset.
+		_ = Read(filepath.Join(r.Root, "revisions", Key(path)+".json"), &rev)
+	}
 	rev = revisionForEdit(rev, capture.Digest, requestState)
 
 	if err = Write(revPath, rev); err != nil {
@@ -431,9 +435,6 @@ func (r Runner) flush(ctx context.Context) {
 // Content can return to an earlier value after undo/reapply. Request identity
 // also includes the owning edit and its context; transport retries keep the key.
 func revisionForEdit(rev revision, digest string, state State) revision {
-	if rev.Session != state.Owner.Session {
-		rev = revision{Session: state.Owner.Session}
-	}
 	raw, _ := json.Marshal(struct {
 		Digest      string
 		Owner       Owner
@@ -443,6 +444,12 @@ func revisionForEdit(rev revision, digest string, state State) revision {
 		Hypotheses  []adversarylabs.WorkspaceHypothesis
 	}{digest, state.Owner, state.RequestedAt, state.AgentDiff, state.Prompt, state.Hypotheses})
 	key := Key(string(raw))
+	if rev.Session == "" && rev.RequestKey == key {
+		rev.Session = state.Owner.Session
+	}
+	if rev.Session != state.Owner.Session {
+		rev = revision{Session: state.Owner.Session}
+	}
 	if rev.Group == "" {
 		rev.Group = rand.Text()
 	}
