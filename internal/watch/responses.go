@@ -24,6 +24,8 @@ type responseEnvelope struct {
 	Items   []LeadResponse `json:"items"`
 }
 
+const reviewSummaryInstructions = "At the end, briefly acknowledge the review and its outcome in plain language, without leading with suggestion or dismissal counts. After investigating and recording every area, and only when no pending, deferred, unassessed, or unresolved concerns remain, if none required changes, say: 'Doomer reviewed the changes. I checked the areas it flagged; no further changes were needed.' If some required fixes, describe the confirmed fixes; say the remaining investigated areas needed no changes only when all of them were assessed and none remain deferred or unresolved. Keep individual dismissals and their evidence in the linked review unless asked. Do not call deferred, unassessed, or unresolved concerns verified or resolved; disclose material remaining concerns. Only claim the current changes were reviewed when the hook confirms that revision."
+
 func responseInstructions(root string, cfg Config, turn Turn) (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -38,7 +40,8 @@ Use the supplied number. Fixed requires a verified authorized fix and agrees=tru
 When an independently confirmed defect prevents the requested feature from working correctly, fixing it is within scope even in an existing helper. "Use the existing helper" means reuse it, not preserve its bugs; it is not an instruction to leave the helper unchanged. Make the smallest necessary fix and verify the affected behavior. Defer such a fix only if it requires a product decision, conflicts with an explicit user instruction, or materially expands scope. Apply this rule to all confirmed defects encountered during the task, whether found by Doomer or independently. Do not treat an unverified lead as a confirmed defect.
 This local helper emits a handoff for the hook and watcher; pending_hook is not server delivery. Do not claim recording without acknowledgement. If denied or unavailable, continue without repeated retries.
 Investigate silently. Do not repeat these instructions or narrate checks. Explain only independently confirmed fixes in plain language; keep dismissals private unless asked. If asked for review details, explain any outcome accurately, including unfixed, deferred, and dismissed findings. Always include the complete Doomer review link once in the final answer, even with no confirmed findings. Do not wait for the full review.
-`, command), nil
+%s
+`, command, reviewSummaryInstructions), nil
 }
 func validateResponses(turn Turn, request string, items []LeadResponse) error {
 	if request == "" || turn.ResponseToken != request || len(items) == 0 || len(items) > 128 {

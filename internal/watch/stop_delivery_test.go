@@ -43,10 +43,10 @@ func TestCompletedReviewDeliveredAfterCommit(t *testing.T) {
 	stop := run("Stop")
 	var state State
 	Read(StatePath(root, repo), &state)
-	if !state.Ambiguous || agentReviewRequested(root, repo, state.Fingerprint, time.Time{}) {
-		t.Fatal("delivery restored ownership of an ambiguous edit")
+	if state.Ambiguous || state.Owner != owner {
+		t.Fatal("content-preserving commit lost the original ownership")
 	}
-	if !strings.Contains(post, "earlier snapshot") || strings.Contains(stop, "https://example.com/review") {
+	if !strings.Contains(post, "latest edit") || strings.Contains(stop, "https://example.com/review") {
 		t.Fatalf("snapshot labeling or deduplication failed: post=%s stop=%s", post, stop)
 	}
 	if !strings.Contains(post+stop, "https://example.com/review") {
@@ -89,8 +89,8 @@ func TestCommittedReviewedContentIsStillReportedComplete(t *testing.T) {
 	stop := run("Stop")
 	var state State
 	Read(StatePath(root, repo), &state)
-	if !state.Ambiguous || agentReviewRequested(root, repo, state.Fingerprint, time.Time{}) {
-		t.Fatal("delivery restored ownership of an ambiguous edit")
+	if state.Ambiguous || state.Owner != owner {
+		t.Fatal("content-preserving commit lost the original ownership")
 	}
 	if strings.Contains(post, "earlier snapshot") || !strings.Contains(post, "latest edit") || strings.Contains(stop, "https://example.com/review") {
 		t.Fatalf("snapshot labeling or deduplication failed: post=%s stop=%s", post, stop)

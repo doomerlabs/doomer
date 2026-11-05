@@ -50,6 +50,9 @@ func resumeCompletedEdit(ctx context.Context, root, path string, capture sources
 			}
 			delete(state.Active, id)
 			if capture.Digest != op.Before && !state.RequestedAt.After(op.CompletedAt) {
+				if err := Write(reviewCapturePath(root, path), capture); err != nil {
+					return err
+				}
 				state.Owner = op.Owner
 				state.Fingerprint = capture.Digest
 				state.RequestedAt = op.CompletedAt

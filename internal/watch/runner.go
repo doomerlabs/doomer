@@ -153,7 +153,7 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 		r.debugf("%s: scanning working tree", path)
 		scanStarted := time.Now()
 		captureCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		capture, err := sourcesnapshot.CaptureWorktree(captureCtx, sourcesnapshot.CaptureOptions{Workspace: true, Path: path, Base: r.Base})
+		capture, err := captureForReview(captureCtx, r.Root, path, r.Base)
 		cancel()
 		if ctx.Err() != nil {
 			return nil
