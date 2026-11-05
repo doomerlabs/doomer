@@ -39,6 +39,7 @@ type Runner struct {
 	WatchToken   string
 }
 type revision struct {
+	Session    string
 	RequestKey string
 	ID         string
 
@@ -318,7 +319,7 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 	defer cancel()
 
 	var rev revision
-	revPath := filepath.Join(r.Root, "revisions", Key(path)+".json")
+	revPath := filepath.Join(r.Root, "revisions", Key(path+"\x00"+requestState.Owner.Session)+".json")
 	_ = Read(revPath, &rev)
 	rev = revisionForEdit(rev, capture.Digest, requestState)
 
@@ -430,6 +431,9 @@ func (r Runner) flush(ctx context.Context) {
 // Content can return to an earlier value after undo/reapply. Request identity
 // also includes the owning edit and its context; transport retries keep the key.
 func revisionForEdit(rev revision, digest string, state State) revision {
+	if rev.Session != state.Owner.Session {
+		rev = revision{Session: state.Owner.Session}
+	}
 	raw, _ := json.Marshal(struct {
 		Digest      string
 		Owner       Owner

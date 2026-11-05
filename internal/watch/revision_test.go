@@ -26,10 +26,21 @@ func TestRevisionIdentityBelongsToEditNotOnlyContent(t *testing.T) {
 		t.Fatal("undo/reapply in same turn reused identity")
 	}
 }
-func TestLegacyRevisionGetsFreshIdentityWithoutLosingGroup(t *testing.T) {
+func TestRevisionGroupsDoNotCrossSessions(t *testing.T) {
+	first := State{Owner: Owner{Session: "smoke-chat", Turn: "first"}, RequestedAt: time.Unix(100, 0)}
+	original := revisionForEdit(revision{}, "same-content", first)
+	second := first
+	second.Owner = Owner{Session: "footer-chat", Turn: "second"}
+	next := revisionForEdit(original, "same-content", second)
+	if next.Group == original.Group || next.Number != 1 || next.ID == original.ID {
+		t.Fatalf("unrelated chat reused prior group: before=%+v after=%+v", original, next)
+	}
+}
+
+func TestLegacyRevisionWithoutSessionStartsSeparateGroup(t *testing.T) {
 	old := revision{ID: "old", Group: "existing", Number: 9, Digest: "same-content"}
-	next := revisionForEdit(old, "same-content", State{})
-	if next.ID == old.ID || next.Group != old.Group || next.Number != 10 || next.RequestKey == "" {
-		t.Fatalf("invalid migration: %+v", next)
+	next := revisionForEdit(old, "same-content", State{Owner: Owner{Session: "chat", Turn: "turn"}})
+	if next.ID == old.ID || next.Group == old.Group || next.Number != 1 || next.RequestKey == "" {
+		t.Fatalf("unscoped legacy group was reused: %+v", next)
 	}
 }
