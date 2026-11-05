@@ -3,6 +3,7 @@ package watch
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -23,7 +24,7 @@ type hookDiagnostic struct {
 // so a later successful hook does not erase the cause of an earlier failure.
 func recordHookDiagnostic(root, session string, diagnostic hookDiagnostic) {
 	_ = Write(filepath.Join(root, "hook-diagnostics", Key(session+diagnostic.Event)+".json"), diagnostic)
-	_ = Locked(root, "hook-history-"+session, func() error {
+	_ = Locked(root, "hook-history", func() error {
 		file := filepath.Join(root, "hook-history", Key(session)+".json")
 		var history []hookDiagnostic
 		_ = Read(file, &history)
@@ -35,7 +36,32 @@ func recordHookDiagnostic(root, session string, diagnostic hookDiagnostic) {
 	})
 }
 
+// Retain a week for debugging, removing inactive histories under the same
+// lock used by writers and rechecking their age after acquiring it.
+func pruneHookHistory(root string, before time.Time) {
+	directory := filepath.Join(root, "hook-history")
+	entries, _ := os.ReadDir(directory)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || !info.ModTime().Before(before) {
+			continue
+		}
+		_ = Locked(root, "hook-history", func() error {
+			file := filepath.Join(directory, entry.Name())
+			info, err := os.Stat(file)
+			if err != nil || !info.ModTime().Before(before) {
+				return err
+			}
+			return os.Remove(file)
+		})
+	}
+}
+
 func (r Runner) logHookDiagnostics(path string, after time.Time) time.Time {
+	pruneHookHistory(r.Root, time.Now().Add(-7*24*time.Hour))
 	entries, _ := os.ReadDir(filepath.Join(r.Root, "hook-diagnostics"))
 	latest := after
 	for _, entry := range entries {

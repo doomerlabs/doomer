@@ -152,3 +152,37 @@ func TestHookDiagnosticHistoryIsBoundedAndRetainsConflict(t *testing.T) {
 		t.Fatalf("history lost conflict: %d", len(history))
 	}
 }
+
+func TestHookHistoryPrunesInactiveSessionsAndPreservesActiveWriters(t *testing.T) {
+	root := t.TempDir()
+	old := time.Now().Add(-8 * 24 * time.Hour)
+	for _, session := range []string{"expired", "active", "recent"} {
+		recordHookDiagnostic(root, session, hookDiagnostic{At: time.Now(), Event: "PreToolUse"})
+		if session != "recent" {
+			file := filepath.Join(root, "hook-history", Key(session)+".json")
+			if err := os.Chtimes(file, old, old); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := Locked(root, "hook-history", func() error {
+		(Runner{Root: root}).logHookDiagnostics("", time.Time{})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "hook-history", Key("expired")+".json")); !os.IsNotExist(err) {
+		t.Fatalf("expired history survived: %v", err)
+	}
+	for _, session := range []string{"active", "recent"} {
+		if _, err := os.Stat(filepath.Join(root, "hook-history", Key(session)+".json")); err != nil {
+			t.Fatalf("retained history %s: %v", session, err)
+		}
+	}
+	recordHookDiagnostic(root, "active", hookDiagnostic{At: time.Now(), Event: "PostToolUse"})
+	(Runner{Root: root}).logHookDiagnostics("", time.Time{})
+	var history []hookDiagnostic
+	if err := Read(filepath.Join(root, "hook-history", Key("active")+".json"), &history); err != nil || len(history) != 2 {
+		t.Fatalf("updated history was lost: %v, %d events", err, len(history))
+	}
+}
