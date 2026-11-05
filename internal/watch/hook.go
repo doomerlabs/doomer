@@ -534,6 +534,11 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			if e != nil || (fingerprint != feed.Fingerprint && !olderSnapshot) {
 				return
 			}
+			currentContentReviewed := false
+			if olderSnapshot && feed.BaseRef != "" && feed.TargetTreeHash != "" {
+				capture, err := sourcesnapshot.CaptureWorktree(ctx, sourcesnapshot.CaptureOptions{Workspace: true, Path: path, Base: feed.BaseRef})
+				currentContentReviewed = err == nil && capture.TargetTreeHash == feed.TargetTreeHash
+			}
 			var message string
 			_ = Locked(root, input.Session, func() error {
 				_ = Read(turnFile, &turn)
@@ -547,7 +552,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 				}
 				snapshotLabel := "latest edit"
 				snapshotNote := ""
-				if olderSnapshot {
+				if olderSnapshot && !currentContentReviewed {
 					snapshotLabel = "earlier snapshot from this turn"
 					snapshotNote = "The checkout changed after that snapshot. This does not confirm review of the current code. Verify each lead against the current code before acting. "
 				}

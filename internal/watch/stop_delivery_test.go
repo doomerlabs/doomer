@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 )
 
 func TestCompletedReviewDeliveredAfterCommit(t *testing.T) {
@@ -45,6 +47,52 @@ func TestCompletedReviewDeliveredAfterCommit(t *testing.T) {
 		t.Fatal("delivery restored ownership of an ambiguous edit")
 	}
 	if !strings.Contains(post, "earlier snapshot") || strings.Contains(stop, "https://example.com/review") {
+		t.Fatalf("snapshot labeling or deduplication failed: post=%s stop=%s", post, stop)
+	}
+	if !strings.Contains(post+stop, "https://example.com/review") {
+		t.Fatal("completed review lost after commit")
+	}
+}
+
+func TestCommittedReviewedContentIsStillReportedComplete(t *testing.T) {
+	repo, root := repository(t), t.TempDir()
+	owner := Owner{"session", "turn"}
+	os.WriteFile(filepath.Join(repo, "file.txt"), []byte("changed\n"), 0600)
+	capture, err := sourcesnapshot.CaptureWorktree(context.Background(), sourcesnapshot.CaptureOptions{Workspace: true, Path: repo})
+	fp := capture.Digest
+	if err != nil {
+		t.Fatal(err)
+	}
+	Write(TurnPath(root, owner.Session), Turn{Owner: owner, Repositories: []string{repo}})
+	Write(StatePath(root, repo), State{Owner: owner, Fingerprint: fp, HypothesesSubmitted: true, RequestedAt: time.Now()})
+	Write(filepath.Join(root, "heartbeat.json"), time.Now())
+	manifest, err := sourcesnapshot.DecodeWorkspace(capture.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	Write(FeedPath(root, repo), Feed{BaseRef: manifest.BaseRef, TargetTreeHash: capture.TargetTreeHash, Owner: owner, Fingerprint: fp, ReviewID: "review", URL: "https://example.com/review", AssessmentStatus: "ready", Updated: time.Now()})
+	run := func(event string) string {
+		raw, _ := json.Marshal(HookInput{Session: owner.Session, Turn: owner.Turn, CWD: repo, Event: event, Tool: "Bash", ToolID: "commit", Input: json.RawMessage(`{"command":"git add . && git commit -m change"}`)})
+		var out strings.Builder
+		hookForTest(context.Background(), root, Config{Directories: []string{repo}}, strings.NewReader(string(raw)), &out)
+		return out.String()
+	}
+	run("PreToolUse")
+	for _, args := range [][]string{{"add", "."}, {"-c", "core.hooksPath=/dev/null", "commit", "-m", "change"}} {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("commit: %s %v", out, err)
+		}
+	}
+	post := run("PostToolUse")
+	stop := run("Stop")
+	var state State
+	Read(StatePath(root, repo), &state)
+	if !state.Ambiguous || agentReviewRequested(root, repo, state.Fingerprint, time.Time{}) {
+		t.Fatal("delivery restored ownership of an ambiguous edit")
+	}
+	if strings.Contains(post, "earlier snapshot") || !strings.Contains(post, "latest edit") || strings.Contains(stop, "https://example.com/review") {
 		t.Fatalf("snapshot labeling or deduplication failed: post=%s stop=%s", post, stop)
 	}
 	if !strings.Contains(post+stop, "https://example.com/review") {
