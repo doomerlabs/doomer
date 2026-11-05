@@ -23,18 +23,19 @@ import (
 )
 
 type setupRepository struct {
-	MainCheckout string `json:"mainCheckout"`
-	Checkout     string `json:"checkout"`
+	MainCheckout   string `json:"mainCheckout"`
+	Checkout       string `json:"checkout"`
+	AlreadyGranted bool   `json:"alreadyGranted,omitempty"`
 }
 
-func setupRepositories(ctx context.Context, directories []string) ([]setupRepository, error) {
+func setupRepositories(ctx context.Context, directories []string, granted watching.Config) ([]setupRepository, error) {
 	repositories := make([]setupRepository, 0, len(directories))
 	for _, directory := range directories {
 		primary, err := watching.PrimaryCheckout(ctx, directory)
 		if err != nil {
 			return nil, err
 		}
-		repositories = append(repositories, setupRepository{MainCheckout: primary, Checkout: directory})
+		repositories = append(repositories, setupRepository{MainCheckout: primary, Checkout: directory, AlreadyGranted: watching.Allowed(granted, directory)})
 	}
 	return repositories, nil
 }
@@ -59,12 +60,15 @@ func (s setupConsent) print(w io.Writer) {
 	} else {
 		fmt.Fprintln(w, "Access:       These repositories, including their main checkouts and all existing and future linked Git worktrees:")
 		for _, repo := range s.Repositories {
-			if repo.MainCheckout != "" {
-				fmt.Fprintln(w, "Main checkout: "+repo.MainCheckout)
+			label := "Repository"
+			if repo.AlreadyGranted {
+				label = "Already granted"
 			}
-			if repo.Checkout != repo.MainCheckout {
-				fmt.Fprintln(w, "Setup checkout: "+repo.Checkout)
+			path := repo.MainCheckout
+			if path == "" {
+				path = repo.Checkout
 			}
+			fmt.Fprintf(w, "%s: %s\n", label, path)
 		}
 	}
 	fmt.Fprintln(w, "Sends:        Base and current source snapshots (including files outside your changes), the task prompt behind an agent edit, and agent review responses.\n\nRepositories are discovered through your coding agent; Doomer does not scan your whole disk.\nSetup installs hooks. Uploads begin only while the watcher runs. See the destination’s privacy policy for retention; expiry of a review link does not delete uploaded source.")
@@ -215,4 +219,20 @@ func (s setupConsent) ServiceURL() string {
 	u.Path = strings.TrimSuffix(strings.TrimRight(u.Path, "/"), "/api")
 	u.RawPath, u.RawQuery, u.Fragment = "", "", ""
 	return strings.TrimRight(u.String(), "/")
+}
+
+func (s setupConsent) RequestedRepositories() []setupRepository {
+	return s.repositoriesWithGrant(false)
+}
+func (s setupConsent) GrantedRepositories() []setupRepository {
+	return s.repositoriesWithGrant(true)
+}
+func (s setupConsent) repositoriesWithGrant(granted bool) []setupRepository {
+	var result []setupRepository
+	for _, repo := range s.Repositories {
+		if repo.AlreadyGranted == granted {
+			result = append(result, repo)
+		}
+	}
+	return result
 }

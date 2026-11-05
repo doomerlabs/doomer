@@ -10,10 +10,10 @@
 {{define "foot"}}</main><footer class="foot">Local setup · Your choice stays with this installation.</footer></div></body></html>{{end}}
 {{define "consent"}}{{template "head" .}}<main>
 <p class="eyebrow">Your code. Your permission.</p>
-<h1>{{if .AllRepositories}}Allow Doomer to review your repositories?{{else}}Allow Doomer to review this repo and its worktrees?{{end}}</h1>
+<h1>{{if .AllRepositories}}Allow Doomer to review your repositories?{{else if .RequestedRepositories}}Allow Doomer to review this repo and its worktrees?{{else}}Continue with your existing repository access?{{end}}</h1>
 <p class="lede">Doomer sends code from {{if .AllRepositories}}repositories your coding agent edits{{else}}this repo{{end}}, along with the task prompt and the agent’s review responses, to Doomer’s servers for analysis. You’ll get free initial feedback in your coding chat. No account required.</p>
 <section class="scope" aria-label="Repository access"><p class="label">{{if .AllRepositories}}Repositories your agent works in{{else}}Repository access{{end}}</p>
-{{if .AllRepositories}}<p>Includes future checkouts your coding agent edits. Doomer does not scan your whole disk.</p>{{else}}<p>Includes the main checkout and all existing and future linked Git worktrees.</p><ul class="repos">{{range .Repositories}}<li>{{if .MainCheckout}}<span class="label">Main checkout</span><br><code>{{.MainCheckout}}</code>{{end}}{{if ne .Checkout .MainCheckout}}{{if .MainCheckout}}<br>{{end}}<span class="label">Setup checkout</span><br><code>{{.Checkout}}</code>{{end}}</li>{{end}}</ul>{{end}}
+{{if .AllRepositories}}<p>Includes future checkouts your coding agent edits. Doomer does not scan your whole disk.</p>{{else}}<p>Includes the main checkout and all existing and future linked Git worktrees.</p>{{if not .RequestedRepositories}}<p>Access to these repositories was already granted.</p>{{end}}<ul class="repos">{{range .RequestedRepositories}}<li><code>{{if .MainCheckout}}{{.MainCheckout}}{{else}}{{.Checkout}}{{end}}</code></li>{{end}}</ul>{{end}}
 </section>
 <dl class="meta"><dt>Send code to</dt><dd><a href="{{.ServiceURL}}" target="_blank" rel="noreferrer">{{.ServiceURL}}</a></dd><dt>Profile</dt><dd><code>{{.Profile}}</code></dd></dl>
 <details><summary>What gets sent?</summary>
@@ -22,9 +22,10 @@
 <p>Setup installs {{range .Agents}}{{.}} {{end}}hooks. Your coding agent may separately ask you to trust them. The watcher uploads only after approval and an attributable agent edit. You can pause watching or revoke approval from the CLI.</p>
 </details>
 <form class="actions" method="get" action="/complete"><input type="hidden" name="nonce" value="{{.Nonce}}">
-<button class="primary" name="decision" value="allow">{{if .AllRepositories}}Allow for these repositories{{else}}Allow for repo and worktrees{{end}}</button>
+<button class="primary" name="decision" value="allow">{{if .AllRepositories}}Allow for these repositories{{else if .RequestedRepositories}}Allow for repo and worktrees{{else}}Continue with existing access{{end}}</button>
 <button name="decision" value="cancel">Not now</button></form>
 <p class="note">Choosing “Not now” leaves your coding agent working normally.</p>
+{{if .GrantedRepositories}}<section class="scope" aria-label="Already granted"><p class="label">Already granted</p><p>You previously allowed access to these repositories and their linked worktrees.</p><ul class="repos">{{range .GrantedRepositories}}<li><code>{{if .MainCheckout}}{{.MainCheckout}}{{else}}{{.Checkout}}{{end}}</code></li>{{end}}</ul></section>{{end}}
 {{template "foot" .}}{{end}}
 {{define "complete"}}{{template "head" .}}<main>
 <div class="badge" aria-hidden="true">{{if .Approved}}✓{{else}}−{{end}}</div>
