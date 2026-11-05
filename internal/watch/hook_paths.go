@@ -3,6 +3,7 @@ package watch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 )
+
+var errHookOutsideRepository = errors.New("explicit working directory is outside Git")
 
 var hookWorkdir = regexp.MustCompile(`(?:["']?(?:workdir|cwd)["']?)\s*:\s*("(?:[^"\\]|\\.)*"|'[^']*')`)
 var hookPatchPath = regexp.MustCompile(`(?:^|\n|\\n)\*\*\* (?:Update File|Add File|Delete File|Move to): ([^\r\n\\"']+)`)
@@ -23,6 +26,7 @@ func HookRepository(ctx context.Context, input HookInput) (string, error) {
 
 func hookRepository(ctx context.Context, input HookInput, fallback string) (string, error) {
 	candidates := []string{}
+	explicitDirectory := false
 	var inspect func(any)
 	inspect = func(value any) {
 		switch v := value.(type) {
@@ -30,6 +34,9 @@ func hookRepository(ctx context.Context, input HookInput, fallback string) (stri
 			for _, key := range []string{"workdir", "cwd", "path", "file_path", "filename"} {
 				if p, ok := v[key].(string); ok && p != "" {
 					candidates = append(candidates, p)
+					if key == "workdir" || key == "cwd" {
+						explicitDirectory = true
+					}
 				}
 			}
 			for _, key := range []string{"command", "cmd", "code", "patch", "input"} {
@@ -39,6 +46,7 @@ func hookRepository(ctx context.Context, input HookInput, fallback string) (stri
 			}
 		case string:
 			for _, match := range hookWorkdir.FindAllStringSubmatch(v, -1) {
+				explicitDirectory = true
 				raw := match[1]
 				if len(raw) > 0 && raw[0] == '"' {
 					if p, err := strconv.Unquote(raw); err == nil {
@@ -84,6 +92,9 @@ func hookRepository(ctx context.Context, input HookInput, fallback string) (stri
 	}
 	for root := range roots {
 		return root, nil
+	}
+	if explicitDirectory {
+		return "", errHookOutsideRepository
 	}
 	root, err := Root(ctx, input.CWD)
 	// Only pathless events may reuse a repository selected earlier in this

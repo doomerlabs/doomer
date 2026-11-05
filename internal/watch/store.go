@@ -41,7 +41,15 @@ type Operation struct {
 	Attributable   bool
 	CompletedAt    time.Time
 }
+type AttributionConflict struct {
+	Reason      string
+	ToolID      string
+	OtherToolID string
+	OtherOwner  Owner
+}
+
 type State struct {
+	Conflict            *AttributionConflict `json:",omitempty"`
 	InlineWaited        bool
 	Agent               string `json:"agent,omitempty"`
 	QuestionRequest     string

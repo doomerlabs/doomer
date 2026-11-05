@@ -6,15 +6,33 @@ import (
 	"time"
 )
 
-// Latest event metadata only: never prompts, source, tool arguments or results.
+// Local event metadata only: never prompts, source, tool arguments or results.
 type hookDiagnostic struct {
 	At         time.Time
 	Event      string
 	Tool       string
+	ToolID     string
+	Conflict   *AttributionConflict `json:",omitempty"`
 	Repository string
 	HasToolID  bool
 	Status     string
 	Owner      Owner
+}
+
+// Keep the latest event for existing readers, plus a bounded per-chat history
+// so a later successful hook does not erase the cause of an earlier failure.
+func recordHookDiagnostic(root, session string, diagnostic hookDiagnostic) {
+	_ = Write(filepath.Join(root, "hook-diagnostics", Key(session+diagnostic.Event)+".json"), diagnostic)
+	_ = Locked(root, "hook-history-"+session, func() error {
+		file := filepath.Join(root, "hook-history", Key(session)+".json")
+		var history []hookDiagnostic
+		_ = Read(file, &history)
+		history = append(history, diagnostic)
+		if len(history) > 128 {
+			history = history[len(history)-128:]
+		}
+		return Write(file, history)
+	})
 }
 
 func (r Runner) logHookDiagnostics(path string, after time.Time) time.Time {
