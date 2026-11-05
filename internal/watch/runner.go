@@ -73,6 +73,15 @@ func agentReviewRequested(root, path, fingerprint string, since time.Time) bool 
 }
 
 func (r Runner) Run(ctx context.Context, path string, once bool) error {
+	reportingContext, stopReporting := context.WithCancel(ctx)
+	if r.Config.ActivationReporting {
+		reportingDone := make(chan struct{})
+		go func() { defer close(reportingDone); r.runActivationReporting(reportingContext, path) }()
+		defer func() { stopReporting(); <-reportingDone }()
+	} else {
+		defer stopReporting()
+	}
+
 	if ctx.Err() != nil || RepositoryRemoved(r.Root, path) {
 		return nil
 	}
@@ -332,6 +341,9 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 	}
 	hostname, _ := os.Hostname()
 	input := adversarylabs.WorkspaceSubmission{Hypotheses: requestState.Hypotheses, AgentDiff: requestState.AgentDiff, RepositoryID: baseRepo, SnapshotID: headID, BaseSnapshotID: baseID, ReviewID: rev.ID, GroupID: rev.Group, Revision: rev.Number, Repository: repo, Branch: capture.Source.Branch, Diff: diff, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "hostname": hostname, "agent": requestState.Agent}}
+	if r.Config.ActivationReporting {
+		input.Client["installation_id"] = r.Config.InstallationID
+	}
 	if prompt := strings.TrimSpace(requestState.Prompt); prompt != "" {
 		text := []rune(prompt)
 		if len(text) > 4000 {
@@ -358,6 +370,9 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 			}
 		}
 		r.debugf("%s: review status=%s, look closer review=%s", path, current.Status, earlyStatus)
+		if current.Early != nil && current.Early.Status == "ready" {
+			queueLifecycle(ctx, r.Root, path, requestState.Agent, "first_review", current.ID, r.Config)
+		}
 		if current.Early != nil && (current.Early.Status == "ready" || current.Early.Status == "unavailable") {
 			feed := Feed{BaseRef: manifest.BaseRef, TargetTreeHash: capture.TargetTreeHash, Owner: requestState.Owner, Fingerprint: capture.Digest, ReviewID: current.ID, URL: link, Updated: time.Now(), AssessmentStatus: current.Early.Status, FailureCode: current.Early.FailureCode, Anonymous: current.Anonymous}
 			for _, l := range current.Early.Leads {

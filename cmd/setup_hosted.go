@@ -20,8 +20,16 @@ import (
 
 type setupGrantRequest struct {
 	setupConsent
-	Callback      string `json:"callback"`
-	CodeChallenge string `json:"codeChallenge"`
+	Callback            string `json:"callback"`
+	CodeChallenge       string `json:"codeChallenge"`
+	ActivationReporting bool   `json:"activationReporting"`
+}
+
+// Negotiate reporting support without changing the approval flow.
+func (s *setupGrantRequest) SetActivationReporting(enabled bool) {
+	if s.setupConsent.ActivationReporting != nil {
+		*s.setupConsent.ActivationReporting = enabled
+	}
 }
 
 type setupBrowserClient interface {
@@ -53,7 +61,7 @@ func hostedSetupConsent(ctx context.Context, s setupConsent, credential string, 
 	verifier := base64.RawURLEncoding.EncodeToString(secret[:])
 	challenge := sha256.Sum256([]byte(verifier))
 	callback := "http://" + listener.Addr().String() + "/complete?nonce=" + s.Nonce
-	link, err := client.CreateSetupGrant(ctx, credential, setupGrantRequest{s, callback, base64.RawURLEncoding.EncodeToString(challenge[:])})
+	link, err := client.CreateSetupGrant(ctx, credential, &setupGrantRequest{setupConsent: s, Callback: callback, CodeChallenge: base64.RawURLEncoding.EncodeToString(challenge[:]), ActivationReporting: true})
 	if err != nil {
 		return false, nil, fmt.Errorf("create browser setup request: %w", err)
 	}

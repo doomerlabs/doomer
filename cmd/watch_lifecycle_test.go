@@ -200,7 +200,18 @@ func TestWatchBackgroundLifecycle(t *testing.T) {
 	t.Setenv("CODEX_HOME", t.TempDir())
 	repo, other := newWatchTestRepo(t), newWatchTestRepo(t)
 	var requests atomic.Int32
-	service := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	service := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Setup may report consent, but must never submit a review or another
+		// lifecycle milestone before an agent edits a file.
+		if r.URL.Path == "/api/v2/installations/activate" && r.Method == http.MethodPost {
+			var event struct {
+				Stage string `json:"stage"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&event); err == nil && event.Stage == "approved" {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
 		requests.Add(1)
 		w.WriteHeader(http.StatusInternalServerError)
 	}))

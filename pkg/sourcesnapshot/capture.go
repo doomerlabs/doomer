@@ -492,6 +492,9 @@ func (g gitReader) readTree(commit string, blobs map[string][]byte) ([]Entry, er
 	return entries, nil
 }
 
+// RepositoryIdentifier strips credentials and rejects local filesystem remotes.
+func RepositoryIdentifier(remote string) string { return repositoryIdentity(remote) }
+
 func repositoryIdentity(remote string) string {
 	if !strings.Contains(remote, "://") {
 		if at := strings.IndexByte(remote, '@'); at >= 0 {

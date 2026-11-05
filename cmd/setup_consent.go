@@ -42,12 +42,13 @@ func setupRepositories(ctx context.Context, directories []string) ([]setupReposi
 // Only the selected profile's destination and requested scope enter the browser.
 // Login credentials stay in the CLI, and approval exists only for this invocation.
 type setupConsent struct {
-	Profile         string            `json:"profile"`
-	API             string            `json:"api"`
-	AllRepositories bool              `json:"allRepositories"`
-	Repositories    []setupRepository `json:"repositories"`
-	Agents          []string          `json:"agents"`
-	Nonce           string            `json:"nonce"`
+	ActivationReporting *bool             `json:"-"`
+	Profile             string            `json:"profile"`
+	API                 string            `json:"api"`
+	AllRepositories     bool              `json:"allRepositories"`
+	Repositories        []setupRepository `json:"repositories"`
+	Agents              []string          `json:"agents"`
+	Nonce               string            `json:"nonce"`
 }
 
 func (s setupConsent) print(w io.Writer) {
