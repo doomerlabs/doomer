@@ -534,11 +534,6 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			if e != nil || (fingerprint != feed.Fingerprint && !olderSnapshot) {
 				return
 			}
-			currentContentReviewed := false
-			if olderSnapshot && feed.BaseRef != "" && feed.TargetTreeHash != "" {
-				capture, err := sourcesnapshot.CaptureWorktree(ctx, sourcesnapshot.CaptureOptions{Workspace: true, Path: path, Base: feed.BaseRef})
-				currentContentReviewed = err == nil && capture.TargetTreeHash == feed.TargetTreeHash
-			}
 			var message string
 			_ = Locked(root, input.Session, func() error {
 				_ = Read(turnFile, &turn)
@@ -549,6 +544,16 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 					if id == feed.ReviewID {
 						return nil
 					}
+				}
+				currentContentReviewed := false
+				if olderSnapshot && feed.BaseRef != "" && feed.TargetTreeHash != "" {
+					// Check only undelivered results, inside the delivery lock.
+					// A second fingerprint check rejects edits concurrent with
+					// the content comparison without restoring edit ownership.
+					before, beforeErr := snapshotDigest(ctx, path)
+					capture, captureErr := sourcesnapshot.CaptureWorktree(ctx, sourcesnapshot.CaptureOptions{Workspace: true, Path: path, Base: feed.BaseRef})
+					after, afterErr := snapshotDigest(ctx, path)
+					currentContentReviewed = beforeErr == nil && captureErr == nil && afterErr == nil && before == after && capture.TargetTreeHash == feed.TargetTreeHash
 				}
 				snapshotLabel := "latest edit"
 				snapshotNote := ""
