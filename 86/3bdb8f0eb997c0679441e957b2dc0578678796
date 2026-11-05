@@ -1,0 +1,37 @@
+internal/watch/hook_paths_test.go
+  s_19d08b7f01e7fd::t_eb7ab5adabe681 205
+internal/watch/hook.go
+  s_19d08b7f01e7fd::t_6635de9d61ea79 351-354
+  s_19d08b7f01e7fd::t_81575c7e00b0fd 782-785,791,793
+  s_19d08b7f01e7fd::t_2b4a5577c985ff 363-365,369-371
+  s_19d08b7f01e7fd::t_8d2e2feef0313e 101,103,106,259,362,368,380,383,387,390-391,393,431,433,439
+internal/watch/hook_paths.go
+  s_19d08b7f01e7fd::t_2b4a5577c985ff 6,15-16,29,37-39,49,96-97
+  s_19d08b7f01e7fd::t_1252bbfbed1417 98
+internal/watch/store.go
+  s_19d08b7f01e7fd::t_2b4a5577c985ff 45-46,48,52
+  s_19d08b7f01e7fd::t_8d2e2feef0313e 44,47,49-50
+internal/watch/hook_diagnostics.go
+  s_19d08b7f01e7fd::t_2b4a5577c985ff 9,14-15,22-35
+  s_19d08b7f01e7fd::t_160e5d4cfc37bc 36-37
+internal/watch/hook_attribution_test.go
+  s_19d08b7f01e7fd::t_eb7ab5adabe681 1-15,27-56,63-87,93-154
+  s_19d08b7f01e7fd::t_81575c7e00b0fd 16-26,57-62
+  s_19d08b7f01e7fd::t_6635de9d61ea79 88-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "863bdb8f0eb997c0679441e957b2dc0578678796",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
