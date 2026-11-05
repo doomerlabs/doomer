@@ -109,7 +109,12 @@ func TestWaitForReviewCancellationAndLookupFailure(t *testing.T) {
 }
 
 func TestReviewWaitFlagValidation(t *testing.T) {
-	isolate(t)
+	store := isolate(t)
+	// Anonymous reviews force Look Closer on, so validate disabled-stage flags
+	// with a signed-in profile rather than contacting the live review service.
+	if err := store.SetAuth(adversarylabs.AuthKey("https://doomer.ai/api", "default"), adversarylabs.Auth{Token: "test-token"}); err != nil {
+		t.Fatal(err)
+	}
 	for _, args := range [][]string{{"--look-closer=false", "--timeout", "1s"}, {"--look-closer=false", "--poll-interval", "1s"}, {"--wait", "--timeout", "0s"}, {"--wait", "--poll-interval", "-1s"}} {
 		if _, err := execute(t, "", append([]string{"review"}, args...)...); err == nil {
 			t.Fatalf("accepted %v", args)
