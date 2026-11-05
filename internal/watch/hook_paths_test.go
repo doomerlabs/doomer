@@ -202,7 +202,7 @@ func TestOrgFallbackNeverGuessesRepository(t *testing.T) {
 					t.Fatalf("unsafe fallback created state for %s: %v", candidate, err)
 				}
 			}
-			if scenario == "multiple-repositories" || scenario == "explicit-invalid" {
+			if scenario == "multiple-repositories" {
 				if !bytes.Contains(out.Bytes(), []byte("repository could not be identified")) {
 					t.Fatalf("missing routing diagnostic: %s", out.String())
 				}

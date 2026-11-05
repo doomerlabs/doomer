@@ -98,11 +98,12 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			input.ToolResponse = nil
 		}
 	}
-	diagnostic := hookDiagnostic{At: time.Now(), Event: event, Tool: input.Tool, HasToolID: input.ToolID != "", Status: "received"}
+	diagnostic := hookDiagnostic{At: time.Now(), Event: event, Tool: input.Tool, ToolID: input.ToolID, HasToolID: input.ToolID != "", Status: "received"}
 	defer func() {
-		_ = Write(filepath.Join(root, "hook-diagnostics", Key(input.Session+event)+".json"), diagnostic)
+		recordHookDiagnostic(root, input.Session, diagnostic)
 	}()
 	owner := Owner{input.Session, input.Turn}
+	defer func() { diagnostic.Owner = owner }()
 	turnFile := TurnPath(root, input.Session)
 	var turn Turn
 	_ = Read(turnFile, &turn)
@@ -255,7 +256,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		if pathErr == nil {
 			diagnostic.Status = "repository not approved"
 		}
-		if pathErr != nil && input.Event == "PreToolUse" && mutates(input) {
+		if pathErr != nil && !errors.Is(pathErr, errHookOutsideRepository) && input.Event == "PreToolUse" && mutates(input) {
 			if message := captureFailureNotice(root, turnFile, owner, errCaptureRepository); message != "" {
 				response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event, "additionalContext": message}}
 			}
@@ -347,7 +348,10 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		err := Locked(root, path, func() error {
 			var s State
 			_ = Read(StatePath(root, path), &s)
-			defer func() { ambiguous = s.Ambiguous }()
+			defer func() {
+				ambiguous = s.Ambiguous
+				diagnostic.Conflict = s.Conflict
+			}()
 			if s.Active == nil {
 				s.Active = map[string]Operation{}
 			}
@@ -355,8 +359,15 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			for id, op := range s.Active {
 				if time.Since(op.Started) > 30*time.Minute {
 					delete(s.Active, id)
-					s.Ambiguous = true
+					if op.Attributable {
+						s.Ambiguous = true
+						s.Conflict = &AttributionConflict{Reason: "unfinished_write_expired", ToolID: input.ToolID, OtherToolID: id, OtherOwner: op.Owner}
+					}
 				}
+			}
+			activeWrites := false
+			for _, op := range s.Active {
+				activeWrites = activeWrites || op.Attributable
 			}
 			if input.Event == "PreToolUse" {
 				// Replayed events for the same tool invocation must not replace
@@ -366,18 +377,20 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 				}
 				// Existing dirty files establish a baseline, not ownership.
 				// Only a subsequent attributable edit may request a review.
-				if len(s.Active) == 0 && s.Fingerprint != fingerprint {
+				if !activeWrites && s.Fingerprint != fingerprint {
 					s = State{Active: map[string]Operation{}, Fingerprint: fingerprint}
 				}
-				if len(s.Active) == 0 && mutates(input) && s.Owner != owner {
+				if !activeWrites && mutates(input) && s.Owner != owner {
 					s.Owner = Owner{}
 					s.RequestedAt = time.Time{}
 					s.Ambiguous = false
+					s.Conflict = nil
 					s.DiffOwner, s.DiffBase = Owner{}, ""
 				}
-				for _, op := range s.Active {
-					if op.Owner != owner {
+				for id, op := range s.Active {
+					if mutates(input) && op.Attributable && op.Owner != owner {
 						s.Ambiguous = true
+						s.Conflict = &AttributionConflict{Reason: "overlapping_writes", ToolID: input.ToolID, OtherToolID: id, OtherOwner: op.Owner}
 					}
 				}
 				if mutates(input) {
@@ -415,13 +428,15 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 				quietTool = fingerprint == op.Before
 				if fingerprint != op.Before {
 					if !op.Attributable {
-						if s.Fingerprint != fingerprint {
+						if s.Fingerprint != fingerprint && !activeWrites {
 							s.Ambiguous = true
+							s.Conflict = &AttributionConflict{Reason: "unattributed_content_change", ToolID: input.ToolID}
 						}
 						return Write(StatePath(root, path), s)
 					}
 					if s.Owner.Session != "" && s.Owner.Session != owner.Session {
 						s.Ambiguous = true
+						s.Conflict = &AttributionConflict{Reason: "changed_owner", ToolID: input.ToolID, OtherOwner: s.Owner}
 					}
 					if !s.Ambiguous {
 						agentDiff := capturedAgentDiff(ctx, root, path, s, owner, input.ToolID, op.Before, capture)
@@ -764,13 +779,18 @@ func finish(root, path string, owner Owner, ctx context.Context) {
 		if Read(StatePath(root, path), &s) != nil {
 			return nil
 		}
+		activeWrites := false
+		for _, op := range s.Active {
+			activeWrites = activeWrites || op.Attributable
+		}
 		for id, op := range s.Active {
 			if op.Owner == owner {
 				if !op.CompletedAt.IsZero() {
 					continue
 				}
-				if op.Before != fingerprint && s.Fingerprint != fingerprint {
+				if op.Before != fingerprint && s.Fingerprint != fingerprint && (op.Attributable || !activeWrites) {
 					s.Ambiguous = true
+					s.Conflict = &AttributionConflict{Reason: "interrupted_content_change", ToolID: id, OtherOwner: op.Owner}
 				}
 				delete(s.Active, id)
 			}
