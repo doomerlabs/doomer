@@ -190,7 +190,13 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 				return err
 			}
 		} else if capture.Source.Dirty || once {
-			if resumeCompletedEdit(ctx, r.Root, path, capture, started) {
+			resumed, recoveryErr := resumeCompletedEdit(ctx, r.Root, path, capture, started)
+			if errors.Is(recoveryErr, errCaptureEditScope) {
+				r.logf("%s: edit capture recovery failed: %s", filepath.Base(path), recoveryErr)
+			} else if recoveryErr != nil {
+				r.debugf("%s: could not update capture recovery: %s", path, recoveryErr)
+			}
+			if resumed {
 				r.logf("%s: files settled; resuming the agent review.", filepath.Base(path))
 			}
 			r.debugf("%s: snapshot captured in %s", path, time.Since(scanStarted).Round(time.Millisecond))

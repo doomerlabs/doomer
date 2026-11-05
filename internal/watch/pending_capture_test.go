@@ -39,7 +39,7 @@ func TestFailedPostCaptureResumesWithoutAnotherHook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resumeCompletedEdit(context.Background(), root, path, capture, since) {
+	if resumed, err := resumeCompletedEdit(context.Background(), root, path, capture, since); !resumed || err != nil {
 		t.Fatal("completed edit was not resumed")
 	}
 	if !agentReviewRequested(root, path, capture.Digest, since) {
@@ -52,7 +52,7 @@ func TestFailedPostCaptureResumesWithoutAnotherHook(t *testing.T) {
 	if state.Agent != "codex" || state.Prompt != "fix it" || len(state.Active) != 0 {
 		t.Fatalf("lost edit identity: %+v", state)
 	}
-	if resumeCompletedEdit(context.Background(), root, path, capture, since) {
+	if resumed, err := resumeCompletedEdit(context.Background(), root, path, capture, since); resumed || err != nil {
 		t.Fatal("edit resumed twice")
 	}
 }
@@ -94,7 +94,7 @@ func TestCaptureRecoveryDoesNotGuessOwnership(t *testing.T) {
 			if err := Write(TurnPath(root, owner.Session), turn); err != nil {
 				t.Fatal(err)
 			}
-			if resumeCompletedEdit(context.Background(), root, path, capture, since) {
+			if resumed, err := resumeCompletedEdit(context.Background(), root, path, capture, since); resumed || err != nil {
 				t.Fatal("unattributable edit recovered")
 			}
 			if agentReviewRequested(root, path, capture.Digest, since) {

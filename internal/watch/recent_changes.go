@@ -48,6 +48,7 @@ func saveOperationSnapshot(file string, data []byte) error {
 }
 
 var errCaptureEditScope = errors.New("could not capture the agent edit scope")
+var errScopeDiff = errors.New("edit diff generation failed")
 
 func recentAgentDiff(ctx context.Context, file, beforeDigest string, after sourcesnapshot.Capture) (diff string, err error) {
 	defer func() {
@@ -92,7 +93,7 @@ func snapshotAgentDiff(ctx context.Context, file, beforeDigest string, after sou
 	}
 	diff, err := Diff(ctx, changedTrees(before, current))
 	if err != nil {
-		return "", fmt.Errorf("%w: generate diff: %w", errCaptureEditScope, err)
+		return "", fmt.Errorf("%w: %w: %w", errCaptureEditScope, errScopeDiff, err)
 	}
 	if len(diff) > 128<<10 {
 		return "", fmt.Errorf("%w: edit patch exceeds 128 KiB", errCaptureEditScope)
