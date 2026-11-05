@@ -1,0 +1,57 @@
+internal/watch/store.go
+  s_19d08b7f01e7fd::t_a33dfef8a88a5d 69-70
+pkg/adversarylabs/response_error_test.go
+  s_19d08b7f01e7fd::t_e215baa793927c 4
+  s_19d08b7f01e7fd::t_d41097942290f6 27-34
+internal/watch/readiness_test.go
+  s_19d08b7f01e7fd::t_55d22886119c9a 134
+internal/watch/runner.go
+  s_19d08b7f01e7fd::t_d41097942290f6 304-306,367-369
+  s_19d08b7f01e7fd::t_a33dfef8a88a5d 162,293-298,390
+internal/watch/pending_capture_test.go
+  s_19d08b7f01e7fd::t_55d22886119c9a 5-6,14,17-27,35-41
+internal/watch/hook.go
+  s_19d08b7f01e7fd::t_a33dfef8a88a5d 450,544
+  s_19d08b7f01e7fd::t_7095d92a4d89f8 442,449,451-455,480-484
+internal/watch/watch_test.go
+  s_19d08b7f01e7fd::t_a33dfef8a88a5d 391-403
+internal/watch/review_scope_test.go
+  s_19d08b7f01e7fd::t_11557e215e87df 200-208
+  s_19d08b7f01e7fd::t_a52a57cfbb5ac2 1-176
+  s_19d08b7f01e7fd::t_e215baa793927c 177-199
+internal/watch/recent_changes_test.go
+  s_19d08b7f01e7fd::t_a33dfef8a88a5d 29-30,56,62
+internal/watch/review_status.go
+  s_19d08b7f01e7fd::t_a33dfef8a88a5d 1-20,22-47
+  s_19d08b7f01e7fd::t_c5e19ef94029b2 21
+pkg/adversarylabs/response_error.go
+  s_19d08b7f01e7fd::t_d41097942290f6 5,14-15,23,36-38,89-90
+  s_19d08b7f01e7fd::t_c5e19ef94029b2 13
+  s_19d08b7f01e7fd::t_06019d73a4b3d5 91
+internal/watch/failure.go
+  s_19d08b7f01e7fd::t_a33dfef8a88a5d 32,36-37,39-43
+  s_19d08b7f01e7fd::t_11557e215e87df 44
+  s_19d08b7f01e7fd::t_d41097942290f6 38,60
+  s_19d08b7f01e7fd::t_7095d92a4d89f8 59
+internal/watch/recent_changes.go
+  s_19d08b7f01e7fd::t_7095d92a4d89f8 5-6,49-51,64,67,75-79,82-86,90,94-98,100,126
+  s_19d08b7f01e7fd::t_aebf2d2007749c 52,56
+internal/watch/pending_capture.go
+  s_19d08b7f01e7fd::t_7095d92a4d89f8 53-59,72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ecb926d5ef3b6a0878b475a9842e69abb35010e2",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
