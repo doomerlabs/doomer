@@ -1,0 +1,34 @@
+CLAUDE.md
+  s_6a12f00e157355::t_33b798071bf606 1
+AGENTS.md
+  s_6a12f00e157355::t_33b798071bf606 13,17-18,30,32-71
+  s_6a12f00e157355::t_0145a44187996a 11-12,14-16,19-29,31
+.agents/skills/doomer-review/SKILL.md
+  s_6a12f00e157355::t_07f295425265be 1-796
+.agents/skills/doomer-review/references/install.md
+  s_6a12f00e157355::t_cd1873ef31ad21 1-249
+.agents/skills/doomer-review/references/updates.md
+  s_6a12f00e157355::t_4804dfb0f68b2e 1-197
+.claude/skills/doomer-review/SKILL.md
+  s_6a12f00e157355::t_b8f21832d50414 1-796
+.claude/skills/doomer-review/references/install.md
+  s_6a12f00e157355::t_f45bc7c0197eb3 1-249
+.claude/skills/doomer-review/references/updates.md
+  s_6a12f00e157355::t_41203d41f6f749 1-197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "85c1e90fdf958195ec57ad4b28e712a62aeea311",
+  "prompts": {},
+  "sessions": {
+    "s_6a12f00e157355": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1adf3-2c56-7b61-9471-13c62dcf0a93",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
