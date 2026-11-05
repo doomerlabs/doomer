@@ -23,8 +23,8 @@ import (
 )
 
 type setupRepository struct {
-	MainCheckout string
-	Checkout     string
+	MainCheckout string `json:"mainCheckout"`
+	Checkout     string `json:"checkout"`
 }
 
 func setupRepositories(ctx context.Context, directories []string) ([]setupRepository, error) {

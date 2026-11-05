@@ -375,3 +375,15 @@ func PollInterval(login DeviceLogin) time.Duration {
 
 // ValidateAPIURL enforces HTTPS except for local development servers.
 func ValidateAPIURL(value string) error { _, err := validateBaseURL(value); return err }
+
+// CreateSetupGrant creates a short-lived browser permission request. It carries
+// scope metadata only, never repository source or a browser login cookie.
+func (c Client) CreateSetupGrant(ctx context.Context, credential string, scope any) (string, error) {
+	var out struct {
+		URL string `json:"url"`
+	}
+	if err := c.postJSON(ctx, "/v1/setup/grants", scope, credential, &out); err != nil {
+		return "", err
+	}
+	return out.URL, nil
+}
