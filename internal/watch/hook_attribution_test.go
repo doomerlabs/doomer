@@ -171,6 +171,8 @@ func TestHookHistoryPrunesInactiveSessionsAndPreservesActiveWriters(t *testing.T
 	}); err != nil {
 		t.Fatal(err)
 	}
+	recordHookDiagnostic(root, "active", hookDiagnostic{At: time.Now(), Event: "PostToolUse"})
+	(Runner{Root: root}).logHookDiagnostics("", time.Time{})
 	if _, err := os.Stat(filepath.Join(root, "hook-history", Key("expired")+".json")); !os.IsNotExist(err) {
 		t.Fatalf("expired history survived: %v", err)
 	}
@@ -179,8 +181,6 @@ func TestHookHistoryPrunesInactiveSessionsAndPreservesActiveWriters(t *testing.T
 			t.Fatalf("retained history %s: %v", session, err)
 		}
 	}
-	recordHookDiagnostic(root, "active", hookDiagnostic{At: time.Now(), Event: "PostToolUse"})
-	(Runner{Root: root}).logHookDiagnostics("", time.Time{})
 	var history []hookDiagnostic
 	if err := Read(filepath.Join(root, "hook-history", Key("active")+".json"), &history); err != nil || len(history) != 2 {
 		t.Fatalf("updated history was lost: %v, %d events", err, len(history))
