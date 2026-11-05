@@ -1,0 +1,21 @@
+internal/watch/revision_test.go
+  s_19d08b7f01e7fd::t_06c8d7bcd5d830 29-40,42-44
+internal/watch/runner.go
+  s_19d08b7f01e7fd::t_4746381afb0677 42,322,434-436
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "34510bd15494907e247b8cf746e0c69a46fa37a3",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
