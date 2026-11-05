@@ -114,6 +114,10 @@ func (r Runner) reportActivations(ctx context.Context, path string) {
 	if !ok || !r.Config.ActivationReporting {
 		return
 	}
+	entries, err := os.ReadDir(filepath.Join(activationRoot(r.Root), "activations"))
+	if err != nil || len(entries) == 0 {
+		return
+	}
 	identity, err := RepositoryIdentity(ctx, path)
 	if err != nil {
 		return

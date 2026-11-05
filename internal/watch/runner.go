@@ -74,9 +74,12 @@ func agentReviewRequested(root, path, fingerprint string, since time.Time) bool 
 
 func (r Runner) Run(ctx context.Context, path string, once bool) error {
 	reportingContext, stopReporting := context.WithCancel(ctx)
-	defer stopReporting()
 	if r.Config.ActivationReporting {
-		go r.runActivationReporting(reportingContext, path)
+		reportingDone := make(chan struct{})
+		go func() { defer close(reportingDone); r.runActivationReporting(reportingContext, path) }()
+		defer func() { stopReporting(); <-reportingDone }()
+	} else {
+		defer stopReporting()
 	}
 
 	if ctx.Err() != nil || RepositoryRemoved(r.Root, path) {
