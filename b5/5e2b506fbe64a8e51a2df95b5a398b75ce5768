@@ -1,0 +1,37 @@
+cmd/watch.go
+  s_19d08b7f01e7fd::t_12708e8af588d4 288-290
+  s_19d08b7f01e7fd::t_c2f309825ac926 284-287
+pkg/adversarylabs/activation_test.go
+  s_19d08b7f01e7fd::t_c2f309825ac926 38
+internal/watch/activation_reporting.go
+  s_19d08b7f01e7fd::t_c2f309825ac926 58-64,72-75,83-84,112,114,150-164,166-168,170-174,176-183
+  s_19d08b7f01e7fd::t_12708e8af588d4 65-66,149
+pkg/adversarylabs/activation.go
+  s_19d08b7f01e7fd::t_c2f309825ac926 7-8,17
+cmd/setup_hosted.go
+  s_19d08b7f01e7fd::t_c2f309825ac926 28
+internal/watch/runner.go
+  s_19d08b7f01e7fd::t_c2f309825ac926 344-346,373-375
+internal/watch/activation_reporting_test.go
+  s_19d08b7f01e7fd::t_c28c555a8e760a 148-172,175,178-186,189,195-196
+  s_19d08b7f01e7fd::t_ad5ddb1c6060d2 173-174
+  s_19d08b7f01e7fd::t_e8278c85eb1270 176-177
+  s_19d08b7f01e7fd::t_75de0adcd634d3 187-188
+  s_19d08b7f01e7fd::t_53f0fdcd079492 190-194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b55e2b506fbe64a8e51a2df95b5a398b75ce5768",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
