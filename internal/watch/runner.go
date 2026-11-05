@@ -359,7 +359,7 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 		}
 		r.debugf("%s: review status=%s, look closer review=%s", path, current.Status, earlyStatus)
 		if current.Early != nil && (current.Early.Status == "ready" || current.Early.Status == "unavailable") {
-			feed := Feed{Owner: requestState.Owner, Fingerprint: capture.Digest, ReviewID: current.ID, URL: link, Updated: time.Now(), AssessmentStatus: current.Early.Status, FailureCode: current.Early.FailureCode, Anonymous: current.Anonymous}
+			feed := Feed{BaseRef: manifest.BaseRef, TargetTreeHash: capture.TargetTreeHash, Owner: requestState.Owner, Fingerprint: capture.Digest, ReviewID: current.ID, URL: link, Updated: time.Now(), AssessmentStatus: current.Early.Status, FailureCode: current.Early.FailureCode, Anonymous: current.Anonymous}
 			for _, l := range current.Early.Leads {
 				_, idErr := hex.DecodeString(l.ID)
 				if len(feed.Leads) >= 10 {

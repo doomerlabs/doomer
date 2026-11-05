@@ -54,6 +54,8 @@ type State struct {
 	Prompt              string
 }
 type Feed struct {
+	BaseRef          string
+	TargetTreeHash   string
 	Anonymous        bool
 	Owner            Owner
 	Fingerprint      string
