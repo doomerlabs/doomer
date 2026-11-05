@@ -357,14 +357,27 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 					s.Owner = Owner{}
 					s.RequestedAt = time.Time{}
 					s.Ambiguous = false
+					s.DiffOwner, s.DiffBase = Owner{}, ""
 				}
 				for _, op := range s.Active {
 					if op.Owner != owner {
 						s.Ambiguous = true
 					}
 				}
-				if mutates(input) && fingerprint != "clean" {
-					_ = saveOperationSnapshot(snapshotFile, capture.Bytes)
+				if mutates(input) {
+					if s.DiffOwner != owner || s.DiffBase == "" {
+						if fingerprint != "clean" {
+							if err := saveOperationSnapshot(reviewBaselinePath(root, path, owner), capture.Bytes); err != nil {
+								return err
+							}
+						}
+						s.DiffOwner, s.DiffBase = owner, fingerprint
+					}
+					if fingerprint != "clean" {
+						if err := saveOperationSnapshot(snapshotFile, capture.Bytes); err != nil {
+							return err
+						}
+					}
 				}
 				s.Active[input.ToolID] = Operation{Owner: owner, Before: fingerprint, Started: time.Now(), Attributable: mutates(input)}
 			} else {
@@ -384,7 +397,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 						s.Ambiguous = true
 					}
 					if !s.Ambiguous {
-						agentDiff := recentAgentDiff(ctx, snapshotFile, op.Before, capture)
+						agentDiff := capturedAgentDiff(ctx, root, path, s, owner, input.ToolID, op.Before, capture)
 						if ctx.Err() != nil {
 							op.CompletedAt = time.Now()
 							s.Active[input.ToolID] = op
@@ -688,7 +701,7 @@ func mutates(input HookInput) bool {
 			return false
 		}
 	}
-	for _, part := range []string{"apply_patch", ".write_text(", ".write_bytes(", "writeFile(", "writeFileSync(", "sed -i", "perl -pi", "git apply", "git restore", "git checkout", "git switch", "git reset", "git cherry-pick", "git merge", "git rebase", "tee ", " >", "rm ", "mv ", "cp "} {
+	for _, part := range []string{"apply_patch", ".write_text(", ".write_bytes(", "writeFile(", "writeFileSync(", "sed -i", "perl -pi", "git apply", "git restore", "git checkout", "git switch", "git reset", "git cherry-pick", "git merge", "git rebase", "go get ", "go mod tidy", "go mod edit", "tee ", " >", "rm ", "mv ", "cp "} {
 		if strings.Contains(command, part) {
 			return true
 		}
