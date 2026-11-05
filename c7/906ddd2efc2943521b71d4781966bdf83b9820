@@ -1,0 +1,42 @@
+internal/watch/responses.go
+  s_19d08b7f01e7fd::t_c3aa50d739df71 27-28,43-44
+internal/watch/runner.go
+  s_19d08b7f01e7fd::t_25169fab10b949 156
+internal/watch/capture_identity.go
+  s_19d08b7f01e7fd::t_25169fab10b949 1-57,64,67,70,73
+  s_19d08b7f01e7fd::t_9dbbb80770ee4b 58-63,65-66,68-69,71-72
+internal/watch/pending_capture.go
+  s_19d08b7f01e7fd::t_25169fab10b949 53-55
+internal/watch/capture_identity_test.go
+  s_19d08b7f01e7fd::t_287f2287c414ef 59,69,73
+  s_19d08b7f01e7fd::t_e7e8f85be5cf89 111-133
+  s_19d08b7f01e7fd::t_7d4a600d88686f 1-58,60-68,70-72,74-110
+internal/watch/hypotheses.go
+  s_19d08b7f01e7fd::t_25169fab10b949 88,135
+internal/watch/hook.go
+  s_19d08b7f01e7fd::t_25169fab10b949 59,76-78,316,333,338-340,401-402,411,430-432,559,579,581,754
+  s_19d08b7f01e7fd::t_c3aa50d739df71 236,612
+  s_19d08b7f01e7fd::t_0fcec1ebc64256 590-593,599
+  s_19d08b7f01e7fd::t_e7e8f85be5cf89 397-400
+  s_19d08b7f01e7fd::t_260088abcad610 334-337,394-396,403-404
+internal/watch/stop_delivery_test.go
+  s_19d08b7f01e7fd::t_44f280e0155475 46-47,49,92-93
+internal/watch/store.go
+  s_19d08b7f01e7fd::t_1dddc8d861f7f6 34-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c7906ddd2efc2943521b71d4781966bdf83b9820",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
