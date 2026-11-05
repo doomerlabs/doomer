@@ -59,7 +59,7 @@ func resumeCompletedEdit(ctx context.Context, root, path string, capture sources
 				state.QuestionRequest = ""
 				state.HypothesesSubmitted = false
 				state.Hypotheses = nil
-				state.AgentDiff = recentAgentDiff(ctx, operationSnapshotPath(root, path, op.Owner, id), op.Before, capture)
+				state.AgentDiff = capturedAgentDiff(ctx, root, path, state, op.Owner, id, op.Before, capture)
 				resumed = true
 			}
 			if err := Write(StatePath(root, path), state); err != nil {

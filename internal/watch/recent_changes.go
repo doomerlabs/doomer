@@ -12,6 +12,10 @@ import (
 func operationSnapshotPath(root, path string, owner Owner, tool string) string {
 	return filepath.Join(root, "operation-snapshots", Key(path+"\x00"+owner.Session+"\x00"+owner.Turn+"\x00"+tool)+".json")
 }
+func reviewBaselinePath(root, path string, owner Owner) string {
+	return filepath.Join(root, "review-baselines", Key(path), Key(owner.Session+"\x00"+owner.Turn)+".json")
+}
+
 func saveOperationSnapshot(file string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(file), 0700); err != nil {
 		return err
@@ -48,6 +52,11 @@ func recentAgentDiff(ctx context.Context, file, beforeDigest string, after sourc
 			_ = os.Remove(file)
 		}
 	}()
+	return snapshotAgentDiff(ctx, file, beforeDigest, after)
+}
+
+// A turn baseline is retained across edits; per-operation snapshots are disposable.
+func snapshotAgentDiff(ctx context.Context, file, beforeDigest string, after sourcesnapshot.Capture) string {
 	current, err := sourcesnapshot.DecodeWorkspace(after.Bytes)
 	if err != nil {
 		return ""
@@ -98,4 +107,12 @@ func changedTrees(before, after sourcesnapshot.Manifest) sourcesnapshot.Manifest
 		}
 	}
 	return result
+}
+
+func capturedAgentDiff(ctx context.Context, root, path string, state State, owner Owner, toolID, before string, capture sourcesnapshot.Capture) string {
+	if state.DiffOwner == owner && state.DiffBase != "" {
+		return snapshotAgentDiff(ctx, reviewBaselinePath(root, path, owner), state.DiffBase, capture)
+	}
+	// Operations recorded by an older runtime have only their own baseline.
+	return recentAgentDiff(ctx, operationSnapshotPath(root, path, owner, toolID), before, capture)
 }

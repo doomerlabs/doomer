@@ -44,6 +44,8 @@ type State struct {
 	HypothesesSubmitted bool
 	Hypotheses          []adversarylabs.WorkspaceHypothesis
 	AgentDiff           string
+	DiffOwner           Owner
+	DiffBase            string
 	RequestedAt         time.Time
 	Active              map[string]Operation
 	Owner               Owner
