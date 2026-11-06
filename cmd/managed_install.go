@@ -62,7 +62,7 @@ func newManagedInstallCommand() *cobra.Command {
 					return err
 				}
 				if string(data) != content {
-					return fmt.Errorf("existing bootstrap differs at %s; reconcile it before installing", path)
+					return fmt.Errorf("existing bootstrap differs at %s; inspect it with doomer bootstrap status before offering an upgrade", path)
 				}
 			} else if !os.IsNotExist(err) {
 				return err
@@ -229,6 +229,10 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 // Stage complete files and publish only absent destinations. The installation
 // lock coordinates both agent copies; rollback removes only our new files.
 func installBootstrapFiles(base string, paths []string, content []byte) error {
+	return writeBootstrapFiles(base, paths, content, nil)
+}
+
+func writeBootstrapFiles(base string, paths []string, content []byte, expected map[string][]byte) error {
 	state, err := managedStore()
 	if err != nil {
 		return err
@@ -244,9 +248,16 @@ func installBootstrapFiles(base string, paths []string, content []byte) error {
 	}
 	defer root.Close()
 	var created []string
+	replaced := map[string][]byte{}
 	success := false
 	defer func() {
 		if !success {
+			for path, previous := range replaced {
+				current, err := root.ReadFile(path)
+				if err == nil && bytes.Equal(current, content) {
+					_ = root.WriteFile(path, previous, 0644)
+				}
+			}
 			for _, path := range created {
 				current, err := root.ReadFile(path)
 				if err == nil && bytes.Equal(current, content) {
@@ -286,12 +297,18 @@ func installBootstrapFiles(base string, paths []string, content []byte) error {
 			if err != nil {
 				return err
 			}
-			if !bytes.Equal(existing, content) {
+			previous, replacing := expected[path]
+			if !bytes.Equal(existing, content) && (!replacing || !bytes.Equal(existing, previous)) {
 				return fmt.Errorf("bootstrap content changed during installation")
 			}
-			continue
+			if bytes.Equal(existing, content) {
+				continue
+			}
+			replaced[relative] = existing
 		} else if !os.IsNotExist(err) {
 			return err
+		} else if _, present := expected[path]; present {
+			return fmt.Errorf("bootstrap disappeared during upgrade")
 		}
 		temporary := filepath.Join(filepath.Dir(relative), ".doomer-"+rand.Text())
 		file, err := root.OpenFile(temporary, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
@@ -308,7 +325,9 @@ func installBootstrapFiles(base string, paths []string, content []byte) error {
 			_ = root.Remove(temporary)
 			return err
 		}
-		created = append(created, relative)
+		if _, replacing := replaced[relative]; !replacing {
+			created = append(created, relative)
+		}
 	}
 	success = true
 	return nil

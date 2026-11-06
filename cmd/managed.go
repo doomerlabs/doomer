@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -28,6 +29,7 @@ import (
 )
 
 type managedResult struct {
+	BootstrapUpdates     []managed.BootstrapUpdate      `json:"bootstrap_updates,omitempty"`
 	Consent              *managedConsentEvidence        `json:"consent,omitempty"`
 	State                string                         `json:"state"`
 	Task                 string                         `json:"task,omitempty"`
@@ -88,6 +90,9 @@ func resultFor(task managed.Task) managedResult {
 	return r
 }
 func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedResult) error {
+	if c.Name() == "prepare" && t.Bootstrap.Path != "" {
+		r.BootstrapUpdates = managedBootstrapUpdates(t)
+	}
 	if r.Authenticated && r.UploadApproved {
 		evidence, err := savedManagedConsentEvidence(s, t)
 		if err != nil {
@@ -281,13 +286,17 @@ func prepareRelease(ctx context.Context, s managed.Store, task *managed.Task, al
 	if saved.Policy != policy {
 		saved = selectedRelease{Policy: policy}
 	}
-	if allow {
-		saved.Authorized = true
+	authorized, err := authorizeManagedUpdates(ctx, s, *task, allow, saved)
+	if err != nil {
+		return "", err
+	}
+	if authorized && !saved.Authorized {
+		saved.Authorized = authorized
 		if err := watch.Write(file, saved); err != nil {
 			return "", err
 		}
 	}
-	if !saved.Authorized {
+	if !authorized {
 		return "update_permission_required", nil
 	}
 	request, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -722,7 +731,30 @@ func dispatchManaged(ctx context.Context, args []string, in io.Reader, out, stde
 	child.Stdin = in
 	child.Stdout = out
 	child.Stderr = stderr
-	return true, child.Run()
+	if command.Name() != "prepare" {
+		return true, child.Run()
+	}
+	// The newest launcher can offer wrapper maintenance even when a delayed or
+	// pinned task resumes an older runtime that predates bootstrap inspection.
+	var output bytes.Buffer
+	child.Stdout = &output
+	err = child.Run()
+	var result map[string]json.RawMessage
+	if err == nil && json.Unmarshal(output.Bytes(), &result) == nil && result != nil {
+		updates := managedBootstrapUpdates(task)
+		if len(updates) > 0 {
+			result["bootstrap_updates"], err = json.Marshal(updates)
+			if err != nil {
+				return true, err
+			}
+			return true, json.NewEncoder(out).Encode(result)
+		}
+	}
+	_, writeErr := out.Write(output.Bytes())
+	if err != nil {
+		return true, err
+	}
+	return true, writeErr
 }
 
 func managedInstructionDigest() string {

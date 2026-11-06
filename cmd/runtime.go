@@ -47,7 +47,7 @@ func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr i
 	command, rest, findErr := root.Find(args)
 	// Installation, protocol checks, and diagnostics must remain available
 	// when the checkout pins a missing or broken release.
-	if findErr == nil && (command.Name() == "prepare" || command.Name() == "task" || command.Parent() != nil && command.Parent().Name() == "task" || command.Name() == "doctor" || command.Name() == "self-update" || command.Name() == "runtime-info" || command.Name() == "supervise") {
+	if findErr == nil && (command.Name() == "prepare" || command.Name() == "task" || command.Parent() != nil && (command.Parent().Name() == "task" || command.Parent().Name() == "bootstrap") || command.Name() == "doctor" || command.Name() == "self-update" || command.Name() == "runtime-info" || command.Name() == "supervise") {
 		return false, nil
 	}
 

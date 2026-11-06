@@ -53,6 +53,9 @@ func TestPortableSetupAcrossHomesAndMountPaths(t *testing.T) {
 	if err := watch.Write(filepath.Join(s.Root, "selections", watch.Key(task.Bootstrap.Path)+".json"), selectedRelease{Policy: policy, Authorized: true}); err != nil {
 		t.Fatal(err)
 	}
+	if err := watch.Write(filepath.Join(s.Root, "update-authorizations", updateAuthorizationKey(task)+".json"), updateAuthorization{Authorized: true, ApprovedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
 	if err := savePortable(ctx, app, s, task, true); err != nil {
 		t.Fatal(err)
 	}
@@ -94,6 +97,10 @@ func TestPortableSetupAcrossHomesAndMountPaths(t *testing.T) {
 	var selection selectedRelease
 	if err := watch.Read(filepath.Join(s.Root, "selections", watch.Key(task.Bootstrap.Path)+".json"), &selection); err != nil || !selection.Authorized {
 		t.Fatal("update policy was not restored", err)
+	}
+	var updates updateAuthorization
+	if err := watch.Read(filepath.Join(s.Root, "update-authorizations", updateAuthorizationKey(task)+".json"), &updates); err != nil || !updates.Authorized || !updates.ApprovedAt.Equal(original.UpdateApprovedAt) {
+		t.Fatal("update approval evidence was not preserved", err)
 	}
 	if err := checkPortable(ctx, task); err != nil {
 		t.Fatal(err)

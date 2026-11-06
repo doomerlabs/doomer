@@ -98,6 +98,9 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if err := watch.Write(filepath.Join(s.Root, "selections", watch.Key(task.Bootstrap.Path)+".json"), selectedRelease{Policy: task.Bootstrap.Policy, Authorized: true}); err != nil {
 		t.Fatal(err)
 	}
+	if err := watch.Write(filepath.Join(s.Root, "update-authorizations", updateAuthorizationKey(task)+".json"), updateAuthorization{Authorized: true, ApprovedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
 	if err = s.Save(&task); err != nil {
 		t.Fatal(err)
 	}

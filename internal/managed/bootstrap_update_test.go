@@ -1,0 +1,64 @@
+package managed
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestBootstrapVersionRanges(t *testing.T) {
+	for _, tc := range []struct {
+		constraint, version string
+		want                bool
+	}{
+		{">=2026.11.6.9 <2027.1.1.1", "2026.11.6.10", true},
+		{">=2026.11.6.9", "2026.11.6.8", false},
+		{">2026.11.6.9 <=2026.11.6.11", "2026.11.6.9", false},
+		{">2026.11.6.9 <=2026.11.6.11", "2026.11.6.11", true},
+		{"2026.11.6.9", "2026.11.6.9", true},
+		{"=2026.11.6.9", "2026.11.6.10", false},
+		{">=2026.11.6.9", "dev", false},
+	} {
+		got, err := BootstrapSupports(tc.constraint, tc.version)
+		if err != nil || got != tc.want {
+			t.Fatalf("%s / %s: %v %v", tc.constraint, tc.version, got, err)
+		}
+	}
+	for _, invalid := range []string{"", "*", ">=1.2.3", "^2026.11.6.9", ">=oops", ">=2026.11.6.9 junk"} {
+		if _, err := BootstrapSupports(invalid, BootstrapVersion); err == nil {
+			t.Fatalf("accepted %q", invalid)
+		}
+	}
+}
+
+func TestBootstrapInspectionRecognizesUnmarkedAndCustomWrappers(t *testing.T) {
+	p := Policy{Protocol: Protocol, Channel: "pinned", Version: "2026.11.6.9"}
+	current, _ := BootstrapText(p)
+	legacy, _ := bootstrapText(p, legacyBootstrapTemplate, false)
+	path := filepath.Join(t.TempDir(), "SKILL.md")
+	for _, tc := range []struct{ text, state string }{
+		{current, "current"}, {legacy, "update_available"},
+		{legacy + "\nCustom instructions.\n", "modified"},
+		{strings.Replace(current, BootstrapVersion, "2027.1.1.1", 1), "newer"},
+	} {
+		if err := os.WriteFile(path, []byte(tc.text), 0600); err != nil {
+			t.Fatal(err)
+		}
+		result, err := InspectBootstrap(path, "project", "2026.11.6.9")
+		if err != nil || result.State != tc.state {
+			t.Fatalf("%s: %+v %v", tc.state, result, err)
+		}
+		b, err := ReadBootstrap(path, "project")
+		if err != nil || b.Policy != p {
+			t.Fatal(b, err)
+		}
+	}
+	if err := os.WriteFile(path, []byte(current), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := InspectBootstrap(path, "project", "2026.11.6.8")
+	if err != nil || result.State != "incompatible" {
+		t.Fatal(result, err)
+	}
+}

@@ -23,14 +23,15 @@ import (
 // Its browser approval explicitly covers sharing account access with other
 // execution environments that can access this checkout's Git metadata.
 type portableSetup struct {
-	Schema     int                `json:"schema"`
-	API        string             `json:"api"`
-	Profile    string             `json:"profile"`
-	Origin     string             `json:"origin"`
-	Auth       adversarylabs.Auth `json:"auth"`
-	Grant      repositoryConsent  `json:"grant"`
-	Policy     managed.Policy     `json:"policy"`
-	Authorized bool               `json:"authorized"`
+	Schema           int                `json:"schema"`
+	API              string             `json:"api"`
+	Profile          string             `json:"profile"`
+	Origin           string             `json:"origin"`
+	Auth             adversarylabs.Auth `json:"auth"`
+	Grant            repositoryConsent  `json:"grant"`
+	Policy           managed.Policy     `json:"policy"`
+	Authorized       bool               `json:"authorized"`
+	UpdateApprovedAt time.Time          `json:"update_approved_at"`
 }
 
 func portableLocation(ctx context.Context, t managed.Task) (string, string, error) {
@@ -109,6 +110,9 @@ func restorePortable(ctx context.Context, app *application.App, s managed.Store,
 	if record.Auth.Token == "" || adversarylabs.IsAnonymousToken(record.Auth.Token) {
 		return fmt.Errorf("portable setup has no account credential")
 	}
+	if record.Authorized && record.Policy == t.Bootstrap.Policy && record.UpdateApprovedAt.IsZero() {
+		return fmt.Errorf("portable setup is missing its update approval timestamp")
+	}
 	t.Portable = true
 	t.PortableApproved = false
 	if record.Auth.ExpiresAt != "" {
@@ -180,6 +184,9 @@ func restorePortable(ctx context.Context, app *application.App, s managed.Store,
 		if err := watch.Write(selectionPath, selection); err != nil {
 			return err
 		}
+		if err := watch.Write(filepath.Join(s.Root, "update-authorizations", updateAuthorizationKey(*t)+".json"), updateAuthorization{Authorized: true, ApprovedAt: record.UpdateApprovedAt}); err != nil {
+			return err
+		}
 	}
 	t.Portable, t.PortableApproved = true, true
 	return s.Save(t)
@@ -208,6 +215,13 @@ func savePortable(ctx context.Context, app *application.App, s managed.Store, t 
 	if !selection.Authorized || selection.Policy != t.Bootstrap.Policy {
 		return fmt.Errorf("portable setup requires an approved update policy")
 	}
+	var updates updateAuthorization
+	if err := watch.Read(filepath.Join(s.Root, "update-authorizations", updateAuthorizationKey(t)+".json"), &updates); err != nil {
+		return err
+	}
+	if !updates.Authorized || updates.ApprovedAt.IsZero() {
+		return fmt.Errorf("portable setup requires a recorded update approval")
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
@@ -222,7 +236,7 @@ func savePortable(ctx context.Context, app *application.App, s managed.Store, t 
 		if err == nil && previous.Grant.Account != account {
 			return fmt.Errorf("revoke the previous account's portable setup before replacing it")
 		}
-		return watch.Write(path, portableSetup{Schema: 1, API: t.API, Profile: t.Profile, Origin: origin, Auth: auth, Grant: grant, Policy: selection.Policy, Authorized: true})
+		return watch.Write(path, portableSetup{Schema: 1, API: t.API, Profile: t.Profile, Origin: origin, Auth: auth, Grant: grant, Policy: selection.Policy, Authorized: true, UpdateApprovedAt: updates.ApprovedAt})
 	})
 }
 

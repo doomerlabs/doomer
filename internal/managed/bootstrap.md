@@ -27,6 +27,9 @@ setup or editing in a temporary-home environment, execute the returned
 `portable_setup_command` argument array when present. It invokes the selected
 runtime directly and resumes the same task with portable setup enabled.
 
+If prepare reports a bootstrap upgrade, offer it to the user and apply it only
+after acceptance. Keep the repository's update policy and any local edits.
+
 Resume an existing task with `doomer prepare --task HANDLE` after interruption.
 Never create a replacement task to recover an existing review. If that task's
 selected runtime is missing, run `doomer task repair HANDLE` through the available
@@ -40,8 +43,8 @@ to submit changes, retrieve results, record every finding response, and verify
 completion. A pending result or installed CLI does not establish a completed review.
 
 If `doomer` is missing, read the official INSTALL.md at
-https://raw.githubusercontent.com/doomerlabs/skills/d6483e9e92bbd85dc1b2e3ce32d1bff92e9ffdc6/INSTALL.md and require its SHA-256 to equal
-`a3294313882499e90a67f64b611f834ae9d5b376cc4751940b6bfe0dd5f5fff3`
+https://raw.githubusercontent.com/doomerlabs/skills/6029750bef71c137dedd982a6aea79a26ede7b7a/INSTALL.md and require its SHA-256 to equal
+`82d44c9402c629b94071aeaba3bc24184c8bed03413a2a354726e4405c9c535f`
 before following its verified installation flow with the user's normal execution permissions.
 Complete this prerequisite before editing. In Cowork, install into the editing
 VM's personal environment, preserving any existing repository bootstrap.
