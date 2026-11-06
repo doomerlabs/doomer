@@ -23,7 +23,7 @@ func putRuntime(t *testing.T, home, release string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		t.Fatal(err)
 	}
-	body := []byte("#!/bin/sh\nif [ \"$1\" = runtime-info ]; then printf '{\"protocol\":1}\\n'; else printf '" + release + " %s\\n' \"$DOOMER_SELECTED_PIN\"; fi\n")
+	body := []byte("#!/bin/sh\nif [ \"$1\" = runtime-info ]; then printf '{\"protocol\":1}\\n'; else printf '" + release + " %s\\n' \"$DOOMER_SELECTED_PIN\"; printf '%s\\n' \"$@\"; fi\n")
 	if err := os.WriteFile(path, body, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -68,6 +68,83 @@ func TestLauncherSelectsThreeRepositoryPins(t *testing.T) {
 		handled, err = DispatchCLI(context.Background(), []string{"watch", "status", repo}, nil, &out, &out)
 		if !handled || err != nil || !strings.HasPrefix(out.String(), release+" ") {
 			t.Fatal(handled, err, out.String())
+		}
+	}
+}
+
+func TestLauncherForwardsCommandsAndFlagsToSelectedRelease(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("versioned release execution supports macOS and Linux")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	original := launcherExecutable
+	launcherExecutable = func() (string, error) { return filepath.Join(home, ".local/bin/doomer"), nil }
+	t.Cleanup(func() { launcherExecutable = original })
+
+	repo := newWatchTestRepo(t)
+	release := "2026.11.5.5"
+	putPin(t, repo, release)
+	putRuntime(t, home, release)
+	t.Chdir(repo)
+
+	otherRepo := newWatchTestRepo(t)
+	otherRelease := "2026.11.5.6"
+	putPin(t, otherRepo, otherRelease)
+	putRuntime(t, home, otherRelease)
+
+	for _, tt := range []struct {
+		name    string
+		args    []string
+		release string
+	}{
+		{"new command", []string{"future-command", "--new-option", "value"}, release},
+		{"new subcommand", []string{"review", "future-command"}, release},
+		{"new flag", []string{"version", "--new-option=value"}, release},
+		{"changed flag", []string{"version", "--help=extended"}, release},
+		{"reserved command as value", []string{"future-command", "--label", "self-update"}, release},
+		{"runtime command as value", []string{"future-command", "--label", "runtime-info"}, release},
+		{"hook flag after terminator", []string{"future-command", "--", "--dispatch"}, release},
+		{"new dispatch flag", []string{"future-command", "--dispatch"}, release},
+		{"explicit repo", []string{"future-command", "--repo", otherRepo}, otherRelease},
+		{"explicit repo equals", []string{"future-command", "--repo=" + otherRepo}, otherRelease},
+		{"explicit path", []string{"future-command", "--path", otherRepo}, otherRelease},
+		{"new flag before repo", []string{"onboard", "--new-option", "value", "--repo", otherRepo}, otherRelease},
+		{"new flag with directory", []string{"watch", "status", otherRepo, "--new-option=value"}, otherRelease},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var out bytes.Buffer
+			handled, err := DispatchCLI(context.Background(), tt.args, nil, &out, &out)
+			if !handled || err != nil || !strings.HasPrefix(out.String(), tt.release+" ") {
+				t.Fatalf("dispatch: handled=%v err=%v output=%q", handled, err, out.String())
+			}
+			if !strings.HasSuffix(out.String(), strings.Join(tt.args, "\n")+"\n") {
+				t.Fatalf("arguments were not forwarded unchanged: %q", out.String())
+			}
+		})
+	}
+}
+
+func TestLauncherKeepsLocalCommands(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	original := launcherExecutable
+	launcherExecutable = func() (string, error) { return filepath.Join(home, ".local/bin/doomer"), nil }
+	t.Cleanup(func() { launcherExecutable = original })
+	repo := newWatchTestRepo(t)
+	putPin(t, repo, "2026.11.5.5")
+	t.Chdir(repo)
+	for _, args := range [][]string{
+		{"self-update", "--check"},
+		{"runtime-info"},
+		{"doctor", "--no-upload"},
+		{"watch", "hook", "--dispatch"},
+		{"watch", "hook", "--dispatch=true"},
+	} {
+		var out bytes.Buffer
+		handled, err := DispatchCLI(context.Background(), args, nil, &out, &out)
+		if handled || err != nil {
+			t.Fatalf("local command %v dispatched: handled=%v err=%v", args, handled, err)
 		}
 	}
 }
