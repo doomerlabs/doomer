@@ -137,7 +137,7 @@ func newRootCommand(injected *application.App) *cobra.Command {
 	}
 	root.AddCommand(newLoginCommand(app, &apiURL, &profile, settings), newLogoutCommand(app, &apiURL, &profile), newProfileCommand(app, settings))
 	root.AddCommand(newVersionCommand(), newSelfUpdateCommand(), newRuntimeInfoCommand())
-	root.AddCommand(newPrepareCommand(app, &apiURL, &profile), newManagedTaskCommand(app, &apiURL, &profile), newManagedInstallCommand(), newManagedHooksCommand(app, &apiURL, &profile), newManagedAgentHookCommand(app, &apiURL, &profile))
+	root.AddCommand(newPrepareCommand(app, &apiURL, &profile), newManagedTaskCommand(app, &apiURL, &profile), newManagedInstallCommand(), newManagedBootstrapCommand(), newManagedHooksCommand(app, &apiURL, &profile), newManagedAgentHookCommand(app, &apiURL, &profile))
 	root.AddCommand(newDoctorCommand(app, &apiURL, &profile))
 	root.AddCommand(newWhoamiCommand(app, &apiURL, &profile))
 	root.AddCommand(newWatchCommand(app, &apiURL, &profile))

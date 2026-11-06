@@ -1,5 +1,29 @@
 # Skill-managed CLI updates
 
+## Managed bootstrap wrappers
+
+Protocol-2 wrappers declare `doomer-bootstrap-version` using the first Doomer
+release that ships that wrapper revision. `doomer-cli-range` declares supported
+four-part CLI versions, for example `>=2026.11.6.9 <2027.1.1.1`. Supported
+comparisons are `=`, `>`, `>=`, `<`, and `<=`, joined with spaces. These fields
+are separate from the repository's stable, delayed, manual, or pinned policy.
+Ordinary CLI releases keep the wrapper revision unchanged.
+
+`prepare` reports `bootstrap_updates` for old, modified, newer, or incompatible
+wrappers. The launcher also adds this information when resuming older runtimes.
+`doomer bootstrap status --repo .` inspects both repository copies. Use
+`--personal` to inspect the wrappers in the user's agent directories.
+
+After the user accepts the offer, `doomer bootstrap upgrade --accept --repo .`
+replaces recognized generated wrappers and preserves their update policy.
+Use `--personal` for personal installations. Without `--accept`, the command
+only reports the offer. Locally modified wrappers require manual reconciliation.
+Both destinations are checked before writing, concurrent changes are rejected,
+and partial failures restore already-written copies. Existing task handles,
+runtime pins, credentials, and repository grants stay intact.
+
+The following sections describe the legacy skill-pinned updater.
+
 The review skill pins a tested stable release. Updating the skill changes that
 pin; the CLI does not independently follow the stable channel or a beta.
 
