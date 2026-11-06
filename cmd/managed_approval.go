@@ -38,6 +38,11 @@ func displayManagedService(api string) string {
 
 func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t *managed.Task) error {
 	client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, t.API)
+	authKey := adversarylabs.AuthKey(t.API, t.Profile)
+	expectedAuth, hadAuth, err := app.Dependencies().Auth.StoredAuthE(authKey)
+	if err != nil {
+		return err
+	}
 	auth, account, identityErr := managedIdentity(c.Context(), app, *t)
 	if identityErr != nil && !errors.Is(identityErr, errManagedLoginRequired) {
 		return identityErr
@@ -132,7 +137,7 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		if verifiedAccount != result.AccountID {
 			return fmt.Errorf("repository approval account mismatch")
 		}
-		if err = app.Dependencies().Auth.SetAuth(adversarylabs.AuthKey(t.API, t.Profile), adversarylabs.Auth{Token: result.Token, ClientID: result.ClientID, ExpiresAt: result.ExpiresAt, RegistryNamespace: result.RegistryNamespace}); err != nil {
+		if err = app.Dependencies().Auth.SetAuthCAS(authKey, expectedAuth, hadAuth, adversarylabs.Auth{Token: result.Token, ClientID: result.ClientID, ExpiresAt: result.ExpiresAt, RegistryNamespace: result.RegistryNamespace}); err != nil {
 			return err
 		}
 
