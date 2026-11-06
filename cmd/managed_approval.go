@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -38,6 +39,9 @@ func displayManagedService(api string) string {
 func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t *managed.Task) error {
 	client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, t.API)
 	auth, account, identityErr := managedIdentity(c.Context(), app, *t)
+	if identityErr != nil && !errors.Is(identityErr, errManagedLoginRequired) {
+		return identityErr
+	}
 	if identityErr == nil {
 		if t.AccountID != "" && t.AccountID != account {
 			return fmt.Errorf("task belongs to another account")
@@ -120,16 +124,18 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		if t.AccountID != "" && t.AccountID != result.AccountID {
 			return fmt.Errorf("repository approval belongs to another account")
 		}
-		if err = app.Dependencies().Auth.SetAuth(adversarylabs.AuthKey(t.API, t.Profile), adversarylabs.Auth{Token: result.Token, ClientID: result.ClientID, ExpiresAt: result.ExpiresAt, RegistryNamespace: result.RegistryNamespace}); err != nil {
-			return err
-		}
-		_, verifiedAccount, err := managedIdentity(c.Context(), app, *t)
+		verified, err := client.Whoami(c.Context(), result.Token)
 		if err != nil {
-			return err
+			return managed.NetworkError("account_verification", err)
 		}
+		verifiedAccount := verified.ID
 		if verifiedAccount != result.AccountID {
 			return fmt.Errorf("repository approval account mismatch")
 		}
+		if err = app.Dependencies().Auth.SetAuth(adversarylabs.AuthKey(t.API, t.Profile), adversarylabs.Auth{Token: result.Token, ClientID: result.ClientID, ExpiresAt: result.ExpiresAt, RegistryNamespace: result.RegistryNamespace}); err != nil {
+			return err
+		}
+
 		t.AccountID = verifiedAccount
 		if _, err = managedConsent(s, *t, result.Token, true); err != nil {
 			return err

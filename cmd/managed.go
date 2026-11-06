@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -353,13 +354,15 @@ func watchLock(root, key string) (func(), error) {
 	return func() { _ = lock.Close() }, nil
 }
 
+var errManagedLoginRequired = errors.New("account login required")
+
 func managedIdentity(ctx context.Context, app *application.App, t managed.Task) (adversarylabs.Auth, string, error) {
 	auth, ok, err := scopedAuth(app.Dependencies().Auth, t.API, t.Profile, app.Dependencies().RegistryHost)
 	if err != nil {
 		return auth, "", err
 	}
 	if !ok || auth.Token == "" || adversarylabs.IsAnonymousToken(auth.Token) {
-		return auth, "", fmt.Errorf("account login required")
+		return auth, "", errManagedLoginRequired
 	}
 	client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, t.API)
 	account, err := client.Whoami(ctx, auth.Token)

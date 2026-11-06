@@ -309,3 +309,38 @@ func TestPersonalBootstrapRemainsInUserHomeWithIsolatedRuntime(t *testing.T) {
 		t.Fatal(task)
 	}
 }
+
+func TestManagedApprovalPreservesLoginOnVerificationFailure(t *testing.T) {
+	credentials := isolate(t)
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Path != "/v1/auth/whoami" {
+			t.Errorf("unexpected approval request %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	key := adversarylabs.AuthKey(server.URL, "default")
+	original := adversarylabs.Auth{Token: "existing-account"}
+	if err := credentials.SetAuth(key, original); err != nil {
+		t.Fatal(err)
+	}
+	store, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, API: server.URL, Profile: "default", Repo: newWatchTestRepo(t), Agent: "codex", Release: "2026.11.6.1"}
+	if err = store.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	_, err = execute(t, "", "--api-url", server.URL, "task", "login", handle)
+	if err == nil || !strings.Contains(err.Error(), "account_verification") {
+		t.Fatal(err)
+	}
+	saved, ok, err := credentials.ExactAuthE(key)
+	if err != nil || !ok || saved.Token != original.Token || requests == 0 {
+		t.Fatal(saved, ok, err, requests)
+	}
+}
