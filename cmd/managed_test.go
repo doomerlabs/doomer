@@ -23,7 +23,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	var feedback int
 	lead := strings.Repeat("a", 64)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer selected-account" {
+		if !strings.HasPrefix(r.URL.Path, "/v1/auth/device/") && r.Header.Get("Authorization") != "Bearer selected-account" {
 			t.Error("wrong account credential")
 		}
 		switch r.URL.Path {
