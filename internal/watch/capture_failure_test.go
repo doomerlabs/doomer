@@ -11,11 +11,8 @@ import (
 )
 
 func TestCaptureFailureIsDeliveredOnceWithoutReviewState(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("symlink permissions vary")
-	}
 	dir, root := repository(t), t.TempDir()
-	if err := os.Symlink("file.txt", filepath.Join(dir, "source-link")); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "pointer"), []byte("version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	owner := Owner{"chat", "turn"}
@@ -29,7 +26,7 @@ func TestCaptureFailureIsDeliveredOnceWithoutReviewState(t *testing.T) {
 		return out.String()
 	}
 	first := run()
-	if !strings.Contains(first, "unsupported source symlink") || !strings.Contains(first, "could not start a review") {
+	if !strings.Contains(first, "local snapshot capture failed") || !strings.Contains(first, "could not start a review") {
 		t.Fatal(first)
 	}
 	if second := strings.TrimSpace(run()); second != "{}" {
@@ -60,5 +57,29 @@ func TestUnresolvedRepositoryNoticeIsScopedToOperation(t *testing.T) {
 	}
 	if repeated := captureFailureNotice(root, turnFile, owner, errCaptureRepository); repeated != "" {
 		t.Fatal("repeated unresolved repository notice", repeated)
+	}
+}
+
+func TestSymlinksDoNotEmitCaptureFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary")
+	}
+	dir, root := repository(t), t.TempDir()
+	if err := os.Symlink("missing", filepath.Join(dir, "source-link")); err != nil {
+		t.Fatal(err)
+	}
+	owner := Owner{"chat", "turn"}
+	if err := Write(TurnPath(root, owner.Session), Turn{Owner: owner}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(HookInput{Session: owner.Session, Turn: owner.Turn, CWD: dir, Event: "PostToolUse", Tool: "apply_patch", ToolID: "edit"})
+	var out strings.Builder
+	hookForTest(context.Background(), root, Config{Directories: []string{dir}}, strings.NewReader(string(raw)), &out)
+	if strings.TrimSpace(out.String()) != "{}" {
+		t.Fatalf("unexpected hook message: %s", out.String())
+	}
+	digest, err := snapshotDigest(context.Background(), dir)
+	if err != nil || digest != "clean" {
+		t.Fatalf("symlink blocked clean snapshot: %q, %v", digest, err)
 	}
 }
