@@ -211,6 +211,9 @@ func ensureWatchSupervisor(ctx context.Context, shared, api, profile string) err
 }
 
 func ensureWatchSupervisorBinary(ctx context.Context, shared, api, profile, exe, release string) error {
+	if paused(shared) {
+		return nil
+	}
 	root := filepath.Join(shared, "supervisor")
 	lock, err := lifecycleLock(ctx, root)
 	if err != nil {
@@ -273,6 +276,14 @@ func newWatchSupervisorCommand(api, profile *string) *cobra.Command {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 		for {
+			if paused(shared) {
+				return nil
+			}
+			if _, err := os.Stat(filepath.Join(shared, "config.json")); os.IsNotExist(err) {
+				return nil
+			} else if err != nil {
+				return err
+			}
 			if _, err := os.Stat(filepath.Join(root, "paused.json")); !os.IsNotExist(err) {
 				return nil
 			}

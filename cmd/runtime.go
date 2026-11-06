@@ -112,7 +112,7 @@ func newRuntimeInfoCommand() *cobra.Command {
 }
 
 func dispatchRuntimeHooks(c *cobra.Command, api, profile, state, agent string) error {
-	shared, _, err := consentPaths(api, profile)
+	shared, config, err := consentPaths(api, profile)
 	if err != nil || state != shared {
 		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
 	}
@@ -126,6 +126,11 @@ func dispatchRuntimeHooks(c *cobra.Command, api, profile, state, agent string) e
 	}
 	if paused(shared) {
 		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
+	}
+	if _, err := os.Stat(config); os.IsNotExist(err) {
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
+	} else if err != nil {
+		return err
 	}
 	if err := ensureWatchSupervisor(c.Context(), shared, api, profile); err != nil {
 		return fmt.Errorf("start watcher supervisor: %w", err)

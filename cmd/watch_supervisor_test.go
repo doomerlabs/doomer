@@ -407,4 +407,13 @@ func TestSideBySideUpgradeStartsCurrentSupervisorAndRetries(t *testing.T) {
 	if err != nil || installed.State != "ready" {
 		t.Fatal(installed, err)
 	}
+	// Uninstall removes the profile grant. Its supervisor must exit too.
+	if err := os.Remove(config); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := waitWatch(ctx, func() (bool, error) { _, running, err := runningWatch(supervisor); return !running, err }); err != nil {
+		t.Fatal(err)
+	}
 }

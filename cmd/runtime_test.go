@@ -244,6 +244,7 @@ func TestRuntimeDispatcherPreservesResultsFromThreeVersions(t *testing.T) {
 		t.Fatal(err)
 	}
 	supervisor := filepath.Join(root, "supervisor")
+	_ = watching.Write(filepath.Join(root, "config.json"), watching.Config{API: api, Profile: profile})
 	supervisorLock, err := publock.TryAcquire(supervisor, "watcher")
 	if err != nil {
 		t.Fatal(err)
