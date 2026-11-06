@@ -386,6 +386,19 @@ func TestSideBySideUpgradeStartsCurrentSupervisorAndRetries(t *testing.T) {
 		t.Fatal(err)
 	}
 	supervisor := filepath.Join(shared, "supervisor")
+	// Simulate the previous supervisor generation using the same lifetime-lock
+	// and pause protocol, then install the new CLI through its normal command.
+	previous := exec.Command(os.Args[0], "-test.run=^TestLegacyWatcherProcess$", "-test.timeout=20s")
+	previous.Env = append(os.Environ(), "DOOMER_TEST_LEGACY_WATCH_ROOT="+supervisor)
+	if err := previous.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = previous.Process.Kill() })
+	readyContext, stopReady := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stopReady()
+	if err := waitWatch(readyContext, func() (bool, error) { _, running, err := runningWatch(supervisor); return running, err }); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
 		_ = watching.Write(filepath.Join(supervisor, "paused.json"), time.Now())
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -415,6 +428,9 @@ func TestSideBySideUpgradeStartsCurrentSupervisorAndRetries(t *testing.T) {
 			t.Fatal("retry replaced a healthy supervisor")
 		}
 		firstSession = process.ManagedSession
+	}
+	if err := previous.Wait(); err != nil {
+		t.Fatalf("previous supervisor did not retire: %v", err)
 	}
 	installed, err := (selfupdate.Updater{Home: home}).Check(release)
 	if err != nil || installed.State != "ready" {
