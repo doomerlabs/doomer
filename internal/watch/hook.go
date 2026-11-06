@@ -197,7 +197,10 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 	if owner.Turn == "" {
 		owner.Turn = turn.Owner.Turn
 	}
-	if dispatchStop && input.Event == "Stop" && owner == turn.Owner && len(turn.Repositories) > 0 {
+	if input.Event == "PostToolUse" {
+		reconcileUnresolvedOperation(ctx, root, turnFile, owner, input)
+	}
+	if dispatchStop && input.Event == "Stop" && owner.Turn != "" && owner == turn.Owner && (len(turn.Repositories) > 0 || len(turn.UnresolvedOperations) > 0) {
 		// Stop has the chat's cwd, not the cwd of the last edited repository.
 		// Re-enter the single-repository handler only for this turn's approved
 		// checkouts. Each result retains its own snapshot and owner checks.
@@ -239,6 +242,9 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 				messages = append(messages, result.Reason)
 			}
 		}
+		if message := unresolvedCoverageNotice(ctx, root, turnFile, owner); message != "" {
+			messages = append(messages, message)
+		}
 		if len(messages) > 0 {
 			response = map[string]any{"decision": "block", "reason": strings.Join(messages, "\n\n")}
 		}
@@ -276,7 +282,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			diagnostic.Status = "repository not approved"
 		}
 		if pathErr != nil && !errors.Is(pathErr, errHookOutsideRepository) && input.Event == "PreToolUse" && mutates(input) {
-			if message := captureFailureNotice(root, turnFile, owner, errCaptureRepository); message != "" {
+			if message := recordUnresolvedOperation(ctx, root, turnFile, owner, input); message != "" {
 				response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event, "additionalContext": message}}
 			}
 		}
@@ -528,6 +534,9 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			if message := captureFailureNotice(root, turnFile, owner, errCaptureOwnership); message != "" {
 				response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event, "additionalContext": message}}
 			}
+		}
+		if err == nil && input.Event == "PreToolUse" {
+			toolContext = strings.TrimSpace(toolContext + "\n\n" + reconcileUnresolvedOperation(ctx, root, turnFile, owner, input))
 		}
 		if err != nil || input.Event == "PreToolUse" || responsesRecorded {
 			return
@@ -881,6 +890,7 @@ func continueReviewContext(previous, next Turn, prompt string) Turn {
 	next.ResponseToken = previous.ResponseToken
 	next.Next = previous.Next
 	next.Repositories = previous.Repositories
+	next.UnresolvedOperations = previous.UnresolvedOperations
 	next.Prompt = previous.Prompt
 	return next
 }

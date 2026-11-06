@@ -95,17 +95,24 @@ type Pending struct {
 	ReviewID string
 }
 type Turn struct {
-	PendingPromptUntil time.Time `json:"pending_prompt_until,omitempty"`
-	Agent              string    `json:"agent,omitempty"`
-	ResponseToken      string    `json:"response_token,omitempty"`
-	ReviewContext      string    `json:"review_context,omitempty"`
-	ReviewContinuation string    `json:"review_continuation,omitempty"`
-	Repositories       []string  `json:"repositories,omitempty"`
-	Owner              Owner
-	Prompt             string
-	Next               int
-	Pending            []Pending
-	Delivered          []string
+	UnresolvedOperations []UnresolvedOperation `json:"unresolved_operations,omitempty"`
+	PendingPromptUntil   time.Time             `json:"pending_prompt_until,omitempty"`
+	Agent                string                `json:"agent,omitempty"`
+	ResponseToken        string                `json:"response_token,omitempty"`
+	ReviewContext        string                `json:"review_context,omitempty"`
+	ReviewContinuation   string                `json:"review_continuation,omitempty"`
+	Repositories         []string              `json:"repositories,omitempty"`
+	Owner                Owner
+	Prompt               string
+	Next                 int
+	Pending              []Pending
+	Delivered            []string
+}
+type UnresolvedOperation struct {
+	ToolID    string `json:"tool_id"`
+	Tool      string `json:"tool"`
+	Directory string `json:"directory"`
+	Completed bool   `json:"completed,omitempty"`
 }
 type Feedback struct {
 	ID       string
