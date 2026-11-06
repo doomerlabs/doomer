@@ -4,7 +4,7 @@ description: Required Doomer review workflow for repository edits in Codex or Cl
 ---
 <!-- doomer-managed
 package: doomerlabs/skills
-revision: 41ee6ed74528fc69f2d5bde8d8f01a4095f80db9
+revision: 1a6f04aa65ca52d461990a47894d9604efec20fa
 source: skills/doomer-review/SKILL.md
 kind: file
 -->
@@ -534,7 +534,7 @@ permitted local work if verification remains unavailable, reporting that
 coverage accurately. Reuse the saved grant throughout recovery.
 
 Install or verify the checkout-pinned CLI following [installation](references/install.md), including its managed ownership and runtime-protocol checks.
-Use stable CLI **2026.11.5.8**, which provides the consolidated onboarding command.
+Use stable CLI **2026.11.5.9**, which provides the consolidated onboarding command.
 Probe `doomer onboard --help` before using the new workflow. If unavailable,
 report that the installed release needs updating; do not invent the command,
 recreate removed helpers, or claim setup succeeded.
