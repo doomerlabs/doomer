@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -210,6 +211,9 @@ func TestIdleResumeDoesNotClearChangedOrSharedPause(t *testing.T) {
 }
 
 func TestPromptReplayBeforeFirstEditAndOnlyOnce(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("background watching and shell runtime fixtures support macOS and Linux")
+	}
 	shared := t.TempDir()
 	root := filepath.Join(shared, "runtimes", "2026.11.5.9")
 	calls := filepath.Join(shared, "calls")
@@ -288,6 +292,9 @@ func TestNewestInstalledIgnoresUnverifiedVersions(t *testing.T) {
 }
 
 func TestAdvanceLauncherAndRetryNeverDowngrade(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("background watching and shell runtime fixtures support macOS and Linux")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("DOOMER_CONFIG_DIR", t.TempDir())
@@ -318,6 +325,9 @@ func TestAdvanceLauncherAndRetryNeverDowngrade(t *testing.T) {
 }
 
 func TestConcurrentLauncherInstallsNeverDowngrade(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("background watching and shell runtime fixtures support macOS and Linux")
+	}
 	home := t.TempDir()
 	for _, release := range []string{"2026.11.5.9", "2026.11.6.1"} {
 		putRuntime(t, home, release)
@@ -343,6 +353,9 @@ func TestConcurrentLauncherInstallsNeverDowngrade(t *testing.T) {
 }
 
 func TestSideBySideUpgradeStartsCurrentSupervisorAndRetries(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("background watching and shell runtime fixtures support macOS and Linux")
+	}
 	const release = "2026.11.6.1"
 	home := t.TempDir()
 	binary := runtimeversion.Binary(home, release)
