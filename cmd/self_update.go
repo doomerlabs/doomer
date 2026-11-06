@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -123,6 +124,7 @@ func superviseInstalledProfiles(ctx context.Context, launcher selfupdate.Status)
 	if err != nil {
 		return err
 	}
+	var failures []error
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -133,11 +135,12 @@ func superviseInstalledProfiles(ctx context.Context, launcher selfupdate.Status)
 			if os.IsNotExist(err) {
 				continue
 			}
-			return err
+			failures = append(failures, fmt.Errorf("profile %s: %w", entry.Name(), err))
+			continue
 		}
 		if err := ensureWatchSupervisorBinary(ctx, shared, cfg.API, cfg.Profile, launcher.Path, launcher.Version); err != nil {
-			return err
+			failures = append(failures, fmt.Errorf("profile %s: %w", entry.Name(), err))
 		}
 	}
-	return nil
+	return errors.Join(failures...)
 }

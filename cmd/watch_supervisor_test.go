@@ -407,7 +407,30 @@ func TestSideBySideUpgradeStartsCurrentSupervisorAndRetries(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	var firstSession string
+	// Migration checks already succeeded for this modern launcher. A later
+	// damaged profile must not prevent recovery of the remaining profiles.
+	if _, err := (selfupdate.Updater{Home: home, Versioned: true}).InstallLauncher(release, false); err != nil {
+		t.Fatal(err)
+	}
+	brokenConfig := filepath.Join(filepath.Dir(shared), "000-broken", "config.json")
+	if err := os.MkdirAll(filepath.Dir(brokenConfig), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(brokenConfig, []byte("{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	failed := exec.Command(binary, "self-update", "--side-by-side", "--version", release)
+	if output, err := failed.CombinedOutput(); err == nil || !strings.Contains(string(output), "profile 000-broken") {
+		t.Fatalf("missing profile failure: %s %v", output, err)
+	}
+	process, running, err := runningWatch(supervisor)
+	if err != nil || !running || process.Session != release {
+		t.Fatal("broken profile prevented healthy profile supervision", process, running, err)
+	}
+	if err := os.Remove(brokenConfig); err != nil {
+		t.Fatal(err)
+	}
+	firstSession := process.ManagedSession
 	for range 2 {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		command := exec.CommandContext(ctx, binary, "self-update", "--side-by-side", "--version", release)
