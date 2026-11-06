@@ -25,29 +25,30 @@ type Capabilities struct {
 }
 
 type Task struct {
-	Schema        int                                `json:"schema"`
-	Handle        string                             `json:"handle"`
-	Repo          string                             `json:"repo"`
-	RepositoryID  string                             `json:"repository_id"`
-	API           string                             `json:"api"`
-	Profile       string                             `json:"profile"`
-	Agent         string                             `json:"agent"`
-	Release       string                             `json:"release"`
-	Bootstrap     Bootstrap                          `json:"bootstrap"`
-	Capabilities  Capabilities                       `json:"capabilities"`
-	Base          string                             `json:"base"`
-	Prompt        string                             `json:"prompt"`
-	AccountID     string                             `json:"account_id,omitempty"`
-	Created       time.Time                          `json:"created"`
-	Updated       time.Time                          `json:"updated"`
-	Stage         string                             `json:"stage"`
-	Revision      int                                `json:"revision"`
-	Submission    *adversarylabs.WorkspaceSubmission `json:"submission,omitempty"`
-	Review        *adversarylabs.WorkspaceReview     `json:"review,omitempty"`
-	ReviewedTree  string                             `json:"reviewed_tree,omitempty"`
-	Responses     map[string]Response                `json:"responses,omitempty"`
-	Paused        bool                               `json:"paused"`
-	HookActivated bool                               `json:"hook_activated"`
+	Schema         int                                `json:"schema"`
+	Handle         string                             `json:"handle"`
+	Repo           string                             `json:"repo"`
+	RepositoryID   string                             `json:"repository_id"`
+	API            string                             `json:"api"`
+	Profile        string                             `json:"profile"`
+	Agent          string                             `json:"agent"`
+	OfferedRelease string                             `json:"offered_release,omitempty"`
+	Release        string                             `json:"release"`
+	Bootstrap      Bootstrap                          `json:"bootstrap"`
+	Capabilities   Capabilities                       `json:"capabilities"`
+	Base           string                             `json:"base"`
+	Prompt         string                             `json:"prompt"`
+	AccountID      string                             `json:"account_id,omitempty"`
+	Created        time.Time                          `json:"created"`
+	Updated        time.Time                          `json:"updated"`
+	Stage          string                             `json:"stage"`
+	Revision       int                                `json:"revision"`
+	Submission     *adversarylabs.WorkspaceSubmission `json:"submission,omitempty"`
+	Review         *adversarylabs.WorkspaceReview     `json:"review,omitempty"`
+	ReviewedTree   string                             `json:"reviewed_tree,omitempty"`
+	Responses      map[string]Response                `json:"responses,omitempty"`
+	Paused         bool                               `json:"paused"`
+	HookActivated  bool                               `json:"hook_activated"`
 }
 
 type Response struct {

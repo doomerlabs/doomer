@@ -27,18 +27,22 @@ import (
 )
 
 type managedResult struct {
-	State          string                         `json:"state"`
-	Task           string                         `json:"task,omitempty"`
-	Release        string                         `json:"release,omitempty"`
-	Instructions   string                         `json:"instructions,omitempty"`
-	Review         *adversarylabs.WorkspaceReview `json:"review,omitempty"`
-	URL            string                         `json:"url,omitempty"`
-	Action         string                         `json:"action,omitempty"`
-	Error          string                         `json:"error,omitempty"`
-	SoftwareReady  bool                           `json:"software_ready"`
-	Authenticated  bool                           `json:"authenticated"`
-	UploadApproved bool                           `json:"upload_approved"`
-	HookActivated  bool                           `json:"hook_activated"`
+	State           string                         `json:"state"`
+	Task            string                         `json:"task,omitempty"`
+	Release         string                         `json:"release,omitempty"`
+	Instructions    string                         `json:"instructions,omitempty"`
+	Review          *adversarylabs.WorkspaceReview `json:"review,omitempty"`
+	URL             string                         `json:"url,omitempty"`
+	Action          string                         `json:"action,omitempty"`
+	Error           string                         `json:"error,omitempty"`
+	SoftwareReady   bool                           `json:"software_ready"`
+	Authenticated   bool                           `json:"authenticated"`
+	UploadApproved  bool                           `json:"upload_approved"`
+	HookActivated   bool                           `json:"hook_activated"`
+	Responses       map[string]managed.Response    `json:"responses,omitempty"`
+	Deferred        int                            `json:"deferred"`
+	UpdateAvailable string                         `json:"update_available,omitempty"`
+	Capabilities    managed.Capabilities           `json:"capabilities"`
 }
 
 func managedStore() (managed.Store, error) {
@@ -55,7 +59,18 @@ func managedStore() (managed.Store, error) {
 }
 func resultFor(task managed.Task) managedResult {
 	r := managedResult{State: task.Stage, Task: task.Handle, Release: task.Release, SoftwareReady: task.Release != "", HookActivated: task.HookActivated, Review: task.Review}
+	r.Capabilities = task.Capabilities
+	r.UpdateAvailable = task.OfferedRelease
 	if task.Review != nil {
+		r.Responses = map[string]managed.Response{}
+		for key, response := range task.Responses {
+			if strings.HasPrefix(key, task.Review.ID+":") {
+				r.Responses[key] = response
+				if response.Sent && response.Status == "deferred" {
+					r.Deferred++
+				}
+			}
+		}
 		r.URL = adversarylabs.WorkspaceLink(task.API, *task.Review)
 	}
 	return r
@@ -269,6 +284,7 @@ func prepareRelease(ctx context.Context, s managed.Store, task *managed.Task, al
 		}
 		if policy.Channel == "manual" && saved.Release.Version != "" && saved.Release.Version != candidate.Version && !allow {
 			selected = saved.Release
+			task.OfferedRelease = candidate.Version
 		} else {
 			selected = candidate
 			if saved.Release.Version != "" && managed.VersionLess(selected.Version, saved.Release.Version) && policy.Channel != "pinned" {
