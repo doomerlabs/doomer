@@ -17,7 +17,7 @@ import (
 )
 
 func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
-	credentials := isolate(t)
+	isolate(t)
 	repo := newWatchTestRepo(t)
 	var submissions int
 	var feedback int
@@ -80,9 +80,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	if err := credentials.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: "selected-account"}); err != nil {
-		t.Fatal(err)
-	}
+
 	s, err := managedStore()
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +107,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 		}
 		return result
 	}
-	if r := run("", "task", "submit", handle); r.State != "consent_required" {
+	if r := run("", "task", "submit", handle); r.State != "authentication_required" {
 		t.Fatal(r)
 	}
 	if r := run("", "task", "login", handle); r.State != "approval_required" || !r.SoftwareReady || !strings.Contains(r.URL, "/cli/setup#request=") {
