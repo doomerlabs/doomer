@@ -17,7 +17,7 @@ func newHasPermissionCommand(app *application.App, api, profile *string) *cobra.
 	c := &cobra.Command{
 		Use:   "has-permission [directory]",
 		Short: "Read saved repository upload consent without changing setup",
-		Long:  "Read saved upload consent for this repository and its approved worktrees. Prints true or false. A paused watcher retains consent. Accept the decision only when the command exits successfully. Discard all output on error, including incomplete output after a write failure. This command does not contact a server or write local state.",
+		Long:  "Read saved upload consent for this repository and its approved worktrees. Prints true or false. A paused watcher retains consent. A nonzero exit status means stdout is invalid and must not be used as a permission decision. Output can be incomplete after a write failure. This command does not contact a server or write local state.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			path := "."
