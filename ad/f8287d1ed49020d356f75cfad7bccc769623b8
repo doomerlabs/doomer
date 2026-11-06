@@ -1,0 +1,23 @@
+internal/watch/capture_failure_test.go
+  s_e7ebcdf0e476b5::t_afb4af5b38f697 15,29,62-85
+pkg/sourcesnapshot/capture.go
+  s_e7ebcdf0e476b5::t_ff5260deb06956 10,126-127,193-196,198-200,279-282,311,327-331,333,360-361,364-367,373,425-432
+pkg/sourcesnapshot/capture_test.go
+  s_e7ebcdf0e476b5::t_2f1b1a841a7463 4,8,150,275,312,328-479
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "adf8287d1ed49020d356f75cfad7bccc769623b8",
+  "prompts": {},
+  "sessions": {
+    "s_e7ebcdf0e476b5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b16a-3538-7923-884a-7a18d58b7477",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
