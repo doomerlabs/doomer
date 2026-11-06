@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -31,6 +32,79 @@ func TestHookRepositoryFindsEditedRepoOutsideChatDirectory(t *testing.T) {
 }
 
 func quotedJSON(value string) string { b, _ := json.Marshal(value); return string(b) }
+
+func TestHookRepositoryResolvesShellWriteDestinations(t *testing.T) {
+	repo, other, parent := repository(t), repository(t), t.TempDir()
+	for _, command := range []string{
+		"printf changed > " + quotedJSON(filepath.Join(repo, "new", "file.txt")),
+		"cat source | tee " + quotedJSON(filepath.Join(repo, "file.txt")),
+		"cp /tmp/source " + quotedJSON(filepath.Join(repo, "file.txt")),
+		"mv " + quotedJSON(filepath.Join(repo, "file.txt")) + " /tmp/moved",
+	} {
+		input, _ := json.Marshal(map[string]string{"cmd": command})
+		got, err := HookRepository(context.Background(), HookInput{CWD: parent, Input: input})
+		if err != nil || got != repo {
+			t.Errorf("command=%s root=%s error=%v", command, got, err)
+		}
+	}
+	command := "printf changed > " + quotedJSON(filepath.Join(repo, "file.txt")) +
+		"; printf changed > " + quotedJSON(filepath.Join(other, "file.txt"))
+	input, _ := json.Marshal(map[string]string{"cmd": command})
+	if _, err := HookRepository(context.Background(), HookInput{CWD: parent, Input: input}); err == nil {
+		t.Fatal("mixed repository writes must remain ambiguous")
+	}
+}
+
+func TestHookTemporaryShellWritesDoNotReportRepositoryFailure(t *testing.T) {
+	for _, operation := range []string{"printf changed > ", "rm ", "cp source ", "cat source | tee "} {
+		t.Run(operation, func(t *testing.T) {
+			root, repo, parent := t.TempDir(), repository(t), t.TempDir()
+			owner := Owner{"chat", "turn"}
+			if err := Write(TurnPath(root, owner.Session), Turn{Owner: owner, Repositories: []string{repo}}); err != nil {
+				t.Fatal(err)
+			}
+			input, _ := json.Marshal(map[string]string{"cmd": operation + quotedJSON(filepath.Join(parent, "output.txt"))})
+			for _, cwd := range []string{parent, repo} {
+				hook := HookInput{Session: owner.Session, Turn: owner.Turn, CWD: cwd, Event: "PreToolUse", Tool: "Bash", ToolID: "temporary", Input: input}
+				if _, err := hookRepository(context.Background(), hook, repo); !errors.Is(err, errHookOutsideRepository) {
+					t.Fatalf("temporary destination reused repository: %v", err)
+				}
+				raw, _ := json.Marshal(hook)
+				var out bytes.Buffer
+				hookWithRepositories(context.Background(), root, Config{Directories: []string{repo}}, bytes.NewReader(raw), &out, func(context.Context) bool { return false }, true, "codex")
+				if out.String() != "{}\n" {
+					t.Fatalf("temporary operation reported failure: %s", out.String())
+				}
+				if _, err := os.Stat(StatePath(root, repo)); !os.IsNotExist(err) {
+					t.Fatal("temporary operation created repository review state")
+				}
+			}
+		})
+	}
+}
+
+func TestShellWritePathsRetainsUnknownOperations(t *testing.T) {
+	for _, command := range []string{
+		"npm run build > /tmp/build.log",
+		"printf changed > /tmp/output; python3 -c 'Path(\"file\").write_text(\"changed\")'",
+		"python3 >/tmp/output <<'PY'\nPath('file').write_text('changed')\nPY",
+		"printf changed > \"$TARGET\"",
+		"rm -f /tmp/output",
+		"rm /tmp/*/file.txt",
+		"rm /tmp/{first,second}/file.txt",
+		"rm ~/file.txt",
+		"printf '%s' \"$(unknown-writer)\" > /tmp/output",
+		"printf changed > /tmp/output; git restore file",
+	} {
+		if paths := shellWritePaths(command); len(paths) > 0 {
+			t.Errorf("inferred destinations for unknown operation %q: %v", command, paths)
+		}
+	}
+	input, _ := json.Marshal(map[string]string{"cmd": "printf changed > relative.txt"})
+	if _, err := HookRepository(context.Background(), HookInput{CWD: t.TempDir(), Input: input}); err == nil || errors.Is(err, errHookOutsideRepository) {
+		t.Fatalf("unresolved relative write must retain its diagnostic: %v", err)
+	}
+}
 
 func TestHookRecordsTurnAndEditWhenChatIsOutsideRepository(t *testing.T) {
 	repo, parent, root := repository(t), t.TempDir(), t.TempDir()
