@@ -21,7 +21,7 @@ type Engine struct {
 	Store   Store
 	Client  ReviewClient
 	Capture func(context.Context, Task) (sourcesnapshot.Capture, error)
-	Upload  func(context.Context, Task, string, sourcesnapshot.Manifest) (string, string, string, error)
+	Upload  func(context.Context, Task, string, string, sourcesnapshot.Manifest) (string, string, string, error)
 }
 
 // Submit journals the exact request before sending it. A lost HTTP response
@@ -48,19 +48,27 @@ func (e Engine) Submit(ctx context.Context, task *Task, token string) error {
 	if err != nil {
 		return err
 	}
-	repo, base, head, err := e.Upload(ctx, *task, token, manifest)
+	repository := capture.Source.Repository
+	if repository == "" {
+		repository = "local/checkout"
+	}
+	repo, base, head, err := e.Upload(ctx, *task, token, repository, manifest)
 	if err != nil {
 		return NetworkError("snapshot_upload", err)
 	}
 	task.Revision++
 	look, deep := true, false
 	threshold := 80
+	prompt := []rune(task.Prompt)
+	if len(prompt) > 4000 {
+		prompt = prompt[:4000]
+	}
 	task.Submission = &adversarylabs.WorkspaceSubmission{
 		ReviewScope: "diff", LookCloser: &look, FullReview: &deep, LookCloserThreshold: &threshold,
 		RepositoryID: repo, BaseSnapshotID: base, SnapshotID: head,
 		ReviewID: fmt.Sprintf("managed-%s-%d", task.Handle, task.Revision), GroupID: task.Handle, Revision: task.Revision,
-		Repository: capture.Source.Repository, Branch: capture.Source.Branch, Diff: diff, Continuity: true,
-		UserRequest: &adversarylabs.WorkspaceUserRequest{Prompt: task.Prompt, SessionID: task.Handle, TurnID: fmt.Sprint(task.Revision)},
+		Repository: repository, Branch: capture.Source.Branch, Diff: diff, Continuity: true,
+		UserRequest: &adversarylabs.WorkspaceUserRequest{Prompt: string(prompt), SessionID: task.Handle, TurnID: fmt.Sprint(task.Revision)},
 		Client:      map[string]string{"name": "Doomer managed CLI", "agent": task.Agent, "task_id": task.Handle, "cli_version": task.Release, "bootstrap_protocol": fmt.Sprint(Protocol)},
 	}
 	task.ReviewedTree = capture.TargetTreeHash
@@ -207,4 +215,23 @@ func (e Engine) Finish(ctx context.Context, task *Task, token string) error {
 	task.Stage = "complete"
 	task.Updated = time.Now().UTC()
 	return e.Store.Save(task)
+}
+
+// Retry starts a new revision only after the previous review is terminal.
+// Network retries use Submit/Status and retain their existing request identity.
+func (e Engine) Retry(ctx context.Context, task *Task, token string) error {
+	if err := e.Status(ctx, task, token); err != nil {
+		return err
+	}
+	if task.Stage != "review_failed" {
+		return fmt.Errorf("review is not terminal; resume its existing submission")
+	}
+	task.Review = nil
+	task.Submission = nil
+	task.ReviewedTree = ""
+	task.Stage = "ready"
+	if err := e.Store.Save(task); err != nil {
+		return err
+	}
+	return e.Submit(ctx, task, token)
 }

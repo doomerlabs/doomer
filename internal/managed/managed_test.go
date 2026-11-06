@@ -128,7 +128,7 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	capture := sourcesnapshot.Capture{Bytes: raw, TargetTreeHash: "tree-a"}
 	yes, no := true, false
 	client := &fakeReview{lost: true, result: adversarylabs.WorkspaceReview{ID: "review-id", LookCloserEnabled: &yes, Full: &adversarylabs.WorkspaceFullReview{Enabled: false}, Early: &adversarylabs.WorkspaceAssessment{Status: "ready", Leads: []adversarylabs.WorkspaceLead{{ID: strings.Repeat("a", 64)}}}}}
-	engine := Engine{Store: store, Client: client, Capture: func(context.Context, Task) (sourcesnapshot.Capture, error) { return capture, nil }, Upload: func(context.Context, Task, string, sourcesnapshot.Manifest) (string, string, string, error) {
+	engine := Engine{Store: store, Client: client, Capture: func(context.Context, Task) (sourcesnapshot.Capture, error) { return capture, nil }, Upload: func(context.Context, Task, string, string, sourcesnapshot.Manifest) (string, string, string, error) {
 		return "repo", "base", "head", nil
 	}}
 	if err := store.Save(&task); err != nil {
@@ -166,6 +166,17 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	capture.TargetTreeHash = "tree-b"
 	if err = engine.Finish(context.Background(), &resumed, "token"); err == nil {
 		t.Fatal("accepted unreviewed edits")
+	}
+	if err := engine.Retry(context.Background(), &resumed, "token"); err == nil {
+		t.Fatal("retry replaced a nonterminal review")
+	}
+	client.result.Status = "failed"
+	client.result.Early = nil
+	if err := engine.Retry(context.Background(), &resumed, "token"); err != nil {
+		t.Fatal(err)
+	}
+	if resumed.Revision != 2 || client.ids[len(client.ids)-1] == client.ids[0] {
+		t.Fatal("terminal retry did not create a new revision")
 	}
 	if resumed.Release != "2026.11.6.1" {
 		t.Fatal("task release drifted")

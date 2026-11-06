@@ -25,6 +25,8 @@ agent prose never selects the version.
 - `doomer task submit HANDLE` uploads snapshots and journals a stable review ID
   before submission. HTTP retries and process restarts reuse the same request.
 - `doomer task status HANDLE` performs one result fetch.
+- `doomer task retry HANDLE` starts a new revision only after a terminal review
+  failure. Network retries continue using submit/status with the original ID.
 - `doomer task respond HANDLE` reads JSON responses from stdin, persists them
   before delivery, and records each server acknowledgment.
 - `doomer task finish HANDLE` verifies results, response delivery, and the current
@@ -54,7 +56,11 @@ previously verified selection. Unknown initial state requires connectivity.
 A withdrawn release cannot be selected after a successful current catalog check.
 Active tasks keep their version until they finish.
 
-Every task produces a private current-state observation. Review submissions
+Every task produces a private current-state observation. Authenticated clients
+also report bounded operational metadata to `/api/v3/installations/observe`,
+which feeds the CLI adoption dashboard. Reporting has its own timeout and never
+blocks reviews. A per-task persisted sequence rejects delayed older observations.
+Review submissions
 also identify their task, running CLI, and bootstrap protocol in the existing
 server-side client metadata. Installing software, authenticating, granting
 uploads, activating hooks, and completing a review are separate outcomes.

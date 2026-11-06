@@ -165,7 +165,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 			}
 			if state != "ready" {
 				r.State = state
-				r.Action = "After explicit user approval, resume with --allow-updates"
+				r.Action = "Ask the user to allow verified software updates under this bootstrap policy and reporting of version/task-state metadata to " + task.API + ". Repository content requires separate upload consent. After approval, resume with --allow-updates"
 				return outputManaged(c, s, task, r)
 			}
 			r = resultFor(task)
@@ -404,7 +404,7 @@ func managedConsent(s managed.Store, t managed.Task, token string, allow bool) (
 
 func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Command {
 	parent := &cobra.Command{Use: "task", Short: "Resume a durable managed review without a persistent process"}
-	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume", "rollback"} {
+	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume", "rollback", "retry"} {
 		operation := operation
 		var allow bool
 		c := &cobra.Command{Use: operation + " HANDLE", Args: cobra.ExactArgs(1)}
@@ -494,6 +494,8 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 			switch operation {
 			case "submit":
 				err = engine.Submit(c.Context(), &t, auth.Token)
+			case "retry":
+				err = engine.Retry(c.Context(), &t, auth.Token)
 			case "status":
 				err = engine.Status(c.Context(), &t, auth.Token)
 			case "finish":
@@ -530,13 +532,13 @@ func managedEngine(s managed.Store, t managed.Task) managed.Engine {
 		Capture: func(ctx context.Context, t managed.Task) (sourcesnapshot.Capture, error) {
 			return sourcesnapshot.CaptureWorktree(ctx, sourcesnapshot.CaptureOptions{Path: t.Repo, Base: t.Base, Workspace: true})
 		},
-		Upload: func(ctx context.Context, t managed.Task, token string, manifest sourcesnapshot.Manifest) (string, string, string, error) {
+		Upload: func(ctx context.Context, t managed.Task, token, repository string, manifest sourcesnapshot.Manifest) (string, string, string, error) {
 			root, _, err := watchPaths(t.API, t.Profile)
 			if err != nil {
 				return "", "", "", err
 			}
 			runner := watch.Runner{Root: root, Config: watch.Config{API: t.API, Profile: t.Profile}, Client: client, Token: token, Output: io.Discard}
-			return runner.UploadSnapshots(ctx, t.Repo, t.RepositoryID, manifest)
+			return runner.UploadSnapshots(ctx, t.Repo, repository, manifest)
 		}}
 }
 
@@ -745,7 +747,7 @@ func reportManagedStatus(ctx context.Context, s managed.Store, t managed.Task, s
 	if err != nil || !ok || auth.Token == "" || adversarylabs.IsAnonymousToken(auth.Token) {
 		return
 	}
-	installation, err := watch.EnsureInstallationID(s.Root)
+	installation, err := watch.EnsureInstallationID(filepath.Join(s.Root, "identities", watch.Key(t.API+"\x00"+t.Profile)))
 	if err != nil {
 		return
 	}

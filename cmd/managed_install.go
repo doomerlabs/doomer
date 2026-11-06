@@ -197,6 +197,9 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 		}
 		if event.Event == "Stop" {
 			var result managedResult
+			if err == nil && json.Unmarshal(output.Bytes(), &result) == nil && result.State == "paused" {
+				return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
+			}
 			if err != nil || json.Unmarshal(output.Bytes(), &result) != nil || result.State != "complete" {
 				return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"decision": "block", "reason": context})
 			}
