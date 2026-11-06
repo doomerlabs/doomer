@@ -13,7 +13,10 @@ interpolation. Read the returned instructions and retain the task handle.
 If a real harness session ID is available, pass it with `--session`.
 
 Resume an existing task with `doomer prepare --task HANDLE` after interruption.
-Never create a replacement task to recover an existing review. Follow structured
+Never create a replacement task to recover an existing review. If that task's
+selected runtime is missing, run `doomer task repair HANDLE` through the available
+launcher, then resume the same handle. Repair restores that exact release; do not
+substitute the current stable release for an active task. Follow structured
 user-action requests. Never invent consent, account identity, or hook activation.
 Reading this file directly is sufficient; native skill discovery is optional.
 

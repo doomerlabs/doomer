@@ -25,6 +25,16 @@ func main() {
 	checkKey := flag.Bool("check-key", false, "verify the protected signing key before publication")
 	flag.Parse()
 	if *checkKey {
+		conflicting := false
+		flag.Visit(func(value *flag.Flag) {
+			if value.Name != "check-key" {
+				conflicting = true
+			}
+		})
+		if conflicting {
+			fmt.Fprintln(os.Stderr, "--check-key cannot be combined with signing arguments")
+			os.Exit(1)
+		}
 		if err := checkSigningKey(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
