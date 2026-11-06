@@ -1,0 +1,22 @@
+cmd/permission.go
+  s_884169a093fdfd::t_70586c9334578f 20
+cmd/permission_test.go
+  s_884169a093fdfd::t_70586c9334578f 4,22-51
+  s_884169a093fdfd::t_1ec3017fbb8739 52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e84d977d0696be4f2e74cd422f2ef230fc5d096d",
+  "prompts": {},
+  "sessions": {
+    "s_884169a093fdfd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1aefa-4a15-7fe0-a429-80c4f6fe52e8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
