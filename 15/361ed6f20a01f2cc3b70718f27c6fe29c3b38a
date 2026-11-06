@@ -1,0 +1,21 @@
+internal/managed/bootstrap.md
+  s_8950320cc3aea4::t_674616499d907e 23-24,65-67
+internal/managed/instructions.md
+  s_8950320cc3aea4::t_674616499d907e 13-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "15361ed6f20a01f2cc3b70718f27c6fe29c3b38a",
+  "prompts": {},
+  "sessions": {
+    "s_8950320cc3aea4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b16d-3ac0-71e1-8c85-109b3e532462",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
