@@ -1,0 +1,35 @@
+internal/managed/instructions.md
+  s_f23d7bc729b5d1::t_449c58df4657dc 20-22,33-36
+  s_8950320cc3aea4::t_2c0fbad86ee916 37
+cmd/managed_test.go
+  s_f23d7bc729b5d1::t_449c58df4657dc 65-71
+  s_f23d7bc729b5d1::t_d07e15b8b19760 72-74
+  s_f23d7bc729b5d1::t_ed5af1e267c9e1 6,75,77
+internal/managed/managed_test.go
+  s_f23d7bc729b5d1::t_449c58df4657dc 214
+  s_f23d7bc729b5d1::t_3a280f6f83e0c7 218-220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "be73deb2bde572707bf34a170677f07b67db0304",
+  "prompts": {},
+  "sessions": {
+    "s_8950320cc3aea4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b16d-3ac0-71e1-8c85-109b3e532462",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    },
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
