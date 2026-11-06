@@ -39,6 +39,22 @@ func SaveTaskHandoff(root, repository, session string, input io.Reader) error {
 	})
 }
 
+// pendingTaskPrompt recovers an explicitly saved request when a new runtime
+// first sees a tool event after missing UserPromptSubmit. Only a real hook calls
+// this helper. Reading it neither creates a receipt nor consumes the handoff.
+func pendingTaskPrompt(root, repository string, owner Owner) string {
+	var saved taskHandoff
+	if owner.Session == "" || owner.Turn == "" || Read(taskHandoffPath(root, repository, owner.Session), &saved) != nil {
+		return ""
+	}
+	age := time.Since(saved.Created)
+	if saved.Repository != repository || saved.Session != owner.Session || saved.Created.IsZero() || age < 0 || age > 24*time.Hour ||
+		(saved.BoundTurn != "" && saved.BoundTurn != owner.Turn) {
+		return ""
+	}
+	return saved.Prompt
+}
+
 // The saved request applies to one editing turn after onboarding. Read-only
 // setup and trust-confirmation turns do not consume it. Further turns use their
 // own request instead of silently inheriting an old task.

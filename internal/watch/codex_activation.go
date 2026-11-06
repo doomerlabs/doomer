@@ -64,7 +64,7 @@ func CodexActivationStatus(root, repo, session string) (string, string) {
 		return "error", receipt.Status
 	}
 	if strings.TrimSpace(turn.Prompt) == "" {
-		return "error", "The current task prompt was not captured by a hook."
+		return "pending", "A tool hook is active, but the current task prompt is missing. Preserve the original request with onboard --task-stdin, then run one read-only tool in this repository and check again."
 	}
 	return "ready", "A hook processed the current task in this repository."
 }
