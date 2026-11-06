@@ -208,6 +208,11 @@ func ensureRuntimeWatch(ctx context.Context, root, path, api, profile string) er
 	if paused(root) {
 		return nil
 	}
+	// Register before testing liveness so an idle watcher cannot retire between
+	// this check and the hook recording its first request.
+	if err := watching.RegisterRepository(root, path, "agent", false, time.Now()); err != nil {
+		return err
+	}
 	_, running, err := runningWatch(root)
 	if err != nil || running {
 		return err
@@ -273,4 +278,18 @@ func compatibleRepositoryPins(home string, cfg watching.Config) error {
 		}
 	}
 	return nil
+}
+
+// A checkout that changed pins no longer keeps its previous runtime alive.
+func activeRuntimeRepositories(root string, cfg watching.Config, now time.Time) (bool, error) {
+	repos, err := watching.Repositories(root, cfg)
+	if err != nil {
+		return false, err
+	}
+	for _, repo := range repos {
+		if repo.Active(now) && watching.Allowed(cfg, repo.Path) {
+			return true, nil
+		}
+	}
+	return false, nil
 }

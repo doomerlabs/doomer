@@ -72,6 +72,27 @@ func agentReviewRequested(root, path, fingerprint string, since time.Time) bool 
 	return Read(TurnPath(root, state.Owner.Session), &turn) == nil && turn.Owner == state.Owner
 }
 
+// Full snapshots are only useful for a live review request or a completed
+// tool whose capture needs recovery. Filesystem noise alone cannot authorize one.
+func captureRequested(root, path string, since time.Time, reviewed string) bool {
+	var state State
+	if Read(StatePath(root, path), &state) != nil || state.Ambiguous {
+		return false
+	}
+	var owner Owner
+	if len(state.Active) == 1 {
+		for _, op := range state.Active {
+			if op.Attributable && !op.CompletedAt.IsZero() && !op.CompletedAt.Before(since) && time.Since(op.Started) <= 30*time.Minute {
+				owner = op.Owner
+			}
+		}
+	} else if len(state.Active) == 0 && !state.RequestedAt.IsZero() && !state.RequestedAt.Before(since) && state.Fingerprint != reviewed {
+		owner = state.Owner
+	}
+	var turn Turn
+	return owner.Session != "" && owner.Turn != "" && Read(TurnPath(root, owner.Session), &turn) == nil && turn.Owner == owner
+}
+
 func (r Runner) Run(ctx context.Context, path string, once bool) error {
 	reportingContext, stopReporting := context.WithCancel(ctx)
 	if r.Config.ActivationReporting {
@@ -152,14 +173,23 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 		if r.Debug && events == nil {
 			lastHookDiagnostic = r.logHookDiagnostics(path, lastHookDiagnostic)
 		}
+		r.flush(ctx)
+		r.refreshUnavailableReview(ctx, path)
+		if !once && !captureRequested(r.Root, path, started, last) {
+			if retryRequest != nil {
+				nextWake = time.Until(nextRetry)
+			}
+			if !events.wait(ctx, r.Interval, nextWake) {
+				return nil
+			}
+			continue
+		}
 		if events != nil && time.Since(events.refreshedAt) >= r.Interval {
 			if err := events.addTree(ctx, path); err != nil {
 				r.debugf("%s: refreshing directory watches failed: %s", path, err)
 			}
 			events.refreshedAt = time.Now()
 		}
-		r.flush(ctx)
-		r.refreshUnavailableReview(ctx, path)
 		r.debugf("%s: scanning working tree", path)
 		scanStarted := time.Now()
 		captureCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
