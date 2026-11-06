@@ -92,7 +92,7 @@ func newManagedInstallCommand() *cobra.Command {
 		if err := installBootstrapFiles(base, destinations, []byte(content)); err != nil {
 			return err
 		}
-		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"state": "bootstrap_installed", "paths": destinations, "next": "Run doomer prepare in the target checkout. Approve managed updates, account login, and repository uploads separately."})
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"state": "bootstrap_installed", "paths": destinations, "next": "Run doomer prepare in the target checkout. After repository approval, configure the active agent hooks through its normal trust controls. For team installation, open the initial bootstrap PR."})
 	}
 	return c
 }
