@@ -231,6 +231,15 @@ func TestManagedAutomaticDeepReviewWaitsForFullResult(t *testing.T) {
 	if task.Stage != "review_failed" {
 		t.Fatal("failed Deep review was not retained", task.Stage)
 	}
+	// Server-side Deep availability can change after admission. A successful
+	// Quick phase still completes when the server explicitly disables Deep.
+	client.result.Status = "cancelled"
+	client.result.Error = "full_review_temporarily_disabled"
+	client.result.Full = &adversarylabs.WorkspaceFullReview{Enabled: false, Status: "disabled"}
+	task.Stage = "review_pending"
+	if err := engine.Finish(context.Background(), &task, "token"); err != nil || task.Stage != "complete" {
+		t.Fatal(task.Stage, err)
+	}
 }
 func TestTaskIsolationAndNetworkRedaction(t *testing.T) {
 	s := Store{Root: t.TempDir()}

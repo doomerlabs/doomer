@@ -142,7 +142,8 @@ func (e Engine) Status(ctx context.Context, task *Task, token string) error {
 			}
 		}
 	}
-	if result.Status == "failed" || result.Status == "cancelled" || result.Status == "expired" || result.Early != nil && (result.Early.Status == "unavailable" || result.Early.FailureCode != "") {
+	deepDisabled := result.Error == "full_review_temporarily_disabled" && result.Full != nil && !result.Full.Enabled
+	if result.Status == "failed" || result.Status == "cancelled" && !deepDisabled || result.Status == "expired" || result.Early != nil && (result.Early.Status == "unavailable" || result.Early.FailureCode != "") {
 		task.Stage = "review_failed"
 	}
 	return e.Store.Save(task)
