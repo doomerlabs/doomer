@@ -131,7 +131,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if r := run("", "task", "submit", handle); r.State != "review_pending" {
 		t.Fatal(r)
 	}
-	if r := run("", "task", "status", handle); r.State != "responses_required" || r.Consent == nil || len(r.Consent.Includes) != 3 {
+	if r := run("", "task", "status", handle); r.State != "responses_required" || r.Consent == nil || strings.Join(r.Consent.Includes, ",") != "repository_snapshots,task_context,finding_responses" || r.Consent.Account != "user-account" || r.Consent.Repository != id || r.Consent.Service != server.URL {
 		t.Fatal(r)
 	}
 	input := `[{"lead_id":"` + lead + `","status":"dismissed","agrees":false,"reason":"Checked the implementation"}]`

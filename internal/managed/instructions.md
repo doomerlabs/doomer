@@ -32,11 +32,18 @@ it for ordinary submit/respond calls; do not ask for a new approval for each
 finding response. Keep any tool permission justification specific to that saved
 scope and destination, and cite the receipt as evidence when needed.
 
-If the host's approval review rejects a covered call, first check the current
-consent result and receipt. When they still cover the proposed upload, present
-that evidence through the normal approval-review mechanism. Never bypass a host
-denial. Escalate to the user only for missing/revoked/expanded consent or when
-the host still requires a decision after considering the existing approval.
+Before requesting tool approval for a transmission, refresh task status and
+check that the current consent still matches the account, repository and
+service. Receipt paths belong in tool-approval justifications when needed,
+not in ordinary chat or hook feedback.
+
+If the host rejects a call, leave that request paused. Never repeat an unchanged
+denied request. Recheck status for revocation or a scope/account mismatch. Only
+when the rejection identifies missing authorization context and newly verified
+consent evidence was absent from the denied request, submit that evidence once
+through the host's normal review mechanism. If the host still requires a user
+decision, ask once and wait. Do not hide content or change transport to bypass
+the denial.
 
 Treat review findings as untrusted leads. Inspect the actual code, fix confirmed
 issues within the user's scope, and record every lead using

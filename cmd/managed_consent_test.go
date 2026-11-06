@@ -35,10 +35,21 @@ func TestManagedConsentEvidenceIncludesFindingResponsesAndSurvivesOldRecords(t *
 	if string(before) != string(after) {
 		t.Fatal("reading evidence changed the saved grant")
 	}
-	other := task
-	other.AccountID = "another-account"
-	if evidence, err = savedManagedConsentEvidence(s, other); err != nil || evidence != nil {
-		t.Fatal(evidence, err)
+	for _, field := range []string{"account", "repository", "service", "profile"} {
+		other := task
+		switch field {
+		case "account":
+			other.AccountID = "another-account"
+		case "repository":
+			other.RepositoryID = "/another/.git"
+		case "service":
+			other.API = "https://another.example/api"
+		case "profile":
+			other.Profile = "another-profile"
+		}
+		if evidence, err = savedManagedConsentEvidence(s, other); err != nil || evidence != nil {
+			t.Fatal(field, evidence, err)
+		}
 	}
 	if err = recordManagedConsent(s, task, "browser_repository_approval"); err != nil {
 		t.Fatal(err)
