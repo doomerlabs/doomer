@@ -1,0 +1,23 @@
+cmd/managed_approval.go
+  s_f23d7bc729b5d1::t_dcec65e6651663 7,42-44,127,129,131,135-138
+cmd/managed.go
+  s_f23d7bc729b5d1::t_dcec65e6651663 8,357-358,365
+cmd/managed_test.go
+  s_f23d7bc729b5d1::t_dcec65e6651663 312-346
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0da36d97ff71ca7ac8f711aef45a5e460ef99c6a",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
