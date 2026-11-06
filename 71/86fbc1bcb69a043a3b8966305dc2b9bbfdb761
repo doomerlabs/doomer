@@ -1,0 +1,23 @@
+internal/managed/instructions.md
+  s_8950320cc3aea4::t_71db0330d27d7d 12-14,32-34
+internal/managed/bootstrap_update.go
+  s_8950320cc3aea4::t_71db0330d27d7d 14
+internal/managed/bootstrap.md
+  s_8950320cc3aea4::t_71db0330d27d7d 20-24,48-50,58-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7186fbc1bcb69a043a3b8966305dc2b9bbfdb761",
+  "prompts": {},
+  "sessions": {
+    "s_8950320cc3aea4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b16d-3ac0-71e1-8c85-109b3e532462",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
