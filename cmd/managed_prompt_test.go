@@ -70,6 +70,7 @@ func TestManagedFailedHookWaitsForExplicitRetry(t *testing.T) {
 	repo := newWatchTestRepo(t)
 	attempts := 0
 	fail := true
+	ready := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/auth/whoami":
@@ -84,6 +85,12 @@ func TestManagedFailedHookWaitsForExplicitRetry(t *testing.T) {
 				return
 			}
 			w.Write([]byte(`{"id":"review","status":"running","look_closer_enabled":true,"full_review":{"enabled":false}}`))
+		case "/v1/reviews/workspace/review":
+			if ready {
+				w.Write([]byte(`{"id":"review","status":"completed","early_assessment":{"status":"ready","leads":[]}}`))
+			} else {
+				w.Write([]byte(`{"id":"review","status":"running"}`))
+			}
 		default:
 			w.WriteHeader(404)
 		}
@@ -140,6 +147,14 @@ func TestManagedFailedHookWaitsForExplicitRetry(t *testing.T) {
 	}
 	if attempts != 2 {
 		t.Fatal(attempts)
+	}
+
+	if result := run("hook", "Stop"); result.State != "review_pending" || result.Error != "" {
+		t.Fatal("pending review latched failure", result)
+	}
+	ready = true
+	if result := run("hook", "Stop"); result.State != "complete" || result.Error != "" {
+		t.Fatal("ready review did not complete", result)
 	}
 	saved, err := store.Load(handle)
 	if err != nil || saved.LastError != "" {

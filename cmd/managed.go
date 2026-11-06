@@ -609,6 +609,9 @@ func managedHook(c *cobra.Command, s managed.Store, t *managed.Task, e managed.E
 		if err := e.Status(c.Context(), t, token); err != nil {
 			return err
 		}
+		if t.Stage == "review_pending" || t.Stage == "responses_required" || t.Stage == "review_failed" {
+			return nil
+		}
 		return e.Finish(c.Context(), t, token)
 	case "UserPromptSubmit", "PreToolUse":
 		return nil
