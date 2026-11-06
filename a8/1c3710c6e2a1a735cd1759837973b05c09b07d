@@ -1,0 +1,55 @@
+cmd/managed_install.go
+  s_8950320cc3aea4::t_34b610c0b37c95 65,232-235,251,255-260,300-301,304-307,310-311,328-329
+  s_8950320cc3aea4::t_938dddbd3cf7ab 330
+cmd/managed_bootstrap_test.go
+  s_8950320cc3aea4::t_34b610c0b37c95 1-104
+docs/managed-updates.md
+  s_8950320cc3aea4::t_34b610c0b37c95 3-26
+.agents/skills/doomer-review/SKILL.md
+  s_8950320cc3aea4::t_a7f9fa12991307 1-31
+internal/managed/policy.go
+  s_8950320cc3aea4::t_34b610c0b37c95 28-32,99-108,153-156,161-164,179
+cmd/managed_bootstrap.go
+  s_8950320cc3aea4::t_34b610c0b37c95 1-132
+cmd/managed_update_authorization_test.go
+  s_8950320cc3aea4::t_34b610c0b37c95 1-93
+cmd/managed_portable.go
+  s_8950320cc3aea4::t_35c2ee0972da66 187-189,218-224,239
+  s_8950320cc3aea4::t_f2c04cb38e9040 26-34,113-115
+cmd/managed_portable_test.go
+  s_8950320cc3aea4::t_35c2ee0972da66 56-58,101-104
+cmd/managed_update_authorization.go
+  s_8950320cc3aea4::t_34b610c0b37c95 1-110
+internal/managed/bootstrap_update_test.go
+  s_8950320cc3aea4::t_34b610c0b37c95 1-64
+cmd/runtime.go
+  s_8950320cc3aea4::t_34b610c0b37c95 50
+internal/managed/bootstrap-legacy.md
+  s_8950320cc3aea4::t_34b610c0b37c95 1-30
+internal/managed/bootstrap_update.go
+  s_8950320cc3aea4::t_34b610c0b37c95 1-124
+cmd/root.go
+  s_8950320cc3aea4::t_34b610c0b37c95 140
+cmd/managed.go
+  s_8950320cc3aea4::t_34b610c0b37c95 4,32,93-95,289-294,299,734-757
+cmd/managed_test.go
+  s_8950320cc3aea4::t_35c2ee0972da66 101-103
+.claude/skills/doomer-review/SKILL.md
+  s_8950320cc3aea4::t_a7f9fa12991307 1-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a81c3710c6e2a1a735cd1759837973b05c09b07d",
+  "prompts": {},
+  "sessions": {
+    "s_8950320cc3aea4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b16d-3ac0-71e1-8c85-109b3e532462",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
