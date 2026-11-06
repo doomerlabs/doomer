@@ -51,11 +51,12 @@ type Status struct {
 	LauncherVersion string `json:"launcher_version,omitempty"`
 }
 type Updater struct {
-	Versioned bool // Install immutable releases side by side.
-	Home      string
-	HTTP      *http.Client
-	BaseURL   string // Injected by tests; the CLI always uses the public download service.
-	OS, Arch  string
+	Versioned              bool   // Install immutable releases side by side.
+	ExpectedManifestSHA256 string // Optional signed catalog trust anchor.
+	Home                   string
+	HTTP                   *http.Client
+	BaseURL                string // Injected by tests; the CLI always uses the public download service.
+	OS, Arch               string
 }
 
 func compare(a, b string) (int, error) {
@@ -289,6 +290,12 @@ func (u Updater) download(ctx context.Context, version string) ([]byte, error) {
 	raw, err := u.get(ctx, url+"release-manifest.json", 1<<20)
 	if err != nil {
 		return nil, err
+	}
+	if u.ExpectedManifestSHA256 != "" {
+		sum := sha256.Sum256(raw)
+		if hex.EncodeToString(sum[:]) != u.ExpectedManifestSHA256 {
+			return nil, errors.New("release manifest does not match signed catalog")
+		}
 	}
 	var manifest struct {
 		SchemaVersion int               `json:"schemaVersion"`

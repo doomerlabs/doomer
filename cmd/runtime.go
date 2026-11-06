@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/doomerlabs/doomer/internal/managed"
 	"github.com/doomerlabs/doomer/internal/paths"
 	"github.com/doomerlabs/doomer/internal/runtimeversion"
 	"github.com/doomerlabs/doomer/internal/selfupdate"
@@ -24,6 +25,9 @@ import (
 var launcherExecutable = os.Executable
 
 func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr io.Writer) (bool, error) {
+	if handled, err := dispatchManaged(ctx, args, in, out, stderr); handled {
+		return true, err
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return false, err
@@ -43,7 +47,7 @@ func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr i
 	command, rest, findErr := root.Find(args)
 	// Installation, protocol checks, and diagnostics must remain available
 	// when the checkout pins a missing or broken release.
-	if findErr == nil && (command.Name() == "doctor" || command.Name() == "self-update" || command.Name() == "runtime-info" || command.Name() == "supervise") {
+	if findErr == nil && (command.Name() == "prepare" || command.Name() == "task" || command.Parent() != nil && command.Parent().Name() == "task" || command.Name() == "doctor" || command.Name() == "self-update" || command.Name() == "runtime-info" || command.Name() == "supervise") {
 		return false, nil
 	}
 
@@ -107,7 +111,7 @@ func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr i
 
 func newRuntimeInfoCommand() *cobra.Command {
 	return &cobra.Command{Use: "runtime-info", Hidden: true, Args: cobra.NoArgs, PersistentPreRunE: func(*cobra.Command, []string) error { return nil }, RunE: func(c *cobra.Command, _ []string) error {
-		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]int{"protocol": 1, "managed_upgrade": 1, "watch_supervisor": 1})
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"protocol": 1, "managed_upgrade": 1, "watch_supervisor": 1, "managed_protocol": managed.Protocol, "instruction_sha256": managedInstructionDigest()})
 	}}
 }
 
