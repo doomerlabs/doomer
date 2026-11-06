@@ -1,0 +1,20 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 545-547
+cmd/managed_prompt_test.go
+  h_aa44c3b5b60dec 138-139
+pkg/adversarylabs/response_error.go
+  h_aa44c3b5b60dec 100-102
+pkg/adversarylabs/response_error_test.go
+  h_aa44c3b5b60dec 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "255b0fe3cc907e2e5580e9622e9192d50a61f256",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
