@@ -66,6 +66,7 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 			return err
 		}
 	}
+	reportManagedStatus(c.Context(), s, t, r.State)
 	return json.NewEncoder(c.OutOrStdout()).Encode(r)
 }
 
@@ -715,4 +716,37 @@ func rollbackManaged(s managed.Store, t managed.Task) error {
 	selection.Release = selection.Previous
 	selection.Previous = managed.Release{}
 	return watch.Write(file, selection)
+}
+
+// Status delivery is best effort and separately bounded. The private observation
+// remains available when the service is unreachable. No review is created here.
+func reportManagedStatus(ctx context.Context, s managed.Store, t managed.Task, state string) {
+	if t.Release == "" || t.AccountID == "" {
+		return
+	}
+	store := adversarylabs.ConfigStore{Path: filepath.Join(filepath.Dir(s.Root), "config.json")}
+	auth, ok, err := store.StoredAuthE(adversarylabs.AuthKey(t.API, t.Profile))
+	if err != nil || !ok || auth.Token == "" || adversarylabs.IsAnonymousToken(auth.Token) {
+		return
+	}
+	installation, err := watch.EnsureInstallationID(s.Root)
+	if err != nil {
+		return
+	}
+	var sequence int64
+	if err := watch.Locked(s.Root, "observation-"+t.Handle, func() error {
+		path := filepath.Join(s.Root, "observation-sequences", t.Handle+".json")
+		if err := watch.Read(path, &sequence); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		sequence++
+		return watch.Write(path, sequence)
+	}); err != nil {
+		return
+	}
+	observation := adversarylabs.ManagedStatus{InstallationID: installation, Repository: watch.Key(t.RepositoryID), Task: t.Handle, Agent: t.Agent, Release: t.Release, Protocol: managed.Protocol, Policy: t.Bootstrap.Policy.Channel, State: state, Sequence: sequence, Paused: t.Paused, HookActivated: t.HookActivated}
+	timeout, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, t.API)
+	_ = client.ReportManagedStatus(timeout, auth.Token, observation)
 }

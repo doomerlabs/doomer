@@ -29,6 +29,8 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 		switch r.URL.Path {
 		case "/v1/auth/whoami":
 			w.Write([]byte(`{"id":"user-account","type":"user"}`))
+		case "/v3/installations/observe":
+			w.Write([]byte(`{"accepted":true}`))
 		case "/v1/repositories":
 			w.Write([]byte(`{"repository_id":"repo","snapshot_id":"snapshot","complete":true}`))
 		case "/v1/reviews/workspace":
