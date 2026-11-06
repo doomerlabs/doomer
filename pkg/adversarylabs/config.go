@@ -87,7 +87,7 @@ type Auth struct {
 type ConfigStore struct {
 	Path       string
 	LegacyPath string
-	// ReadOnly preserves credential file and directory permissions during inspection.
+	// Deprecated: Load is always read-only. Retained for source compatibility.
 	ReadOnly bool
 }
 
@@ -116,16 +116,12 @@ func (s ConfigStore) rejectSymlink() error {
 	return nil
 }
 
+// Load only reads saved credentials. Permission repair belongs to credential writes.
 func (s ConfigStore) Load() (Config, error) {
 	if err := s.rejectSymlink(); err != nil {
 		return Config{}, err
 	}
-	if !s.ReadOnly {
-		if err := os.Chmod(filepath.Dir(s.Path), 0700); err != nil && !os.IsNotExist(err) {
-			return Config{}, err
-		}
-	}
-	data, err := readCredentialFile(s.Path, !s.ReadOnly)
+	data, err := readCredentialFile(s.Path)
 	if os.IsNotExist(err) {
 		if s.LegacyPath == "" {
 			return Config{Auths: map[string]Auth{}}, nil
@@ -134,7 +130,7 @@ func (s ConfigStore) Load() (Config, error) {
 		if err := legacy.rejectSymlink(); err != nil {
 			return Config{}, fmt.Errorf("read legacy credentials: %w", err)
 		}
-		data, err = readCredentialFile(s.LegacyPath, !s.ReadOnly)
+		data, err = readCredentialFile(s.LegacyPath)
 		if os.IsNotExist(err) {
 			return Config{Auths: map[string]Auth{}}, nil
 		}

@@ -560,21 +560,31 @@ func TestWatchStatusCommandPreservesLocalState(t *testing.T) {
 	if err := os.MkdirAll(root, 0700); err != nil {
 		t.Fatal(err)
 	}
-	command := NewRootCommand()
-	command.SetOut(io.Discard)
-	command.SetErr(io.Discard)
-	command.SetArgs([]string{"--profile", "default", "--api-url", "https://doomer.ai/api", "watch", "status", "--json", newWatchTestRepo(t)})
-	if err := command.Execute(); err != nil {
-		t.Fatal(err)
-	}
-	for p, want := range map[string]os.FileMode{dir: 0750, config: 0640} {
-		info, err := os.Stat(p)
-		if err != nil || info.Mode().Perm() != want {
-			t.Fatalf("status changed %s: %v", p, err)
-		}
-	}
-	entries, err := os.ReadDir(root)
-	if err != nil || len(entries) != 0 {
-		t.Fatalf("status created watcher state: %v %v", entries, err)
+	repo := newWatchTestRepo(t)
+	for _, args := range [][]string{
+		{"watch", "status", "--json", repo},
+		{"onboard", "--repo", repo, "--agent", "codex", "--session", "test-session", "--check-hooks"},
+		{"onboard", "--repo", repo, "--agent", "claude", "--session", "test-session", "--check-hooks"},
+		{"whoami", "--format", "json"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			command := NewRootCommand()
+			command.SetOut(io.Discard)
+			command.SetErr(io.Discard)
+			command.SetArgs(append([]string{"--profile", "default", "--api-url", "https://doomer.ai/api"}, args...))
+			if err := command.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			for p, want := range map[string]os.FileMode{dir: 0750, config: 0640} {
+				info, err := os.Stat(p)
+				if err != nil || info.Mode().Perm() != want {
+					t.Fatalf("inspection changed %s: %v", p, err)
+				}
+			}
+			entries, err := os.ReadDir(root)
+			if err != nil || len(entries) != 0 {
+				t.Fatalf("inspection created watcher state: %v %v", entries, err)
+			}
+		})
 	}
 }

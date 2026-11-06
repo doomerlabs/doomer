@@ -9,7 +9,7 @@ import (
 	"syscall"
 )
 
-func readCredentialFile(path string, repairPermissions bool) ([]byte, error) {
+func readCredentialFile(path string) ([]byte, error) {
 	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, err
@@ -23,11 +23,7 @@ func readCredentialFile(path string, repairPermissions bool) ([]byte, error) {
 	if !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("credential path %q is not regular", path)
 	}
-	if repairPermissions {
-		if err := f.Chmod(0600); err != nil {
-			return nil, err
-		}
-	}
+
 	return io.ReadAll(f)
 }
 

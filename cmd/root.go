@@ -124,7 +124,6 @@ func newRootCommand(injected *application.App) *cobra.Command {
 				return err
 			}
 		}
-		store.ReadOnly = command.CommandPath() == "doomer watch status"
 		app.Deps = application.Dependencies{
 			Auth: store, API: apiFactory{store}, RegistryHost: adversarylabs.ResolveRegistryHost(),
 			Clock: dependencies.Clock{NowFunc: time.Now, TimerFunc: func(d time.Duration) application.Timer { return timer{time.NewTimer(d)} }},
