@@ -19,11 +19,13 @@ import (
 func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	isolate(t)
 	repo := newWatchTestRepo(t)
+	reviewGit(t, repo, "remote", "add", "origin", "https://github.com/example/project.git")
 	var submissions int
 	var feedback int
 	var approvals int
 	var approvalPolls int
 	var approvalRequest string
+	portableChoice := true
 	lead := strings.Repeat("a", 64)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/v1/setup/") && r.Header.Get("Authorization") != "Bearer selected-account" {
@@ -38,7 +40,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 				t.Fatal(err)
 			}
-			if !input.Resumable || input.Callback != "" || len(input.Repositories) != 1 {
+			if !input.Resumable || !input.PortableState || input.Callback != "" || len(input.Repositories) != 1 {
 				t.Fatal(input)
 			}
 			approvalRequest = input.Request
@@ -53,7 +55,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 			if approvalPolls == 1 {
 				w.Write([]byte(`{"state":"pending"}`))
 			} else {
-				w.Write([]byte(`{"state":"approved","token":"selected-account","account_id":"user-account"}`))
+				json.NewEncoder(w).Encode(map[string]any{"state": "approved", "token": "selected-account", "account_id": "user-account", "portable_state": portableChoice})
 			}
 		case "/v3/installations/observe":
 			w.Write([]byte(`{"accepted":true}`))
@@ -91,6 +93,14 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	}
 	handle, _ := managed.NewHandle()
 	task := managed.Task{Schema: managed.Protocol, Handle: handle, Repo: repo, RepositoryID: id, API: server.URL, Profile: "default", Agent: "codex", Release: "2026.11.6.1", Base: "HEAD", Prompt: "Fix the code", Created: time.Now(), Stage: "ready"}
+	task.Portable = true
+	task.Bootstrap = managed.Bootstrap{Path: filepath.Join(repo, ".claude/skills/doomer-review/SKILL.md"), Policy: managed.Policy{Protocol: 2, Channel: "stable"}}
+	if err := watch.Write(filepath.Join(s.Root, "selections", watch.Key(task.Bootstrap.Path)+".json"), selectedRelease{Policy: task.Bootstrap.Policy, Authorized: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.Write(filepath.Join(s.Root, "update-authorizations", updateAuthorizationKey(task)+".json"), updateAuthorization{Authorized: true, ApprovedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
 	if err = s.Save(&task); err != nil {
 		t.Fatal(err)
 	}
@@ -115,6 +125,13 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	}
 	if r := run("", "task", "login", handle); r.State != "ready" || !r.Authenticated || !r.UploadApproved || r.Consent == nil || r.Consent.Source != "browser_repository_approval" {
 		t.Fatal(r)
+	}
+	portablePath, _, err := portableLocation(context.Background(), task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readPortable(portablePath); err != nil {
+		t.Fatal("browser approval did not save portable setup", err)
 	}
 	if approvals != 1 {
 		t.Fatal("approval duplicated", approvals)
@@ -147,8 +164,31 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if r := run("", "task", "revoke", handle); r.State != "consent_revoked" || !r.Authenticated || r.UploadApproved || !r.SoftwareReady {
 		t.Fatal(r)
 	}
+	if _, err := os.Stat(portablePath); !os.IsNotExist(err) {
+		t.Fatal("revocation retained portable credentials", err)
+	}
 	if r := run("", "task", "status", handle); r.State != "consent_required" {
 		t.Fatal(r)
+	}
+	// A user can approve this environment without persisting portable access.
+	portableChoice = false
+	task.Handle, _ = managed.NewHandle()
+	if err := s.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	if r := run("", "task", "login", task.Handle); r.State != "ready" || !r.Authenticated || !r.UploadApproved {
+		t.Fatal(r)
+	}
+	environmentOnly, err := s.Load(task.Handle)
+	if err != nil || !environmentOnly.PortableDeclined || environmentOnly.PortableApproved {
+		t.Fatal("environment-only choice was not preserved", err)
+	}
+	if _, err := os.Stat(portablePath); !os.IsNotExist(err) {
+		t.Fatal("environment-only approval persisted account access", err)
+	}
+	previousApprovals := approvals
+	if r := run("", "task", "login", task.Handle); r.State != "ready" || approvals != previousApprovals {
+		t.Fatal("environment-only approval was requested again", r)
 	}
 }
 

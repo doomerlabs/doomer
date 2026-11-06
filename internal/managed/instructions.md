@@ -10,11 +10,29 @@ Before editing, resolve any repository approval or update authorization
 request returned by prepare. Show its actual user action and wait for the human.
 Never grant permission or manufacture account state on the user's behalf.
 
+Begin repository edits only after prepare reports ready, with software_ready,
+authenticated, and upload_approved all true. A missing CLI or pending approval
+keeps the coding task pending. Before a task has selected a release, use the
+bootstrap's verified installer for missing software. After selection, use
+`task repair HANDLE` to restore the exact missing runtime.
+
+In Cowork, install and execute inside the editing VM. The Mac may have no Doomer
+installation. For a temporary home, `prepare --portable` requests a setup page
+offering both reusable setup and access in this environment only. Present that
+page and honor the user's choice. The flag itself grants no permission. Only a
+confirmed reusable choice allows the CLI to retain account access and the grant
+in private Git metadata. Later prepare calls restore that approved setup across
+home directories and mount paths. The CLI owns this transfer and its validation.
+Do not copy credentials, edit receipts, or infer approval in prose.
+Use `task revoke` to remove the saved portable approval. Keep using ordinary
+per-call commands when the harness cannot load hooks.
+
 Readiness fields are separate. Software readiness is not upload consent, hook
 activation, account authentication, or a completed review. Native skill discovery,
 a browser callback, session IDs, and persistent processes are optional.
 
-For per-call execution, work normally on the user's task, then run
+For per-call execution, first obtain the ready prepare result described above.
+Then work on the user's task and run
 `doomer task submit HANDLE`. This captures the checkout and submits free Look
 Closer only. Use `doomer task status HANDLE` to retrieve the result. Each call is
 resumable. If pending, continue useful work and check again with a bounded delay.

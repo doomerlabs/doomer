@@ -151,8 +151,12 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	if len(client.ids) != 2 || client.ids[0] != client.ids[1] {
 		t.Fatal("submission id changed on resume", client.ids)
 	}
+	resumed.Review.URL = "https://doomer.test/look-closer/owner/repo/" + strings.Repeat("a", 64)
 	if err = engine.Status(context.Background(), &resumed, "token"); err != nil {
 		t.Fatal(err)
+	}
+	if resumed.Review.URL == "" {
+		t.Fatal("compact status discarded the review URL")
 	}
 	if err = engine.Finish(context.Background(), &resumed, "token"); err == nil {
 		t.Fatal("completed with missing finding response")
@@ -215,6 +219,20 @@ func TestTaskIsolationAndNetworkRedaction(t *testing.T) {
 	failure := NetworkError("upload", &url.Error{Op: "PUT", URL: "https://storage.example/private?token=secret", Err: errors.New("denied")}).Error()
 	if strings.Contains(failure, "secret") || !strings.Contains(failure, "storage.example") {
 		t.Fatal(failure)
+	}
+}
+
+func TestReadyAssessmentWithFailureCodeCannotFinish(t *testing.T) {
+	store := Store{Root: t.TempDir()}
+	handle, _ := NewHandle()
+	result := adversarylabs.WorkspaceReview{ID: "failed-review", Status: "completed", Early: &adversarylabs.WorkspaceAssessment{Status: "ready", FailureCode: "model_request_failed"}}
+	task := Task{Schema: Protocol, Handle: handle, Review: &result}
+	engine := Engine{Store: store, Client: &fakeReview{result: result}}
+	if err := engine.Status(context.Background(), &task, "token"); err != nil || task.Stage != "review_failed" {
+		t.Fatal("analysis failure was not terminal", task.Stage, err)
+	}
+	if err := engine.Finish(context.Background(), &task, "token"); err == nil {
+		t.Fatal("failed analysis was reported as complete")
 	}
 }
 

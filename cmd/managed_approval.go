@@ -56,7 +56,12 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		if err != nil {
 			return err
 		}
-		if approved {
+		if approved && (!t.Portable || t.PortableApproved || t.PortableDeclined) {
+			if t.PortableApproved {
+				if err := savePortable(c.Context(), app, s, *t, false); err != nil {
+					return err
+				}
+			}
 			t.Stage = "ready"
 			if err = s.Save(t); err != nil {
 				return err
@@ -71,7 +76,7 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 	if err := watch.Read(file, &pending); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	if pending.Input.Request == "" || time.Now().After(pending.Expires) {
+	if pending.Input.Request == "" || time.Now().After(pending.Expires) || pending.Input.PortableState != t.Portable {
 		secret := make([]byte, 96)
 		if _, err := rand.Read(secret); err != nil {
 			return err
@@ -86,7 +91,7 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		if err != nil {
 			return err
 		}
-		pending.Input = adversarylabs.ManagedSetupRequest{Resumable: true, Request: base64.RawURLEncoding.EncodeToString(secret[32:64]),
+		pending.Input = adversarylabs.ManagedSetupRequest{Resumable: true, PortableState: t.Portable, Request: base64.RawURLEncoding.EncodeToString(secret[32:64]),
 			CodeChallenge: base64.RawURLEncoding.EncodeToString(challenge[:]), Profile: t.Profile, API: t.API,
 			Repositories: repos, Agents: []string{t.Agent}}
 		// Persist the request identity before network I/O so a retry cannot create
@@ -144,6 +149,18 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		t.AccountID = verifiedAccount
 		if err = recordManagedConsent(s, *t, "browser_repository_approval"); err != nil {
 			return err
+		}
+		if t.Portable {
+			if result.PortableState == nil {
+				return fmt.Errorf("the service did not confirm portable setup approval")
+			}
+			if *result.PortableState {
+				if err = savePortable(c.Context(), app, s, *t, true); err != nil {
+					return err
+				}
+			}
+			t.PortableApproved = *result.PortableState
+			t.PortableDeclined = !*result.PortableState
 		}
 		r.State, r.Authenticated, r.UploadApproved, r.Instructions = "ready", true, true, managed.Instructions
 	default:

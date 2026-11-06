@@ -79,6 +79,21 @@ Explicit server-side task recovery after complete VM loss is outside protocol 2.
 The account and repository are rechecked before every review operation. Network
 errors identify the failing host without printing signed URL query strings.
 
+`prepare --portable` requests browser approval to keep the account credential,
+repository grant, and approved update policy in private Git metadata. The page
+discloses that environments with access to this checkout can reuse the account
+access. The record lives under the Git common directory, outside committed files
+and source snapshots. Subsequent preparation verifies its remote, service,
+profile, file permissions, and live account before restoring local state. The
+same Git storage can be mounted at a different path with an empty home. No Mac
+installation is required. Revoking the task's approval also removes its portable
+record. Existing local account conflicts require resolution before restoration.
+
+For older launchers, preparation returns `portable_setup_command` as an argument
+array using the exact selected runtime. Temporary-home harnesses execute it
+before approving setup or editing. This enables the new operation without asking
+an older launcher to parse its flag. Task history remains local to each environment.
+
 ## Verification
 
 `go test ./internal/managed ./cmd ./internal/selfupdate` covers policy precedence,

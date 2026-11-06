@@ -116,6 +116,10 @@ func (e Engine) Status(ctx context.Context, task *Task, token string) error {
 	if result.ID != task.Review.ID || result.Anonymous {
 		return fmt.Errorf("review identity mismatch")
 	}
+	// Older servers omit links from compact status responses.
+	if result.URL == "" {
+		result.URL = task.Review.URL
+	}
 	task.Review = &result
 	task.Stage = "review_pending"
 	if result.Early != nil && result.Early.Status == "ready" {
@@ -124,7 +128,7 @@ func (e Engine) Status(ctx context.Context, task *Task, token string) error {
 			task.Stage = "reviewed"
 		}
 	}
-	if result.Status == "failed" || result.Status == "cancelled" || result.Status == "expired" || result.Early != nil && result.Early.Status == "unavailable" {
+	if result.Status == "failed" || result.Status == "cancelled" || result.Status == "expired" || result.Early != nil && (result.Early.Status == "unavailable" || result.Early.FailureCode != "") {
 		task.Stage = "review_failed"
 	}
 	return e.Store.Save(task)
@@ -149,7 +153,7 @@ func ValidateResponse(r Response) error {
 	return nil
 }
 func (e Engine) Respond(ctx context.Context, task *Task, token string, items []Response) error {
-	if task.Review == nil || task.Review.Early == nil || task.Review.Early.Status != "ready" {
+	if task.Review == nil || task.Review.Early == nil || task.Review.Early.Status != "ready" || task.Review.Early.FailureCode != "" {
 		return fmt.Errorf("review results are not ready")
 	}
 	if task.Responses == nil {
