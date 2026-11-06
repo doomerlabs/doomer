@@ -1,0 +1,36 @@
+scripts/sign-managed-catalog.go
+  s_f23d7bc729b5d1::t_764afc74465b17 25,27-33,112-122
+  s_f23d7bc729b5d1::t_28a3de786eaf5c 123
+cmd/managed_release_test.go
+  s_f23d7bc729b5d1::t_b6a0ef11dcbfd3 25,137-145
+scripts/test-publish-r2.py
+  s_f23d7bc729b5d1::t_b6a0ef11dcbfd3 7,41-65
+scripts/publish-r2.py
+  s_f23d7bc729b5d1::t_764afc74465b17 131-136,192-193
+.agents/skills/doomer-release/SKILL.md
+  s_f23d7bc729b5d1::t_764afc74465b17 72-75
+cmd/managed.go
+  s_f23d7bc729b5d1::t_8c5c386fae3d46 30-47,64-65,411,433-455,673-675,801-836
+cmd/managed_test.go
+  s_f23d7bc729b5d1::t_baba32bbd427e9 201-207
+internal/managed/instructions.md
+  s_f23d7bc729b5d1::t_fccdfe3dfb1b8c 4-7
+internal/managed/bootstrap.md
+  s_f23d7bc729b5d1::t_51debd8b9e7880 25-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6617f1345d08e649875064236a33ad38662543fa",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
