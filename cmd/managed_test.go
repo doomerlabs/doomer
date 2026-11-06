@@ -205,3 +205,70 @@ func TestManagedResultDisclosesPromptTruncation(t *testing.T) {
 		t.Fatal(result)
 	}
 }
+
+func TestManagedRuntimeHomeCanBeIsolated(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "fresh", "runtime")
+	t.Setenv("DOOMER_RUNTIME_HOME", root)
+	home, err := managedRuntimeHome()
+	if err != nil || home != root {
+		t.Fatal(home, err)
+	}
+	t.Setenv("DOOMER_RUNTIME_HOME", "relative")
+	if _, err = managedRuntimeHome(); err == nil {
+		t.Fatal("accepted relative runtime root")
+	}
+}
+
+func TestManagedTaskKeepsRuntimeRootWhenEnvironmentChanges(t *testing.T) {
+	root := t.TempDir()
+	task := managed.Task{RuntimeHome: root}
+	t.Setenv("DOOMER_RUNTIME_HOME", filepath.Join(t.TempDir(), "other"))
+	got, err := taskRuntimeHome(task)
+	if err != nil || got != root {
+		t.Fatal(got, err)
+	}
+	t.Setenv("DOOMER_RUNTIME_HOME", "")
+	got, err = taskRuntimeHome(task)
+	if err != nil || got != root {
+		t.Fatal(got, err)
+	}
+}
+
+func TestPersonalBootstrapRemainsInUserHomeWithIsolatedRuntime(t *testing.T) {
+	isolate(t)
+	userHome := t.TempDir()
+	t.Setenv("HOME", userHome)
+	runtimeRoot := filepath.Join(t.TempDir(), "runtime")
+	t.Setenv("DOOMER_RUNTIME_HOME", runtimeRoot)
+	repo := newWatchTestRepo(t)
+	text, err := managed.BootstrapText(managed.Policy{Protocol: managed.Protocol, Channel: "stable"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(userHome, ".agents/skills/doomer-review/SKILL.md")
+	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(path, []byte(text), 0600); err != nil {
+		t.Fatal(err)
+	}
+	output, err := execute(t, "", "prepare", "--repo", repo, "--agent", "codex")
+	if err != nil {
+		t.Fatal(output, err)
+	}
+	var result managedResult
+	if err = json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatal(err)
+	}
+	state, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := state.Load(result.Task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.RuntimeHome != runtimeRoot || task.Bootstrap.Scope != "personal" || task.Bootstrap.Path != path {
+		t.Fatal(task)
+	}
+}
