@@ -29,6 +29,10 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 		switch r.URL.Path {
 		case "/v1/auth/whoami":
 			w.Write([]byte(`{"id":"user-account","type":"user"}`))
+		case "/v1/auth/device/code":
+			w.Write([]byte(`{"device_code":"device","user_code":"ABCD","verification_uri":"https://doomer.ai/device","expires_in":60,"interval":1}`))
+		case "/v1/auth/device/token":
+			w.Write([]byte(`{"token":"selected-account"}`))
 		case "/v3/installations/observe":
 			w.Write([]byte(`{"accepted":true}`))
 		case "/v1/repositories":
@@ -83,6 +87,12 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 		}
 		return result
 	}
+	if r := run("", "task", "login", handle); r.State != "authentication_pending" || r.Authenticated || !r.SoftwareReady || r.URL != "https://doomer.ai/device" {
+		t.Fatal(r)
+	}
+	if r := run("", "task", "login", handle); r.State != "authenticated" || !r.Authenticated || !r.SoftwareReady || r.UploadApproved {
+		t.Fatal(r)
+	}
 	if r := run("", "task", "submit", handle); r.State != "consent_required" {
 		t.Fatal(r)
 	}
@@ -111,7 +121,9 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if submissions != 1 || feedback != 1 {
 		t.Fatal(submissions, feedback)
 	}
-	run("", "task", "revoke", handle)
+	if r := run("", "task", "revoke", handle); r.State != "consent_revoked" || !r.Authenticated || r.UploadApproved || !r.SoftwareReady {
+		t.Fatal(r)
+	}
 	if r := run("", "task", "status", handle); r.State != "consent_required" {
 		t.Fatal(r)
 	}

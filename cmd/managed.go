@@ -521,7 +521,7 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				if err := watch.Write(filepath.Join(s.Root, "consents", key+".json"), repositoryConsent{Account: t.AccountID}); err != nil {
 					return err
 				}
-				return outputManaged(c, s, t, managedResult{State: "consent_revoked", Task: t.Handle})
+				return outputManaged(c, s, t, managedResult{State: "consent_revoked", Task: t.Handle, Authenticated: true})
 			}
 			approved, err := managedConsent(s, t, auth.Token, false)
 			if err != nil {
@@ -666,7 +666,7 @@ func managedLogin(c *cobra.Command, app *application.App, s managed.Store, t man
 			if err = os.Remove(file); err != nil {
 				return err
 			}
-			return outputManaged(c, s, t, managedResult{State: "authenticated", Task: t.Handle, Action: "Resume doomer prepare --task " + t.Handle})
+			return outputManaged(c, s, t, managedResult{State: "authenticated", Task: t.Handle, Authenticated: true, Action: "Resume doomer prepare --task " + t.Handle})
 		}
 		pending.NextPoll = time.Now().Add(adversarylabs.PollInterval(pending.Login))
 		if err = watch.Write(file, pending); err != nil {
