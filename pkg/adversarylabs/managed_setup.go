@@ -4,6 +4,7 @@ import "context"
 
 type ManagedSetupRequest struct {
 	Resumable       bool                     `json:"resumable"`
+	PortableState   bool                     `json:"portableState,omitempty"`
 	Request         string                   `json:"request"`
 	CodeChallenge   string                   `json:"codeChallenge"`
 	Callback        string                   `json:"callback"`
@@ -27,8 +28,9 @@ type ManagedSetupResponse struct {
 
 type ManagedSetupResult struct {
 	TokenResponse
-	State     string `json:"state"`
-	AccountID string `json:"account_id"`
+	State         string `json:"state"`
+	AccountID     string `json:"account_id"`
+	PortableState *bool  `json:"portable_state"`
 }
 
 func (c Client) CreateManagedSetup(ctx context.Context, credential string, input ManagedSetupRequest) (ManagedSetupResponse, error) {

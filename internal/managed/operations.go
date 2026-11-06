@@ -126,9 +126,14 @@ func (e Engine) Status(ctx context.Context, task *Task, token string) error {
 			return fmt.Errorf("server did not return the completed deep review result")
 		}
 	}
+	// Older servers omit links from compact status responses.
+	if result.URL == "" {
+		result.URL = task.Review.URL
+
+	}
 	task.Review = &result
 	task.Stage = "review_pending"
-	if result.Early != nil && (result.Early.Status == "ready" || result.Early.Status == "unavailable" && result.Full != nil && result.Full.Enabled && result.Full.Status == "completed") {
+	if result.Early != nil && (result.Early.Status == "ready") {
 		task.Stage = "responses_required"
 		if len(result.Early.Leads) == 0 {
 			task.Stage = "reviewed"
@@ -137,7 +142,7 @@ func (e Engine) Status(ctx context.Context, task *Task, token string) error {
 			}
 		}
 	}
-	if result.Status == "failed" || result.Status == "cancelled" || result.Status == "expired" || result.Early != nil && result.Early.Status == "unavailable" && (result.Full == nil || !result.Full.Enabled) {
+	if result.Status == "failed" || result.Status == "cancelled" || result.Status == "expired" || result.Early != nil && (result.Early.Status == "unavailable" || result.Early.FailureCode != "") {
 		task.Stage = "review_failed"
 	}
 	return e.Store.Save(task)
@@ -162,11 +167,7 @@ func ValidateResponse(r Response) error {
 	return nil
 }
 func (e Engine) Respond(ctx context.Context, task *Task, token string, items []Response) error {
-	if task.Review == nil || task.Review.Early == nil || task.Review.Early.Status != "ready" {
-		if task.Review != nil && task.Review.Early != nil && task.Review.Early.Status == "unavailable" && task.Review.Full != nil && task.Review.Full.Enabled && task.Review.Full.Status == "completed" && len(items) == 0 {
-			task.Stage = "reviewed"
-			return e.Store.Save(task)
-		}
+	if task.Review == nil || task.Review.Early == nil || task.Review.Early.Status != "ready" || task.Review.Early.FailureCode != "" {
 		return fmt.Errorf("review results are not ready")
 	}
 	if task.Responses == nil {

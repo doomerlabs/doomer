@@ -2,10 +2,13 @@ package adversarylabs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/doomerlabs/doomer/pkg/namespacesig"
 	"net/http"
 )
+
+var ErrNotAuthenticated = errors.New("not logged in; run doomer login")
 
 type WhoamiResponse struct {
 	Type              string       `json:"type,omitempty"`
@@ -51,7 +54,7 @@ func (c Client) Whoami(ctx context.Context, token string) (WhoamiResponse, error
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
-		return WhoamiResponse{}, fmt.Errorf("not logged in; run doomer login")
+		return WhoamiResponse{}, ErrNotAuthenticated
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return WhoamiResponse{}, fmt.Errorf("whoami failed: %s", resp.Status)
