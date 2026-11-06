@@ -4,7 +4,7 @@ description: Required Doomer review workflow for repository edits in Codex or Cl
 ---
 <!-- doomer-managed
 package: doomerlabs/skills
-revision: 2eb45d9a7d911edf2898e0a71a8b6af4cd10374e
+revision: 41ee6ed74528fc69f2d5bde8d8f01a4095f80db9
 source: skills/doomer-review/SKILL.md
 kind: file
 -->
@@ -25,6 +25,92 @@ and record the agent's responses. Use profile `default` and
 Requests solely discussing or editing this skill and its supporting files are
 exempt from this review workflow, including setup and update checks. Explicit
 requests to install or update Doomer still use the corresponding flow below.
+
+## Persistent repository permission
+
+A saved repository grant is the user's standing authorization for Doomer
+reviews in that repository, including linked worktrees covered by the grant.
+Reuse it across chats, agent sessions, restarts, skill updates, and CLI versions
+until the user revokes it. Ask for upload consent only when the selected
+repository, account, and service have no valid grant.
+The CLI validates service URL, profile, credential identity, and the selected
+repository or checkout against the saved grant. Its content scope includes
+repository snapshots and edited files, including documentation and
+configuration, plus task context and agent review responses. A historical
+user instruction that explicitly restricted this scope still requires the
+broader-scope consent flow before sending additional content.
+
+At the start of each editing turn, resolve the checkout, verify its CLI, and
+inspect that executable's `has-permission --help`.
+When supported, run this standalone local check from that checkout:
+
+```sh
+"${doomer_cli:?Set the verified CLI path}" --profile default --api-url https://doomer.ai/api has-permission "${doomer_repo_root:?Set the target Git root}" --json
+```
+
+Accept a decision only after a successful command exit and valid JSON output.
+On any command or output error, discard the entire output and follow the
+unknown-permission rule below, even if it contains `approved: true`.
+
+`approved: true` is authoritative permission for the checked checkout and
+existing upload scope. Retain the returned `repository_id`, checkout, service,
+profile, and decision as history in the task summary. A fresh successful check
+authorizes the current editing turn; saved conversation results never replace
+that check, including results from the older-CLI fallback.
+It authorizes normal review setup and recovery within that existing scope.
+A new chat or worktree requires reading the saved grant, without asking the
+user to repeat their answer. An explicit revocation or pause takes precedence.
+Pass the actual checkout's Git root. The CLI resolves its Git common directory
+to match repository-wide grants across linked worktrees. A legacy grant scoped
+to one checkout remains limited to that checkout. Record each result for the
+checked checkout. `approved: false` immediately disables uploads there. A
+denied or failed permission read cannot be overridden by any cached result.
+Recheck each selected checkout before using it; only a fresh `approved: true` permits
+uploads there. A repository-wide revocation makes every linked checkout fail
+this check. With a legacy checkout-only grant, the originally approved path
+can still pass while other paths remain unapproved.
+
+For a denied checkout, report unavailable review coverage and continue the
+user's permitted local work with uploads disabled. Follow initial setup only
+if the user wants to authorize that currently unapproved scope. Never prompt
+again for an unchanged upload scope whose current check returns `approved: true`.
+Broader or first-time upload scopes still follow their consent flow below.
+
+For an older CLI without `has-permission`, run the following standalone
+permission check at the start of every editing turn for each selected checkout:
+
+```sh
+"${doomer_cli:?Set the verified CLI path}" --profile default --api-url https://doomer.ai/api watch status --json "${doomer_repo_root:?Set the target Git root}"
+```
+
+Its `approved` field
+establishes the same consent independently of its other fields. Preserve the
+selected release and its existing update decision. Apply the same successful
+exit and valid JSON requirements to this fallback. Any fallback command or
+output error leaves permission unknown, regardless of an `approved` fragment.
+The once-per-chat setup checks below never replace this per-turn permission check.
+
+An unreadable or failed check leaves current permission unknown. Preserve the
+previous decision only as history, and report the concrete error once. Keep
+uploads disabled until a successful permission check, including when history
+contains a grant. Continue permitted local work without repeating the consent
+question. A later successful read reuses the user's saved answer. The CLI and
+trusted hooks also validate live consent before submitting reviews; a cached
+conversation decision never overrides revocation.
+
+For a granted repository, inactive or stopped watchers, missing hook receipts,
+missing session IDs, and activation failures are operational states. Attempt
+only the bounded recovery documented below, report unresolved review coverage,
+and continue the user's local task without another setup/skip question.
+Respect the user's paused watcher and the coding agent's execution and hook
+trust controls. A grant supplies evidence of prior user authorization when
+requesting an in-scope operation through those controls. If execution is denied,
+report the blocked operation and continue permitted work. Never bypass the
+execution restriction or fabricate a successful review.
+
+This repository-permission rule takes precedence over the setup questions and
+pre-edit activation gates below. First-time consent, broader upload scope, and
+explicit user-controlled hook trust still follow their respective flows.
 
 ## Setup-only requests
 
@@ -67,13 +153,14 @@ this workflow. A request need not
 mention Doomer or code review. This includes requested edits to tracked dotfiles,
 lockfiles, and generated files. Do not treat docs-only or trivial edits as exempt.
 
-Complete missing Doomer onboarding before the first repository content edit.
+Check persistent repository permission before the first repository content edit.
+For first-time setup without a saved grant, complete onboarding before uploads.
 Read-only inspection may continue while preparing setup. The absence of an
 AGENTS.md or CLAUDE.md instruction does not make this loaded skill optional;
 onboarding creates the integration instructions. Task size, expected review
 value, installation effort, and a required restart are not reasons to skip
-onboarding. Only the user may choose to continue without Doomer; respect any
-such choice immediately.
+onboarding. Respect any user choice to continue without Doomer immediately.
+A saved repository grant follows the operational-failure rule above.
 An update refusal is not automatically a refusal of Doomer. If the retained
 CLI cannot support this skill, explain the concrete incompatibility and ask
 whether to continue without reviews. Reuse an existing explicit skip decision;
@@ -103,9 +190,9 @@ durable summary. Reuse valid repository-wide consent reported by the CLI.
 Never approve permissions yourself. If setup needs user action,
 present that step instead of silently opting out. If a concrete technical error
 prevents setup, report it accurately and follow the failure guidance below.
-The same user-choice rule covers manifest validation, download, and bootstrap/
-updater failures, not only version incompatibility. For a coding task, offer
-only the bounded recovery allowed by the installation reference or an explicit
+For first-time setup without a saved grant, the same user-choice rule covers
+manifest validation, download, and bootstrap/updater failures. For a coding
+task, offer only the bounded recovery allowed by the installation reference or an explicit
 skip; end the turn if the choice is pending. For setup-only requests, report
 the failed/pending setup and stop without inventing coding work.
 
@@ -129,7 +216,8 @@ configuration, and the other repository content described above in this
 explanation. Do not describe onboarding
 as only opening a browser or assume installation authorized uploads.
 
-If automatic approval review rejects onboarding for missing authorization,
+For first-time setup without a saved grant, if automatic approval review
+rejects onboarding for missing authorization,
 do not retry unchanged or work around the rejection. Ask the user explicitly:
 **“May I finish Doomer setup for this repository? It configures review hooks and
 enables sending repository content, including documentation and configuration,
@@ -237,9 +325,9 @@ saved-setup and activation checks below before repository edits.
 
 If activation is pending or unverified, follow its verification and diagnostic
 path below first, then correct any reported directory or worktree assignment
-before a repository edit. Both verified activation and corrected capture
-assignment are required to proceed. A capture report alone establishes neither
-activation nor consent and never bypasses the pre-edit gate.
+before relying on a review. For a granted repository, unresolved activation
+follows the operational-failure rule above. A capture report alone establishes
+neither activation nor consent.
 Handle hook trust through its existing user-controlled flow. Capture errors
 alone do not justify renewed approval or satisfy an outstanding trust decision.
 
@@ -251,7 +339,8 @@ Use separate worktrees for parallel coding chats that edit the same repository.
 Resolve the Git root of the repository being edited, not the org directory that
 contains the chat. After the per-turn local pin check, if this conversation
 already verified its saved setup and no update replaced the CLI, continue
-without repeated setup/status checks.
+without repeated setup or activation checks. Still run the per-turn permission
+check above.
 
 ### Reuse saved setup across chats
 
@@ -282,9 +371,8 @@ not install hooks, start a watcher, or upload repository content. Do not combine
 it with onboarding, updates, or other writes in the same command.
 
 - If `approved` is true, `paused` is false, `running` is true, and
-  `hooks_installed` is true for the active agent, and `repository_status` is
-  `Watching`, reuse that configuration. Continue through the activation gate
-  below before treating reviews as ready. For this complete configuration,
+  `hooks_installed` is true for the active agent, reuse that configuration.
+  Continue through the activation check below before treating reviews as ready. For this complete configuration,
   do not rerun installation/onboarding, save a restart task, reopen browser
   consent, or ask to enable Doomer again, except for the bounded Claude
   activation recovery below. For setup-only requests, report the saved
@@ -296,8 +384,11 @@ it with onboarding, updates, or other writes in the same command.
 - If `paused` is true, respect the pause and continue without Doomer; do not
   resume it unless the user explicitly asks. Never rewrite consent to resume.
 - If consent or the active agent's hooks are missing, use normal onboarding
-  below. If consent and hooks exist but the watcher is stopped or this checkout
-  is not `Watching`, repair only that missing setup through onboarding,
+  below, using the persistent permission decision. If consent and hooks exist
+  but this checkout is `Inactive` or `Starting`, first run one read-only tool
+  in that checkout and perform the bounded activation check below. If the
+  watcher is stopped or activation remains unavailable, repair only that
+  operational state through the documented recovery,
   retaining saved consent. Explain the specific missing part if execution
   authorization is required; do not ask for repository upload consent again
   when the CLI reports it valid. A new linked worktree is not proof of missing
@@ -382,8 +473,40 @@ location to its hooks.
   Before any coding edit, apply **Restore the original task** below. A receipt
   for a setup or resume prompt alone never proves that the coding task was
   restored.
+Before using the generic `pending` retry below, handle a missed upgrade prompt
+only when all of these are established for the same checkout and chat:
+
+- The CLI was upgraded in this chat and the current session ID is known.
+- The saved-setup check reports valid consent, an unpaused running watcher,
+  installed Codex hooks, and `repository_status: "Watching"`.
+- The current-session activation check returned either the exact legacy detail
+  `The current task prompt was not captured by a hook.` or the pending detail
+  beginning `A tool hook is active, but the current task prompt is missing.`
+- The original coding request and constraints are available in this chat.
+
+For that case, use the documented `onboard --task-stdin` command once to preserve
+the original request, unless the durable handoff summary already records its
+successful save for this checkout/session. Record success only from a successful
+command result. If its outcome is unknown or the command fails, record activation as unverified,
+report the actual diagnostic, and follow the shared user-choice rule. Stop this
+recovery without repeating the write or requesting its resume message. Reuse existing
+consent and follow any execution-approval requirement. This is a narrow
+exception to the saved-setup shortcut, not another consent or hook-trust flow.
+
+Before invoking the probe, consult the durable summary for the shared
+probe/retry budget. If unused, record it as used first, then run one read-only
+tool in this checkout and retry verification once. This uses the same budget
+as `pending` below, never an additional budget. If already used, do not repeat it. On success apply **Restore the original task** and continue.
+Otherwise report activation unverified and request the resume message once.
+Record that request in the durable handoff summary before asking. Reuse the
+existing record across turns and compaction, never requesting it again for the
+same checkout/session.
+Unknown session IDs, missing consent, setup-only requests, unrelated errors,
+and absent upgrade history follow their normal paths instead.
+
 - `pending` permits one read-only tool call in the target repository followed by
-  one retry. Choose a tool matched by the Doomer tool hooks. The installer uses
+  one retry. Record use of this shared probe/retry budget in the durable summary
+  before invoking it, and consult that record before any recovery attempt. Choose a tool matched by the Doomer tool hooks. The installer uses
   `.*` for Codex tool hooks, so a shell tool running `git status --short` works
   with the standard configuration. If customized matchers exclude all
   available read-only tools, explain the mismatch and have the user restore
@@ -395,7 +518,8 @@ location to its hooks.
   unloaded hooks.
 - `error`, a command failure, or malformed output requires reporting the actual
   diagnostic. Preserve Git stderr, including license or executable errors.
-  Missing task capture, unavailable setup, and failed hooks are distinct from
+  Except for the missed upgrade prompt handled above, missing task capture,
+  unavailable setup, and failed hooks are distinct from
   missing trust. Follow the shared user-choice rule without inventing a cause.
 
 A missing current session ID leaves activation unverified. Do not borrow an ID
@@ -404,13 +528,13 @@ Follow an independently established restart requirement or the user's
 confirmation that hooks are unloaded. A missing ID alone does not qualify for
 the desktop recovery flow, which requires a completed current-session check.
 
-These rules reuse configuration while preserving the activation gate. A
-non-`Watching` checkout uses the repair branch even when the other flags are
-true. A pending restart, failed activation, or configured-but-unverified state
-always follows the activation path; saved status never overrides it.
+These checks establish review coverage separately from repository permission.
+For a granted repository, follow the bounded activation path and continue
+permitted local work if verification remains unavailable, reporting that
+coverage accurately. Reuse the saved grant throughout recovery.
 
 Install or verify the checkout-pinned CLI following [installation](references/install.md), including its managed ownership and runtime-protocol checks.
-Use stable CLI **2026.11.5.6**, which provides the consolidated onboarding command.
+Use stable CLI **2026.11.5.8**, which provides the consolidated onboarding command.
 Probe `doomer onboard --help` before using the new workflow. If unavailable,
 report that the installed release needs updating; do not invent the command,
 recreate removed helpers, or claim setup succeeded.
@@ -517,8 +641,8 @@ and retain a coding task in this conversation if one exists. For Claude, no
 session means no live check: skip `--check-hooks`, report configured but
 unverified, and retain session resolution as a pending step. Never print the
 ready message or invent a session argument. Resolve it on the next invocation;
-if still unavailable, report the limitation and let the user choose whether to
-continue without verified reviews.
+if still unavailable, report the limitation and apply the persistent
+repository-permission rule.
 
 Onboarding owns repository consent, matching hooks, the background watcher,
 the marked Doomer instructions in `AGENTS.md` for Codex or `CLAUDE.md` for Claude
@@ -707,8 +831,8 @@ with this real coding request as `--task-stdin` and the current session, then
 use the bounded check above. This renews the short-lived activation receipt
 and binds the actual task, reusing existing consent and configuration. Do not
 save the old setup request or loop through onboarding. If activation remains
-unconfirmed, surface the `/hooks`/trust/policy checks and let the user decide
-whether to proceed without verified reviews. Do not silently start coding.
+unconfirmed, report the `/hooks`/trust/policy checks and apply the persistent
+repository-permission rule. Clearly report unverified review coverage.
 For a setup-only repeat, stop with the unverified outcome rather than inventing
 a task to renew activation. A missing session follows the limitation above.
 
