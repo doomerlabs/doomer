@@ -1,0 +1,28 @@
+cmd/managed.go
+  s_f23d7bc729b5d1::t_14a983797ba455 266-268
+  s_f23d7bc729b5d1::t_5a09c73be08328 265,269-270,275
+cmd/managed_update_authorization.go
+  s_f23d7bc729b5d1::t_f8aef983b4a0f5 25
+  s_f23d7bc729b5d1::t_041b5b3b4d0071 22-24
+  s_f23d7bc729b5d1::t_5a09c73be08328 1-15,17-21,26-29,31-39,46-48,52-55,59-69,76-78,82-86,90-91,101,108-110
+  s_f23d7bc729b5d1::t_14a983797ba455 16,30,40-45,49-51,56-58,70-75,79-81,87-89,92-100,102-107
+cmd/managed_update_authorization_test.go
+  s_f23d7bc729b5d1::t_041b5b3b4d0071 16-18,27-29,32-34,37-45,49-56,58-60,67-69,74-76,78-80,83-85,87-92
+  s_f23d7bc729b5d1::t_f8aef983b4a0f5 1-15,19-26,30-31,35-36,46-48,57,61-66,70-73,77,81-82,86,93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "60eb0ec2a6872568333c72ea8f4e3949c4d77d60",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
