@@ -207,6 +207,15 @@ func TestManagedAutomaticDeepReviewWaitsForFullResult(t *testing.T) {
 	if err := engine.Finish(context.Background(), &task, "token"); err != nil || task.Stage != "review_pending" {
 		t.Fatal(task.Stage, err)
 	}
+	leadID := strings.Repeat("d", 64)
+	client.result.Early.Leads = []adversarylabs.WorkspaceLead{{ID: leadID}}
+	agrees := false
+	if err := engine.Respond(context.Background(), &task, "token", []Response{{LeadID: leadID, Status: "dismissed", Agrees: &agrees, Reason: "Verified expected behavior"}}); err != nil || task.Stage != "review_pending" {
+		t.Fatal("responding to Quick bypassed pending Deep", task.Stage, err)
+	}
+	if err := engine.Finish(context.Background(), &task, "token"); err != nil || task.Stage != "review_pending" {
+		t.Fatal(task.Stage, err)
+	}
 	client.result.Status = "completed"
 	client.result.Full.Status = "completed"
 	client.result.Full.Result = &adversarylabs.ReviewResult{Summary: "Deep reviewed"}
