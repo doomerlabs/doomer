@@ -137,6 +137,12 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 	clearPendingPrompt(root, turnFile, time.Now(), input.Event == "Stop")
 	_ = Read(turnFile, &turn)
 	if input.Event == "UserPromptSubmit" {
+		// Codex delivers answers to its questions as new turns. Keep the
+		// underlying task instead of replacing it with the reply envelope.
+		prompt := strings.TrimSpace(input.Prompt)
+		if agent == "codex" && strings.HasPrefix(prompt, "<send_user_message_question_reply>") && strings.HasSuffix(prompt, "</send_user_message_question_reply>") {
+			input.Prompt = turn.Prompt
+		}
 		if owner.Turn == "" {
 			owner.Turn = rand.Text()
 		}
