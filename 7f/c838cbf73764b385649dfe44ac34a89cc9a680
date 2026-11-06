@@ -1,0 +1,27 @@
+cmd/managed_install.go
+  s_f23d7bc729b5d1::t_76506c1bbdba72 178,185-186
+  s_f23d7bc729b5d1::t_1a26e7c72cc5de 42,140-149,160,164,179-184,187,207,214-219
+docs/managed-runtime.md
+  s_f23d7bc729b5d1::t_1a26e7c72cc5de 90-92
+cmd/managed.go
+  s_f23d7bc729b5d1::t_1a26e7c72cc5de 112,128-132,180,242,707,756,826,849-860,864-872
+  s_f23d7bc729b5d1::t_1c08c090463696 873
+cmd/managed_test.go
+  s_f23d7bc729b5d1::t_76506c1bbdba72 210,221-274
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7fc838cbf73764b385649dfe44ac34a89cc9a680",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
