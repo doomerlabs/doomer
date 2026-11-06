@@ -193,7 +193,7 @@ func TestReadOnlyCredentialsPreservePermissions(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"auths":{"test":{"token":"saved"}}}`), 0640); err != nil {
 		t.Fatal(err)
 	}
-	store := ConfigStore{Path: path, ReadOnly: true}
+	store := ConfigStore{Path: path}
 	cfg, err := store.Load()
 	if err != nil || cfg.Auths["test"].Token != "saved" {
 		t.Fatalf("load: %v %v", cfg, err)
