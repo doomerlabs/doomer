@@ -16,6 +16,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/publock"
 	"github.com/doomerlabs/doomer/internal/runtimeversion"
 	"github.com/doomerlabs/doomer/internal/selfupdate"
+	"github.com/doomerlabs/doomer/internal/version"
 	watching "github.com/doomerlabs/doomer/internal/watch"
 )
 
@@ -242,6 +243,15 @@ func TestRuntimeDispatcherPreservesResultsFromThreeVersions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	supervisor := filepath.Join(root, "supervisor")
+	_ = watching.Write(filepath.Join(root, "config.json"), watching.Config{API: api, Profile: profile})
+	supervisorLock, err := publock.TryAcquire(supervisor, "watcher")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer supervisorLock.Close()
+	_ = watching.Write(filepath.Join(supervisor, "process.json"), watchProcess{Session: version.Version, ManagedSession: "supervisor"})
+	_ = watching.Write(filepath.Join(supervisor, "heartbeat.json"), time.Now())
 	for _, release := range []string{"2026.11.3.7", "2026.11.4.1", "2026.11.5.1"} {
 		putRuntime(t, home, release)
 		path := runtimeversion.Binary(home, release)
@@ -250,7 +260,10 @@ func TestRuntimeDispatcherPreservesResultsFromThreeVersions(t *testing.T) {
 		sum := sha256.Sum256(body)
 		raw, _ := json.Marshal(selfupdate.Record{SchemaVersion: 1, Manager: "doomer-review", Path: path, Version: release, SHA256: hex.EncodeToString(sum[:])})
 		os.WriteFile(filepath.Join(filepath.Dir(path), "installation.json"), raw, 0600)
-		os.MkdirAll(filepath.Join(root, "runtimes", release), 0700)
+		runtimeRoot := filepath.Join(root, "runtimes", release)
+		os.MkdirAll(runtimeRoot, 0700)
+		_ = watching.Write(watching.TurnPath(runtimeRoot, "session"), watching.Turn{Owner: watching.Owner{Session: "session"}, Repositories: []string{"edited checkout"}})
+		_ = watching.Write(filepath.Join(runtimeRoot, "activity.json"), time.Now())
 	}
 	var out bytes.Buffer
 	c := newRuntimeInfoCommand()
@@ -266,6 +279,58 @@ func TestRuntimeDispatcherPreservesResultsFromThreeVersions(t *testing.T) {
 	}
 	if result["decision"] != "block" || result["reason"] != "2026.11.3.7\n\n2026.11.4.1\n\n2026.11.5.1" {
 		t.Fatal(result)
+	}
+	for _, test := range []struct {
+		name             string
+		brokenSupervisor bool
+		conflictingPin   bool
+		warning          string
+	}{
+		{name: "supervisor unavailable", brokenSupervisor: true, warning: "watcher supervision is unavailable"},
+		{name: "unresolved checkout"},
+		{name: "conflicting pins", conflictingPin: true, warning: "conflicting Codex and Claude CLI pins"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if test.brokenSupervisor {
+				if err := os.WriteFile(filepath.Join(supervisor, "process.json"), []byte("{"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				_ = watching.Write(filepath.Join(supervisor, "process.json"), watchProcess{Session: version.Version, ManagedSession: "supervisor"})
+			}
+			input := watching.HookInput{Session: "session", Event: "Stop", CWD: t.TempDir()}
+			for _, release := range []string{"2026.11.3.7", "2026.11.4.1", "2026.11.5.1"} {
+				_ = os.Remove(watching.TurnPath(filepath.Join(root, "runtimes", release), input.Session))
+			}
+			if test.conflictingPin {
+				repo := newWatchTestRepo(t)
+				putPin(t, repo, "2026.11.3.7")
+				dir := filepath.Join(repo, ".claude/skills/doomer-review/references")
+				if err := os.MkdirAll(dir, 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, "install.md"), []byte("## Select CLI release 2026.11.4.1\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				input.CWD = repo
+			}
+			raw, _ := json.Marshal(input)
+			out.Reset()
+			c.SetIn(bytes.NewReader(raw))
+			if err := dispatchRuntimeHooks(c, api, profile, root, "codex"); err != nil {
+				t.Fatal(err)
+			}
+			result = nil
+			if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result["decision"] != "block" || result["reason"] != "2026.11.3.7\n\n2026.11.4.1\n\n2026.11.5.1" {
+				t.Fatal("lost runtime output", result)
+			}
+			if test.warning != "" && !strings.Contains(out.String(), test.warning) {
+				t.Fatal("missing diagnostic", result)
+			}
+		})
 	}
 }
 

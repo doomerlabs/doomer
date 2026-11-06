@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/doomerlabs/doomer/internal/runtimeversion"
+	"os"
 	"path/filepath"
 
 	"github.com/doomerlabs/doomer/internal/publock"
+	"github.com/doomerlabs/doomer/internal/runtimeversion"
 )
 
 // InstallLauncher is an explicit migration of the convenient global command.
@@ -30,7 +31,7 @@ func (u Updater) InstallLauncher(required string, adopt bool) (Status, error) {
 	if err != nil {
 		return before, err
 	}
-	if before.State == "ready" {
+	if before.State == "ready" || before.State == "newer_installed" {
 		return before, nil
 	}
 	if !before.Managed && before.State != "missing" && !adopt {
@@ -47,6 +48,9 @@ func (u Updater) InstallLauncher(required string, adopt bool) (Status, error) {
 	}
 	defer lock.Close()
 	current, err := legacy.status(r, required)
+	if err == nil && current.Managed && (current.State == "ready" || current.State == "newer_installed") {
+		return current, nil
+	}
 	if err != nil || current.State != before.State || current.SHA256 != before.SHA256 {
 		return current, errors.Join(err, errors.New("global command changed during launcher installation"))
 	}
@@ -74,4 +78,35 @@ func (u Updater) InstallLauncher(required string, adopt bool) (Status, error) {
 		result.Backup = filepath.Join(u.Home, backup)
 	}
 	return result, err
+}
+
+// NewestInstalled selects only checksum-verified immutable releases. Directory
+// names and partial downloads cannot advance the global command by themselves.
+func (u Updater) NewestInstalled(required string) (string, error) {
+	if _, err := compare(required, required); err != nil {
+		return "", err
+	}
+	entries, err := os.ReadDir(filepath.Join(u.Home, ".local/share/doomer/versions"))
+	if os.IsNotExist(err) {
+		return required, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	u.Versioned = true
+	newest := required
+	for _, entry := range entries {
+		comparison, err := compare(entry.Name(), newest)
+		if err != nil || comparison <= 0 || !entry.IsDir() {
+			continue
+		}
+		status, err := u.Check(entry.Name())
+		if err != nil {
+			return "", err
+		}
+		if status.State == "ready" {
+			newest = entry.Name()
+		}
+	}
+	return newest, nil
 }

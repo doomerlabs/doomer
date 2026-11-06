@@ -1,11 +1,18 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/doomerlabs/doomer/internal/selfupdate"
-	"github.com/spf13/cobra"
 	"os"
+	"path/filepath"
+
+	"github.com/doomerlabs/doomer/internal/paths"
+	"github.com/doomerlabs/doomer/internal/runtimeversion"
+	"github.com/doomerlabs/doomer/internal/selfupdate"
+	watching "github.com/doomerlabs/doomer/internal/watch"
+	"github.com/spf13/cobra"
 )
 
 func newSelfUpdateCommand() *cobra.Command {
@@ -28,6 +35,9 @@ func newSelfUpdateCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := superviseInstalledProfiles(c.Context(), result); err != nil {
+				return fmt.Errorf("launcher installed; watcher reconciliation failed: %w", err)
+			}
 			return json.NewEncoder(c.OutOrStdout()).Encode(result)
 		}
 		var result selfupdate.Status
@@ -39,6 +49,20 @@ func newSelfUpdateCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
+		if !check && sideBySide {
+			launcher, err := advanceManagedLauncher(u, required)
+			if err != nil {
+				return fmt.Errorf("release installed; launcher update failed: %w", err)
+			}
+			if err := superviseInstalledProfiles(c.Context(), launcher); err != nil {
+				return fmt.Errorf("release and launcher installed; watcher reconciliation failed: %w", err)
+			}
+			result.LauncherVersion = launcher.Version
+		} else if !check {
+			if err := superviseInstalledProfiles(c.Context(), result); err != nil {
+				return fmt.Errorf("launcher installed; watcher reconciliation failed: %w", err)
+			}
+		}
 		return json.NewEncoder(c.OutOrStdout()).Encode(result)
 	}}
 	c.Flags().StringVar(&required, "version", "", "exact stable release pinned by the skill")
@@ -49,4 +73,74 @@ func newSelfUpdateCommand() *cobra.Command {
 	c.MarkFlagsMutuallyExclusive("check", "adopt")
 	c.MarkFlagsMutuallyExclusive("check", "install-launcher")
 	return c
+}
+
+// Installing an older checkout pin must not regress the machine-wide launcher.
+// A ready immutable release still completes any interrupted launcher upgrade.
+func advanceManagedLauncher(u selfupdate.Updater, required string) (selfupdate.Status, error) {
+	newest, err := u.NewestInstalled(required)
+	if err != nil {
+		return selfupdate.Status{}, err
+	}
+	required = newest
+	global := u
+	global.Versioned = false
+	current, err := global.Check(required)
+	if err != nil {
+		return current, err
+	}
+	if current.State == "newer_installed" || current.State == "ready" {
+		return current, nil
+	}
+	if !current.Managed && current.State != "missing" {
+		return current, fmt.Errorf("global command is unmanaged; use self-update --install-launcher with explicit adoption")
+	}
+	if current.Managed {
+		if err := runtimeversion.Supports(context.Background(), current.Path); err == nil {
+			return u.InstallLauncher(required, false)
+		}
+	}
+	if err := validateLauncherMigration(u.Home); err != nil {
+		return current, err
+	}
+	return u.InstallLauncher(required, false)
+}
+
+// Supervision uses the current launcher, not the older pin being installed.
+// The supervisor can stop idle protocol-1 workers from previous releases.
+func superviseInstalledProfiles(ctx context.Context, launcher selfupdate.Status) error {
+	dir := os.Getenv("DOOMER_CONFIG_DIR")
+	if dir == "" {
+		var err error
+		dir, err = paths.ConfigDir()
+		if err != nil {
+			return err
+		}
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, "watch"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var failures []error
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		shared := filepath.Join(dir, "watch", entry.Name())
+		var cfg watching.Config
+		if err := watching.Read(filepath.Join(shared, "config.json"), &cfg); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			failures = append(failures, fmt.Errorf("profile %s: %w", entry.Name(), err))
+			continue
+		}
+		if err := ensureWatchSupervisorBinary(ctx, shared, cfg.API, cfg.Profile, launcher.Path, launcher.Version); err != nil {
+			failures = append(failures, fmt.Errorf("profile %s: %w", entry.Name(), err))
+		}
+	}
+	return errors.Join(failures...)
 }

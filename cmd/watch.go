@@ -623,6 +623,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	addWatchSetupFlags(c)
 	addWatchRepositoryCommands(c, app, api, profile)
 	addWatchLifecycleCommands(c, app, api, profile)
+	c.AddCommand(newWatchSupervisorCommand(api, profile))
 	c.Flags().StringVar(&managedSession, "managed-session", "", "internal background startup identity")
 	_ = c.Flags().MarkHidden("managed-session")
 	c.Flags().BoolVar(&debug, "debug", false, "show repository discovery, scans, uploads, and review status (no source contents)")
@@ -659,7 +660,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			var input watching.HookInput
 			if json.Unmarshal(raw, &input) == nil {
 				path, err := watching.HookRepository(c.Context(), input)
-				if err == nil && watching.Allowed(cfg, path) && !watching.RepositoryRemoved(state, path) {
+				if err == nil && watching.Allowed(cfg, path) && !watching.RepositoryRemoved(state, path) && watching.HookStartsWork(input) {
 					if err := ensureRuntimeWatch(c.Context(), state, path, *api, *profile); err != nil {
 						return err
 					}

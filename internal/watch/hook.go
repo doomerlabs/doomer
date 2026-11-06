@@ -807,6 +807,11 @@ func collect(root string, turn Turn, owner Owner, message string) {
 	})
 }
 
+// HookStartsWork uses the same mutation classification as edit capture.
+func HookStartsWork(input HookInput) bool {
+	return input.Session != "" && input.Event == "PreToolUse" && mutates(input)
+}
+
 func mutates(input HookInput) bool {
 	name := strings.ToLower(input.Tool)
 	for _, suffix := range []string{"apply_patch", "write", "edit", "write_file", "edit_file", "multiedit"} {

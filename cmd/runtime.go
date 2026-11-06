@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -44,7 +43,7 @@ func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr i
 	command, rest, findErr := root.Find(args)
 	// Installation, protocol checks, and diagnostics must remain available
 	// when the checkout pins a missing or broken release.
-	if findErr == nil && (command.Name() == "doctor" || command.Name() == "self-update" || command.Name() == "runtime-info") {
+	if findErr == nil && (command.Name() == "doctor" || command.Name() == "self-update" || command.Name() == "runtime-info" || command.Name() == "supervise") {
 		return false, nil
 	}
 
@@ -108,12 +107,12 @@ func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr i
 
 func newRuntimeInfoCommand() *cobra.Command {
 	return &cobra.Command{Use: "runtime-info", Hidden: true, Args: cobra.NoArgs, PersistentPreRunE: func(*cobra.Command, []string) error { return nil }, RunE: func(c *cobra.Command, _ []string) error {
-		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]int{"protocol": 1})
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]int{"protocol": 1, "managed_upgrade": 1, "watch_supervisor": 1})
 	}}
 }
 
 func dispatchRuntimeHooks(c *cobra.Command, api, profile, state, agent string) error {
-	shared, _, err := consentPaths(api, profile)
+	shared, config, err := consentPaths(api, profile)
 	if err != nil || state != shared {
 		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
 	}
@@ -121,9 +120,43 @@ func dispatchRuntimeHooks(c *cobra.Command, api, profile, state, agent string) e
 	if err != nil || len(raw) > 1<<20 {
 		return fmt.Errorf("invalid hook input")
 	}
+	var input watching.HookInput
+	if err := json.Unmarshal(raw, &input); err != nil || input.Session == "" {
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
+	}
+	if paused(shared) {
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
+	}
+	if _, err := os.Stat(config); os.IsNotExist(err) {
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
+	} else if err != nil {
+		return err
+	}
+	var diagnostics []map[string]any
+	if err := ensureWatchSupervisor(c.Context(), shared, api, profile); err != nil {
+		diagnostics = append(diagnostics, map[string]any{"systemMessage": "Doomer watcher supervision is unavailable: " + err.Error()})
+	}
+	if input.Event == "UserPromptSubmit" {
+		if err := watching.Write(filepath.Join(shared, "runtime-prompts", watching.Key(input.Session)+".json"), runtimePrompt{Input: input, At: time.Now()}); err != nil {
+			return err
+		}
+	}
+	path, pathErr := watching.HookRepository(c.Context(), input)
+	var selected string
+	fallback := pathErr != nil
+	if pathErr == nil {
+		var pinErr error
+		selected, _, pinErr = runtimeversion.Pin(path)
+		fallback = pinErr != nil || selected == ""
+		if pinErr != nil {
+			diagnostics = append(diagnostics, map[string]any{"systemMessage": "Doomer could not select a checkout runtime: " + pinErr.Error()})
+		}
+	}
+	// Each runtime still checks its own checkout pin and upload grant. Let
+	// those handlers report attribution failures when routing is uncertain.
 	entries, err := os.ReadDir(filepath.Join(shared, "runtimes"))
 	if os.IsNotExist(err) {
-		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
+		return json.NewEncoder(c.OutOrStdout()).Encode(mergeHookOutputs(diagnostics))
 	}
 	if err != nil {
 		return err
@@ -140,6 +173,14 @@ func dispatchRuntimeHooks(c *cobra.Command, api, profile, state, agent string) e
 		if !entry.IsDir() || !runtimeversion.Release.MatchString(entry.Name()) {
 			continue
 		}
+		runtimeRoot := filepath.Join(shared, "runtimes", entry.Name())
+		if !fallback && !hookRuntimeSelected(runtimeRoot, entry.Name(), selected, input) {
+			continue
+		}
+		if err := prepareHookRuntime(ctx, runtimeRoot, input, entry.Name() == selected); err != nil {
+			outputs[i] = map[string]any{"systemMessage": "Doomer watcher lifecycle: " + err.Error()}
+			continue
+		}
 		status, e := (selfupdate.Updater{Home: home, Versioned: true}).Check(entry.Name())
 		if e != nil || status.State != "ready" {
 			outputs[i] = map[string]any{"systemMessage": "Doomer " + entry.Name() + " could not be verified. Rerun this checkout's setup."}
@@ -148,16 +189,16 @@ func dispatchRuntimeHooks(c *cobra.Command, api, profile, state, agent string) e
 		group.Add(1)
 		go func(i int, release string, binary string) {
 			defer group.Done()
-			child := exec.CommandContext(ctx, binary, "--api-url", api, "--profile", profile, "watch", "hook", "--state", filepath.Join(shared, "runtimes", release), "--agent", agent)
-			child.Stdin = bytes.NewReader(raw)
-			data, err := child.Output()
-			if err != nil || json.Unmarshal(data, &outputs[i]) != nil {
+			root := filepath.Join(shared, "runtimes", release)
+			var err error
+			outputs[i], err = runtimeHookOutput(ctx, binary, api, profile, root, shared, agent, input, raw)
+			if err != nil {
 				outputs[i] = map[string]any{"systemMessage": "Doomer " + release + " hook failed. Check its runtime log."}
 			}
 		}(i, entry.Name(), status.Path)
 	}
 	group.Wait()
-	return json.NewEncoder(c.OutOrStdout()).Encode(mergeHookOutputs(outputs))
+	return json.NewEncoder(c.OutOrStdout()).Encode(mergeHookOutputs(append(outputs, diagnostics...)))
 }
 
 // Merge each runtime's context and blocking decisions without letting an empty
