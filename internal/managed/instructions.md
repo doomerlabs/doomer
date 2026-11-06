@@ -1,8 +1,10 @@
 # Doomer managed review
 
 These instructions belong to the release selected for this task. Keep the task
-handle from prepare. Use `doomer prepare --task HANDLE` to resume after a restart
-or compaction. Never create a replacement task to recover an existing review.
+handle from prepare. If prompt_truncated is true, summarize the task to at most
+4000 characters with `doomer task context HANDLE` on stdin before submitting. Use `doomer prepare --task HANDLE` to resume after a restart
+or compaction. If the pinned executable is missing, use `doomer task repair
+HANDLE` to restore that exact release. Never create a replacement task to recover an existing review.
 
 Before editing, resolve any authentication, permission, or update authorization
 request returned by prepare. Show its actual user action and wait for the human.

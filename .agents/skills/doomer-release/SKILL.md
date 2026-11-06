@@ -69,7 +69,10 @@ outputs are:
   the tap's default branch, and the publication job successful.
 - For stable releases, the signed `cli/managed.json` catalog includes the verified
   release and its immutable manifest SHA-256. Ordinary releases leave the
-  bootstrap skill unchanged.
+  bootstrap skill unchanged. The publisher re-fetches and signature-verifies the
+  previous catalog, retains its entries, and retries conditional-write conflicts.
+  Stable releases must pass signing-key validation before any public writes.
+  Beta releases never write the stable managed catalog.
 
 The bucket is shared with Mac app releases. CLI writes belong only under `cli/`
 in `doomer-macos-releases`. Preserve other objects and use the existing scoped

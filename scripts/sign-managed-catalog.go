@@ -22,7 +22,15 @@ func main() {
 	manifestPath := flag.String("manifest", "dist/release-manifest.json", "verified release manifest")
 	previousPath := flag.String("previous", "", "previous signed catalog")
 	output := flag.String("output", "dist/managed.json", "signed output")
+	checkKey := flag.Bool("check-key", false, "verify the protected signing key before publication")
 	flag.Parse()
+	if *checkKey {
+		if err := checkSigningKey(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(*manifestPath, *previousPath, *output); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -100,4 +108,16 @@ func run(manifestPath, previousPath, output string) error {
 		return err
 	}
 	return os.WriteFile(output, data, 0600)
+}
+
+func checkSigningKey() error {
+	key, err := base64.StdEncoding.DecodeString(os.Getenv("DOOMER_RELEASE_SIGNING_KEY"))
+	if err != nil || len(key) != ed25519.PrivateKeySize {
+		return fmt.Errorf("release signing key is missing or invalid")
+	}
+	public, err := base64.StdEncoding.DecodeString(managed.ReleasePublicKey)
+	if err != nil || !ed25519.PublicKey(public).Equal(ed25519.PrivateKey(key).Public()) {
+		return fmt.Errorf("release signing key does not match the embedded public key")
+	}
+	return nil
 }

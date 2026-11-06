@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/doomerlabs/doomer/internal/managed"
+	"github.com/doomerlabs/doomer/internal/runtimeversion"
 	"github.com/doomerlabs/doomer/internal/watch"
 )
 
@@ -132,6 +133,15 @@ func TestPrepareSignedReleaseManualAndOffline(t *testing.T) {
 	rolledBack := prepare(false)
 	if rolledBack.Release != first.Release {
 		t.Fatal("rollback selected rejected release", rolledBack.Release)
+	}
+	if err := os.RemoveAll(filepath.Dir(runtimeversion.Binary(home, first.Release))); err != nil {
+		t.Fatal(err)
+	}
+	if err := repairManagedRelease(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(runtimeversion.Binary(home, first.Release)); err != nil {
+		t.Fatal("exact pinned release not restored", err)
 	}
 	var saved struct{ Release managed.Release }
 	if err = watch.Read(filepath.Join(s.Root, "selections", watch.Key(bootstrap)+".json"), &saved); err != nil || saved.Release.Version != first.Release {

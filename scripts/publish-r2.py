@@ -128,6 +128,12 @@ def publish(client, bucket, directory, version, verify_public):
     print('Published ' + version + ' to ' + BASE_URL)
 
 
+def validate_managed_signing_key():
+    if not os.environ.get('DOOMER_RELEASE_SIGNING_KEY'):
+        raise ValueError('DOOMER_RELEASE_SIGNING_KEY is required before publication')
+    subprocess.run(['go', 'run', './scripts/sign-managed-catalog.go', '--check-key'], check=True)
+
+
 def publish_managed(client, bucket, directory):
     """CAS publication preserves releases added by a concurrent publisher."""
     if not os.environ.get('DOOMER_RELEASE_SIGNING_KEY'):
@@ -183,6 +189,8 @@ def main():
         with urllib.request.urlopen(request, timeout=60) as response:
             if digest(response.read()) != digest(data):
                 raise ValueError('Public artifact checksum mismatch')
+    if '-beta.' not in args.version:
+        validate_managed_signing_key()
     publish(client, bucket, args.dir, args.version, verify)
     if '-beta.' not in args.version:
         publish_managed(client, bucket, args.dir)

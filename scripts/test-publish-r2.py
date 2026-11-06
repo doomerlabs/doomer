@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('publisher', Path(__file__).with_name('publish-r2.py'))
 publisher = importlib.util.module_from_spec(spec)
@@ -37,6 +38,31 @@ class Store:
 
 
 class PublicationTests(unittest.TestCase):
+    def test_managed_key_is_required_before_publication(self):
+        with patch.dict(publisher.os.environ, {}, clear=True), patch.object(publisher.subprocess, 'run') as run:
+            with self.assertRaises(ValueError):
+                publisher.validate_managed_signing_key()
+            run.assert_not_called()
+
+    def test_managed_catalog_retries_with_concurrent_entries(self):
+        class RacingStore(Store):
+            raced = False
+            def put_object(self, **kwargs):
+                if kwargs['Key'] == 'cli/managed.json' and not self.raced:
+                    self.raced = True
+                    self.data['cli/managed.json'] = json.dumps({'versions': ['2026.11.6.1', '2026.11.6.3']}).encode()
+                return super().put_object(**kwargs)
+        store = RacingStore()
+        store.data['cli/managed.json'] = json.dumps({'versions': ['2026.11.6.1']}).encode()
+        def signer(args, check):
+            previous = json.loads(Path(args[args.index('--previous') + 1]).read_text())
+            versions = sorted(set(previous['versions'] + ['2026.11.6.2']))
+            Path(args[args.index('--output') + 1]).write_text(json.dumps({'versions': versions}))
+        with tempfile.TemporaryDirectory() as directory, patch.dict(publisher.os.environ, {'DOOMER_RELEASE_SIGNING_KEY': 'test'}), patch.object(publisher.subprocess, 'run', side_effect=signer) as run:
+            publisher.publish_managed(store, 'bucket', Path(directory))
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(json.loads(store.data['cli/managed.json'])['versions'], ['2026.11.6.1', '2026.11.6.2', '2026.11.6.3'])
+
     def test_bucket_must_match_public_download_origin(self):
         self.assertEqual(publisher.validate_bucket('doomer-macos-releases'), 'doomer-macos-releases')
         with self.assertRaises(ValueError):

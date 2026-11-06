@@ -198,3 +198,10 @@ func TestManagedSessionCannotReplaceAnActiveTask(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestManagedResultDisclosesPromptTruncation(t *testing.T) {
+	result := resultFor(managed.Task{Prompt: strings.Repeat("x", 5000)})
+	if !result.PromptTruncated || result.SubmittedPromptRunes != 4000 {
+		t.Fatal(result)
+	}
+}

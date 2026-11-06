@@ -27,22 +27,24 @@ import (
 )
 
 type managedResult struct {
-	State           string                         `json:"state"`
-	Task            string                         `json:"task,omitempty"`
-	Release         string                         `json:"release,omitempty"`
-	Instructions    string                         `json:"instructions,omitempty"`
-	Review          *adversarylabs.WorkspaceReview `json:"review,omitempty"`
-	URL             string                         `json:"url,omitempty"`
-	Action          string                         `json:"action,omitempty"`
-	Error           string                         `json:"error,omitempty"`
-	SoftwareReady   bool                           `json:"software_ready"`
-	Authenticated   bool                           `json:"authenticated"`
-	UploadApproved  bool                           `json:"upload_approved"`
-	HookActivated   bool                           `json:"hook_activated"`
-	Responses       map[string]managed.Response    `json:"responses,omitempty"`
-	Deferred        int                            `json:"deferred"`
-	UpdateAvailable string                         `json:"update_available,omitempty"`
-	Capabilities    managed.Capabilities           `json:"capabilities"`
+	State                string                         `json:"state"`
+	Task                 string                         `json:"task,omitempty"`
+	Release              string                         `json:"release,omitempty"`
+	Instructions         string                         `json:"instructions,omitempty"`
+	Review               *adversarylabs.WorkspaceReview `json:"review,omitempty"`
+	URL                  string                         `json:"url,omitempty"`
+	Action               string                         `json:"action,omitempty"`
+	Error                string                         `json:"error,omitempty"`
+	SoftwareReady        bool                           `json:"software_ready"`
+	Authenticated        bool                           `json:"authenticated"`
+	UploadApproved       bool                           `json:"upload_approved"`
+	HookActivated        bool                           `json:"hook_activated"`
+	Responses            map[string]managed.Response    `json:"responses,omitempty"`
+	Deferred             int                            `json:"deferred"`
+	UpdateAvailable      string                         `json:"update_available,omitempty"`
+	PromptTruncated      bool                           `json:"prompt_truncated"`
+	SubmittedPromptRunes int                            `json:"submitted_prompt_runes"`
+	Capabilities         managed.Capabilities           `json:"capabilities"`
 }
 
 func managedStore() (managed.Store, error) {
@@ -59,6 +61,8 @@ func managedStore() (managed.Store, error) {
 }
 func resultFor(task managed.Task) managedResult {
 	r := managedResult{State: task.Stage, Task: task.Handle, Release: task.Release, SoftwareReady: task.Release != "", HookActivated: task.HookActivated, Review: task.Review}
+	r.PromptTruncated = len([]rune(task.Prompt)) > 4000
+	r.SubmittedPromptRunes = min(len([]rune(task.Prompt)), 4000)
 	r.Capabilities = task.Capabilities
 	r.UpdateAvailable = task.OfferedRelease
 	if task.Review != nil {
@@ -404,7 +408,7 @@ func managedConsent(s managed.Store, t managed.Task, token string, allow bool) (
 
 func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Command {
 	parent := &cobra.Command{Use: "task", Short: "Resume a durable managed review without a persistent process"}
-	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume", "rollback", "retry"} {
+	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume", "rollback", "retry", "repair", "context"} {
 		operation := operation
 		var allow bool
 		c := &cobra.Command{Use: operation + " HANDLE", Args: cobra.ExactArgs(1)}
@@ -425,6 +429,29 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 			}
 			if t.API != *api || t.Profile != *profile {
 				return fmt.Errorf("task service or profile mismatch")
+			}
+			if operation == "repair" {
+				if err := repairManagedRelease(c.Context(), t); err != nil {
+					return err
+				}
+				return outputManaged(c, s, t, managedResult{State: "runtime_repaired", Task: t.Handle, Release: t.Release, SoftwareReady: true})
+			}
+			if operation == "context" {
+				if t.Submission != nil {
+					return fmt.Errorf("submitted task context is immutable")
+				}
+				data, err := io.ReadAll(io.LimitReader(c.InOrStdin(), 16001))
+				if err != nil {
+					return err
+				}
+				if len(data) > 16000 || len([]rune(string(data))) > 4000 || strings.TrimSpace(string(data)) == "" {
+					return fmt.Errorf("provide a task summary of at most 4000 characters")
+				}
+				t.Prompt = string(data)
+				if err = s.Save(&t); err != nil {
+					return err
+				}
+				return outputManaged(c, s, t, resultFor(t))
 			}
 			if operation == "rollback" {
 				if err := rollbackManaged(s, t); err != nil {
@@ -643,6 +670,9 @@ func dispatchManaged(ctx context.Context, args []string, in io.Reader, out, stde
 	}
 	var handle string
 	if command.Parent() != nil && command.Parent().Name() == "task" {
+		if command.Name() == "repair" {
+			return false, nil
+		}
 		if err := command.ParseFlags(rest); err != nil {
 			return true, err
 		}
@@ -767,4 +797,40 @@ func reportManagedStatus(ctx context.Context, s managed.Store, t managed.Task, s
 	defer cancel()
 	client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, t.API)
 	_ = client.ReportManagedStatus(timeout, auth.Token, observation)
+}
+
+// Repair restores the exact immutable release recorded in the task. It never
+// resolves a newer channel or changes bootstrap policy or the task's version.
+func repairManagedRelease(ctx context.Context, t managed.Task) error {
+	if !runtimeversion.Release.MatchString(t.Release) {
+		return fmt.Errorf("task has no valid pinned release")
+	}
+	catalog, err := managed.FetchCatalog(ctx, &http.Client{Timeout: 15 * time.Second})
+	if err != nil {
+		return err
+	}
+	var pinned *managed.Release
+	for _, release := range catalog.Releases {
+		if release.Version == t.Release && !release.Withdrawn && release.Protocol == managed.Protocol {
+			copy := release
+			pinned = &copy
+		}
+	}
+	if pinned == nil {
+		return fmt.Errorf("task's pinned release is unavailable or withdrawn")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	updater := selfupdate.Updater{Home: home, Versioned: true, ExpectedManifestSHA256: pinned.ManifestSHA256}
+	status, err := updater.Apply(ctx, pinned.Version, false)
+	if err != nil {
+		return err
+	}
+	if status.State != "ready" {
+		return fmt.Errorf("pinned runtime repair did not complete")
+	}
+	_, err = updater.InstallLauncher(pinned.Version, false)
+	return err
 }
