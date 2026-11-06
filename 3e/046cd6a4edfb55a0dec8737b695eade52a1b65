@@ -1,0 +1,71 @@
+cmd/managed_test.go
+  s_8950320cc3aea4::t_459d6f111a3a28 22,42,57,95-99,125-131,163-165
+internal/managed/instructions.md
+  s_8950320cc3aea4::t_da7e63e95a94ad 13-26
+internal/managed/operations.go
+  s_8950320cc3aea4::t_3dfbe0a2cadb0f 119-122
+pkg/adversarylabs/publishing.go
+  s_8950320cc3aea4::t_414d906dac6863 11-12,57
+  s_8950320cc3aea4::t_0f4deaad787610 5
+pkg/adversarylabs/managed_setup.go
+  s_8950320cc3aea4::t_26fdd7df3317f5 31-33
+  s_8950320cc3aea4::t_be66d1556aa187 7
+internal/managed/managed_test.go
+  s_8950320cc3aea4::t_414d906dac6863 154,158-159
+  s_34cf4e21e5c4f6::t_f21f0715dd5844 160
+cmd/managed_portable_test.go
+  s_8950320cc3aea4::t_da1255b3999f9f 22-25,99-112,115
+  s_8950320cc3aea4::t_1c22e69ef14e93 147
+  s_8950320cc3aea4::t_0cc3884e4c8e1d 1-21,26-98,113-114,116-142
+  s_8950320cc3aea4::t_fd5c33e951edde 143-146,148-154
+internal/managed/bootstrap.md
+  s_8950320cc3aea4::t_da7e63e95a94ad 15-20,22-24,29
+  s_8950320cc3aea4::t_67a0403e13f279 25-28
+  s_8950320cc3aea4::t_2786d11b656e01 21
+  s_8950320cc3aea4::t_5aa02555234fb8 43-44
+docs/managed-runtime.md
+  s_8950320cc3aea4::t_18e8a00a057d10 82-96
+cmd/managed.go
+  s_8950320cc3aea4::t_12ad98c69ccb75 127,165,201-203,244
+  s_8950320cc3aea4::t_28538a5d7b17aa 195-200,538
+  s_8950320cc3aea4::t_67a0403e13f279 50,71-75,106
+  s_8950320cc3aea4::t_414d906dac6863 396-398
+  s_8950320cc3aea4::t_397a672823e653 523-527,534-537
+internal/managed/store.go
+  s_8950320cc3aea4::t_26fdd7df3317f5 28-55
+cmd/managed_approval.go
+  s_8950320cc3aea4::t_28538a5d7b17aa 74
+  s_8950320cc3aea4::t_12ad98c69ccb75 59,89,148-155
+  s_34cf4e21e5c4f6::t_7d80c6b0ea0c91 156
+cmd/managed_portable.go
+  s_8950320cc3aea4::t_fd5c33e951edde 208-220,228,231-237
+  s_8950320cc3aea4::t_26fdd7df3317f5 26-33
+  s_8950320cc3aea4::t_397a672823e653 19,70,133-135,158-160,238-252
+  s_8950320cc3aea4::t_12ad98c69ccb75 80-88
+  s_8950320cc3aea4::t_37b2dbbcb91ea1 1-18,20-25,34-69,71-79,89-94,98-108,111-124,128-132,136-157,161-207,221-227,229-230,253
+  s_8950320cc3aea4::t_414d906dac6863 95-97,109-110,125-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3e046cd6a4edfb55a0dec8737b695eade52a1b65",
+  "prompts": {},
+  "sessions": {
+    "s_34cf4e21e5c4f6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b2da-7a5c-7da1-8712-49d6b934229a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    },
+    "s_8950320cc3aea4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b16d-3ac0-71e1-8c85-109b3e532462",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
