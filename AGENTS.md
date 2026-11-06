@@ -33,7 +33,7 @@ uploads or hook trust on the user's behalf. Preserve a paused watcher.
 <!-- doomer-review-policy:start -->
 <!-- doomer-managed
 package: doomerlabs/skills
-revision: 7b15afc1719d09a91ef04e6665f197a0fb5a5333
+revision: 80297bbdbb57e8e71314213df3e2fceccc9bc1bf
 source: templates/review-policy.md
 kind: block
 agents: codex,claude

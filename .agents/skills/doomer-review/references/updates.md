@@ -1,6 +1,6 @@
 <!-- doomer-managed
 package: doomerlabs/skills
-revision: 7b15afc1719d09a91ef04e6665f197a0fb5a5333
+revision: 80297bbdbb57e8e71314213df3e2fceccc9bc1bf
 source: skills/doomer-review/references/updates.md
 kind: file
 -->
