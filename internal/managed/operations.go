@@ -14,6 +14,7 @@ import (
 type ReviewClient interface {
 	StartWorkspace(context.Context, string, adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error)
 	GetWorkspace(context.Context, string, string) (adversarylabs.WorkspaceReview, error)
+	GetWorkspaceResults(context.Context, string, string) (adversarylabs.WorkspaceReview, error)
 	ReportWorkspaceLead(context.Context, string, string, string, string, string, *bool) error
 }
 
@@ -57,7 +58,7 @@ func (e Engine) Submit(ctx context.Context, task *Task, token string) error {
 		return NetworkError("snapshot_upload", err)
 	}
 	task.Revision++
-	look, deep := true, false
+	look := true
 	threshold := 80
 	prompt := []rune(task.Prompt)
 	if len(prompt) > 4000 {
@@ -68,7 +69,7 @@ func (e Engine) Submit(ctx context.Context, task *Task, token string) error {
 		userRequest = &adversarylabs.WorkspaceUserRequest{Prompt: string(prompt), SessionID: task.Handle, TurnID: fmt.Sprint(task.Revision)}
 	}
 	task.Submission = &adversarylabs.WorkspaceSubmission{
-		ReviewScope: "diff", LookCloser: &look, FullReview: &deep, LookCloserThreshold: &threshold,
+		ReviewScope: "diff", LookCloser: &look, LookCloserThreshold: &threshold,
 		RepositoryID: repo, BaseSnapshotID: base, SnapshotID: head,
 		ReviewID: fmt.Sprintf("managed-%s-%d", task.Handle, task.Revision), GroupID: task.Handle, Revision: task.Revision,
 		Repository: repository, Branch: capture.Source.Branch, Diff: diff, Continuity: true,
@@ -93,8 +94,8 @@ func (e Engine) send(ctx context.Context, task *Task, token string) error {
 	if result.Anonymous {
 		return fmt.Errorf("account-linked review required; server returned anonymous review")
 	}
-	if result.Full == nil || result.Full.Enabled || result.LookCloserEnabled == nil || !*result.LookCloserEnabled {
-		return fmt.Errorf("server did not confirm free Look Closer-only review")
+	if result.Full == nil || result.LookCloserEnabled == nil || !*result.LookCloserEnabled {
+		return fmt.Errorf("server did not confirm the enabled review stages")
 	}
 	task.Review = &result
 	task.Stage = "review_pending"
@@ -116,19 +117,33 @@ func (e Engine) Status(ctx context.Context, task *Task, token string) error {
 	if result.ID != task.Review.ID || result.Anonymous {
 		return fmt.Errorf("review identity mismatch")
 	}
+	if result.Full != nil && result.Full.Enabled && result.Full.Status == "completed" {
+		result, err = e.Client.GetWorkspaceResults(ctx, token, task.Review.ID)
+		if err != nil {
+			return NetworkError("review_results", err)
+		}
+		if result.ID != task.Review.ID || result.Anonymous || result.Full == nil || !result.Full.Enabled || result.Full.Status != "completed" || result.Full.Result == nil {
+			return fmt.Errorf("server did not return the completed deep review result")
+		}
+	}
 	// Older servers omit links from compact status responses.
 	if result.URL == "" {
 		result.URL = task.Review.URL
+
 	}
 	task.Review = &result
 	task.Stage = "review_pending"
-	if result.Early != nil && result.Early.Status == "ready" {
+	if result.Early != nil && (result.Early.Status == "ready") {
 		task.Stage = "responses_required"
 		if len(result.Early.Leads) == 0 {
 			task.Stage = "reviewed"
+			if result.Full != nil && result.Full.Enabled && result.Full.Status != "completed" {
+				task.Stage = "review_pending"
+			}
 		}
 	}
-	if result.Status == "failed" || result.Status == "cancelled" || result.Status == "expired" || result.Early != nil && (result.Early.Status == "unavailable" || result.Early.FailureCode != "") {
+	deepDisabled := result.Error == "full_review_temporarily_disabled" && result.Full != nil && !result.Full.Enabled
+	if result.Status == "failed" || result.Status == "cancelled" && !deepDisabled || result.Status == "expired" || result.Early != nil && (result.Early.Status == "unavailable" || result.Early.FailureCode != "") {
 		task.Stage = "review_failed"
 	}
 	return e.Store.Save(task)
@@ -196,6 +211,9 @@ func (e Engine) Respond(ctx context.Context, task *Task, token string, items []R
 		}
 	}
 	task.Stage = "reviewed"
+	if task.Review.Full != nil && task.Review.Full.Enabled && task.Review.Full.Status != "completed" {
+		task.Stage = "review_pending"
+	}
 	for _, lead := range task.Review.Early.Leads {
 		if !task.Responses[task.Review.ID+":"+lead.ID].Sent {
 			task.Stage = "responses_required"
@@ -207,10 +225,19 @@ func (e Engine) Finish(ctx context.Context, task *Task, token string) error {
 	if err := e.Status(ctx, task, token); err != nil {
 		return err
 	}
+	if task.Stage == "review_failed" {
+		return fmt.Errorf("review failed; inspect the task status before retrying")
+	}
+	if task.Stage == "review_pending" {
+		return nil
+	}
 	if err := e.Respond(ctx, task, token, nil); err != nil {
 		return err
 	}
 	if task.Stage != "reviewed" {
+		if task.Stage == "review_pending" {
+			return nil
+		}
 		return fmt.Errorf("record every finding response before finishing")
 	}
 	capture, err := e.Capture(ctx, *task)
