@@ -12,6 +12,9 @@ Replace AGENT with codex or claude and supply the actual task without shell
 interpolation. Read the returned instructions and retain the task handle.
 If a real harness session ID is available, pass it with `--session`.
 
+If prepare reports a bootstrap upgrade, offer it to the user and apply it only
+after acceptance. Keep the repository's update policy and any local edits.
+
 Resume an existing task with `doomer prepare --task HANDLE` after interruption.
 Never create a replacement task to recover an existing review. If that task's
 selected runtime is missing, run `doomer task repair HANDLE` through the available

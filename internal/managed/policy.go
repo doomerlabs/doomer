@@ -25,9 +25,11 @@ type Policy struct {
 }
 
 type Bootstrap struct {
-	Path   string `json:"path"`
-	Scope  string `json:"scope"`
-	Policy Policy `json:"policy"`
+	Path     string `json:"path"`
+	Scope    string `json:"scope"`
+	Policy   Policy `json:"policy"`
+	Revision string `json:"revision,omitempty"`
+	CLIRange string `json:"cli_range,omitempty"`
 }
 
 func (p Policy) Validate() error {
@@ -94,6 +96,16 @@ func ReadBootstrap(path, scope string) (Bootstrap, error) {
 		}
 	}
 	b.Policy = Policy{Protocol: protocol, Channel: header.Metadata["doomer-update-policy"], Version: header.Metadata["doomer-version"], DelayHours: delay}
+	b.Revision = header.Metadata["doomer-bootstrap-version"]
+	b.CLIRange = header.Metadata["doomer-cli-range"]
+	if b.Revision != "" && !runtimeversion.Release.MatchString(b.Revision) {
+		return b, fmt.Errorf("invalid doomer-bootstrap-version metadata")
+	}
+	if b.CLIRange != "" {
+		if _, err := BootstrapSupports(b.CLIRange, BootstrapVersion); err != nil {
+			return b, err
+		}
+	}
 	return b, b.Policy.Validate()
 }
 
@@ -138,10 +150,18 @@ func (p Policy) Eligible(r Release, now time.Time) bool {
 }
 
 func BootstrapText(p Policy) (string, error) {
+	return bootstrapText(p, bootstrapTemplate, true)
+}
+
+func bootstrapText(p Policy, template string, versioned bool) (string, error) {
 	if err := p.Validate(); err != nil {
 		return "", err
 	}
 	metadata := map[string]string{"doomer-protocol": strconv.Itoa(p.Protocol), "doomer-update-policy": p.Channel}
+	if versioned {
+		metadata["doomer-bootstrap-version"] = BootstrapVersion
+		metadata["doomer-cli-range"] = BootstrapCLIRange
+	}
 	if p.Version != "" {
 		metadata["doomer-version"] = p.Version
 	}
@@ -156,5 +176,5 @@ func BootstrapText(p Policy) (string, error) {
 	for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
 		lines = append(lines, "  "+line)
 	}
-	return strings.Replace(bootstrapTemplate, "{{metadata}}", strings.Join(lines, "\n"), 1), nil
+	return strings.Replace(template, "{{metadata}}", strings.Join(lines, "\n"), 1), nil
 }
