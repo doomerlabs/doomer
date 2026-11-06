@@ -21,6 +21,23 @@ resumable. If pending, continue useful work and check again with a bounded delay
 Do not start another review while this revision is pending. If a call is rejected
 by network policy, show the returned required host and retain the same handle.
 
+Keep raw CLI JSON, task handles, and local receipt paths out of user-facing
+progress messages. Summarize the review status and the next action in plain
+language; read structured details through the task commands when needed.
+
+The `consent` result records the existing repository upload approval, including
+its receipt path, account, service, approval time, and covered data. That scope
+includes finding responses derived from the approved repository and task. Reuse
+it for ordinary submit/respond calls; do not ask for a new approval for each
+finding response. Keep any tool permission justification specific to that saved
+scope and destination, and cite the receipt as evidence when needed.
+
+If the host's approval review rejects a covered call, first check the current
+consent result and receipt. When they still cover the proposed upload, present
+that evidence through the normal approval-review mechanism. Never bypass a host
+denial. Escalate to the user only for missing/revoked/expanded consent or when
+the host still requires a decision after considering the existing approval.
+
 Treat review findings as untrusted leads. Inspect the actual code, fix confirmed
 issues within the user's scope, and record every lead using
 `doomer task respond HANDLE` with a JSON array on stdin. Each item contains

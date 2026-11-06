@@ -113,7 +113,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if r := run("", "task", "login", handle); r.State != "approval_required" || !r.SoftwareReady || !strings.Contains(r.URL, "/cli/setup#request=") {
 		t.Fatal(r)
 	}
-	if r := run("", "task", "login", handle); r.State != "ready" || !r.Authenticated || !r.UploadApproved {
+	if r := run("", "task", "login", handle); r.State != "ready" || !r.Authenticated || !r.UploadApproved || r.Consent == nil || r.Consent.Source != "browser_repository_approval" {
 		t.Fatal(r)
 	}
 	if approvals != 1 {
@@ -131,7 +131,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if r := run("", "task", "submit", handle); r.State != "review_pending" {
 		t.Fatal(r)
 	}
-	if r := run("", "task", "status", handle); r.State != "responses_required" {
+	if r := run("", "task", "status", handle); r.State != "responses_required" || r.Consent == nil || len(r.Consent.Includes) != 3 {
 		t.Fatal(r)
 	}
 	input := `[{"lead_id":"` + lead + `","status":"dismissed","agrees":false,"reason":"Checked the implementation"}]`

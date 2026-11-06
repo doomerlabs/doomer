@@ -221,23 +221,7 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 		command.Stdout = &output
 		command.Stderr = io.Discard
 		err = command.Run()
-		context := "Doomer task " + handle + ". Use doomer task status " + handle + " and record every finding response before finishing."
-		if err != nil {
-			context += " Hook operation failed; use the resumable per-call workflow."
-		} else {
-			context += "\n" + strings.TrimSpace(output.String())
-		}
-		if event.Event == "Stop" {
-			var result managedResult
-			if err == nil && json.Unmarshal(output.Bytes(), &result) == nil && result.State == "paused" {
-				return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
-			}
-			if err != nil || json.Unmarshal(output.Bytes(), &result) != nil || result.State != "complete" {
-				return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"decision": "block", "reason": context})
-			}
-			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
-		}
-		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event.Event, "additionalContext": context}})
+		return json.NewEncoder(c.OutOrStdout()).Encode(managedHookFeedback(event.Event, output.Bytes(), err))
 	}
 	return c
 }
