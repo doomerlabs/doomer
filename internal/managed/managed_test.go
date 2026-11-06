@@ -222,6 +222,20 @@ func TestTaskIsolationAndNetworkRedaction(t *testing.T) {
 	}
 }
 
+func TestReadyAssessmentWithFailureCodeCannotFinish(t *testing.T) {
+	store := Store{Root: t.TempDir()}
+	handle, _ := NewHandle()
+	result := adversarylabs.WorkspaceReview{ID: "failed-review", Status: "completed", Early: &adversarylabs.WorkspaceAssessment{Status: "ready", FailureCode: "model_request_failed"}}
+	task := Task{Schema: Protocol, Handle: handle, Review: &result}
+	engine := Engine{Store: store, Client: &fakeReview{result: result}}
+	if err := engine.Status(context.Background(), &task, "token"); err != nil || task.Stage != "review_failed" {
+		t.Fatal("analysis failure was not terminal", task.Stage, err)
+	}
+	if err := engine.Finish(context.Background(), &task, "token"); err == nil {
+		t.Fatal("failed analysis was reported as complete")
+	}
+}
+
 func TestSubmissionOmitsUnavailablePrompt(t *testing.T) {
 	for _, prompt := range []string{"", "  ", "Fix the background"} {
 		t.Run(fmt.Sprintf("prompt-%d", len(prompt)), func(t *testing.T) {
