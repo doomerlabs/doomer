@@ -1,0 +1,25 @@
+cmd/watch_lifecycle_test.go
+  s_19d08b7f01e7fd::t_13bc0ffdfa5f45 563-588
+pkg/adversarylabs/config_test.go
+  s_19d08b7f01e7fd::t_5557f15c40f950 196
+pkg/adversarylabs/lock_unix.go
+  s_19d08b7f01e7fd::t_d1027c6d869aae 12,26
+pkg/adversarylabs/lock_windows.go
+  s_19d08b7f01e7fd::t_0322aa3b03428b 12,20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "43f8ccc0a30368086b8c99b62643ad3b0d060ef3",
+  "prompts": {},
+  "sessions": {
+    "s_19d08b7f01e7fd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a863-607c-7ca3-a1c8-8150542b758a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
