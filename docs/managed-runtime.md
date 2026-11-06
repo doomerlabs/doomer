@@ -18,6 +18,9 @@ agent prose never selects the version.
   starts a localhost callback or copies credentials from another environment.
 - `doomer task consent HANDLE --allow` records explicit repository upload
   permission for the authenticated account, profile, service, and Git identity.
+- `doomer task rollback HANDLE` rejects a bad current selection and selects the
+  previous verified release for future tasks. Active tasks keep their versions.
+- `doomer task pause HANDLE` and `resume` control uploads for an individual task.
 - `doomer task revoke HANDLE` revokes that local repository grant.
 - `doomer task submit HANDLE` uploads snapshots and journals a stable review ID
   before submission. HTTP retries and process restarts reuse the same request.

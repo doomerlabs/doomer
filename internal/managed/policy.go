@@ -4,6 +4,7 @@ package managed
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -54,7 +55,12 @@ func (p Policy) Validate() error {
 
 func ReadBootstrap(path, scope string) (Bootstrap, error) {
 	b := Bootstrap{Path: path, Scope: scope}
-	raw, err := os.ReadFile(path)
+	file, err := os.Open(path)
+	if err != nil {
+		return b, err
+	}
+	defer file.Close()
+	raw, err := io.ReadAll(io.LimitReader(file, (64<<10)+1))
 	if err != nil {
 		return b, err
 	}
@@ -150,5 +156,5 @@ func BootstrapText(p Policy) (string, error) {
 	for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
 		lines = append(lines, "  "+line)
 	}
-	return "---\nname: doomer-review\ndescription: Use Doomer before repository edits and finish its review before reporting completion.\nmetadata:\n" + strings.Join(lines, "\n") + "\n---\n\n# Doomer review\n\nRun `doomer prepare --agent " + "AGENT" + " --repo . --prompt \"USER TASK\"` before editing. Supply the actual user task with safe shell quoting. Replace AGENT with codex or claude. Read the returned instructions and retain the task handle. Resume with `doomer prepare --task HANDLE` after interruption. Follow structured user-action requests; never invent consent, account identity, or hook activation. Reading this file directly is sufficient; native skill discovery is optional.\n", nil
+	return strings.Replace(bootstrapTemplate, "{{metadata}}", strings.Join(lines, "\n"), 1), nil
 }

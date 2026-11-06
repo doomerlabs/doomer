@@ -210,6 +210,8 @@ type selectedRelease struct {
 	Release    managed.Release `json:"release"`
 	Policy     managed.Policy  `json:"policy"`
 	Authorized bool            `json:"authorized"`
+	Previous   managed.Release `json:"previous"`
+	Rejected   map[string]bool `json:"rejected,omitempty"`
 }
 
 func prepareRelease(ctx context.Context, s managed.Store, task *managed.Task, allow bool) (string, error) {
@@ -253,7 +255,14 @@ func prepareRelease(ctx context.Context, s managed.Store, task *managed.Task, al
 	catalog, fetchErr := managed.FetchCatalog(request, &http.Client{Timeout: 15 * time.Second})
 	selected := saved.Release
 	if fetchErr == nil {
-		candidate, e := managed.SelectRelease(catalog, policy, time.Now())
+		eligible := catalog
+		eligible.Releases = nil
+		for _, release := range catalog.Releases {
+			if !saved.Rejected[release.Version] {
+				eligible.Releases = append(eligible.Releases, release)
+			}
+		}
+		candidate, e := managed.SelectRelease(eligible, policy, time.Now())
 		if e != nil {
 			return "", e
 		}
@@ -312,6 +321,9 @@ func prepareRelease(ctx context.Context, s managed.Store, task *managed.Task, al
 		if _, err = updater.InstallLauncher(selected.Version, false); err != nil {
 			return "", err
 		}
+	}
+	if saved.Release.Version != "" && saved.Release.Version != selected.Version {
+		saved.Previous = saved.Release
 	}
 	saved.Release = selected
 	if err = watch.Write(file, saved); err != nil {
@@ -375,7 +387,7 @@ func managedConsent(s managed.Store, t managed.Task, token string, allow bool) (
 
 func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Command {
 	parent := &cobra.Command{Use: "task", Short: "Resume a durable managed review without a persistent process"}
-	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume"} {
+	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume", "rollback"} {
 		operation := operation
 		var allow bool
 		c := &cobra.Command{Use: operation + " HANDLE", Args: cobra.ExactArgs(1)}
@@ -396,6 +408,12 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 			}
 			if t.API != *api || t.Profile != *profile {
 				return fmt.Errorf("task service or profile mismatch")
+			}
+			if operation == "rollback" {
+				if err := rollbackManaged(s, t); err != nil {
+					return err
+				}
+				return outputManaged(c, s, t, managedResult{State: "rollback_recorded", Task: t.Handle, Action: "Start a new task to use the prior verified release. This active task keeps its existing version."})
 			}
 			if operation == "pause" || operation == "resume" {
 				t.Paused = operation == "pause"
@@ -659,4 +677,42 @@ func dispatchManaged(ctx context.Context, args []string, in io.Reader, out, stde
 func managedInstructionDigest() string {
 	sum := sha256.Sum256([]byte(managed.Instructions))
 	return hex.EncodeToString(sum[:])
+}
+
+func rollbackManaged(s managed.Store, t managed.Task) error {
+	key := watch.Key(t.Bootstrap.Path)
+	unlock, err := watchLock(s.Root, "release-"+key)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	file := filepath.Join(s.Root, "selections", key+".json")
+	var selection selectedRelease
+	if err := watch.Read(file, &selection); err != nil {
+		return err
+	}
+	if selection.Policy.Channel == "pinned" {
+		return fmt.Errorf("change the repository pin explicitly to select a different release")
+	}
+	if selection.Release.Version != t.Release {
+		return fmt.Errorf("selected release changed; rollback requires a task on the current selection")
+	}
+	if selection.Previous.Version == "" {
+		return fmt.Errorf("no previous verified release is available")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	status, err := (selfupdate.Updater{Home: home, Versioned: true}).Check(selection.Previous.Version)
+	if err != nil || status.State != "ready" {
+		return fmt.Errorf("previous release is unavailable or modified")
+	}
+	if selection.Rejected == nil {
+		selection.Rejected = map[string]bool{}
+	}
+	selection.Rejected[selection.Release.Version] = true
+	selection.Release = selection.Previous
+	selection.Previous = managed.Release{}
+	return watch.Write(file, selection)
 }

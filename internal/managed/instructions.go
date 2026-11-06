@@ -6,3 +6,6 @@ import _ "embed"
 //
 //go:embed instructions.md
 var Instructions string
+
+//go:embed bootstrap.md
+var bootstrapTemplate string
