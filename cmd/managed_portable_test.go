@@ -53,7 +53,7 @@ func TestPortableSetupAcrossHomesAndMountPaths(t *testing.T) {
 	if err := watch.Write(filepath.Join(s.Root, "selections", watch.Key(task.Bootstrap.Path)+".json"), selectedRelease{Policy: policy, Authorized: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := savePortable(ctx, app, s, task); err != nil {
+	if err := savePortable(ctx, app, s, task, true); err != nil {
 		t.Fatal(err)
 	}
 	path, _, err := portableLocation(ctx, task)
@@ -118,6 +118,9 @@ func TestPortableSetupAcrossHomesAndMountPaths(t *testing.T) {
 	}
 	if err := checkPortable(ctx, task); err == nil {
 		t.Fatal("revoked portable approval remained usable")
+	}
+	if err := savePortable(ctx, app, s, task, false); err == nil {
+		t.Fatal("a concurrent refresh recreated revoked portable access")
 	}
 }
 

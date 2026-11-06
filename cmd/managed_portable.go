@@ -185,7 +185,7 @@ func restorePortable(ctx context.Context, app *application.App, s managed.Store,
 	return s.Save(t)
 }
 
-func savePortable(ctx context.Context, app *application.App, s managed.Store, t managed.Task) error {
+func savePortable(ctx context.Context, app *application.App, s managed.Store, t managed.Task, allowCreate bool) error {
 	path, origin, err := portableLocation(ctx, t)
 	if err != nil {
 		return err
@@ -213,6 +213,9 @@ func savePortable(ctx context.Context, app *application.App, s managed.Store, t 
 	}
 	return watch.Locked(filepath.Dir(path), "portable-setup", func() error {
 		previous, err := readPortable(path)
+		if os.IsNotExist(err) && !allowCreate {
+			return fmt.Errorf("portable setup was revoked during preparation; request approval again")
+		}
 		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
