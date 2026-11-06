@@ -35,7 +35,7 @@ func reviewProgressMessage(feed Feed) string {
 		}
 		switch feed.FullReviewStatus {
 		case "completed":
-			return fmt.Sprintf("Doomer's Look Closer assessment failed because %s. The deeper review completed. See [Doomer review](%s) for its findings. Do not describe this as an overall review failure or assume there were no findings.", reason, feed.URL)
+			return fmt.Sprintf("Doomer's Look Closer assessment failed because %s. The deeper review completed. See [Doomer review](%s) for its findings.", reason, feed.URL)
 		case "queued", "running", "uploading", "scoring":
 			return fmt.Sprintf("Doomer's Look Closer assessment failed because %s. The deeper review is still %s. [Doomer review](%s)", reason, feed.FullReviewStatus, feed.URL)
 		case "failed", "cancelled":

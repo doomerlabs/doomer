@@ -57,9 +57,13 @@ func TestClaudeReviewLifecycle(t *testing.T) {
 			url := "https://doomer.ai/look-closer/org/repo/digest#review=complete-token"
 			feed := Feed{Owner: state.Owner, Fingerprint: state.Fingerprint, ReviewID: "claude-review", URL: url, AssessmentStatus: "ready", Updated: time.Now(), Leads: []Lead{{ID: strings.Repeat("a", 64), Path: "file.txt", Line: 1, Concern: "Check pagination", Check: "Check the final page"}}}
 			Write(FeedPath(root, dir), feed)
-			if out := run("Stop", "", "", nil, ""); !strings.Contains(out, url) || !strings.Contains(out, "Check pagination") {
+			if out := run("Stop", "", "", nil, ""); !strings.Contains(out, url) || strings.Contains(out, "watch respond") {
 				t.Fatal(out)
 			}
+			if out := run("PreToolUse", "Bash", "inspect", nil, ""); !strings.Contains(out, "Check pagination") || !strings.Contains(out, "additionalContext") {
+				t.Fatal("missing private investigation context", out)
+			}
+			run("PostToolUse", "Bash", "inspect", nil, "")
 			var turn Turn
 			Read(TurnPath(root, "claude-session"), &turn)
 			if len(turn.Pending) != 1 {

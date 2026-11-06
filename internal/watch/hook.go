@@ -59,6 +59,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 	quietTool := false
 	waiting := false
 	upgradeNotice := ""
+	toolContext := ""
 	defer func() {
 		if waiting && errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			recordHookReadiness(root, cfg, false)
@@ -66,7 +67,16 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 	}()
 	defer func() {
 		if upgradeNotice != "" {
-			response["hookSpecificOutput"] = map[string]any{"hookEventName": "PreToolUse", "additionalContext": upgradeNotice}
+			toolContext = strings.TrimSpace(toolContext + "\n\n" + upgradeNotice)
+		}
+		if toolContext != "" {
+			specific, _ := response["hookSpecificOutput"].(map[string]any)
+			if specific == nil {
+				specific = map[string]any{"hookEventName": "PreToolUse"}
+				response["hookSpecificOutput"] = specific
+			}
+			existing, _ := specific["additionalContext"].(string)
+			specific["additionalContext"] = strings.TrimSpace(existing + "\n\n" + toolContext)
 		}
 		if event == "PostToolUseFailure" {
 			if specific, ok := response["hookSpecificOutput"].(map[string]any); ok {
@@ -275,7 +285,8 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		_ = RegisterRepository(root, path, "agent", false, time.Now())
 	}
 	if input.Event == "PreToolUse" {
-		_ = Locked(root, input.Session, func() error {
+		pendingContext := ""
+		err := Locked(root, input.Session, func() error {
 			_ = Read(turnFile, &turn)
 			if turn.Owner != owner {
 				turn = Turn{Owner: owner, Next: 1, Agent: agent}
@@ -287,10 +298,14 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 				turn.Prompt = pendingTaskPrompt(root, path, owner)
 				recovered = strings.TrimSpace(turn.Prompt) != ""
 			}
+			if input.ToolID != "" {
+				pendingContext = turn.ReviewContext
+				turn.ReviewContext = ""
+			}
 			turn.PendingPromptUntil = time.Time{}
 			for _, existing := range turn.Repositories {
 				if existing == path {
-					if recovered {
+					if recovered || pendingContext != "" {
 						return Write(turnFile, turn)
 					}
 					return nil
@@ -299,6 +314,9 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			turn.Repositories = append(turn.Repositories, path)
 			return Write(turnFile, turn)
 		})
+		if err == nil {
+			toolContext = pendingContext
+		}
 	}
 	if input.Event == "Stop" {
 		// Do this before finish captures the tree. A dead service should not
@@ -578,7 +596,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 					if err := Write(turnFile, current); err != nil {
 						return err
 					}
-					response = map[string]any{"decision": "block", "reason": message + " Tell the user this briefly in your final answer. Do not repeat these instructions or retry setup."}
+					response = map[string]any{"decision": "block", "reason": message}
 					return nil
 				})
 			}
@@ -603,7 +621,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			if e != nil || (fingerprint != feed.Fingerprint && !olderSnapshot) {
 				return
 			}
-			var message string
+			var message, stopMessage string
 			_ = Locked(root, input.Session, func() error {
 				_ = Read(turnFile, &turn)
 				if turn.Owner != owner {
@@ -633,6 +651,10 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 				completionSummary := "Briefly say 'Doomer reviewed these changes and raised no issues.' "
 				if olderSnapshot && !currentContentReviewed {
 					completionSummary = "Briefly acknowledge the reviewed earlier snapshot; do not claim the current changes were reviewed. "
+				}
+				stopMessage = fmt.Sprintf("Doomer reviewed the %s and raised no issues. [Doomer review](%s)", snapshotLabel, feed.URL)
+				if olderSnapshot && !currentContentReviewed {
+					stopMessage += " The current changes have not been verified by this review."
 				}
 				if len(feed.Leads) == 0 {
 					turn.Delivered = append(turn.Delivered, feed.ReviewID)
@@ -667,16 +689,25 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 					return err
 				}
 				text.WriteString(instructions)
+				if input.Event == "Stop" {
+					// Stop reasons are visible continuation prompts. Keep the
+					// investigation protocol for the next tool's private context.
+					turn.ReviewContext = strings.TrimSpace(turn.ReviewContext + "\n\nRepository: " + path + "\n" + text.String())
+				}
 				turn.Delivered = append(turn.Delivered, feed.ReviewID)
 				if e := Write(turnFile, turn); e != nil {
 					return e
 				}
 				message = text.String()
+				stopMessage = fmt.Sprintf("Doomer reviewed the %s and found %d %s to investigate before finishing. [Doomer review](%s)", snapshotLabel, len(feed.Leads), areaWord, feed.URL)
+				if olderSnapshot && !currentContentReviewed {
+					stopMessage += " This review covers an earlier snapshot."
+				}
 				return nil
 			})
 			if message != "" {
 				if input.Event == "Stop" {
-					response = map[string]any{"decision": "block", "reason": message}
+					response = map[string]any{"decision": "block", "reason": stopMessage}
 				} else {
 					response = map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "PostToolUse", "additionalContext": message}}
 				}

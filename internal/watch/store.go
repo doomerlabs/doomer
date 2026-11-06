@@ -98,6 +98,7 @@ type Turn struct {
 	PendingPromptUntil time.Time `json:"pending_prompt_until,omitempty"`
 	Agent              string    `json:"agent,omitempty"`
 	ResponseToken      string    `json:"response_token,omitempty"`
+	ReviewContext      string    `json:"review_context,omitempty"`
 	Repositories       []string  `json:"repositories,omitempty"`
 	Owner              Owner
 	Prompt             string
