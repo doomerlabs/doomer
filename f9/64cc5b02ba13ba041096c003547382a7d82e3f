@@ -1,0 +1,21 @@
+cmd/onboard.go
+  s_884169a093fdfd::t_60825df4a923f3 85-86
+cmd/onboard_test.go
+  s_884169a093fdfd::t_60825df4a923f3 183-187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f964cc5b02ba13ba041096c003547382a7d82e3f",
+  "prompts": {},
+  "sessions": {
+    "s_884169a093fdfd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1aefa-4a15-7fe0-a429-80c4f6fe52e8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
