@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-var errCaptureRepository = errors.New("unresolved edit repository")
 var errCaptureOwnership = errors.New("ambiguous edit ownership")
 
 func (r Runner) markRetrying(path string) {
@@ -54,8 +53,6 @@ func captureFailureNotice(root, turnFile string, owner Owner, err error) string 
 	}
 	code, reason := "capture_failed", "local snapshot capture failed"
 	switch {
-	case errors.Is(err, errCaptureRepository):
-		code, reason = "capture_repository", "this tool's edit repository could not be identified. Set the tool's working directory or use explicit file paths in the target checkout"
 	case errors.Is(err, errCaptureEditScope):
 		code, reason = "capture_edit_scope", "the agent edit scope could not be captured. "+err.Error()
 	case errors.Is(err, errCaptureOwnership):
@@ -80,9 +77,6 @@ func captureFailureNotice(root, turnFile string, owner Owner, err error) string 
 			return err
 		}
 		message = "Doomer could not start a review because " + reason + ". If no later completed review arrives, briefly report this concrete failure in your final answer instead of calling the review pending or unconfirmed. Continue the coding task; do not repeat setup or these instructions."
-		if code == "capture_repository" {
-			message = "Doomer could not attribute this tool operation because " + reason + ". If it only prepares temporary files or performs review-exempt skill maintenance, continue without presenting this as a failed repository review. For actual repository edits, correct the target and report unavailable review coverage if no later completed review arrives. Continue the coding task; do not repeat setup or these instructions."
-		}
 		return nil
 	})
 	return message
