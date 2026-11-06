@@ -284,7 +284,9 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 	if cfg.AllRepositories && input.Event == "PreToolUse" {
 		_ = Write(filepath.Join(root, "discovered", Key(path)+".json"), path)
 	}
-	if input.Event == "PreToolUse" && mutates(input) {
+	// A real tool call is agent activity even before the first edit. This lets
+	// an approved new worktree become watchable during activation checks.
+	if input.Event == "PreToolUse" {
 		_ = RegisterRepository(root, path, "agent", false, time.Now())
 	}
 	if input.Event == "PreToolUse" {
