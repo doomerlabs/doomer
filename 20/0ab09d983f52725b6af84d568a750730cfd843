@@ -1,0 +1,56 @@
+docs/managed-updates.md
+  s_f23d7bc729b5d1::t_db17f83129209d 3-26
+cmd/managed_bootstrap.go
+  s_f23d7bc729b5d1::t_36f152130879f2 10,51,64-66,84
+  s_f23d7bc729b5d1::t_853389e9d80236 104-106,112-120,123-125
+  s_f23d7bc729b5d1::t_e6ff9bb4f62e37 102-103,107-111,121-122,126-131
+  s_f23d7bc729b5d1::t_dc2a4e345d4465 1-9,11-23,27-29,33-39,49-50,55-56,60,67-68,72-74,81-83,88-94,98-101
+  s_f23d7bc729b5d1::t_303ef8e72748f0 24-26,30-32,40-48,52-54,57-59,61-63,69-71,75-80,85-87,95-97
+cmd/runtime.go
+  s_f23d7bc729b5d1::t_e6ff9bb4f62e37 50
+cmd/root.go
+  s_f23d7bc729b5d1::t_dc2a4e345d4465 140
+internal/managed/bootstrap-legacy.md
+  s_f23d7bc729b5d1::t_4b4511bf16dad0 1-30
+internal/managed/bootstrap_update.go
+  s_f23d7bc729b5d1::t_9019a4c735888a 1-23,27-30,39-42,53-59,62-63,67-68,78-80,97,101,109-113,117-124
+  s_f23d7bc729b5d1::t_36f152130879f2 66,69-77,83-95
+  s_f23d7bc729b5d1::t_303ef8e72748f0 24-26,31-38,43-52,60-61,64-65,81-82,96,98-100,102-108,114-116
+internal/managed/bootstrap_update_test.go
+  s_f23d7bc729b5d1::t_4295f8f85e0f25 11-14,24-26,29-31,45-47,49-51,53-55,57-59,61-63
+  s_f23d7bc729b5d1::t_07b7ac3304db29 1-10,15-23,27-28,32-44,48,52,56,60,64
+internal/managed/policy.go
+  s_f23d7bc729b5d1::t_303ef8e72748f0 28-30,105-107
+  s_f23d7bc729b5d1::t_9019a4c735888a 31-32,99-104,108,153-156,161-164,179
+internal/managed/bootstrap.md
+  s_f23d7bc729b5d1::t_9019a4c735888a 15-17
+cmd/managed.go
+  s_f23d7bc729b5d1::t_e6ff9bb4f62e37 4,88,92,701-708,712-713,717-720,724
+  s_f23d7bc729b5d1::t_dc2a4e345d4465 87,93
+  s_f23d7bc729b5d1::t_303ef8e72748f0 32
+  s_f23d7bc729b5d1::t_853389e9d80236 89-91,698-700,709-711,714-716,721-723
+cmd/managed_bootstrap_test.go
+  s_f23d7bc729b5d1::t_4295f8f85e0f25 17-19,23-28,39-41,44-46,49-51,54-59,62-67,78-80,82-84,86-88
+  s_f23d7bc729b5d1::t_07b7ac3304db29 1-16,20-22,29-38,42-43,47-48,52-53,60-61,68-77,81,85,89
+cmd/managed_install.go
+  s_f23d7bc729b5d1::t_db17f83129209d 65
+  s_f23d7bc729b5d1::t_07b7ac3304db29 300-301
+  s_f23d7bc729b5d1::t_303ef8e72748f0 304-306,328-330
+  s_f23d7bc729b5d1::t_dc2a4e345d4465 232-235,251,255-260,307,310-311
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "200ab09d983f52725b6af84d568a750730cfd843",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
