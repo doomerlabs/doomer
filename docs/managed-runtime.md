@@ -85,3 +85,9 @@ release signatures and expiry, task isolation, lock contention, interrupted
 submission recovery, response recording, revocation, native-discovery absence,
 and account-authenticated per-call review completion against an isolated API.
 Actual Codex/Claude/Cowork client trust and UI behavior require client smoke tests.
+
+For isolated validation or an ephemeral harness, `DOOMER_RUNTIME_HOME` can name
+an absolute root for runtime binaries and personal bootstraps. Child task
+processes inherit it. The default remains the user's home. Credential and task
+storage continue to use `DOOMER_CONFIG_DIR` independently; credentials need not
+be copied to change the runtime root.

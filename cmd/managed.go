@@ -109,7 +109,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 			if e != nil {
 				return e
 			}
-			home, e := os.UserHomeDir()
+			home, e := managedRuntimeHome()
 			if e != nil {
 				return e
 			}
@@ -173,7 +173,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 				return outputManaged(c, s, task, r)
 			}
 			r = resultFor(task)
-			home, err := os.UserHomeDir()
+			home, err := managedRuntimeHome()
 			if err != nil {
 				return err
 			}
@@ -235,7 +235,7 @@ type selectedRelease struct {
 }
 
 func prepareRelease(ctx context.Context, s managed.Store, task *managed.Task, allow bool) (string, error) {
-	home, err := os.UserHomeDir()
+	home, err := managedRuntimeHome()
 	if err != nil {
 		return "", err
 	}
@@ -700,7 +700,7 @@ func dispatchManaged(ctx context.Context, args []string, in io.Reader, out, stde
 	if task.Release == "" {
 		return false, nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := managedRuntimeHome()
 	if err != nil {
 		return true, err
 	}
@@ -749,7 +749,7 @@ func rollbackManaged(s managed.Store, t managed.Task) error {
 	if selection.Previous.Version == "" {
 		return fmt.Errorf("no previous verified release is available")
 	}
-	home, err := os.UserHomeDir()
+	home, err := managedRuntimeHome()
 	if err != nil {
 		return err
 	}
@@ -819,7 +819,7 @@ func repairManagedRelease(ctx context.Context, t managed.Task) error {
 	if pinned == nil {
 		return fmt.Errorf("task's pinned release is unavailable or withdrawn")
 	}
-	home, err := os.UserHomeDir()
+	home, err := managedRuntimeHome()
 	if err != nil {
 		return err
 	}
@@ -833,4 +833,16 @@ func repairManagedRelease(ctx context.Context, t managed.Task) error {
 	}
 	_, err = updater.InstallLauncher(pinned.Version, false)
 	return err
+}
+
+// A separate runtime root supports isolated validation and ephemeral harnesses
+// without changing the process home or the user's existing CLI installation.
+func managedRuntimeHome() (string, error) {
+	if root := os.Getenv("DOOMER_RUNTIME_HOME"); root != "" {
+		if !filepath.IsAbs(root) {
+			return "", fmt.Errorf("DOOMER_RUNTIME_HOME must be absolute")
+		}
+		return filepath.Clean(root), nil
+	}
+	return os.UserHomeDir()
 }

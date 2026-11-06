@@ -205,3 +205,16 @@ func TestManagedResultDisclosesPromptTruncation(t *testing.T) {
 		t.Fatal(result)
 	}
 }
+
+func TestManagedRuntimeHomeCanBeIsolated(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DOOMER_RUNTIME_HOME", root)
+	home, err := managedRuntimeHome()
+	if err != nil || home != root {
+		t.Fatal(home, err)
+	}
+	t.Setenv("DOOMER_RUNTIME_HOME", "relative")
+	if _, err = managedRuntimeHome(); err == nil {
+		t.Fatal("accepted relative runtime root")
+	}
+}

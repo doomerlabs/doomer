@@ -39,7 +39,7 @@ func newManagedInstallCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		base, err := os.UserHomeDir()
+		base, err := managedRuntimeHome()
 		if err != nil {
 			return err
 		}
@@ -77,7 +77,7 @@ func newManagedInstallCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			home, err := os.UserHomeDir()
+			home, err := managedRuntimeHome()
 			if err != nil {
 				return err
 			}
@@ -131,7 +131,7 @@ func newManagedHooksCommand(app *application.App, api, profile *string) *cobra.C
 		if agent != "codex" && agent != "claude" {
 			return fmt.Errorf("agent must be codex or claude")
 		}
-		home, err := os.UserHomeDir()
+		home, err := managedRuntimeHome()
 		if err != nil {
 			return err
 		}
@@ -184,7 +184,7 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 		}
 		// Invoke the task's exact release as a separate bounded call. No watcher
 		// process needs to survive this hook invocation.
-		home, err := os.UserHomeDir()
+		home, err := managedRuntimeHome()
 		if err != nil {
 			return err
 		}
