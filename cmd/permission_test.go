@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,37 @@ import (
 	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
+
+type permissionFailingWriter struct {
+	bytes.Buffer
+	err error
+}
+
+func (w *permissionFailingWriter) Write(p []byte) (int, error) {
+	n, _ := w.Buffer.Write(p[:len(p)/2])
+	return n, w.err
+}
+
+func TestHasPermissionReportsOutputFailure(t *testing.T) {
+	isolate(t)
+	repo := newWatchTestRepo(t)
+	for _, format := range []string{"plain", "json"} {
+		t.Run(format, func(t *testing.T) {
+			failure := errors.New("output unavailable")
+			output := &permissionFailingWriter{err: failure}
+			command := NewRootCommand()
+			command.SetOut(output)
+			args := []string{"has-permission", repo}
+			if format == "json" {
+				args = append(args, "--json")
+			}
+			command.SetArgs(args)
+			if err := command.Execute(); !errors.Is(err, failure) {
+				t.Fatalf("output failure returned %v", err)
+			}
+		})
+	}
+}
 
 type permissionNetworkGuard struct{ t *testing.T }
 
