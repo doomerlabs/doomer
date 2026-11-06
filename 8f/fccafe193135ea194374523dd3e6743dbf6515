@@ -1,0 +1,20 @@
+cmd/watch_supervisor_test.go
+  s_0cb4925088ae4a::t_52e8f704ca68c2 393-395,399-401,432-434
+  s_0cb4925088ae4a::t_3ef9f9a3fb4635 389-392,396-398
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8ffccafe193135ea194374523dd3e6743dbf6515",
+  "prompts": {},
+  "sessions": {
+    "s_0cb4925088ae4a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b104-067c-76f3-adb9-8eb3c5b8c417",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
