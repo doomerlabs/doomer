@@ -57,6 +57,11 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 			return err
 		}
 		if approved && (!t.Portable || t.PortableApproved || t.PortableDeclined) {
+			if t.PortableApproved {
+				if err := savePortable(c.Context(), app, s, *t); err != nil {
+					return err
+				}
+			}
 			t.Stage = "ready"
 			if err = s.Save(t); err != nil {
 				return err

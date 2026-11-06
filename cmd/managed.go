@@ -515,6 +515,10 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				if _, err = managedConsent(s, t, auth.Token, true); err != nil {
 					return err
 				}
+				if t.Portable && !t.PortableApproved {
+					// Upload consent alone never grants credential persistence.
+					t.PortableDeclined = true
+				}
 				if err = s.Save(&t); err != nil {
 					return err
 				}
