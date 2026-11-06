@@ -1,0 +1,47 @@
+pkg/adversarylabs/publishing.go
+  s_f23d7bc729b5d1::t_036d62aaecbf3e 5,11-12,57
+cmd/managed.go
+  s_f23d7bc729b5d1::t_036d62aaecbf3e 52,73-77,111,132,170,200-205,211-214,250,406-408,527-530,541-553
+internal/managed/store.go
+  s_f23d7bc729b5d1::t_036d62aaecbf3e 28-56
+docs/managed-runtime.md
+  s_f23d7bc729b5d1::t_036d62aaecbf3e 82-96
+cmd/managed_portable_test.go
+  s_f23d7bc729b5d1::t_036d62aaecbf3e 1-209
+internal/managed/instructions.md
+  s_f23d7bc729b5d1::t_d2672fa4d0f101 34-35
+  s_f23d7bc729b5d1::t_036d62aaecbf3e 13-29
+internal/managed/operations.go
+  s_f23d7bc729b5d1::t_036d62aaecbf3e 129-131,145,170
+  s_f23d7bc729b5d1::t_d2672fa4d0f101 132-133,136
+pkg/adversarylabs/managed_setup.go
+  s_f23d7bc729b5d1::t_036d62aaecbf3e 7,31-33
+cmd/managed_test.go
+  s_f23d7bc729b5d1::t_036d62aaecbf3e 23,29,44,59,108-115,141-147,179-181,185-204
+cmd/managed_portable.go
+  s_f23d7bc729b5d1::t_036d62aaecbf3e 1-273
+cmd/managed_approval.go
+  s_f23d7bc729b5d1::t_036d62aaecbf3e 59-64,79,94,153-163
+  s_f23d7bc729b5d1::t_0da6efa074dba3 164
+internal/managed/managed_test.go
+  s_f23d7bc729b5d1::t_036d62aaecbf3e 158,162-164,259-270
+  s_f23d7bc729b5d1::t_491473f320da6d 271-272
+internal/managed/bootstrap.md
+  s_f23d7bc729b5d1::t_036d62aaecbf3e 15-28,45-46,48-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b829d7ceca9341e3afcf5b5cb98e427d021f8576",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
