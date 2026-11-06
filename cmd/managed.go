@@ -128,10 +128,18 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 			return err
 		}
 		defer lock.Close()
+		task, err = s.Load(handle)
+		if err != nil {
+			return err
+		}
 		if task.API != *api || task.Profile != *profile {
 			return fmt.Errorf("resume with the original service and profile")
 		}
 		r := resultFor(task)
+		if task.Paused {
+			r.State = "paused"
+			return outputManaged(c, s, task, r)
+		}
 		if task.Release == "" {
 			state, err := prepareRelease(c.Context(), s, &task, allowUpdates)
 			if err != nil {
@@ -145,8 +153,17 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 				return outputManaged(c, s, task, r)
 			}
 			r = resultFor(task)
-			lock.Close()
-			if handled, err := dispatchManaged(c.Context(), []string{"--api-url", task.API, "--profile", task.Profile, "prepare", "--task", task.Handle}, c.InOrStdin(), c.OutOrStdout(), c.ErrOrStderr()); handled {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			executable, err := os.Executable()
+			if err != nil {
+				return err
+			}
+			if executable != runtimeversion.Binary(home, task.Release) {
+				lock.Close()
+				_, err := dispatchManaged(c.Context(), []string{"--api-url", task.API, "--profile", task.Profile, "prepare", "--task", task.Handle}, c.InOrStdin(), c.OutOrStdout(), c.ErrOrStderr())
 				return err
 			}
 		}
@@ -210,6 +227,13 @@ func prepareRelease(ctx context.Context, s managed.Store, task *managed.Task, al
 	var saved selectedRelease
 	if err := watch.Read(file, &saved); err != nil && !os.IsNotExist(err) {
 		return "", err
+	}
+	current, err := managed.ReadBootstrap(task.Bootstrap.Path, task.Bootstrap.Scope)
+	if err != nil {
+		return "", err
+	}
+	if current.Policy != task.Bootstrap.Policy {
+		return "", fmt.Errorf("bootstrap policy changed before activation; create a task for the new policy")
 	}
 	policy := task.Bootstrap.Policy
 	if saved.Policy != policy {
@@ -351,7 +375,7 @@ func managedConsent(s managed.Store, t managed.Task, token string, allow bool) (
 
 func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Command {
 	parent := &cobra.Command{Use: "task", Short: "Resume a durable managed review without a persistent process"}
-	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook"} {
+	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume"} {
 		operation := operation
 		var allow bool
 		c := &cobra.Command{Use: operation + " HANDLE", Args: cobra.ExactArgs(1)}
@@ -372,6 +396,20 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 			}
 			if t.API != *api || t.Profile != *profile {
 				return fmt.Errorf("task service or profile mismatch")
+			}
+			if operation == "pause" || operation == "resume" {
+				t.Paused = operation == "pause"
+				if err = s.Save(&t); err != nil {
+					return err
+				}
+				state := "resumed"
+				if t.Paused {
+					state = "paused"
+				}
+				return outputManaged(c, s, t, managedResult{State: state, Task: t.Handle})
+			}
+			if t.Paused {
+				return outputManaged(c, s, t, managedResult{State: "paused", Task: t.Handle})
 			}
 			if operation == "login" {
 				return managedLogin(c, app, s, t)
@@ -486,8 +524,16 @@ func managedHook(c *cobra.Command, s managed.Store, t *managed.Task, e managed.E
 		return err
 	}
 	switch event.Event {
-	case "PostToolUse", "Stop":
+	case "PostToolUse":
 		return e.Submit(c.Context(), t, token)
+	case "Stop":
+		if err := e.Submit(c.Context(), t, token); err != nil {
+			return err
+		}
+		if err := e.Status(c.Context(), t, token); err != nil {
+			return err
+		}
+		return e.Finish(c.Context(), t, token)
 	case "UserPromptSubmit", "PreToolUse":
 		return nil
 	default:

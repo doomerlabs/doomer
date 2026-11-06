@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -88,13 +89,8 @@ func newManagedInstallCommand() *cobra.Command {
 				return err
 			}
 		}
-		for _, path := range destinations {
-			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-				return err
-			}
-			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-				return err
-			}
+		if err := installBootstrapFiles(base, destinations, []byte(content)); err != nil {
+			return err
 		}
 		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"state": "bootstrap_installed", "paths": destinations, "next": "Run doomer prepare in the target checkout. Approve managed updates, account login, and repository uploads separately."})
 	}
@@ -199,7 +195,102 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 		} else {
 			context += "\n" + strings.TrimSpace(output.String())
 		}
+		if event.Event == "Stop" {
+			var result managedResult
+			if err != nil || json.Unmarshal(output.Bytes(), &result) != nil || result.State != "complete" {
+				return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"decision": "block", "reason": context})
+			}
+			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
+		}
 		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event.Event, "additionalContext": context}})
 	}
 	return c
+}
+
+// Stage complete files and publish only absent destinations. The installation
+// lock coordinates both agent copies; rollback removes only our new files.
+func installBootstrapFiles(base string, paths []string, content []byte) error {
+	state, err := managedStore()
+	if err != nil {
+		return err
+	}
+	unlock, err := watchLock(state.Root, "managed-bootstrap-install-"+watch.Key(base))
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	var created []string
+	success := false
+	defer func() {
+		if !success {
+			for _, path := range created {
+				current, err := root.ReadFile(path)
+				if err == nil && bytes.Equal(current, content) {
+					_ = root.Remove(path)
+				}
+			}
+		}
+	}()
+	for _, path := range paths {
+		relative, err := filepath.Rel(base, path)
+		if err != nil {
+			return err
+		}
+		parts := strings.Split(relative, string(filepath.Separator))
+		directory := ""
+		for _, part := range parts[:len(parts)-1] {
+			directory = filepath.Join(directory, part)
+			info, err := root.Lstat(directory)
+			if os.IsNotExist(err) {
+				if err = root.Mkdir(directory, 0755); err != nil {
+					return err
+				}
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+				return fmt.Errorf("bootstrap parent is not a regular directory: %s", directory)
+			}
+		}
+		if info, err := root.Lstat(relative); err == nil {
+			if !info.Mode().IsRegular() {
+				return fmt.Errorf("bootstrap destination changed")
+			}
+			existing, err := root.ReadFile(relative)
+			if err != nil {
+				return err
+			}
+			if !bytes.Equal(existing, content) {
+				return fmt.Errorf("bootstrap content changed during installation")
+			}
+			continue
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		temporary := filepath.Join(filepath.Dir(relative), ".doomer-"+rand.Text())
+		file, err := root.OpenFile(temporary, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+		if err != nil {
+			return err
+		}
+		_, writeErr := file.Write(content)
+		closeErr := file.Close()
+		if writeErr != nil || closeErr != nil {
+			_ = root.Remove(temporary)
+			return fmt.Errorf("stage bootstrap: %v %v", writeErr, closeErr)
+		}
+		if err = root.Rename(temporary, relative); err != nil {
+			_ = root.Remove(temporary)
+			return err
+		}
+		created = append(created, relative)
+	}
+	success = true
+	return nil
 }

@@ -46,6 +46,7 @@ type Task struct {
 	Review        *adversarylabs.WorkspaceReview     `json:"review,omitempty"`
 	ReviewedTree  string                             `json:"reviewed_tree,omitempty"`
 	Responses     map[string]Response                `json:"responses,omitempty"`
+	Paused        bool                               `json:"paused"`
 	HookActivated bool                               `json:"hook_activated"`
 }
 
@@ -106,7 +107,7 @@ func (s Store) Observe(task Task, state string) error {
 	return watch.Write(filepath.Join(s.Root, "observations", task.Handle+".json"), map[string]any{
 		"task": task.Handle, "release": task.Release, "bootstrap_protocol": task.Bootstrap.Policy.Protocol,
 		"policy": task.Bootstrap.Policy, "state": state, "observed_at": time.Now().UTC(),
-		"agent": task.Agent, "hook_activated": task.HookActivated,
+		"agent": task.Agent, "hook_activated": task.HookActivated, "paused": task.Paused,
 	})
 }
 func (s Store) Init() error {
