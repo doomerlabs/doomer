@@ -1,0 +1,40 @@
+cmd/managed_install.go
+  s_f23d7bc729b5d1::t_2c5c18b18bcfa0 198-204,232-233,239,250,253,256-257,261,265,268,272,277,283,287
+  s_f23d7bc729b5d1::t_6f4a5f93da75b6 229-231
+  s_f23d7bc729b5d1::t_85a955d2e01410 234-238
+  s_f23d7bc729b5d1::t_65d656f2d1217b 240-242,247-249
+  s_f23d7bc729b5d1::t_4124b450e4c59a 251-252
+  s_f23d7bc729b5d1::t_9386b2d54a39df 254-255
+  s_f23d7bc729b5d1::t_8a305940c471d5 258-260
+  s_f23d7bc729b5d1::t_40d49982d4ab63 262-264
+  s_f23d7bc729b5d1::t_8ec4ac2d5e021c 266-267
+  s_f23d7bc729b5d1::t_ecc1da1919fb2e 269-271
+  s_f23d7bc729b5d1::t_7ac85863f3ba4f 273-276
+  s_f23d7bc729b5d1::t_c57b3bf21b8537 278-282
+  s_f23d7bc729b5d1::t_6c7d4cf9d89fa9 284-286
+  s_f23d7bc729b5d1::t_0921e38ef34ae9 288-290
+internal/managed/policy.go
+  s_f23d7bc729b5d1::t_87baec47e3257a 153
+cmd/managed.go
+  s_f23d7bc729b5d1::t_87baec47e3257a 231-237,378,400-412
+  s_f23d7bc729b5d1::t_2c5c18b18bcfa0 131-134,139-142,156-166,527,529-536
+  s_f23d7bc729b5d1::t_22d433da3825eb 413
+internal/managed/store.go
+  s_f23d7bc729b5d1::t_87baec47e3257a 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cafabd508ef3f1ec7af4ec9e98a896a0a59244dd",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
