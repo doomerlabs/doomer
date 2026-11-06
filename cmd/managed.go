@@ -62,7 +62,7 @@ func managedStore() (managed.Store, error) {
 	return s, s.Init()
 }
 func resultFor(task managed.Task) managedResult {
-	r := managedResult{State: task.Stage, Task: task.Handle, Release: task.Release, SoftwareReady: task.Release != "", HookActivated: task.HookActivated, Review: task.Review}
+	r := managedResult{Error: task.LastError, State: task.Stage, Task: task.Handle, Release: task.Release, SoftwareReady: task.Release != "", HookActivated: task.HookActivated, Review: task.Review}
 	r.PromptTruncated = len([]rune(task.Prompt)) > 4000
 	r.SubmittedPromptRunes = min(len([]rune(task.Prompt)), 4000)
 	r.Capabilities = task.Capabilities
@@ -542,6 +542,15 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 			case "hook":
 				err = managedHook(c, s, &t, engine, auth.Token)
 			}
+			if operation != "hook" {
+				t.LastError = ""
+			}
+			if err != nil {
+				t.LastError = err.Error()
+			}
+			if saveErr := s.Save(&t); saveErr != nil {
+				return saveErr
+			}
 			r := resultFor(t)
 			r.Authenticated = true
 			r.UploadApproved = true
@@ -574,10 +583,7 @@ func managedEngine(s managed.Store, t managed.Task) managed.Engine {
 // Hooks use exactly the same journal and ownership as explicit CLI calls.
 // A task handle must be supplied by its adapter; never guess from the newest task.
 func managedHook(c *cobra.Command, s managed.Store, t *managed.Task, e managed.Engine, token string) error {
-	var event struct {
-		Event string `json:"hook_event_name"`
-		CWD   string `json:"cwd"`
-	}
+	var event watch.HookInput
 	if err := json.NewDecoder(io.LimitReader(c.InOrStdin(), 1<<20)).Decode(&event); err != nil {
 		return err
 	}
@@ -585,9 +591,15 @@ func managedHook(c *cobra.Command, s managed.Store, t *managed.Task, e managed.E
 	if err != nil || root != t.Repo {
 		return fmt.Errorf("hook checkout does not match task")
 	}
+	if event.Event == "UserPromptSubmit" && t.Submission == nil && strings.TrimSpace(t.Prompt) == "" && strings.TrimSpace(event.Prompt) != "" {
+		t.Prompt = event.Prompt
+	}
 	t.HookActivated = true
 	if err := s.Save(t); err != nil {
 		return err
+	}
+	if t.LastError != "" && (event.Event == "PostToolUse" || event.Event == "Stop") {
+		return errors.New(t.LastError)
 	}
 	switch event.Event {
 	case "PostToolUse":
@@ -598,6 +610,9 @@ func managedHook(c *cobra.Command, s managed.Store, t *managed.Task, e managed.E
 		}
 		if err := e.Status(c.Context(), t, token); err != nil {
 			return err
+		}
+		if t.Stage == "review_pending" || t.Stage == "responses_required" || t.Stage == "review_failed" {
+			return nil
 		}
 		return e.Finish(c.Context(), t, token)
 	case "UserPromptSubmit", "PreToolUse":

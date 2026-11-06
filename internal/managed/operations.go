@@ -63,12 +63,16 @@ func (e Engine) Submit(ctx context.Context, task *Task, token string) error {
 	if len(prompt) > 4000 {
 		prompt = prompt[:4000]
 	}
+	var userRequest *adversarylabs.WorkspaceUserRequest
+	if strings.TrimSpace(string(prompt)) != "" {
+		userRequest = &adversarylabs.WorkspaceUserRequest{Prompt: string(prompt), SessionID: task.Handle, TurnID: fmt.Sprint(task.Revision)}
+	}
 	task.Submission = &adversarylabs.WorkspaceSubmission{
 		ReviewScope: "diff", LookCloser: &look, FullReview: &deep, LookCloserThreshold: &threshold,
 		RepositoryID: repo, BaseSnapshotID: base, SnapshotID: head,
 		ReviewID: fmt.Sprintf("managed-%s-%d", task.Handle, task.Revision), GroupID: task.Handle, Revision: task.Revision,
 		Repository: repository, Branch: capture.Source.Branch, Diff: diff, Continuity: true,
-		UserRequest: &adversarylabs.WorkspaceUserRequest{Prompt: string(prompt), SessionID: task.Handle, TurnID: fmt.Sprint(task.Revision)},
+		UserRequest: userRequest,
 		Client:      map[string]string{"name": "Doomer managed CLI", "agent": task.Agent, "task_id": task.Handle, "cli_version": task.Release, "bootstrap_protocol": fmt.Sprint(Protocol)},
 	}
 	task.ReviewedTree = capture.TargetTreeHash

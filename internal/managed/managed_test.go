@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -94,14 +95,16 @@ func TestSignedCatalogAndDelayedSelection(t *testing.T) {
 }
 
 type fakeReview struct {
-	lost     bool
-	ids      []string
-	feedback int
-	result   adversarylabs.WorkspaceReview
+	submissions []adversarylabs.WorkspaceSubmission
+	lost        bool
+	ids         []string
+	feedback    int
+	result      adversarylabs.WorkspaceReview
 }
 
 func (f *fakeReview) StartWorkspace(_ context.Context, _ string, s adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {
 	f.ids = append(f.ids, s.ReviewID)
+	f.submissions = append(f.submissions, s)
 	if f.lost {
 		f.lost = false
 		return adversarylabs.WorkspaceReview{}, errors.New("response lost")
@@ -212,5 +215,43 @@ func TestTaskIsolationAndNetworkRedaction(t *testing.T) {
 	failure := NetworkError("upload", &url.Error{Op: "PUT", URL: "https://storage.example/private?token=secret", Err: errors.New("denied")}).Error()
 	if strings.Contains(failure, "secret") || !strings.Contains(failure, "storage.example") {
 		t.Fatal(failure)
+	}
+}
+
+func TestSubmissionOmitsUnavailablePrompt(t *testing.T) {
+	for _, prompt := range []string{"", "  ", "Fix the background"} {
+		t.Run(fmt.Sprintf("prompt-%d", len(prompt)), func(t *testing.T) {
+			store := Store{Root: t.TempDir()}
+			handle, _ := NewHandle()
+			task := Task{Schema: Protocol, Handle: handle, Repo: t.TempDir(), Prompt: prompt, Stage: "ready"}
+			manifest := sourcesnapshot.Manifest{Version: 1, Scope: "worktree", Base: []sourcesnapshot.Entry{}, Target: []sourcesnapshot.Entry{}, Blobs: map[string][]byte{}}
+			content := []byte("changed\n")
+			hash := sourcesnapshot.Digest(content)
+			manifest.Target = []sourcesnapshot.Entry{{Path: "file.txt", Hash: hash, Mode: "100644"}}
+			manifest.Blobs[hash] = content
+			raw, _ := json.Marshal(manifest)
+			yes := true
+			client := &fakeReview{result: adversarylabs.WorkspaceReview{ID: "review", LookCloserEnabled: &yes, Full: &adversarylabs.WorkspaceFullReview{Enabled: false}}}
+			engine := Engine{Store: store, Client: client, Capture: func(context.Context, Task) (sourcesnapshot.Capture, error) {
+				return sourcesnapshot.Capture{Bytes: raw, TargetTreeHash: "tree"}, nil
+			}, Upload: func(context.Context, Task, string, string, sourcesnapshot.Manifest) (string, string, string, error) {
+				return "repo", "base", "head", nil
+			}}
+			if err := engine.Submit(context.Background(), &task, "token"); err != nil {
+				t.Fatal(err)
+			}
+			sent := client.submissions[0].UserRequest
+			if strings.TrimSpace(prompt) == "" {
+				if sent != nil {
+					t.Fatal("sent empty user request", sent)
+				}
+				wire, _ := json.Marshal(client.submissions[0])
+				if strings.Contains(string(wire), "user_request") {
+					t.Fatal(string(wire))
+				}
+			} else if sent == nil || sent.Prompt != prompt {
+				t.Fatal(sent)
+			}
+		})
 	}
 }

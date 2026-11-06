@@ -49,6 +49,7 @@ type Task struct {
 	ReviewedTree   string                             `json:"reviewed_tree,omitempty"`
 	Responses      map[string]Response                `json:"responses,omitempty"`
 	Paused         bool                               `json:"paused"`
+	LastError      string                             `json:"last_error,omitempty"`
 	HookActivated  bool                               `json:"hook_activated"`
 }
 

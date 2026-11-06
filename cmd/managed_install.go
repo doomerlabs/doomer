@@ -191,7 +191,7 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 		path := filepath.Join(s.Root, "sessions", watch.Key(*api+"\x00"+*profile+"\x00"+agent+"\x00"+repo+"\x00"+event.Session)+".json")
 		var handle string
 		if err = watch.Read(path, &handle); os.IsNotExist(err) {
-			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event.Event, "additionalContext": "Doomer task is not prepared. Read the installed bootstrap and run doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " before editing."}})
+			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event.Event, "additionalContext": "Doomer task is not prepared. Read the installed bootstrap and run doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " before editing. Include the actual user request with --prompt."}})
 		} else if err != nil {
 			return err
 		}
