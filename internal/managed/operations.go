@@ -116,6 +116,10 @@ func (e Engine) Status(ctx context.Context, task *Task, token string) error {
 	if result.ID != task.Review.ID || result.Anonymous {
 		return fmt.Errorf("review identity mismatch")
 	}
+	// Older servers omit links from compact status responses.
+	if result.URL == "" {
+		result.URL = task.Review.URL
+	}
 	task.Review = &result
 	task.Stage = "review_pending"
 	if result.Early != nil && result.Early.Status == "ready" {

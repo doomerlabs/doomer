@@ -47,6 +47,7 @@ type managedResult struct {
 	PromptTruncated      bool                           `json:"prompt_truncated"`
 	SubmittedPromptRunes int                            `json:"submitted_prompt_runes"`
 	Capabilities         managed.Capabilities           `json:"capabilities"`
+	PortableSetupCommand []string                       `json:"portable_setup_command,omitempty"`
 }
 
 func managedStore() (managed.Store, error) {
@@ -67,6 +68,11 @@ func resultFor(task managed.Task) managedResult {
 	r.SubmittedPromptRunes = min(len([]rune(task.Prompt)), 4000)
 	r.Capabilities = task.Capabilities
 	r.UpdateAvailable = task.OfferedRelease
+	if task.Release != "" && !task.Portable {
+		if home, err := taskRuntimeHome(task); err == nil {
+			r.PortableSetupCommand = []string{runtimeversion.Binary(home, task.Release), "--api-url", task.API, "--profile", task.Profile, "prepare", "--task", task.Handle, "--portable"}
+		}
+	}
 	if task.Review != nil {
 		r.Responses = map[string]managed.Response{}
 		for key, response := range task.Responses {
@@ -97,6 +103,7 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 	r.HookActivated = taskResult.HookActivated
 	r.Capabilities = taskResult.Capabilities
 	r.PromptTruncated = taskResult.PromptTruncated
+	r.PortableSetupCommand = taskResult.PortableSetupCommand
 	r.SubmittedPromptRunes = taskResult.SubmittedPromptRunes
 	r.UpdateAvailable = taskResult.UpdateAvailable
 	r.Review = taskResult.Review
@@ -117,6 +124,7 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 func newPrepareCommand(app *application.App, api, profile *string) *cobra.Command {
 	var repo, agent, handle, prompt, session string
 	var allowUpdates bool
+	var portable bool
 	c := &cobra.Command{Use: "prepare", Short: "Prepare or resume a version-pinned managed review task", Args: cobra.NoArgs}
 	c.RunE = func(c *cobra.Command, _ []string) error {
 		s, err := managedStore()
@@ -154,7 +162,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 			if e != nil {
 				return e
 			}
-			task = managed.Task{RuntimeHome: runtimeHome, Schema: managed.Protocol, Handle: handle, Repo: root, RepositoryID: id, API: *api, Profile: *profile, Agent: agent, Bootstrap: bootstrap, Prompt: prompt, Created: time.Now().UTC(), Stage: "preparing", Capabilities: managed.Capabilities{DurableStorage: true, SessionID: session, Hooks: session != ""}}
+			task = managed.Task{RuntimeHome: runtimeHome, Schema: managed.Protocol, Handle: handle, Repo: root, RepositoryID: id, API: *api, Profile: *profile, Agent: agent, Bootstrap: bootstrap, Prompt: prompt, Portable: portable, Created: time.Now().UTC(), Stage: "preparing", Capabilities: managed.Capabilities{DurableStorage: true, SessionID: session, Hooks: session != ""}}
 			// Capture the task baseline before any edits. The task retains this commit
 			// even if HEAD advances later or another process resumes the task.
 			base, e := exec.CommandContext(c.Context(), "git", "-C", root, "rev-parse", "HEAD").Output()
@@ -183,6 +191,15 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 		}
 		if task.API != *api || task.Profile != *profile {
 			return fmt.Errorf("resume with the original service and profile")
+		}
+		if portable && !task.Portable {
+			task.Portable = true
+			if err := s.Save(&task); err != nil {
+				return err
+			}
+		}
+		if err := restorePortable(c.Context(), app, s, &task); err != nil {
+			return err
 		}
 		r := resultFor(task)
 		if task.Paused {
@@ -224,6 +241,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 	c.Flags().StringVar(&session, "session", "", "actual harness session ID for optional hook binding")
 	c.Flags().StringVar(&prompt, "prompt", "", "original user task (stored locally until upload is approved)")
 	c.Flags().BoolVar(&allowUpdates, "allow-updates", false, "record the user's explicit authorization for this bootstrap's update policy")
+	c.Flags().BoolVar(&portable, "portable", false, "request browser approval to reuse setup across environments through private Git metadata")
 	return c
 }
 
@@ -375,6 +393,9 @@ func managedIdentity(ctx context.Context, app *application.App, t managed.Task) 
 	client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, t.API)
 	account, err := client.Whoami(ctx, auth.Token)
 	if err != nil {
+		if errors.Is(err, adversarylabs.ErrNotAuthenticated) {
+			return auth, "", errManagedLoginRequired
+		}
 		return auth, "", managed.NetworkError("account_verification", err)
 	}
 	if account.ID == "" {
@@ -499,11 +520,21 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				return outputManaged(c, s, t, managedResult{State: "consent_recorded", Task: t.Handle, Authenticated: true, UploadApproved: true})
 			}
 			if operation == "revoke" {
+				if t.PortableApproved {
+					if err := removePortable(c.Context(), t); err != nil {
+						return err
+					}
+				}
 				key := watch.Key(t.AccountID + "\x00" + t.RepositoryID + "\x00" + t.API + "\x00" + t.Profile)
 				if err := watch.Write(filepath.Join(s.Root, "consents", key+".json"), repositoryConsent{Account: t.AccountID}); err != nil {
 					return err
 				}
 				return outputManaged(c, s, t, managedResult{State: "consent_revoked", Task: t.Handle, Authenticated: true})
+			}
+			if t.PortableApproved {
+				if err := checkPortable(c.Context(), t); err != nil {
+					return outputManaged(c, s, t, managedResult{State: "consent_required", Authenticated: true, Error: err.Error()})
+				}
 			}
 			approved, err := managedConsent(s, t, auth.Token, false)
 			if err != nil {

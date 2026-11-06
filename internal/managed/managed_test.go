@@ -151,8 +151,12 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	if len(client.ids) != 2 || client.ids[0] != client.ids[1] {
 		t.Fatal("submission id changed on resume", client.ids)
 	}
+	resumed.Review.URL = "https://doomer.test/look-closer/owner/repo/" + strings.Repeat("a", 64)
 	if err = engine.Status(context.Background(), &resumed, "token"); err != nil {
 		t.Fatal(err)
+	}
+	if resumed.Review.URL == "" {
+		t.Fatal("compact status discarded the review URL")
 	}
 	if err = engine.Finish(context.Background(), &resumed, "token"); err == nil {
 		t.Fatal("completed with missing finding response")

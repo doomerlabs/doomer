@@ -10,6 +10,20 @@ Before editing, resolve any repository approval or update authorization
 request returned by prepare. Show its actual user action and wait for the human.
 Never grant permission or manufacture account state on the user's behalf.
 
+Begin repository edits only after prepare reports ready, with software_ready,
+authenticated, and upload_approved all true. A missing CLI or pending approval
+keeps the coding task pending. Use the verified installation flow from the
+bootstrap when software is missing, respecting the host's execution permissions.
+
+In Cowork, install and execute inside the editing VM. The Mac may have no Doomer
+installation. Request portable setup with `prepare --portable` for a temporary
+home. The browser approval covers retaining account access and the repository
+grant in private Git metadata. Later prepare calls restore that approved setup
+across home directories and mount paths. The CLI owns this transfer and its
+validation. Do not copy credentials, edit receipts, or infer approval in prose.
+Use `task revoke` to remove the saved portable approval. Keep using ordinary
+per-call commands when the harness cannot load hooks.
+
 Readiness fields are separate. Software readiness is not upload consent, hook
 activation, account authentication, or a completed review. Native skill discovery,
 a browser callback, session IDs, and persistent processes are optional.

@@ -19,6 +19,7 @@ import (
 func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	isolate(t)
 	repo := newWatchTestRepo(t)
+	reviewGit(t, repo, "remote", "add", "origin", "https://github.com/example/project.git")
 	var submissions int
 	var feedback int
 	var approvals int
@@ -38,7 +39,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 				t.Fatal(err)
 			}
-			if !input.Resumable || input.Callback != "" || len(input.Repositories) != 1 {
+			if !input.Resumable || !input.PortableState || input.Callback != "" || len(input.Repositories) != 1 {
 				t.Fatal(input)
 			}
 			approvalRequest = input.Request
@@ -53,7 +54,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 			if approvalPolls == 1 {
 				w.Write([]byte(`{"state":"pending"}`))
 			} else {
-				w.Write([]byte(`{"state":"approved","token":"selected-account","account_id":"user-account"}`))
+				w.Write([]byte(`{"state":"approved","token":"selected-account","account_id":"user-account","portable_state":true}`))
 			}
 		case "/v3/installations/observe":
 			w.Write([]byte(`{"accepted":true}`))
@@ -91,6 +92,11 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	}
 	handle, _ := managed.NewHandle()
 	task := managed.Task{Schema: managed.Protocol, Handle: handle, Repo: repo, RepositoryID: id, API: server.URL, Profile: "default", Agent: "codex", Release: "2026.11.6.1", Base: "HEAD", Prompt: "Fix the code", Created: time.Now(), Stage: "ready"}
+	task.Portable = true
+	task.Bootstrap = managed.Bootstrap{Path: filepath.Join(repo, ".claude/skills/doomer-review/SKILL.md"), Policy: managed.Policy{Protocol: 2, Channel: "stable"}}
+	if err := watch.Write(filepath.Join(s.Root, "selections", watch.Key(task.Bootstrap.Path)+".json"), selectedRelease{Policy: task.Bootstrap.Policy, Authorized: true}); err != nil {
+		t.Fatal(err)
+	}
 	if err = s.Save(&task); err != nil {
 		t.Fatal(err)
 	}
@@ -115,6 +121,13 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	}
 	if r := run("", "task", "login", handle); r.State != "ready" || !r.Authenticated || !r.UploadApproved || r.Consent == nil || r.Consent.Source != "browser_repository_approval" {
 		t.Fatal(r)
+	}
+	portablePath, _, err := portableLocation(context.Background(), task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readPortable(portablePath); err != nil {
+		t.Fatal("browser approval did not save portable setup", err)
 	}
 	if approvals != 1 {
 		t.Fatal("approval duplicated", approvals)
@@ -146,6 +159,9 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	}
 	if r := run("", "task", "revoke", handle); r.State != "consent_revoked" || !r.Authenticated || r.UploadApproved || !r.SoftwareReady {
 		t.Fatal(r)
+	}
+	if _, err := os.Stat(portablePath); !os.IsNotExist(err) {
+		t.Fatal("revocation retained portable credentials", err)
 	}
 	if r := run("", "task", "status", handle); r.State != "consent_required" {
 		t.Fatal(r)
