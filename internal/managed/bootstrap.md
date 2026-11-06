@@ -20,7 +20,8 @@ If setup needs user input, ask before editing and resume the same task afterward
 Keep requested work pending while preparation is blocked.
 
 Show setup URLs as clickable Markdown links with a short label, preserving the
-complete URL including its fragment. Use the CLI's returned state to determine
+complete URL including its fragment. Present the link in regular assistant chat
+before using a question or choice tool. Use the CLI's returned state to determine
 which approval is needed. An absent executable alone says nothing about saved
 authentication or grants.
 
@@ -61,6 +62,9 @@ Perform the verified prerequisite installation under the host's normal execution
 permissions, then run prepare to discover and reuse saved setup. Ask the user
 only for an actual permission or decision required by that flow. Do not bundle
 installation with speculative requests to sign in again or approve uploads.
+A separate setup-choice question is unnecessary when this verified installation
+is already permitted. Let the host's tool permission controls request approval
+when required.
 After installation, resume any existing task with `prepare --task HANDLE`, or
 run the initial prepare command if no task exists. Present only the refreshed
 result's approval request; earlier pending requests may have been satisfied.
