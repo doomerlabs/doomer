@@ -128,7 +128,7 @@ func TestCodexActivationRejectsInvalidReceipts(t *testing.T) {
 		{"expired", "processed", "task", "pending", 6 * time.Minute},
 		{"future", "processed", "task", "pending", -time.Minute},
 		{"capture failure", "capture failed: git unavailable", "task", "error", time.Second},
-		{"missing prompt", "processed", "", "error", time.Second},
+		{"missing prompt", "processed", "", "pending", time.Second},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, repo := t.TempDir(), "/repo"
@@ -160,5 +160,84 @@ func TestRootPreservesGitFailure(t *testing.T) {
 	_, err := Root(context.Background(), t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "Xcode license") || !strings.Contains(err.Error(), "exit status 69") || !strings.Contains(err.Error(), filepath.Join(bin, "git")) {
 		t.Fatalf("lost Git failure: %v", err)
+	}
+}
+
+func TestCodexHookRecoversTaskAfterRuntimeUpgrade(t *testing.T) {
+	for _, scenario := range []string{"saved", "already-registered", "missing", "expired", "future", "consumed", "other-repository", "other-session", "current-prompt"} {
+		t.Run(scenario, func(t *testing.T) {
+			repo, root := repository(t), t.TempDir()
+			owner := Owner{"chat", "upgrade-turn"}
+			if scenario != "missing" {
+				if err := SaveTaskHandoff(root, repo, owner.Session, strings.NewReader("Remove the redundant review history")); err != nil {
+					t.Fatal(err)
+				}
+				file := taskHandoffPath(root, repo, owner.Session)
+				var saved taskHandoff
+				if err := Read(file, &saved); err != nil {
+					t.Fatal(err)
+				}
+				switch scenario {
+				case "expired":
+					saved.Created = time.Now().Add(-25 * time.Hour)
+				case "future":
+					saved.Created = time.Now().Add(time.Hour)
+				case "consumed":
+					saved.BoundTurn = "previous-turn"
+				case "other-repository":
+					saved.Repository = repo + "-other"
+				case "other-session":
+					saved.Session = "other-chat"
+				}
+				if err := Write(file, saved); err != nil {
+					t.Fatal(err)
+				}
+			}
+			turn := Turn{Owner: owner, Agent: "codex", Next: 1}
+			if scenario == "already-registered" {
+				turn.Repositories = []string{repo}
+			}
+			if scenario == "current-prompt" {
+				turn.Prompt = "New explicit task"
+			}
+			if err := Write(TurnPath(root, owner.Session), turn); err != nil {
+				t.Fatal(err)
+			}
+			// The command checking activation cannot manufacture hook evidence.
+			if status, _ := CodexActivationStatus(root, repo, owner.Session); status != "pending" {
+				t.Fatal(status)
+			}
+			input := HookInput{Session: owner.Session, Turn: owner.Turn, CWD: repo, Event: "PreToolUse", Tool: "Bash", ToolID: "probe", Input: json.RawMessage(`{"cmd":"git status --short"}`)}
+			raw, _ := json.Marshal(input)
+			var out bytes.Buffer
+			hookWithRepositories(context.Background(), root, Config{Directories: []string{repo}}, bytes.NewReader(raw), &out, func(context.Context) bool { return false }, true, "codex")
+			if err := Read(TurnPath(root, owner.Session), &turn); err != nil {
+				t.Fatal(err)
+			}
+			want := ""
+			switch scenario {
+			case "saved", "already-registered":
+				want = "Remove the redundant review history"
+			case "current-prompt":
+				want = "New explicit task"
+			}
+			if turn.Prompt != want {
+				t.Fatalf("prompt = %q, want %q", turn.Prompt, want)
+			}
+			status, detail := CodexActivationStatus(root, repo, owner.Session)
+			if want != "" && status != "ready" || want == "" && status != "pending" {
+				t.Fatalf("%s: %s", status, detail)
+			}
+			if scenario == "saved" {
+				var saved taskHandoff
+				Read(taskHandoffPath(root, repo, owner.Session), &saved)
+				if saved.BoundTurn != "" {
+					t.Fatal("read-only probe consumed the task")
+				}
+				if prompt := handoffPrompt(root, repo, owner, turn.Prompt); !strings.Contains(prompt, want) {
+					t.Fatal(prompt)
+				}
+			}
+		})
 	}
 }

@@ -280,9 +280,19 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			if turn.Owner != owner {
 				turn = Turn{Owner: owner, Next: 1, Agent: agent}
 			}
+			// A runtime installed during this turn missed its initial prompt.
+			// Recover only this checkout/session's saved onboarding request.
+			recovered := false
+			if strings.TrimSpace(turn.Prompt) == "" && agent == "codex" {
+				turn.Prompt = pendingTaskPrompt(root, path, owner)
+				recovered = strings.TrimSpace(turn.Prompt) != ""
+			}
 			turn.PendingPromptUntil = time.Time{}
 			for _, existing := range turn.Repositories {
 				if existing == path {
+					if recovered {
+						return Write(turnFile, turn)
+					}
 					return nil
 				}
 			}
