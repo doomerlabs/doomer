@@ -40,6 +40,8 @@ to submit changes, retrieve results, record every finding response, and verify
 completion. A pending result or installed CLI does not establish a completed review.
 
 If `doomer` is missing, read the official INSTALL.md at
-https://raw.githubusercontent.com/doomerlabs/skills/cc4ff49d6906fc3be47e75631aa3cb4247df8497/INSTALL.md and require its SHA-256 to equal
-`45c8c2e1b2c2c955008875746f7b98fa048b43c4fd8440c0cdfbe5b2aa35c177`
+https://raw.githubusercontent.com/doomerlabs/skills/d6483e9e92bbd85dc1b2e3ce32d1bff92e9ffdc6/INSTALL.md and require its SHA-256 to equal
+`a3294313882499e90a67f64b611f834ae9d5b376cc4751940b6bfe0dd5f5fff3`
 before following its verified installation flow with the user's normal execution permissions.
+Complete this prerequisite before editing. In Cowork, install into the editing
+VM's personal environment, preserving any existing repository bootstrap.
