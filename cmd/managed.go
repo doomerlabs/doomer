@@ -80,6 +80,22 @@ func resultFor(task managed.Task) managedResult {
 	return r
 }
 func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedResult) error {
+	// Operation outcomes still describe the same pinned runtime and task.
+	taskResult := resultFor(t)
+	r.Task = taskResult.Task
+	r.Release = taskResult.Release
+	r.SoftwareReady = taskResult.SoftwareReady
+	r.HookActivated = taskResult.HookActivated
+	r.Capabilities = taskResult.Capabilities
+	r.PromptTruncated = taskResult.PromptTruncated
+	r.SubmittedPromptRunes = taskResult.SubmittedPromptRunes
+	r.UpdateAvailable = taskResult.UpdateAvailable
+	r.Review = taskResult.Review
+	r.Responses = taskResult.Responses
+	r.Deferred = taskResult.Deferred
+	if r.URL == "" {
+		r.URL = taskResult.URL
+	}
 	if t.Handle != "" {
 		if err := s.Observe(t, r.State); err != nil {
 			return err
@@ -505,7 +521,7 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				if err := watch.Write(filepath.Join(s.Root, "consents", key+".json"), repositoryConsent{Account: t.AccountID}); err != nil {
 					return err
 				}
-				return outputManaged(c, s, t, managedResult{State: "consent_revoked", Task: t.Handle})
+				return outputManaged(c, s, t, managedResult{State: "consent_revoked", Task: t.Handle, Authenticated: true})
 			}
 			approved, err := managedConsent(s, t, auth.Token, false)
 			if err != nil {
@@ -650,7 +666,7 @@ func managedLogin(c *cobra.Command, app *application.App, s managed.Store, t man
 			if err = os.Remove(file); err != nil {
 				return err
 			}
-			return outputManaged(c, s, t, managedResult{State: "authenticated", Task: t.Handle, Action: "Resume doomer prepare --task " + t.Handle})
+			return outputManaged(c, s, t, managedResult{State: "authenticated", Task: t.Handle, Authenticated: true, Action: "Resume doomer prepare --task " + t.Handle})
 		}
 		pending.NextPoll = time.Now().Add(adversarylabs.PollInterval(pending.Login))
 		if err = watch.Write(file, pending); err != nil {

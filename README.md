@@ -21,54 +21,32 @@ go build -o bin/doomer .
 
 ## Coding-agent onboarding
 
-After installing the CLI, the review skill uses one command to obtain browser
-consent, install matching hooks, start or reuse the watcher, and maintain its
-marked repository guidance (`AGENTS.md` for Codex, `CLAUDE.md` for Claude Code):
+Install the managed skill using the [installation guide](https://github.com/doomerlabs/skills/blob/main/INSTALL.md).
+Choose repository installation for a shared team policy or personal installation
+for all your projects. The small bootstrap stores upgrade policy in SKILL.md.
+Doomer installs signed CLI releases and their matching instructions outside Git,
+and each task keeps its selected version until completion.
 
 ```sh
-doomer onboard --repo . --agent codex --session "$CODEX_THREAD_ID" --task-stdin < original-task.txt
+doomer prepare --repo . --agent codex --prompt "Your coding request"
+# Continue using the returned task handle:
+doomer task login HANDLE
+doomer task consent HANDLE --allow
+doomer task submit HANDLE
+doomer task status HANDLE
 ```
 
-The input is the user's original request, saved locally for the required hook
-restart. Add `--restart` when the CLI was installed during the current turn.
-Use `--agent claude --session "$claude_session_id"` for Claude Code. The skill
-passes Claude's expanded `${CLAUDE_SESSION_ID}`; it does not assume that value
-is exported to the shell. Claude's hooks live in `~/.claude/settings.json`;
-existing settings and unrelated hooks are preserved. A newly created
-`CLAUDE.md` imports an existing `AGENTS.md` so shared rules remain available.
+Follow the structured result from each command. Software-update authorization,
+account login, repository upload approval, and optional hook trust are separate
+steps. Consent commands require explicit user approval. Use `--agent claude`
+for Claude Code. Directly reading the bootstrap also works when a harness does
+not discover repository skills.
 
-Claude onboarding preserves the current task and prints a bounded
-`onboard --check-hooks` verification command. Real PreToolUse and PostToolUse
-callbacks confirm that the hooks loaded in the current session; a ready result
-continues without restarting. An unconfirmed result is not proof of missing
-trust: inspect `/hooks` and workspace or managed-policy restrictions, and use a
-restart only as a reload fallback.
-
-For Codex, the command prints the exact `codex resume` command. After restart
-and human hook trust, the prompt hook supplies the original task once. No Python helper,
-second watcher-start command, or internal-state polling is required. A paused
-watcher stays paused; only an explicit `watch start --resume` resumes it.
-
-Trusted hooks deliver each completed revision once, including results with no
-leads, and preserve the complete review URL. Subsequent fixes may produce new
-revisions within the same turn. Upload consent does not grant coding-agent hook trust.
-
-## Skill-managed updates
-
-The skill can check and update its private CLI without changing Homebrew:
-
-```sh
-doomer self-update --check --version YYYY.M.D.N
-# After approving the update:
-doomer self-update --version YYYY.M.D.N
-```
-
-The version comes from the skill's pin. Ownership is verified from the stored
-path and binary checksum, not location alone. Updates verify the release and
-keep a backup. Unknown or modified installations require explicit adoption;
-newer managed versions are never downgraded. See [managed updates](docs/managed-updates.md).
-After replacing a CLI, the skill uses `onboard --refresh` to gracefully refresh
-a managed watcher without changing upload consent or resuming a paused watcher.
+Reviews resume across separate CLI calls using the durable handle. Record
+finding responses with `doomer task respond HANDLE`, then use
+`doomer task finish HANDLE` to verify the reviewed tree and delivery. Optional
+hooks use this same task lifecycle. See [managed runtime](docs/managed-runtime.md)
+for policies, recovery, adapter behavior, and deployment visibility.
 
 ## Watch repositories while you code
 
