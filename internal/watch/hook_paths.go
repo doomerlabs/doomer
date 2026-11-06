@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"mvdan.cc/sh/v3/syntax"
 )
 
 var errHookOutsideRepository = errors.New("explicit working directory is outside Git")
@@ -65,6 +67,27 @@ func hookRepository(ctx context.Context, input HookInput, fallback string) (stri
 	if json.Unmarshal(input.Input, &value) == nil {
 		inspect(value)
 	}
+	// A shell launched from an organization directory can still name all of
+	// its write destinations. Do not attribute temporary output to a checkout
+	// selected by an earlier tool, or infer paths from arbitrary script text.
+	if len(candidates) == 0 {
+		if object, ok := value.(map[string]any); ok {
+			for _, key := range []string{"command", "cmd"} {
+				if command, ok := object[key].(string); ok {
+					candidates = append(candidates, shellWritePaths(command)...)
+				}
+			}
+		}
+		if len(candidates) > 0 {
+			explicitDirectory = true
+			for _, path := range candidates {
+				explicitDirectory = explicitDirectory && filepath.IsAbs(path)
+			}
+			if !explicitDirectory {
+				candidates = nil
+			}
+		}
+	}
 	roots := map[string]bool{}
 	for _, candidate := range candidates {
 		if !filepath.IsAbs(candidate) {
@@ -103,4 +126,70 @@ func hookRepository(ctx context.Context, input HookInput, fallback string) (stri
 		return Root(ctx, fallback)
 	}
 	return root, err
+}
+
+// Return destinations only when every command is understood. Unknown commands,
+// scripts, options and expansions retain the normal unresolved-repository path.
+func shellWritePaths(command string) []string {
+	file, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	if err != nil {
+		return nil
+	}
+	paths := []string{}
+	known := true
+	syntax.Walk(file, func(node syntax.Node) bool {
+		if !known {
+			return false
+		}
+		switch n := node.(type) {
+		case *syntax.Redirect:
+			switch n.Op {
+			case syntax.RdrOut, syntax.AppOut, syntax.RdrInOut, syntax.RdrClob, syntax.RdrAll, syntax.AppAll:
+				path, literal := shellWritePath(n.Word)
+				known = literal && path != ""
+				paths = append(paths, path)
+			}
+		case *syntax.CallExpr:
+			if len(n.Args) == 0 {
+				break
+			}
+			name := shellLiteral(n.Args[0].Parts)
+			switch filepath.Base(name) {
+			case "cat", "printf", "echo", "pwd", "ls", "rg", "grep", "head", "tail", "true", "false", "test", "[":
+			case "rm", "mv", "cp", "tee":
+				operands := []string{}
+				for _, word := range n.Args[1:] {
+					path, literal := shellWritePath(word)
+					if !literal || path == "" || strings.HasPrefix(path, "-") {
+						known = false
+						break
+					}
+					operands = append(operands, path)
+				}
+				if len(operands) == 0 {
+					known = false
+				} else if filepath.Base(name) == "cp" {
+					paths = append(paths, operands[len(operands)-1])
+				} else {
+					paths = append(paths, operands...)
+				}
+			default:
+				known = false
+			}
+		}
+		return known
+	})
+	if !known {
+		return nil
+	}
+	return paths
+}
+
+func shellWritePath(word *syntax.Word) (string, bool) {
+	for _, part := range word.Parts {
+		if literal, ok := part.(*syntax.Lit); ok && strings.ContainsAny(literal.Value, "*?[]{}~\\") {
+			return "", false
+		}
+	}
+	return shellLiteralParts(word.Parts)
 }

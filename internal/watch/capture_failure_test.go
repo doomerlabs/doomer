@@ -44,3 +44,21 @@ func TestCaptureFailureIsDeliveredOnceWithoutReviewState(t *testing.T) {
 		t.Fatal("reported transient or unrelated failure")
 	}
 }
+
+func TestUnresolvedRepositoryNoticeIsScopedToOperation(t *testing.T) {
+	root := t.TempDir()
+	owner := Owner{"chat", "turn"}
+	turnFile := TurnPath(root, owner.Session)
+	if err := Write(turnFile, Turn{Owner: owner}); err != nil {
+		t.Fatal(err)
+	}
+	message := captureFailureNotice(root, turnFile, owner, errCaptureRepository)
+	for _, text := range []string{"this tool operation", "review-exempt skill maintenance", "For actual repository edits", "no later completed review"} {
+		if !strings.Contains(message, text) {
+			t.Errorf("notice missing %q: %s", text, message)
+		}
+	}
+	if repeated := captureFailureNotice(root, turnFile, owner, errCaptureRepository); repeated != "" {
+		t.Fatal("repeated unresolved repository notice", repeated)
+	}
+}
