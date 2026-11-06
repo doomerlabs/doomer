@@ -30,7 +30,7 @@ type ManagedSetupResult struct {
 	TokenResponse
 	State         string `json:"state"`
 	AccountID     string `json:"account_id"`
-	PortableState bool   `json:"portable_state"`
+	PortableState *bool  `json:"portable_state"`
 }
 
 func (c Client) CreateManagedSetup(ctx context.Context, credential string, input ManagedSetupRequest) (ManagedSetupResponse, error) {

@@ -77,6 +77,9 @@ func readPortable(path string) (portableSetup, error) {
 }
 
 func restorePortable(ctx context.Context, app *application.App, s managed.Store, t *managed.Task) error {
+	if t.PortableDeclined {
+		return nil
+	}
 	if !t.Portable {
 		_, err := os.Lstat(filepath.Join(t.RepositoryID, "doomer", "portable"))
 		if os.IsNotExist(err) {

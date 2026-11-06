@@ -198,14 +198,15 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 				return err
 			}
 		}
-		if err := restorePortable(c.Context(), app, s, &task); err != nil {
-			return err
-		}
 		r := resultFor(task)
 		if task.Paused {
 			r.State = "paused"
 			return outputManaged(c, s, task, r)
 		}
+		if err := restorePortable(c.Context(), app, s, &task); err != nil {
+			return err
+		}
+		r = resultFor(task)
 		if task.Release == "" {
 			state, err := prepareRelease(c.Context(), s, &task, allowUpdates)
 			if err != nil {
@@ -531,7 +532,7 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				}
 				return outputManaged(c, s, t, managedResult{State: "consent_revoked", Task: t.Handle, Authenticated: true})
 			}
-			if t.PortableApproved {
+			if t.Portable && !t.PortableDeclined {
 				if err := checkPortable(c.Context(), t); err != nil {
 					return outputManaged(c, s, t, managedResult{State: "consent_required", Authenticated: true, Error: err.Error()})
 				}

@@ -42,6 +42,7 @@ type Task struct {
 	AccountID        string                             `json:"account_id,omitempty"`
 	Portable         bool                               `json:"portable,omitempty"`
 	PortableApproved bool                               `json:"portable_approved,omitempty"`
+	PortableDeclined bool                               `json:"portable_declined,omitempty"`
 	Created          time.Time                          `json:"created"`
 	Updated          time.Time                          `json:"updated"`
 	Stage            string                             `json:"stage"`

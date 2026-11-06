@@ -56,7 +56,7 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		if err != nil {
 			return err
 		}
-		if approved && (!t.Portable || t.PortableApproved) {
+		if approved && (!t.Portable || t.PortableApproved || t.PortableDeclined) {
 			t.Stage = "ready"
 			if err = s.Save(t); err != nil {
 				return err
@@ -146,13 +146,16 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 			return err
 		}
 		if t.Portable {
-			if !result.PortableState {
+			if result.PortableState == nil {
 				return fmt.Errorf("the service did not confirm portable setup approval")
 			}
-			if err = savePortable(c.Context(), app, s, *t); err != nil {
-				return err
+			if *result.PortableState {
+				if err = savePortable(c.Context(), app, s, *t); err != nil {
+					return err
+				}
 			}
-			t.PortableApproved = true
+			t.PortableApproved = *result.PortableState
+			t.PortableDeclined = !*result.PortableState
 		}
 		r.State, r.Authenticated, r.UploadApproved, r.Instructions = "ready", true, true, managed.Instructions
 	default:
