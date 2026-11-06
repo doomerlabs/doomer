@@ -11,7 +11,7 @@ import (
 
 // Bump the wrapper revision only when its generated content changes, using the
 // first Doomer release carrying that change. Ordinary CLI releases keep it.
-const BootstrapVersion = "2026.11.6.10"
+const BootstrapVersion = "2026.11.6.11"
 const BootstrapCLIRange = ">=2026.11.6.9"
 
 //go:embed bootstrap-legacy.md
