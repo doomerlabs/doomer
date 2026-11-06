@@ -80,6 +80,22 @@ func resultFor(task managed.Task) managedResult {
 	return r
 }
 func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedResult) error {
+	// Operation outcomes still describe the same pinned runtime and task.
+	taskResult := resultFor(t)
+	r.Task = taskResult.Task
+	r.Release = taskResult.Release
+	r.SoftwareReady = taskResult.SoftwareReady
+	r.HookActivated = taskResult.HookActivated
+	r.Capabilities = taskResult.Capabilities
+	r.PromptTruncated = taskResult.PromptTruncated
+	r.SubmittedPromptRunes = taskResult.SubmittedPromptRunes
+	r.UpdateAvailable = taskResult.UpdateAvailable
+	r.Review = taskResult.Review
+	r.Responses = taskResult.Responses
+	r.Deferred = taskResult.Deferred
+	if r.URL == "" {
+		r.URL = taskResult.URL
+	}
 	if t.Handle != "" {
 		if err := s.Observe(t, r.State); err != nil {
 			return err

@@ -89,7 +89,9 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if submissions != 0 {
 		t.Fatal("uploaded before consent")
 	}
-	run("", "task", "consent", handle, "--allow")
+	if r := run("", "task", "consent", handle, "--allow"); r.State != "consent_recorded" || !r.SoftwareReady || r.Release != task.Release || !r.Authenticated || !r.UploadApproved || r.SubmittedPromptRunes != len(task.Prompt) {
+		t.Fatal(r)
+	}
 	if err = os.WriteFile(filepath.Join(repo, "new.txt"), []byte("a change\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
