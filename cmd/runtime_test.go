@@ -11,7 +11,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/doomerlabs/doomer/internal/publock"
 	"github.com/doomerlabs/doomer/internal/runtimeversion"
 	"github.com/doomerlabs/doomer/internal/selfupdate"
 	watching "github.com/doomerlabs/doomer/internal/watch"
@@ -307,5 +309,68 @@ func TestLauncherMigrationRequiresEveryConfiguredPin(t *testing.T) {
 	cfg.AllRepositories = true
 	if err := compatibleRepositoryPins(home, cfg); err == nil {
 		t.Fatal("expanded legacy all-repository scope")
+	}
+}
+
+func TestActiveRuntimeRepositoriesFollowsPinAndActivity(t *testing.T) {
+	root, repo := t.TempDir(), newWatchTestRepo(t)
+	cfg := watching.Config{RuntimeVersion: "2026.11.5.7", Directories: []string{repo}}
+	putPin(t, repo, "2026.11.5.7")
+	if active, err := activeRuntimeRepositories(root, cfg, time.Now()); err != nil || !active {
+		t.Fatalf("matching explicit checkout lost: active=%v err=%v", active, err)
+	}
+	putPin(t, repo, "2026.11.5.8")
+	if active, err := activeRuntimeRepositories(root, cfg, time.Now()); err != nil || active {
+		t.Fatalf("upgraded checkout retained old runtime: active=%v err=%v", active, err)
+	}
+	putPin(t, repo, "2026.11.5.7")
+	cfg.Directories = nil
+	cfg.AllRepositories = true
+	root = t.TempDir()
+	if err := watching.RegisterRepository(root, repo, "agent", false, time.Now().Add(-15*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if active, err := activeRuntimeRepositories(root, cfg, time.Now()); err != nil || active {
+		t.Fatalf("expired checkout retained runtime: active=%v err=%v", active, err)
+	}
+	if err := watching.RegisterRepository(root, repo, "agent", false, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if active, err := activeRuntimeRepositories(root, cfg, time.Now()); err != nil || !active {
+		t.Fatalf("new hook registration lost: active=%v err=%v", active, err)
+	}
+}
+
+func TestEnsureRuntimeWatchRegistersBeforeReusingWatcher(t *testing.T) {
+	root, repo := t.TempDir(), newWatchTestRepo(t)
+	lock, err := publock.TryAcquire(root, "watcher")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	if err := watching.Write(filepath.Join(root, "process.json"), watchProcess{ManagedSession: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := watching.Write(filepath.Join(root, "heartbeat.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureRuntimeWatch(context.Background(), root, repo, "https://example.test/api", "default"); err != nil {
+		t.Fatal(err)
+	}
+	if active, err := activeRuntimeRepositories(root, watching.Config{AllRepositories: true}, time.Now()); err != nil || !active {
+		t.Fatalf("reused watcher could retire before the hook registers: active=%v err=%v", active, err)
+	}
+}
+
+func TestEnsureRuntimeWatchPreservesPause(t *testing.T) {
+	root, repo := t.TempDir(), newWatchTestRepo(t)
+	if err := watching.Write(filepath.Join(root, "paused.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureRuntimeWatch(context.Background(), root, repo, "https://example.test/api", "default"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "checkouts")); !os.IsNotExist(err) {
+		t.Fatal("paused runtime registered a checkout")
 	}
 }

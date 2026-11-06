@@ -410,6 +410,8 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 		if !discover && len(dirs) == 0 {
 			return fmt.Errorf("select at least one repository")
 		}
+		var retirementLock *publock.Lock
+		defer func() { _ = retirementLock.Close() }()
 		lock, err := publock.TryAcquire(root, "watcher")
 		if err != nil {
 			return fmt.Errorf("a watcher for this profile is already running")
@@ -527,6 +529,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 		}
 		lastWorktreeScan := time.Time{}
 		nextPromptCleanup := time.Time{}
+		idleSince := time.Now()
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 		for ctx.Err() == nil {
@@ -565,6 +568,24 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 					run.cancel()
 					delete(running, path)
 					statusf("Stopped watching %s — inactive or removed.", path)
+				}
+			}
+			if len(wanted) > 0 {
+				idleSince = time.Now()
+			} else if managedSession != "" && time.Since(idleSince) >= time.Minute {
+				// Serialize retirement with hook startup. The hook registers its
+				// checkout under this same lock before checking watcher liveness.
+				lock, e := lifecycleLock(ctx, root)
+				if e == nil {
+					active, e := activeRuntimeRepositories(root, cfg, time.Now())
+					if e == nil && !active {
+						retirementLock = lock
+						cancel()
+						group.Wait()
+						statusf("No active checkouts use this runtime; stopping the background watcher.")
+						return nil
+					}
+					lock.Close()
 				}
 			}
 			if time.Since(lastWorktreeScan) >= 5*time.Second {

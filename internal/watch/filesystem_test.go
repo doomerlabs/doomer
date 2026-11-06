@@ -95,3 +95,95 @@ func TestFilesystemFallbackAndRetryDeadlines(t *testing.T) {
 		cancel()
 	}
 }
+
+func TestIdleWatcherDoesNotCaptureSnapshots(t *testing.T) {
+	dir := repository(t)
+	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte("manual edit\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	client := &fakeClient{}
+	runner := Runner{Root: t.TempDir(), Output: &output, Debug: true, Client: client, Interval: 20 * time.Millisecond}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	if err := runner.Run(ctx, dir, false); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(output.Bytes(), []byte("scanning working tree")) || client.starts != 0 {
+		t.Fatalf("idle watcher captured or uploaded a snapshot: %s", output.String())
+	}
+}
+
+func TestCaptureRequested(t *testing.T) {
+	now := time.Now()
+	owner := Owner{Session: "session", Turn: "turn"}
+	for _, tc := range []struct {
+		name     string
+		state    State
+		turn     Owner
+		reviewed string
+		want     bool
+	}{
+		{name: "no request"},
+		{name: "pending", state: State{Owner: owner, RequestedAt: now, Fingerprint: "new"}, turn: owner, want: true},
+		{name: "reviewed", state: State{Owner: owner, RequestedAt: now, Fingerprint: "new"}, turn: owner, reviewed: "new"},
+		{name: "old watcher", state: State{Owner: owner, RequestedAt: now.Add(-time.Hour), Fingerprint: "new"}, turn: owner},
+		{name: "old turn", state: State{Owner: owner, RequestedAt: now, Fingerprint: "new"}, turn: Owner{Session: "session", Turn: "next"}},
+		{name: "ambiguous", state: State{Owner: owner, RequestedAt: now, Fingerprint: "new", Ambiguous: true}, turn: owner},
+		{name: "running tool", state: State{Active: map[string]Operation{"tool": {Owner: owner, Started: now, Attributable: true}}}, turn: owner},
+		{name: "completed capture", state: State{Active: map[string]Operation{"tool": {Owner: owner, Started: now, CompletedAt: now, Attributable: true}}}, turn: owner, want: true},
+		{name: "read only tool", state: State{Active: map[string]Operation{"tool": {Owner: owner, Started: now, CompletedAt: now}}}, turn: owner},
+		{name: "expired capture", state: State{Active: map[string]Operation{"tool": {Owner: owner, Started: now.Add(-time.Hour), CompletedAt: now, Attributable: true}}}, turn: owner},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, path := t.TempDir(), t.TempDir()
+			if err := Write(StatePath(root, path), tc.state); err != nil {
+				t.Fatal(err)
+			}
+			if err := Write(TurnPath(root, owner.Session), Turn{Owner: tc.turn}); err != nil {
+				t.Fatal(err)
+			}
+			if got := captureRequested(root, path, now.Add(-time.Second), tc.reviewed); got != tc.want {
+				t.Fatalf("captureRequested = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIdleWatcherWakesForAnAgentReview(t *testing.T) {
+	dir, root := repository(t), t.TempDir()
+	client := &fakeClient{}
+	var output bytes.Buffer
+	runner := Runner{Root: root, Config: Config{API: "https://example.com/api"}, Token: "token", Client: client, Output: &output, Interval: 20 * time.Millisecond, StartedAt: time.Now().Add(-time.Second)}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- runner.Run(ctx, dir, false) }()
+	defer func() { cancel(); <-done }()
+	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte("agent edit\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	requestRunner := runner
+	requestTestAgentReview(t, &requestRunner, dir)
+	var state State
+	if err := Read(StatePath(root, dir), &state); err != nil {
+		t.Fatal(err)
+	}
+	state.HypothesesSubmitted = true
+	if err := Write(StatePath(root, dir), state); err != nil {
+		t.Fatal(err)
+	}
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("idle watcher did not review the agent request")
+		case <-ticker.C:
+			var feed Feed
+			if Read(FeedPath(root, dir), &feed) == nil && feed.AssessmentStatus == "ready" {
+				return
+			}
+		}
+	}
+}
