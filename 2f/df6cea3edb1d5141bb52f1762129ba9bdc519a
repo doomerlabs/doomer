@@ -1,0 +1,27 @@
+cmd/runtime.go
+  s_89049ab70d7402::t_5fc3d2644bb605 45-46,66-67,71-76
+  s_89049ab70d7402::t_0c9baac4d2e336 47
+  s_89049ab70d7402::t_bf953dbb493ca6 20,44,50-60,62-63,65,68-70,77-81,84
+go.mod
+  s_89049ab70d7402::t_5fc3d2644bb605 12
+cmd/runtime_test.go
+  s_89049ab70d7402::t_0c9baac4d2e336 26,75-106,109-141,143-147,149-150
+  s_89049ab70d7402::t_5fc3d2644bb605 107-108,142
+  s_89049ab70d7402::t_d31b58910b3718 148,151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2fdf6cea3edb1d5141bb52f1762129ba9bdc519a",
+  "prompts": {},
+  "sessions": {
+    "s_89049ab70d7402": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ae55-4c69-7c80-9d41-17de3ed4669b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
