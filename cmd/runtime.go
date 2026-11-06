@@ -17,6 +17,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/selfupdate"
 	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // DispatchCLI only redirects the global launcher. Explicit versioned binaries
@@ -39,34 +40,48 @@ func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr i
 	if err != nil {
 		return false, err
 	}
-	for _, arg := range args {
-		if arg == "self-update" || arg == "--dispatch" || arg == "runtime-info" {
-			return false, nil
-		}
-	}
 	root := newRootCommand(nil)
-	command, rest, err := root.Find(args)
-	if err != nil {
+	command, rest, findErr := root.Find(args)
+	// Installation, protocol checks, and diagnostics must remain available
+	// when the checkout pins a missing or broken release.
+	if findErr == nil && (command.Name() == "doctor" || command.Name() == "self-update" || command.Name() == "runtime-info") {
 		return false, nil
 	}
-	// Doctor must run even when the checkout pins a missing, broken, or older
-	// release, since diagnosing that installation is its purpose.
-	if command.Name() == "doctor" {
-		return false, nil
+
+	// Only interpret routing flags here. The selected release owns command and
+	// flag validation, including commands and flags newer than this launcher.
+	routing := pflag.NewFlagSet("launcher", pflag.ContinueOnError)
+	routing.SetOutput(io.Discard)
+	routing.ParseErrorsAllowlist.UnknownFlags = true
+	repoPath := routing.String("repo", "", "")
+	targetPath := routing.String("path", "", "")
+	_ = routing.Parse(args)
+	if routing.Changed("repo") {
+		path = *repoPath
 	}
-	if err := command.ParseFlags(rest); err != nil {
-		return false, nil
+	if routing.Changed("path") {
+		path = *targetPath
 	}
-	for _, key := range []string{"repo", "path"} {
-		if flag := command.Flags().Lookup(key); flag != nil {
-			path = flag.Value.String()
+
+	// Use known command flags only as routing hints. Their validation must not
+	// prevent dispatch to a newer release.
+	if findErr == nil {
+		command.FParseErrWhitelist.UnknownFlags = true
+		if err := command.ParseFlags(rest); err == nil {
+			if command.Name() == "hook" && command.Parent() != nil && command.Parent().Name() == "watch" {
+				dispatch, _ := command.Flags().GetBool("dispatch")
+				if dispatch {
+					return false, nil
+				}
+			}
+			if command.Name() == "watch" || command.Name() == "setup" || (command.Parent() != nil && command.Parent().Name() == "watch") {
+				if paths := command.Flags().Args(); len(paths) > 0 {
+					path = paths[0]
+				}
+			}
 		}
 	}
-	if command.Name() == "watch" || command.Name() == "setup" || (command.Parent() != nil && command.Parent().Name() == "watch") {
-		if paths := command.Flags().Args(); len(paths) > 0 {
-			path = paths[0]
-		}
-	}
+
 	repo, err := watching.Root(ctx, path)
 	if err != nil {
 		return false, nil
