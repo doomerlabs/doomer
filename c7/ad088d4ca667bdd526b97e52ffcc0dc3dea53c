@@ -1,0 +1,39 @@
+cmd/managed_consent_test.go
+  s_f23d7bc729b5d1::t_24ed3d5ca1342c 1-57
+cmd/managed_feedback_test.go
+  s_f23d7bc729b5d1::t_24ed3d5ca1342c 1-25,27-65
+  s_f23d7bc729b5d1::t_50261cf9867065 26
+internal/managed/instructions.md
+  s_f23d7bc729b5d1::t_24ed3d5ca1342c 28-40
+  s_f23d7bc729b5d1::t_f338b53c171df9 24-27
+cmd/managed.go
+  s_f23d7bc729b5d1::t_e87f460d7e3747 31,85-91,389,396,399,408
+cmd/managed_approval.go
+  s_f23d7bc729b5d1::t_28343493678903 145
+cmd/managed_consent.go
+  s_f23d7bc729b5d1::t_f4dc256175953f 1-57
+cmd/managed_feedback.go
+  s_f23d7bc729b5d1::t_4127033e3c81f0 1-46
+cmd/managed_install.go
+  s_f23d7bc729b5d1::t_299ed1d6de5cb7 224
+cmd/managed_test.go
+  s_f23d7bc729b5d1::t_bc649dc6ff24bd 116,134
+docs/managed-runtime.md
+  s_f23d7bc729b5d1::t_f5914cb58cbab1 96-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c7ad088d4ca667bdd526b97e52ffcc0dc3dea53c",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
