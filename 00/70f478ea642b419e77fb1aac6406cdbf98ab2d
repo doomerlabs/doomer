@@ -1,0 +1,16 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 612-614
+cmd/managed_prompt_test.go
+  h_aa44c3b5b60dec 73,88-93,151-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0070f478ea642b419e77fb1aac6406cdbf98ab2d",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
