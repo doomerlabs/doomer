@@ -101,7 +101,13 @@ func bindManagedSession(s managed.Store, t managed.Task) error {
 	if t.Capabilities.SessionID == "" {
 		return nil
 	}
-	path := filepath.Join(s.Root, "sessions", watch.Key(t.API+"\x00"+t.Profile+"\x00"+t.Agent+"\x00"+t.Repo+"\x00"+t.Capabilities.SessionID)+".json")
+	key := watch.Key(t.API + "\x00" + t.Profile + "\x00" + t.Agent + "\x00" + t.Repo + "\x00" + t.Capabilities.SessionID)
+	unlock, err := watchLock(s.Root, "session-"+key)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	path := filepath.Join(s.Root, "sessions", key+".json")
 	var old string
 	if err := watch.Read(path, &old); err == nil && old != t.Handle {
 		previous, err := s.Load(old)

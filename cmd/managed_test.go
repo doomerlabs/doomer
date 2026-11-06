@@ -166,3 +166,35 @@ func TestManagedConsentIsScopedToAccountRepositoryAndService(t *testing.T) {
 		}
 	}
 }
+
+func TestManagedSessionCannotReplaceAnActiveTask(t *testing.T) {
+	isolate(t)
+	s, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _ := managed.NewHandle()
+	second, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: first, Repo: "repo", API: "service", Profile: "default", Agent: "codex", Stage: "ready", Capabilities: managed.Capabilities{SessionID: "session"}}
+	if err = s.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	if err = bindManagedSession(s, task); err != nil {
+		t.Fatal(err)
+	}
+	other := task
+	other.Handle = second
+	if err = s.Save(&other); err != nil {
+		t.Fatal(err)
+	}
+	if err = bindManagedSession(s, other); err == nil {
+		t.Fatal("active task binding was replaced")
+	}
+	task.Stage = "complete"
+	if err = s.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	if err = bindManagedSession(s, other); err != nil {
+		t.Fatal(err)
+	}
+}
