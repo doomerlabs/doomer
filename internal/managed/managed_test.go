@@ -211,8 +211,12 @@ func TestManagedAutomaticDeepReviewWaitsForFullResult(t *testing.T) {
 	}
 	client.result.Status = "failed"
 	client.result.Full.Status = "failed"
+	task.Stage = "review_pending"
 	if err := engine.Finish(context.Background(), &task, "token"); err == nil {
 		t.Fatal("completed failed deep review")
+	}
+	if task.Stage != "review_failed" {
+		t.Fatal("failed Deep review was not retained", task.Stage)
 	}
 }
 func TestTaskIsolationAndNetworkRedaction(t *testing.T) {

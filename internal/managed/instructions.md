@@ -17,8 +17,9 @@ a browser callback, session IDs, and persistent processes are optional.
 For per-call execution, work normally on the user's task, then run
 `doomer task submit HANDLE`. This captures the checkout and requests automatic
 review selection. The server runs Look Closer and enables Deep when the account
-is eligible. Use `doomer task status HANDLE` to retrieve the result. Read the
-completed Deep result and address confirmed findings before finishing. Each call is
+is eligible. Use `doomer task status HANDLE` to retrieve the result. If the status
+includes a completed Deep result, read it and address confirmed findings before
+finishing. Each call is
 resumable. If pending, continue useful work and check again with a bounded delay.
 Do not start another review while this revision is pending. If a call is rejected
 by network policy, show the returned required host and retain the same handle.
@@ -28,6 +29,11 @@ hooks stop resubmitting a failed call. Report the review as incomplete and end
 the turn if recovery is unavailable; do not enter a stop-hook retry loop.
 Use an explicit task command to retry after addressing the cause. Never describe
 a failed submission as a completed review.
+
+If status reports `review_failed`, the review is terminal. Report incomplete
+coverage and stop polling. After addressing the cause, use `doomer task retry
+HANDLE` to request a new revision of the same task. A failed Deep review does
+not become complete merely because its Quick assessment finished.
 
 Keep raw CLI JSON, task handles, and local receipt paths out of user-facing
 progress messages. Summarize the review status and the next action in plain

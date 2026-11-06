@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -61,8 +62,19 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 			w.Write([]byte(`{"repository_id":"repo","snapshot_id":"snapshot","complete":true}`))
 		case "/v1/reviews/workspace":
 			submissions++
+			raw, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &fields); err != nil {
+				t.Fatal(err)
+			}
+			if _, present := fields["full_review"]; present {
+				t.Error("automatic review request must omit full_review")
+			}
 			var input adversarylabs.WorkspaceSubmission
-			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			if err := json.Unmarshal(raw, &input); err != nil {
 				t.Error(err)
 			}
 			if input.FullReview != nil || input.UserRequest == nil || input.UserRequest.Prompt != "Fix the code" || input.Repository == "" || filepath.IsAbs(input.Repository) {
