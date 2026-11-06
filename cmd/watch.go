@@ -525,7 +525,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			}()
 		}
 		if discover {
-			statusf("Agent discovery enabled; automatic checkouts become inactive after 14 days without an agent edit.")
+			statusf("Agent discovery enabled; automatic checkouts become inactive after 14 days without agent activity.")
 		}
 		lastWorktreeScan := time.Time{}
 		nextPromptCleanup := time.Time{}

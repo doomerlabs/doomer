@@ -82,9 +82,13 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 			}
 			if agent == "codex" {
 				result, detail := watching.CodexActivationStatus(root, path, session)
-				if !status.Approved || status.Paused || !status.Running || !status.HooksInstalled[agent] || status.RepositoryStatus != "Watching" {
+				starting := status.RepositoryStatus == "Inactive" || status.RepositoryStatus == "Starting"
+				if !status.Approved || status.Paused || !status.Running || !status.HooksInstalled[agent] || status.RepositoryStatus != "Watching" && !starting {
 					result = "error"
 					detail = fmt.Sprintf("Repository setup unavailable (approved=%t, paused=%t, hooks_installed=%t, watcher_running=%t, repository_status=%q)", status.Approved, status.Paused, status.HooksInstalled[agent], status.Running, status.RepositoryStatus)
+				} else if result == "ready" && status.RepositoryStatus != "Watching" {
+					result = "pending"
+					detail = fmt.Sprintf("Waiting for this approved checkout to become active (repository_status=%q).", status.RepositoryStatus)
 				}
 				return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"status": result, "detail": detail, "repository": path, "session": session})
 			}

@@ -162,6 +162,42 @@ func TestCodexCheckHooksUsesRealReceiptWithoutChangingSetup(t *testing.T) {
 		watching.Hook(context.Background(), root, cfg, bytes.NewReader(raw), io.Discard, "codex")
 	}
 	check("ready")
+	// A new worktree inherits the repository grant, but its watcher has not
+	// started. Activation should wait for the first tool instead of asking
+	// the user to repeat setup.
+	linked := filepath.Join(t.TempDir(), "new-linked-checkout")
+	reviewGit(t, repo, "worktree", "add", "--detach", linked, "HEAD")
+	repo, err = watching.Root(context.Background(), linked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := watching.RegisterRepository(root, repo, "linked worktree", false, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	check("pending")
+	for _, event := range []string{"UserPromptSubmit", "PreToolUse"} {
+		input := watching.HookInput{Session: "codex-session", Turn: "linked-turn", CWD: repo, Event: event, Prompt: "Inspect linked repository", Tool: "Bash", ToolID: "linked-read"}
+		raw, _ := json.Marshal(input)
+		watching.Hook(context.Background(), root, cfg, bytes.NewReader(raw), io.Discard, "codex")
+	}
+	// Activity has been recorded, but a missing watcher is a concrete failure.
+	check("error")
+	if err := watching.SetWatchRuntime(root, repo, watching.WatchRuntime{Session: "watcher-session", Token: "linked-token", Status: "Starting"}); err != nil {
+		t.Fatal(err)
+	}
+	check("pending")
+	if err := watching.SetWatchRuntime(root, repo, watching.WatchRuntime{Session: "watcher-session", Token: "linked-token", Status: "Watching"}); err != nil {
+		t.Fatal(err)
+	}
+	check("ready")
+	if err := os.WriteFile(watching.TurnPath(root, "codex-session"), []byte("invalid JSON"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := watching.SetWatchRuntime(root, repo, watching.WatchRuntime{Session: "watcher-session", Token: "linked-token", Status: "Starting"}); err != nil {
+		t.Fatal(err)
+	}
+	// A genuine receipt error must survive the transient watcher state.
+	check("error")
 	watching.Write(filepath.Join(root, "paused.json"), true)
 	check("error")
 }
