@@ -164,7 +164,7 @@ func TestRootPreservesGitFailure(t *testing.T) {
 }
 
 func TestCodexHookRecoversTaskAfterRuntimeUpgrade(t *testing.T) {
-	for _, scenario := range []string{"saved", "already-registered", "missing", "expired", "future", "consumed", "other-repository", "other-session", "current-prompt"} {
+	for _, scenario := range []string{"saved", "context-delivered", "already-registered", "missing", "expired", "future", "consumed", "other-repository", "other-session", "current-prompt"} {
 		t.Run(scenario, func(t *testing.T) {
 			repo, root := repository(t), t.TempDir()
 			owner := Owner{"chat", "upgrade-turn"}
@@ -178,6 +178,8 @@ func TestCodexHookRecoversTaskAfterRuntimeUpgrade(t *testing.T) {
 					t.Fatal(err)
 				}
 				switch scenario {
+				case "context-delivered":
+					saved.ContextDelivered = true
 				case "expired":
 					saved.Created = time.Now().Add(-25 * time.Hour)
 				case "future":
@@ -216,7 +218,7 @@ func TestCodexHookRecoversTaskAfterRuntimeUpgrade(t *testing.T) {
 			}
 			want := ""
 			switch scenario {
-			case "saved", "already-registered":
+			case "saved", "context-delivered", "already-registered":
 				want = "Remove the redundant review history"
 			case "current-prompt":
 				want = "New explicit task"
