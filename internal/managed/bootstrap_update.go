@@ -69,6 +69,18 @@ type BootstrapUpdate struct {
 	Compatible *bool  `json:"compatible,omitempty"`
 }
 
+func BootstrapUpgradeOffer(scope string) string {
+	location := "this repository’s"
+	if scope == "personal" {
+		location = "your personal"
+	}
+	offer := "Ask the user: ‘A new version of the Doomer skill is available. Update " + location + " skill files now? Your current version still works.’ Present choices in this order: ‘Update skill (recommended)’, ‘Maybe later’."
+	if scope == "personal" {
+		return offer + " Apply an accepted personal update locally without creating a pull request."
+	}
+	return offer + " Before applying an accepted update, check which skill files exist in Git HEAD. For committed skill files, make the update on a separate branch and open a pull request containing only those skill updates. Preserve unrelated changes and any existing local skill edits. If a changed skill file is untracked, update it locally and leave it untracked. If no changed skill files are committed, do not create a pull request. If PR creation is unavailable, report that the local update still needs a pull request."
+}
+
 func RecognizedBootstrap(data []byte, policy Policy) bool {
 	current, err := BootstrapText(policy)
 	if err != nil {
@@ -129,7 +141,7 @@ func InspectBootstrap(path, scope, version string) (BootstrapUpdate, error) {
 	result.Action = "The wrapper differs from the bundled templates. Review its local changes and reconcile manually."
 	if recognizedPreviousBootstrap(data, b.Policy) {
 		result.State = "update_available"
-		result.Action = "Offer the user a bootstrap upgrade. After acceptance, run doomer bootstrap upgrade with the same scope. Preserve the update policy."
+		result.Action = BootstrapUpgradeOffer(scope) + " After acceptance, run doomer bootstrap upgrade with the same scope. Preserve the update policy."
 	}
 	return result, nil
 }

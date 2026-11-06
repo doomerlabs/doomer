@@ -124,7 +124,7 @@ func managedBootstrapUpdates(task managed.Task) []managed.BootstrapUpdate {
 			if task.Bootstrap.Scope == "personal" {
 				target = "--personal"
 			}
-			update.Action = "Offer the user this wrapper upgrade. Only after acceptance run doomer bootstrap upgrade --accept " + target + ". The task keeps its release and update policy."
+			update.Action = managed.BootstrapUpgradeOffer(task.Bootstrap.Scope) + " Only after acceptance run doomer bootstrap upgrade --accept " + target + ". The task keeps its release and update policy."
 		}
 		updates = append(updates, update)
 	}

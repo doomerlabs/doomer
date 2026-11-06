@@ -7,6 +7,25 @@ import (
 	"testing"
 )
 
+func TestBootstrapUpgradeOffer(t *testing.T) {
+	project := BootstrapUpgradeOffer("project")
+	for _, text := range []string{
+		"A new version of the Doomer skill is available. Update this repository’s skill files now? Your current version still works.",
+		"‘Update skill (recommended)’, ‘Maybe later’",
+		"check which skill files exist in Git HEAD",
+		"open a pull request containing only those skill updates",
+		"leave it untracked",
+	} {
+		if !strings.Contains(project, text) {
+			t.Fatalf("project offer missing %q: %s", text, project)
+		}
+	}
+	personal := BootstrapUpgradeOffer("personal")
+	if !strings.Contains(personal, "Update your personal skill files now?") || !strings.Contains(personal, "without creating a pull request") || strings.Contains(personal, "Git HEAD") {
+		t.Fatalf("incorrect personal offer: %s", personal)
+	}
+}
+
 func TestBootstrapVersionRanges(t *testing.T) {
 	for _, tc := range []struct {
 		constraint, version string
