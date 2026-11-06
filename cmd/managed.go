@@ -85,11 +85,7 @@ func resultFor(task managed.Task) managedResult {
 }
 func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedResult) error {
 	if c.Name() == "prepare" && t.Bootstrap.Path != "" {
-		updates, err := managedBootstrapUpdates(t)
-		if err != nil {
-			return err
-		}
-		r.BootstrapUpdates = updates
+		r.BootstrapUpdates = managedBootstrapUpdates(t)
 	}
 	if r.Authenticated && r.UploadApproved {
 		evidence, err := savedManagedConsentEvidence(s, t)
@@ -705,10 +701,7 @@ func dispatchManaged(ctx context.Context, args []string, in io.Reader, out, stde
 	err = child.Run()
 	var result map[string]json.RawMessage
 	if err == nil && json.Unmarshal(output.Bytes(), &result) == nil && result != nil {
-		updates, inspectErr := managedBootstrapUpdates(task)
-		if inspectErr != nil {
-			return true, inspectErr
-		}
+		updates := managedBootstrapUpdates(task)
 		if len(updates) > 0 {
 			result["bootstrap_updates"], err = json.Marshal(updates)
 			if err != nil {

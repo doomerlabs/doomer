@@ -100,9 +100,9 @@ func newManagedBootstrapCommand() *cobra.Command {
 	return root
 }
 
-func managedBootstrapUpdates(task managed.Task) ([]managed.BootstrapUpdate, error) {
+func managedBootstrapUpdates(task managed.Task) []managed.BootstrapUpdate {
 	if task.Bootstrap.Path == "" {
-		return nil, nil
+		return nil
 	}
 	base := filepath.Clean(filepath.Join(filepath.Dir(task.Bootstrap.Path), "../../.."))
 	var updates []managed.BootstrapUpdate
@@ -113,7 +113,8 @@ func managedBootstrapUpdates(task managed.Task) ([]managed.BootstrapUpdate, erro
 			continue
 		}
 		if err != nil {
-			return nil, err
+			updates = append(updates, managed.BootstrapUpdate{Path: path, State: "inspection_failed", Available: managed.BootstrapVersion, CLIRange: managed.BootstrapCLIRange, Action: "Could not inspect this wrapper. Run doomer bootstrap status in its installation scope and reconcile it manually. The current task can continue."})
+			continue
 		}
 		if update.State == "current" {
 			continue
@@ -127,5 +128,5 @@ func managedBootstrapUpdates(task managed.Task) ([]managed.BootstrapUpdate, erro
 		}
 		updates = append(updates, update)
 	}
-	return updates, nil
+	return updates
 }

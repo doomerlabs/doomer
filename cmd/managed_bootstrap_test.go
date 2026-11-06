@@ -87,3 +87,18 @@ func TestBootstrapUpgradeDetectsRacesAndRollsBack(t *testing.T) {
 		t.Fatal("concurrent edit overwritten")
 	}
 }
+
+func TestBootstrapInspectionFailureIsAdvisory(t *testing.T) {
+	repo := t.TempDir()
+	path := filepath.Join(repo, ".agents/skills/doomer-review/SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("malformed wrapper"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	updates := managedBootstrapUpdates(managed.Task{Bootstrap: managed.Bootstrap{Path: path, Scope: "project"}})
+	if len(updates) != 1 || updates[0].State != "inspection_failed" {
+		t.Fatal(updates)
+	}
+}
