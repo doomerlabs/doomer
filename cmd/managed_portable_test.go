@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -160,5 +161,49 @@ func TestPortableSetupCommandUsesTheSelectedRuntime(t *testing.T) {
 	task.Portable = true
 	if len(resultFor(task).PortableSetupCommand) != 0 {
 		t.Fatal("already-portable task requested another setup")
+	}
+}
+
+func TestManagedRevokeSurvivesPortableRemovalFailure(t *testing.T) {
+	isolate(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"id":"account"}`))
+	}))
+	defer server.Close()
+	repo := newWatchTestRepo(t) // No origin remote, so portable cleanup cannot resolve it.
+	id, err := watch.RepositoryIdentity(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := adversarylabs.ConfigStore{Path: filepath.Join(os.Getenv("DOOMER_CONFIG_DIR"), "config.json")}
+	if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: "token"}); err != nil {
+		t.Fatal(err)
+	}
+	s, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: 2, Handle: handle, Repo: repo, RepositoryID: id, API: server.URL, Profile: "default", AccountID: "account", Portable: true, PortableApproved: true}
+	if err := s.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	if err := recordManagedConsent(s, task, "browser_repository_approval"); err != nil {
+		t.Fatal(err)
+	}
+	output, err := execute(t, "", "--api-url", server.URL, "task", "revoke", handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result managedResult
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.State != "consent_revoked" || result.UploadApproved || result.Error == "" || result.Action == "" {
+		t.Fatal("partial cleanup did not report local revocation and recovery guidance", result)
+	}
+	approved, err := managedConsent(s, task, "token", false)
+	if err != nil || approved {
+		t.Fatal("portable cleanup failure preserved local upload permission", approved, err)
 	}
 }

@@ -534,16 +534,18 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				return outputManaged(c, s, t, managedResult{State: "consent_recorded", Task: t.Handle, Authenticated: true, UploadApproved: true})
 			}
 			if operation == "revoke" {
-				if t.PortableApproved {
-					if err := removePortable(c.Context(), t); err != nil {
-						return err
-					}
-				}
 				key := watch.Key(t.AccountID + "\x00" + t.RepositoryID + "\x00" + t.API + "\x00" + t.Profile)
 				if err := watch.Write(filepath.Join(s.Root, "consents", key+".json"), repositoryConsent{Account: t.AccountID}); err != nil {
 					return err
 				}
-				return outputManaged(c, s, t, managedResult{State: "consent_revoked", Task: t.Handle, Authenticated: true})
+				result := managedResult{State: "consent_revoked", Task: t.Handle, Authenticated: true}
+				if t.PortableApproved {
+					if err := removePortable(c.Context(), t); err != nil {
+						result.Error = err.Error()
+						result.Action = "Local upload approval is revoked. The portable record could not be removed; remove this repository's private portable record before using another environment."
+					}
+				}
+				return outputManaged(c, s, t, result)
 			}
 			if t.Portable && !t.PortableDeclined {
 				if err := checkPortable(c.Context(), t); err != nil {

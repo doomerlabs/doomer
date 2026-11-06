@@ -18,14 +18,13 @@ If setup needs user input, ask before editing and resume the same task afterward
 Keep requested work pending while preparation is blocked.
 
 Run the CLI in the environment that edits the checkout. In Cowork or another
-environment with a temporary home, enable portable setup before editing.
-Its browser approval explains how to retain account access and this repository's
-grant in private Git metadata so later sessions can reuse them. The CLI restores
-approved portable setup itself. Never copy tokens or rewrite grant files.
-The initial prepare command above works with older launchers. Before approving
-setup or editing in a temporary-home environment, execute the returned
-`portable_setup_command` argument array when present. It invokes the selected
-runtime directly and resumes the same task with portable setup enabled.
+environment with a temporary home, execute the returned `portable_setup_command`
+argument array when present, before approving setup or editing. It invokes the
+selected runtime directly and offers reusable setup or access in this environment
+only. Honor the user's choice. Only reusable approval retains account access and
+the repository grant in private Git metadata for later sessions. The CLI restores
+approved setup itself. Never copy tokens or rewrite grant files. The initial
+prepare command above remains usable with older launchers.
 
 If prepare reports a bootstrap upgrade, offer it to the user and apply it only
 after acceptance. Keep the repository's update policy and any local edits.
