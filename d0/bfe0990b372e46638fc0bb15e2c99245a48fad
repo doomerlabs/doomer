@@ -1,0 +1,18 @@
+cmd/managed_consent_test.go
+  h_aa44c3b5b60dec 38-52
+cmd/managed_test.go
+  h_aa44c3b5b60dec 134
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 35-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d0bfe0990b372e46638fc0bb15e2c99245a48fad",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
