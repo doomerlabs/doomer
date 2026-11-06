@@ -21,18 +21,40 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	repo := newWatchTestRepo(t)
 	var submissions int
 	var feedback int
+	var approvals int
+	var approvalPolls int
+	var approvalRequest string
 	lead := strings.Repeat("a", 64)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/v1/auth/device/") && r.Header.Get("Authorization") != "Bearer selected-account" {
+		if !strings.HasPrefix(r.URL.Path, "/v1/setup/") && r.Header.Get("Authorization") != "Bearer selected-account" {
 			t.Error("wrong account credential")
 		}
 		switch r.URL.Path {
 		case "/v1/auth/whoami":
 			w.Write([]byte(`{"id":"user-account","type":"user"}`))
-		case "/v1/auth/device/code":
-			w.Write([]byte(`{"device_code":"device","user_code":"ABCD","verification_uri":"https://doomer.ai/device","expires_in":60,"interval":1}`))
-		case "/v1/auth/device/token":
-			w.Write([]byte(`{"token":"selected-account"}`))
+		case "/v1/setup/grants":
+			approvals++
+			var input adversarylabs.ManagedSetupRequest
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Fatal(err)
+			}
+			if !input.Resumable || input.Callback != "" || len(input.Repositories) != 1 {
+				t.Fatal(input)
+			}
+			approvalRequest = input.Request
+			json.NewEncoder(w).Encode(map[string]any{"url": "http://" + r.Host + "/cli/setup#request=" + input.Request, "expiresIn": 1800})
+		case "/v1/setup/grants/poll":
+			approvalPolls++
+			var input map[string]string
+			json.NewDecoder(r.Body).Decode(&input)
+			if input["request"] != approvalRequest || input["codeVerifier"] == "" {
+				t.Fatal(input)
+			}
+			if approvalPolls == 1 {
+				w.Write([]byte(`{"state":"pending"}`))
+			} else {
+				w.Write([]byte(`{"state":"approved","token":"selected-account","account_id":"user-account"}`))
+			}
 		case "/v3/installations/observe":
 			w.Write([]byte(`{"accepted":true}`))
 		case "/v1/repositories":
@@ -87,14 +109,17 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 		}
 		return result
 	}
-	if r := run("", "task", "login", handle); r.State != "authentication_pending" || r.Authenticated || !r.SoftwareReady || r.URL != "https://doomer.ai/device" {
-		t.Fatal(r)
-	}
-	if r := run("", "task", "login", handle); r.State != "authenticated" || !r.Authenticated || !r.SoftwareReady || r.UploadApproved {
-		t.Fatal(r)
-	}
 	if r := run("", "task", "submit", handle); r.State != "consent_required" {
 		t.Fatal(r)
+	}
+	if r := run("", "task", "login", handle); r.State != "approval_required" || !r.SoftwareReady || !strings.Contains(r.URL, "/cli/setup#request=") {
+		t.Fatal(r)
+	}
+	if r := run("", "task", "login", handle); r.State != "ready" || !r.Authenticated || !r.UploadApproved {
+		t.Fatal(r)
+	}
+	if approvals != 1 {
+		t.Fatal("approval duplicated", approvals)
 	}
 	if submissions != 0 {
 		t.Fatal("uploaded before consent")

@@ -189,7 +189,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 			}
 			if state != "ready" {
 				r.State = state
-				r.Action = "Ask the user to allow verified software updates under this bootstrap policy and reporting of version/task-state metadata to " + task.API + ". Repository content requires separate upload consent. After approval, resume with --allow-updates"
+				r.Action = "Ask the user to allow verified software updates under this bootstrap policy and reporting of version/task-state metadata to " + displayManagedService(task.API) + ". Repository content requires separate upload consent. After approval, resume with --allow-updates"
 				return outputManaged(c, s, task, r)
 			}
 			r = resultFor(task)
@@ -207,35 +207,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 				return err
 			}
 		}
-		auth, account, err := managedIdentity(c.Context(), app, task)
-		if err != nil {
-			r.State = "authentication_required"
-			r.Action = "Run doomer task login " + handle + " and complete the displayed device login"
-			r.Error = err.Error()
-			return outputManaged(c, s, task, r)
-		}
-		r.Authenticated = true
-		if task.AccountID != "" && task.AccountID != account {
-			return fmt.Errorf("task belongs to another account")
-		}
-		task.AccountID = account
-		approved, err := managedConsent(s, task, auth.Token, false)
-		if err != nil {
-			return err
-		}
-		if !approved {
-			r.State = "consent_required"
-			r.Action = "Ask the user to approve sending repository snapshots, task context and finding responses to " + task.API + "; after approval run doomer task consent " + handle + " --allow"
-		} else {
-			r.State = "ready"
-			r.UploadApproved = true
-			r.Instructions = managed.Instructions
-		}
-		task.Stage = r.State
-		if err = s.Save(&task); err != nil {
-			return err
-		}
-		return outputManaged(c, s, task, r)
+		return managedApproval(c, app, s, &task)
 	}
 	c.Flags().StringVar(&repo, "repo", ".", "checkout being edited")
 	c.Flags().StringVar(&agent, "agent", "codex", "active agent: codex or claude")
@@ -625,59 +597,8 @@ func managedHook(c *cobra.Command, s managed.Store, t *managed.Task, e managed.E
 	}
 }
 
-type pendingManagedLogin struct {
-	Login    adversarylabs.DeviceLogin
-	Expires  time.Time
-	NextPoll time.Time
-}
-
 func managedLogin(c *cobra.Command, app *application.App, s managed.Store, t managed.Task) error {
-	loginKey := watch.Key(t.API + "\x00" + t.Profile)
-	unlock, err := watchLock(s.Root, "login-"+loginKey)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	file := filepath.Join(s.Root, "logins", loginKey+".json")
-	client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, t.API)
-	var pending pendingManagedLogin
-	err = watch.Read(file, &pending)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	if pending.Login.DeviceCode == "" || time.Now().After(pending.Expires) {
-		login, err := client.BeginLogin(c.Context(), adversarylabs.LoginOptions{Name: "Doomer managed runtime"})
-		if err != nil {
-			return managed.NetworkError("device_login", err)
-		}
-		if login.DeviceCode == "" || login.UserCode == "" || login.ExpiresIn <= 0 {
-			return fmt.Errorf("invalid device login response")
-		}
-		pending = pendingManagedLogin{Login: login, Expires: time.Now().Add(time.Duration(login.ExpiresIn) * time.Second)}
-		if err = watch.Write(file, pending); err != nil {
-			return err
-		}
-	} else if !time.Now().Before(pending.NextPoll) {
-		token, err := client.PollToken(c.Context(), pending.Login.DeviceCode)
-		if err == nil {
-			if err = app.Dependencies().Auth.SetAuth(adversarylabs.AuthKey(t.API, t.Profile), adversarylabs.Auth{Token: token.Token, ClientID: token.ClientID, ExpiresAt: token.ExpiresAt, RegistryNamespace: token.RegistryNamespace}); err != nil {
-				return err
-			}
-			if err = os.Remove(file); err != nil {
-				return err
-			}
-			return outputManaged(c, s, t, managedResult{State: "authenticated", Task: t.Handle, Authenticated: true, Action: "Resume doomer prepare --task " + t.Handle})
-		}
-		pending.NextPoll = time.Now().Add(adversarylabs.PollInterval(pending.Login))
-		if err = watch.Write(file, pending); err != nil {
-			return err
-		}
-	}
-	link := pending.Login.VerificationURIComplete
-	if link == "" {
-		link = pending.Login.VerificationURI
-	}
-	return outputManaged(c, s, t, managedResult{State: "authentication_pending", Task: t.Handle, URL: link, Action: "Open the verification URL and enter " + pending.Login.UserCode + ". Run this same login command again after completing approval."})
+	return managedApproval(c, app, s, &t)
 }
 
 // Explicit task routing precedes checkout policy routing. This is how two tasks

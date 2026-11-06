@@ -6,7 +6,7 @@ handle from prepare. If prompt_truncated is true, summarize the task to at most
 or compaction. If the pinned executable is missing, use `doomer task repair
 HANDLE` to restore that exact release. Never create a replacement task to recover an existing review.
 
-Before editing, resolve any authentication, permission, or update authorization
+Before editing, resolve any repository approval or update authorization
 request returned by prepare. Show its actual user action and wait for the human.
 Never grant permission or manufacture account state on the user's behalf.
 
@@ -37,3 +37,5 @@ Disclose deferred findings or unavailable review coverage accurately.
 Hook mode uses the same durable task operations. Only a real scoped hook callback
 establishes hook activation. If hooks are unavailable, use the per-call procedure.
 Do not install or enable hooks without the user's normal hook-trust workflow.
+
+For approval_required, show the returned repository approval URL. The page handles account sign-in and repository upload permission. Resume the same task with prepare after the browser decision. In user-facing text, name the production service doomer.ai.
