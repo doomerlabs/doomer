@@ -10,6 +10,17 @@ import (
 	"strings"
 )
 
+// ResponseError contains only allowlisted server diagnostics, never a raw body.
+type ResponseError struct {
+	StatusCode int
+	Code       string
+	message    string
+	cause      error
+}
+
+func (e *ResponseError) Error() string { return e.message }
+func (e *ResponseError) Unwrap() error { return e.cause }
+
 // ErrMissingReviewScope identifies a rejected submission with no usable edit scope.
 var ErrMissingReviewScope = errors.New("missing_review_scope")
 
@@ -21,6 +32,7 @@ var validationFieldPattern = regexp.MustCompile(`^(body|repository|repository_id
 // so arbitrary messages, headers, and raw response bodies must never be logged.
 func responseError(resp *http.Response, token string) error {
 	var cause error
+	safeCode := ""
 	message := fmt.Sprintf("request failed: %d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 	var body struct {
 		Error     string `json:"error"`
@@ -34,13 +46,15 @@ func responseError(resp *http.Response, token string) error {
 	if err == nil && len(data) <= maxErrorBytes && json.Unmarshal(data, &body) == nil {
 		switch body.Error {
 		case "missing_review_scope":
+			safeCode = body.Error
 			message += ": " + body.Error
 			cause = ErrMissingReviewScope
 		case "Content does not match SHA-256":
 			message += ": uploaded file checksum mismatch (the server may have received a truncated body)"
-		case "invalid_request", "invalid_json", "unauthorized", "insufficient_scope", "repository_mismatch",
+		case "invalid_request", "invalid_user_request", "invalid_json", "unauthorized", "insufficient_scope", "repository_mismatch",
 			"not_found", "submission_limit", "idempotency_conflict", "payload_too_large", "invalid_snapshot",
 			"digest_mismatch", "source_head_mismatch", "submission_expired_or_finalized", "not_ready", "review_identity_conflict", "review_cancelled":
+			safeCode = body.Error
 			message += ": " + body.Error
 		}
 		if body.Error == "reviews_disabled" {
@@ -86,8 +100,5 @@ func responseError(resp *http.Response, token string) error {
 	if token != "" {
 		message = strings.ReplaceAll(message, token, "[redacted]")
 	}
-	if cause != nil {
-		return fmt.Errorf("%w: %s", cause, message)
-	}
-	return fmt.Errorf("%s", message)
+	return &ResponseError{StatusCode: resp.StatusCode, Code: safeCode, message: message, cause: cause}
 }

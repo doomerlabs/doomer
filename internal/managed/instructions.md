@@ -21,6 +21,12 @@ resumable. If pending, continue useful work and check again with a bounded delay
 Do not start another review while this revision is pending. If a call is rejected
 by network policy, show the returned required host and retain the same handle.
 
+If submission fails, read the safe service error from task status. Automatic
+hooks stop resubmitting a failed call. Report the review as incomplete and end
+the turn if recovery is unavailable; do not enter a stop-hook retry loop.
+Use an explicit task command to retry after addressing the cause. Never describe
+a failed submission as a completed review.
+
 Keep raw CLI JSON, task handles, and local receipt paths out of user-facing
 progress messages. Summarize the review status and the next action in plain
 language; read structured details through the task commands when needed.
