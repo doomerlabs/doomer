@@ -35,11 +35,13 @@ func TestBootstrapVersionRanges(t *testing.T) {
 func TestBootstrapInspectionRecognizesUnmarkedAndCustomWrappers(t *testing.T) {
 	p := Policy{Protocol: Protocol, Channel: "pinned", Version: "2026.11.6.9"}
 	current, _ := BootstrapText(p)
-	legacy, _ := bootstrapText(p, legacyBootstrapTemplate, false)
+	legacy, _ := bootstrapText(p, legacyBootstrapTemplate, "", "")
+	previous, _ := bootstrapText(p, previousVersionedBootstrapTemplate, "2026.11.6.10", ">=2026.11.6.9")
 	path := filepath.Join(t.TempDir(), "SKILL.md")
 	for _, tc := range []struct{ text, state string }{
-		{current, "current"}, {legacy, "update_available"},
+		{current, "current"}, {legacy, "update_available"}, {previous, "update_available"},
 		{legacy + "\nCustom instructions.\n", "modified"},
+		{previous + "\nCustom instructions.\n", "modified"},
 		{strings.Replace(current, BootstrapVersion, "2027.1.1.1", 1), "newer"},
 	} {
 		if err := os.WriteFile(path, []byte(tc.text), 0600); err != nil {
@@ -48,6 +50,9 @@ func TestBootstrapInspectionRecognizesUnmarkedAndCustomWrappers(t *testing.T) {
 		result, err := InspectBootstrap(path, "project", "2026.11.6.9")
 		if err != nil || result.State != tc.state {
 			t.Fatalf("%s: %+v %v", tc.state, result, err)
+		}
+		if got := RecognizedBootstrap([]byte(tc.text), p); got != (tc.state == "current" || tc.state == "update_available") {
+			t.Fatalf("recognition for %s: %v", tc.state, got)
 		}
 		b, err := ReadBootstrap(path, "project")
 		if err != nil || b.Policy != p {

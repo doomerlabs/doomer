@@ -9,6 +9,10 @@ HANDLE` to restore that exact release. Never create a replacement task to recove
 Before editing, resolve any repository approval or update authorization
 request returned by prepare. Show its actual user action and wait for the human.
 Never grant permission or manufacture account state on the user's behalf.
+Render returned setup URLs as clickable Markdown links with a short label and
+the complete URL, including its fragment. Present the link in regular assistant
+chat before using a question or choice tool. Request only the approval indicated
+by the current CLI state.
 
 Begin repository edits only after prepare reports ready, with software_ready,
 authenticated, and upload_approved all true. A missing CLI or pending approval
@@ -26,6 +30,10 @@ home directories and mount paths. The CLI owns this transfer and its validation.
 Do not copy credentials, edit receipts, or infer approval in prose.
 Use `task revoke` to remove the saved portable approval. Keep using ordinary
 per-call commands when the harness cannot load hooks.
+An absent hook receipt means activation is unverified. Continue with the per-call
+procedure and describe it accurately. Consult documented capabilities or permitted
+read-only introspection to determine hook support. Hook installation or callback
+probes require the user's normal hook-trust approval.
 
 Readiness fields are separate. Software readiness is not upload consent, hook
 activation, account authentication, or a completed review. Native skill discovery,
