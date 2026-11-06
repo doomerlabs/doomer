@@ -17,6 +17,9 @@ const BootstrapCLIRange = ">=2026.11.6.9"
 //go:embed bootstrap-legacy.md
 var legacyBootstrapTemplate string
 
+//go:embed bootstrap-2026.11.6.10.md
+var previousVersionedBootstrapTemplate string
+
 // BootstrapSupports accepts whitespace-separated comparison clauses against
 // Doomer's four-part release versions, e.g. ">=2026.11.6.9 <2027.1.1.1".
 func BootstrapSupports(constraint, version string) (bool, error) {
@@ -71,8 +74,20 @@ func RecognizedBootstrap(data []byte, policy Policy) bool {
 	if err != nil {
 		return false
 	}
-	legacy, err := bootstrapText(policy, legacyBootstrapTemplate, false)
-	return err == nil && (string(data) == current || string(data) == legacy)
+	return string(data) == current || recognizedPreviousBootstrap(data, policy)
+}
+
+func recognizedPreviousBootstrap(data []byte, policy Policy) bool {
+	for _, previous := range []struct{ template, revision, cliRange string }{
+		{legacyBootstrapTemplate, "", ""},
+		{previousVersionedBootstrapTemplate, "2026.11.6.10", ">=2026.11.6.9"},
+	} {
+		text, err := bootstrapText(policy, previous.template, previous.revision, previous.cliRange)
+		if err == nil && string(data) == text {
+			return true
+		}
+	}
+	return false
 }
 
 func InspectBootstrap(path, scope, version string) (BootstrapUpdate, error) {
@@ -110,13 +125,9 @@ func InspectBootstrap(path, scope, version string) (BootstrapUpdate, error) {
 		result.State = "newer"
 		return result, nil
 	}
-	legacy, err := bootstrapText(b.Policy, legacyBootstrapTemplate, false)
-	if err != nil {
-		return result, err
-	}
 	result.State = "modified"
 	result.Action = "The wrapper differs from the bundled templates. Review its local changes and reconcile manually."
-	if string(data) == legacy {
+	if recognizedPreviousBootstrap(data, b.Policy) {
 		result.State = "update_available"
 		result.Action = "Offer the user a bootstrap upgrade. After acceptance, run doomer bootstrap upgrade with the same scope. Preserve the update policy."
 	}

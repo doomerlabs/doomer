@@ -150,17 +150,17 @@ func (p Policy) Eligible(r Release, now time.Time) bool {
 }
 
 func BootstrapText(p Policy) (string, error) {
-	return bootstrapText(p, bootstrapTemplate, true)
+	return bootstrapText(p, bootstrapTemplate, BootstrapVersion, BootstrapCLIRange)
 }
 
-func bootstrapText(p Policy, template string, versioned bool) (string, error) {
+func bootstrapText(p Policy, template, revision, cliRange string) (string, error) {
 	if err := p.Validate(); err != nil {
 		return "", err
 	}
 	metadata := map[string]string{"doomer-protocol": strconv.Itoa(p.Protocol), "doomer-update-policy": p.Channel}
-	if versioned {
-		metadata["doomer-bootstrap-version"] = BootstrapVersion
-		metadata["doomer-cli-range"] = BootstrapCLIRange
+	if revision != "" {
+		metadata["doomer-bootstrap-version"] = revision
+		metadata["doomer-cli-range"] = cliRange
 	}
 	if p.Version != "" {
 		metadata["doomer-version"] = p.Version

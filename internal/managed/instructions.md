@@ -29,9 +29,10 @@ home directories and mount paths. The CLI owns this transfer and its validation.
 Do not copy credentials, edit receipts, or infer approval in prose.
 Use `task revoke` to remove the saved portable approval. Keep using ordinary
 per-call commands when the harness cannot load hooks.
-An absent hook receipt means activation is unverified. Establish the harness's
-actual hook support before calling it unavailable. In per-call mode, run the
-review commands as part of the coding task and describe that workflow accurately.
+An absent hook receipt means activation is unverified. Continue with the per-call
+procedure and describe it accurately. Consult documented capabilities or permitted
+read-only introspection to determine hook support. Hook installation or callback
+probes require the user's normal hook-trust approval.
 
 Readiness fields are separate. Software readiness is not upload consent, hook
 activation, account authentication, or a completed review. Native skill discovery,

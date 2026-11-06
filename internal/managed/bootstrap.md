@@ -10,7 +10,9 @@ metadata:
 Before editing, run `doomer prepare --agent AGENT --repo . --prompt "USER TASK"`.
 Replace AGENT with codex or claude and supply the actual task without shell
 interpolation. Read the returned instructions and retain the task handle.
-If a real harness session ID is available, pass it with `--session`.
+If a real harness session ID is available, pass it with `--session`. For Claude,
+use the active harness's `CLAUDE_CODE_SESSION_ID` when exposed. Chat URL IDs and
+invented prefixes do not establish a hook binding.
 
 Treat preparation as an edit gate. Wait for `state=ready`, `software_ready=true`,
 `authenticated=true`, and `upload_approved=true` before the first repository edit.
@@ -59,3 +61,6 @@ Perform the verified prerequisite installation under the host's normal execution
 permissions, then run prepare to discover and reuse saved setup. Ask the user
 only for an actual permission or decision required by that flow. Do not bundle
 installation with speculative requests to sign in again or approve uploads.
+After installation, resume any existing task with `prepare --task HANDLE`, or
+run the initial prepare command if no task exists. Present only the refreshed
+result's approval request; earlier pending requests may have been satisfied.
