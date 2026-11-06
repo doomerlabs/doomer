@@ -1,9 +1,11 @@
 package sourcesnapshot
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -145,20 +147,13 @@ func TestCaptureLinkedWorktreeFromSubdirectory(t *testing.T) {
 }
 
 func TestCaptureRejectsUnsupportedOrUnchangedSources(t *testing.T) {
-	for _, scenario := range []string{"unchanged", "symlink", "oversized", "lfs", "sparse", "bad-base"} {
+	for _, scenario := range []string{"unchanged", "oversized", "lfs", "sparse", "bad-base"} {
 		t.Run(scenario, func(t *testing.T) {
 			dir, base := sourceRepo(t)
 			sourceFile(t, dir, "code.go", "change\n")
 			switch scenario {
 			case "unchanged":
 				sourceFile(t, dir, "code.go", "baseline\n")
-			case "symlink":
-				if runtime.GOOS == "windows" {
-					t.Skip("symlink permissions vary")
-				}
-				if err := os.Symlink(filepath.Join(dir, "code.go"), filepath.Join(dir, "link.go")); err != nil {
-					t.Fatal(err)
-				}
 			case "oversized":
 				sourceFile(t, dir, "big.go", strings.Repeat("x", MaxFileBytes+1))
 			case "lfs":
@@ -277,7 +272,7 @@ func TestTreeSizePreflightAggregateAndFraming(t *testing.T) {
 	}
 }
 
-func TestInstalledSkillAliasDoesNotBlockWorktreeCapture(t *testing.T) {
+func TestSkillSymlinksDoNotBlockWorktreeCapture(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink permissions vary")
 	}
@@ -304,12 +299,6 @@ func TestInstalledSkillAliasDoesNotBlockWorktreeCapture(t *testing.T) {
 			}
 			sourceFile(t, dir, "code.go", "new code\n")
 			captured, err := CaptureWorktree(context.Background(), CaptureOptions{Path: dir, Base: base, Workspace: true})
-			if scenario == "other target" || scenario == "tracked alias" {
-				if err == nil {
-					t.Fatal("unsupported symlink accepted")
-				}
-				return
-			}
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -320,7 +309,7 @@ func TestInstalledSkillAliasDoesNotBlockWorktreeCapture(t *testing.T) {
 			found := map[string]bool{}
 			for _, entry := range m.Target {
 				found[entry.Path] = true
-				if scenario == "installer alias" && strings.HasPrefix(entry.Path, ".claude/skills/doomer-review/") {
+				if scenario != "ordinary directory" && strings.HasPrefix(entry.Path, ".claude/skills/doomer-review/") {
 					t.Fatalf("followed installer alias into %q", entry.Path)
 				}
 			}
@@ -334,5 +323,157 @@ func TestInstalledSkillAliasDoesNotBlockWorktreeCapture(t *testing.T) {
 				t.Fatal("omitted regular directory")
 			}
 		})
+	}
+}
+
+func TestCaptureSkipsSymlinksInHistoryAndWorktree(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary")
+	}
+	for _, tracked := range []bool{false, true} {
+		t.Run(fmt.Sprintf("tracked=%t", tracked), func(t *testing.T) {
+			dir, base := sourceRepo(t)
+			outside := t.TempDir()
+			sourceFile(t, outside, "secret", strings.Repeat("x", MaxFileBytes+1))
+			links := map[string]string{
+				"file-link":          "code.go",
+				"external-file":      filepath.Join(outside, "secret"),
+				"external-directory": outside,
+				"broken-link":        "missing-target",
+				"directory-link":     ".agents/skills",
+			}
+			sourceFile(t, dir, ".agents/skills/example/SKILL.md", "regular skill\n")
+			for name, target := range links {
+				if err := os.Symlink(target, filepath.Join(dir, name)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tracked {
+				git(t, dir, "add", ".")
+				git(t, dir, "commit", "-m", "links in baseline")
+				base = git(t, dir, "rev-parse", "HEAD")
+			}
+			sourceFile(t, dir, "code.go", "changed regular file\n")
+			status := git(t, dir, "status", "--porcelain=v1", "--untracked-files=all")
+			for _, workspace := range []bool{false, true} {
+				captured, err := CaptureWorktree(context.Background(), CaptureOptions{Path: dir, Base: base, Workspace: workspace})
+				if err != nil {
+					t.Fatal(err)
+				}
+				m, err := DecodeWorkspace(captured.Bytes)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, tree := range [][]Entry{m.Base, m.Target} {
+					for _, entry := range tree {
+						for link := range links {
+							if entry.Path == link || strings.HasPrefix(entry.Path, link+"/") {
+								t.Fatalf("captured symlink %q", entry.Path)
+							}
+						}
+					}
+				}
+				if !bytes.Contains(captured.Bytes, []byte(".agents/skills/example/SKILL.md")) {
+					t.Fatal("omitted regular skill")
+				}
+				baseline, _, err := CaptureBaseline(context.Background(), CaptureOptions{Path: dir, Base: base})
+				if err != nil || TreeHash(baseline.Base) != captured.BaseTreeHash {
+					t.Fatalf("baseline differs from review capture: %v", err)
+				}
+			}
+			if got := git(t, dir, "status", "--porcelain=v1", "--untracked-files=all"); got != status {
+				t.Fatal("capture changed repository state")
+			}
+		})
+	}
+}
+
+func TestCaptureSkipsTrackedPathsUnderSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary")
+	}
+	dir, _ := sourceRepo(t)
+	sourceFile(t, dir, "nested/source.go", "original\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-m", "tracked directory")
+	base := git(t, dir, "rev-parse", "HEAD")
+	if err := os.RemoveAll(filepath.Join(dir, "nested")); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	sourceFile(t, outside, "source.go", "must not be read\n")
+	if err := os.Symlink(outside, filepath.Join(dir, "nested")); err != nil {
+		t.Fatal(err)
+	}
+	m := manifest(t, capture(t, dir, base))
+	for _, entry := range m.Target {
+		if strings.HasPrefix(entry.Path, "nested") {
+			t.Fatalf("captured path beneath symlink: %s", entry.Path)
+		}
+	}
+}
+
+func TestCaptureIncludesRegularFileReplacingTrackedSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary")
+	}
+	dir, _ := sourceRepo(t)
+	link := filepath.Join(dir, "link.go")
+	if err := os.Symlink("code.go", link); err != nil {
+		t.Fatal(err)
+	}
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-m", "tracked link")
+	base := git(t, dir, "rev-parse", "HEAD")
+	if err := os.Remove(link); err != nil {
+		t.Fatal(err)
+	}
+	sourceFile(t, dir, "link.go", "regular replacement\n")
+	m := manifest(t, capture(t, dir, base))
+	for _, entry := range m.Target {
+		if entry.Path == "link.go" && string(m.Blobs[entry.Hash]) == "regular replacement\n" {
+			return
+		}
+	}
+	t.Fatal("omitted regular replacement")
+}
+
+func TestCaptureStillRejectsSubmodules(t *testing.T) {
+	dir, base := sourceRepo(t)
+	git(t, dir, "update-index", "--add", "--cacheinfo", "160000", base, "module")
+	if _, err := CaptureWorktree(context.Background(), CaptureOptions{Path: dir, Base: base}); err == nil || !strings.Contains(err.Error(), "submodules are unsupported") {
+		t.Fatalf("expected unsupported submodule: %v", err)
+	}
+	git(t, dir, "commit", "-m", "submodule")
+	if _, _, err := CaptureBaseline(context.Background(), CaptureOptions{Path: dir, Base: "HEAD"}); err == nil || !strings.Contains(err.Error(), "submodules are unsupported") {
+		t.Fatalf("expected unsupported baseline submodule: %v", err)
+	}
+}
+
+func TestSymlinkChangesDoNotCreateReviewChanges(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary")
+	}
+	dir, _ := sourceRepo(t)
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink("code.go", link); err != nil {
+		t.Fatal(err)
+	}
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-m", "tracked link")
+	base := git(t, dir, "rev-parse", "HEAD")
+	if err := os.Remove(link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("missing", link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CaptureWorktree(context.Background(), CaptureOptions{Path: dir, Base: base}); err == nil || !strings.Contains(err.Error(), "snapshot contains no changes") {
+		t.Fatalf("link change should not produce a review: %v", err)
+	}
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-m", "changed link target")
+	if _, err := CaptureWorktree(context.Background(), CaptureOptions{Path: dir, Base: base}); err == nil || !strings.Contains(err.Error(), "snapshot contains no changes") {
+		t.Fatalf("committed link change should not produce a review: %v", err)
 	}
 }

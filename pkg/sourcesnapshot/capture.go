@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -122,7 +123,8 @@ func (g gitReader) baseline(explicit, head string) (string, error) {
 }
 
 // CaptureWorktree captures the whole repository containing Path, including
-// tracked files and non-ignored untracked files. It never stages files, runs
+// regular tracked files and non-ignored untracked files, skipping symlinks and
+// paths beneath symlinks. It never stages files, runs
 // filters/builds/hooks, fetches, or writes Git objects or repository metadata.
 func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) {
 	var result Capture
@@ -188,7 +190,14 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
+		// Git can check out symlinks as ordinary files on Windows.
+		if runtime.GOOS == "windows" && before.symlinks[name] {
+			continue
+		}
 		data, mode, err := readWorktreeFile(root, name, limits.file)
+		if errors.Is(err, errSourceSymlink) {
+			continue
+		}
 		if os.IsNotExist(err) {
 			// A tracked deletion belongs only in base.
 			continue
@@ -267,9 +276,10 @@ func equalNames(a, b []string) bool {
 
 type gitTreeEntry struct{ path, oid, mode string }
 type worktreeInventory struct {
-	names   []string
-	index   []byte
-	entries map[string]gitTreeEntry
+	names    []string
+	index    []byte
+	entries  map[string]gitTreeEntry
+	symlinks map[string]bool
 }
 
 func sameGitTree(a, b map[string]gitTreeEntry) bool {
@@ -298,7 +308,7 @@ func gitBlobHash(data []byte, objectIDLength int) string {
 }
 
 func (g gitReader) worktreeFiles() (worktreeInventory, error) {
-	result := worktreeInventory{entries: map[string]gitTreeEntry{}}
+	result := worktreeInventory{entries: map[string]gitTreeEntry{}, symlinks: map[string]bool{}}
 	index, err := g.run(nil, "ls-files", "--stage", "-z")
 	if err != nil {
 		return result, err
@@ -314,10 +324,14 @@ func (g gitReader) worktreeFiles() (worktreeInventory, error) {
 		if !ok || len(fields) != 3 || fields[2] != "0" {
 			return result, fmt.Errorf("resolve Git merge conflicts before reviewing")
 		}
-		if fields[0] != "100644" && fields[0] != "100755" {
-			return result, fmt.Errorf("unsupported tracked file type at %q (symlinks and submodules are unsupported)", name)
-		}
 		names[name] = true
+		if fields[0] == "120000" {
+			result.symlinks[name] = true
+			continue
+		}
+		if fields[0] != "100644" && fields[0] != "100755" {
+			return result, fmt.Errorf("unsupported tracked file type at %q (submodules are unsupported)", name)
+		}
 		result.entries[name] = gitTreeEntry{path: name, oid: fields[1], mode: fields[0]}
 	}
 	untracked, err := g.run(nil, "ls-files", "--others", "--exclude-standard", "-z")
@@ -326,11 +340,6 @@ func (g gitReader) worktreeFiles() (worktreeInventory, error) {
 	}
 	for _, name := range bytes.Split(untracked, []byte{0}) {
 		if len(name) > 0 {
-			// skills add installs this untracked alias to the canonical skill.
-			// Omit the alias only; never follow it or relax source symlink checks.
-			if g.installedSkillAlias(string(name)) {
-				continue
-			}
 			names[string(name)] = true
 		}
 	}
@@ -348,16 +357,20 @@ func (g gitReader) worktreeFiles() (worktreeInventory, error) {
 	return result, nil
 }
 
+var errSourceSymlink = errors.New("source symlink")
+
 func readWorktreeFile(root *os.Root, name string, maxFileBytes int) ([]byte, string, error) {
 	path := filepath.FromSlash(name)
-	// Reject symlinks at every component, even ones that point inside the root.
-	for parent := path; parent != "."; parent = filepath.Dir(parent) {
+	// Skip symlinks at every component, including links to repository files.
+	parent := ""
+	for _, component := range strings.Split(path, string(filepath.Separator)) {
+		parent = filepath.Join(parent, component)
 		info, err := root.Lstat(parent)
 		if err != nil {
 			return nil, "", err
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return nil, "", fmt.Errorf("symlinks are unsupported")
+			return nil, "", errSourceSymlink
 		}
 	}
 	before, err := root.Lstat(path)
@@ -409,8 +422,14 @@ func (g gitReader) treeEntries(commit string) ([]gitTreeEntry, error) {
 		}
 		header, name, ok := strings.Cut(string(line), "\t")
 		fields := strings.Fields(header)
-		if !ok || len(fields) != 3 || fields[1] != "blob" || (fields[0] != "100644" && fields[0] != "100755") || !ValidPath(name) {
-			return nil, fmt.Errorf("unsupported Git tree entry %q (symlinks and submodules are unsupported)", name)
+		if !ok || len(fields) != 3 || !ValidPath(name) {
+			return nil, fmt.Errorf("invalid Git tree entry %q", name)
+		}
+		if fields[0] == "120000" && fields[1] == "blob" {
+			continue
+		}
+		if fields[1] != "blob" || (fields[0] != "100644" && fields[0] != "100755") {
+			return nil, fmt.Errorf("unsupported Git tree entry %q (submodules are unsupported)", name)
 		}
 		objects = append(objects, gitTreeEntry{path: name, oid: fields[2], mode: fields[0]})
 	}
@@ -542,19 +561,4 @@ func validateTreeSizes(data []byte, ids []string, fileLimit, contentLimit int) e
 		total += size
 	}
 	return nil
-}
-
-// Only the exact untracked alias produced by skills add is installer metadata.
-// Tracked links and every other symlink still fail the normal capture checks.
-func (g gitReader) installedSkillAlias(name string) bool {
-	if name != ".claude/skills/doomer-review" {
-		return false
-	}
-	root, err := os.OpenRoot(g.dir)
-	if err != nil {
-		return false
-	}
-	defer root.Close()
-	target, err := root.Readlink(filepath.FromSlash(name))
-	return err == nil && filepath.ToSlash(filepath.Clean(target)) == "../../.agents/skills/doomer-review"
 }
