@@ -810,26 +810,17 @@ func mutates(input HookInput) bool {
 	}
 	var value any
 	_ = json.Unmarshal(input.Input, &value)
-	command := ""
 	switch v := value.(type) {
 	case string:
-		command = v
+		return shellMutates(v)
 	case map[string]any:
-		for _, key := range []string{"command", "cmd", "code"} {
-			if text, ok := v[key].(string); ok {
-				command += text + "\n"
+		for _, key := range []string{"command", "cmd"} {
+			if command, ok := v[key].(string); ok && shellMutates(command) {
+				return true
 			}
 		}
-	}
-	trimmed := strings.TrimSpace(command)
-	for _, prefix := range []string{"cat ", "rg ", "grep ", "git diff", "git status", "ls ", "pwd"} {
-		if strings.HasPrefix(trimmed, prefix) && !strings.ContainsAny(trimmed, ";|&>\n") {
-			return false
-		}
-	}
-	for _, part := range []string{"apply_patch", ".write_text(", ".write_bytes(", "writeFile(", "writeFileSync(", "sed -i", "perl -pi", "git apply", "git restore", "git checkout", "git switch", "git reset", "git cherry-pick", "git merge", "git rebase", "go get ", "go mod tidy", "go mod edit", "tee ", " >", "rm ", "mv ", "cp "} {
-		if strings.Contains(command, part) {
-			return true
+		if code, ok := v["code"].(string); ok {
+			return scriptMutates(code)
 		}
 	}
 	return false
