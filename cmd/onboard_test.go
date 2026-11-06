@@ -180,6 +180,11 @@ func TestCodexCheckHooksUsesRealReceiptWithoutChangingSetup(t *testing.T) {
 		raw, _ := json.Marshal(input)
 		watching.Hook(context.Background(), root, cfg, bytes.NewReader(raw), io.Discard, "codex")
 	}
+	// Activity has been recorded, but a missing watcher is a concrete failure.
+	check("error")
+	if err := watching.SetWatchRuntime(root, repo, watching.WatchRuntime{Session: "watcher-session", Token: "linked-token", Status: "Starting"}); err != nil {
+		t.Fatal(err)
+	}
 	check("pending")
 	if err := watching.SetWatchRuntime(root, repo, watching.WatchRuntime{Session: "watcher-session", Token: "linked-token", Status: "Watching"}); err != nil {
 		t.Fatal(err)
