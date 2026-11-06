@@ -67,10 +67,9 @@ outputs are:
   won a concurrent promotion, report it rather than regressing the channel.
 - The generated `doomerlabs/homebrew-tap` PR merged by Doomer, its formula on
   the tap's default branch, and the publication job successful.
-- For stable releases, the public installer skill in `doomerlabs/skills` updated
-  to the verified current stable channel, respecting concurrent newer releases
-  as described below. Publishing
-  the CLI alone does not update a pinned skill.
+- For stable releases, the signed `cli/managed.json` catalog includes the verified
+  release and its immutable manifest SHA-256. Ordinary releases leave the
+  bootstrap skill unchanged.
 
 The bucket is shared with Mac app releases. CLI writes belong only under `cli/`
 in `doomer-macos-releases`. Preserve other objects and use the existing scoped
@@ -83,32 +82,13 @@ public channel manifest, not just GitHub success. Send
 requests do not inflate customer download analytics. If useful, run the native
 archive's version command from a temporary directory without installing it.
 
-## Update the public installer skill
+## Managed release catalog
 
-After a stable release's public assets are verified, fetch `cli/stable.json`
-again from the public download service. Use its current stable version for
-the installer pin, even if a concurrent release advanced it past the release
-being monitored. Verify that version's immutable release manifest, commit,
-archive URLs, and checksums agree with the channel before proceeding. Do not
-regress the channel or an existing newer, verified stable installer pin.
-
-Update
-`skills/doomer-review/SKILL.md` and the version description in `README.md` in
-`doomerlabs/skills`. Keep the installer pinned to that verified version and its
-immutable `releases/VERSION/release-manifest.json`, including matching schema,
-archive filenames, URLs, and checksum lookup. Preserve consent, hook trust,
-and installation safeguards. Do not replace the pin with a beta or local build.
-
-Validate the skill and fetch the public manifest to verify all four platform
-entries. Commit and publish through that repository's authorized workflow;
-push directly to main only when the user has authorized it. Fetch the skill
-repository's main branch again before publishing; if another release updated
-the pin, reconcile against the current channel rather than overwriting it with
-an older pin. Confirm the remote
-main contains the update before reporting the installer ready. If publication
-is waiting on review or authorization, report that pending step explicitly.
-Existing users refresh with `npx skills update`; new users install with
-`npx skills add doomerlabs/skills --skill doomer-review`.
+The protected R2 publisher signs `cli/managed.json` using
+`DOOMER_RELEASE_SIGNING_KEY`. The verification key is embedded in each managed
+launcher. Verify the published catalog signature and release manifest digest.
+Do not edit repository or personal bootstraps for routine releases. Publish a
+bootstrap change only when its protocol or integration instructions change.
 
 ## Failures and review comments
 

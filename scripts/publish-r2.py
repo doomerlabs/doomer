@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
+import tempfile
 import urllib.request
 
 BASE_URL = 'https://downloads.doomer.ai/cli'
@@ -126,6 +128,38 @@ def publish(client, bucket, directory, version, verify_public):
     print('Published ' + version + ' to ' + BASE_URL)
 
 
+def publish_managed(client, bucket, directory):
+    """CAS publication preserves releases added by a concurrent publisher."""
+    if not os.environ.get('DOOMER_RELEASE_SIGNING_KEY'):
+        raise ValueError('DOOMER_RELEASE_SIGNING_KEY is required for managed releases')
+    key = OBJECT_PREFIX + 'managed.json'
+    with tempfile.TemporaryDirectory(prefix='doomer-channel-') as temp:
+        previous = Path(temp) / 'previous.json'
+        output = Path(temp) / 'managed.json'
+        for _ in range(5):
+            args = ['go', 'run', './scripts/sign-managed-catalog.go',
+                    '--manifest', str(directory / 'release-manifest.json'), '--output', str(output)]
+            try:
+                current = client.get_object(Bucket=bucket, Key=key)
+            except Exception as error:
+                if status(error) != 404:
+                    raise
+                condition = {'IfNoneMatch': '*'}
+            else:
+                previous.write_bytes(current['Body'].read())
+                args += ['--previous', str(previous)]
+                condition = {'IfMatch': current['ETag']}
+            subprocess.run(args, check=True)
+            try:
+                client.put_object(Bucket=bucket, Key=key, Body=output.read_bytes(),
+                                  ContentType='application/json', CacheControl='no-store', **condition)
+                return
+            except Exception as error:
+                if status(error) != 412:
+                    raise
+        raise RuntimeError('Managed channel changed repeatedly; retry publication')
+
+
 def validate_bucket(bucket):
     if bucket != RELEASE_BUCKET:
         raise ValueError('R2_BUCKET must be ' + RELEASE_BUCKET)
@@ -150,6 +184,8 @@ def main():
             if digest(response.read()) != digest(data):
                 raise ValueError('Public artifact checksum mismatch')
     publish(client, bucket, args.dir, args.version, verify)
+    if '-beta.' not in args.version:
+        publish_managed(client, bucket, args.dir)
 
 
 if __name__ == '__main__':

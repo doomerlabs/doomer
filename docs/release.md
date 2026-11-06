@@ -120,11 +120,7 @@ release. Release verification requests should carry
 
 ### Public installer skill
 
-Stable release completion also includes updating the pinned version and
-immutable manifest URL in `doomerlabs/skills`'s
-`skills/doomer-review/SKILL.md`, plus its README version. Validate the public
-manifest and skill before publishing that change. Use the verified current
-stable channel if a concurrent release has advanced it; never downgrade a
-newer verified stable pin. Beta releases do not update this stable installer.
-CLI publication alone does
-not update a pin. See the release skill for the full handoff.
+Stable release completion includes publishing the signed `cli/managed.json`
+catalog with `DOOMER_RELEASE_SIGNING_KEY` from the protected release environment.
+Its public key is embedded in the CLI. Ordinary releases do not change the
+bootstrap skill or repository policies. See [managed runtime](managed-runtime.md).
