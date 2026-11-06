@@ -48,6 +48,7 @@ type Status struct {
 	RequiredVersion string `json:"required_version"`
 	SHA256          string `json:"sha256,omitempty"`
 	Backup          string `json:"backup,omitempty"`
+	LauncherVersion string `json:"launcher_version,omitempty"`
 }
 type Updater struct {
 	Versioned bool // Install immutable releases side by side.

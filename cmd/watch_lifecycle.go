@@ -159,7 +159,7 @@ func inspectWatch(app *application.App, api, profile, path string) (watchStatus,
 		return s, err
 	}
 	s.Approved = watching.ConsentValid(cfg, api, profile, auth.Token) && watching.Allowed(cfg, path)
-	s.Paused = paused(root) || watching.RepositoryRemoved(root, path)
+	s.Paused = userPaused(root) || watching.RepositoryRemoved(root, path)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return s, err
@@ -178,6 +178,9 @@ func inspectWatch(app *application.App, api, profile, path string) (watchStatus,
 	_, s.Running, err = runningWatch(root)
 	if err != nil {
 		return s, err
+	}
+	if idleRuntime(root) && !s.Paused {
+		s.RepositoryStatus = "Idle"
 	}
 	if s.Approved && !s.Paused && s.Running {
 		repos, err := watching.Repositories(root, cfg)
@@ -208,8 +211,9 @@ func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api,
 		if err != nil {
 			return err
 		}
-		pauseBefore, _ := os.ReadFile(filepath.Join(root, "paused.json"))
-		if (paused(root) || watching.RepositoryRemoved(root, path)) && !resume {
+		pauseBefore, _ := os.ReadFile(filepath.Join(sharedWatchRoot(root), "paused.json"))
+		localPauseBefore, _ := os.ReadFile(filepath.Join(root, "paused.json"))
+		if (userPaused(root) || watching.RepositoryRemoved(root, path)) && !resume {
 			return fmt.Errorf("watching is paused; use watch start --resume to explicitly resume")
 		}
 		cfg, _, err := prepareWatch(c, app, api, profile, []string{path})
@@ -221,8 +225,9 @@ func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api,
 			return err
 		}
 		defer lock.Close()
-		pauseAfter, _ := os.ReadFile(filepath.Join(root, "paused.json"))
-		if !bytes.Equal(pauseBefore, pauseAfter) || paused(root) && !resume {
+		pauseAfter, _ := os.ReadFile(filepath.Join(sharedWatchRoot(root), "paused.json"))
+		localPauseAfter, _ := os.ReadFile(filepath.Join(root, "paused.json"))
+		if !bytes.Equal(pauseBefore, pauseAfter) || !bytes.Equal(localPauseBefore, localPauseAfter) || userPaused(root) && !resume {
 			return fmt.Errorf("watching was paused during setup; use watch start --resume when ready")
 		}
 		if resume {
@@ -234,6 +239,9 @@ func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api,
 			if err := watching.SetRepositorySelection(root, path, false); err != nil {
 				return err
 			}
+		}
+		if err := resumeIdleRuntime(c.Context(), root); err != nil {
+			return err
 		}
 		if err := watching.RegisterRepository(root, path, "explicit", true, time.Time{}); err != nil {
 			return err

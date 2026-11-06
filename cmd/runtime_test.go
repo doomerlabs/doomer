@@ -16,6 +16,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/publock"
 	"github.com/doomerlabs/doomer/internal/runtimeversion"
 	"github.com/doomerlabs/doomer/internal/selfupdate"
+	"github.com/doomerlabs/doomer/internal/version"
 	watching "github.com/doomerlabs/doomer/internal/watch"
 )
 
@@ -242,6 +243,14 @@ func TestRuntimeDispatcherPreservesResultsFromThreeVersions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	supervisor := filepath.Join(root, "supervisor")
+	supervisorLock, err := publock.TryAcquire(supervisor, "watcher")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer supervisorLock.Close()
+	_ = watching.Write(filepath.Join(supervisor, "process.json"), watchProcess{Session: version.Version, ManagedSession: "supervisor"})
+	_ = watching.Write(filepath.Join(supervisor, "heartbeat.json"), time.Now())
 	for _, release := range []string{"2026.11.3.7", "2026.11.4.1", "2026.11.5.1"} {
 		putRuntime(t, home, release)
 		path := runtimeversion.Binary(home, release)
@@ -250,7 +259,10 @@ func TestRuntimeDispatcherPreservesResultsFromThreeVersions(t *testing.T) {
 		sum := sha256.Sum256(body)
 		raw, _ := json.Marshal(selfupdate.Record{SchemaVersion: 1, Manager: "doomer-review", Path: path, Version: release, SHA256: hex.EncodeToString(sum[:])})
 		os.WriteFile(filepath.Join(filepath.Dir(path), "installation.json"), raw, 0600)
-		os.MkdirAll(filepath.Join(root, "runtimes", release), 0700)
+		runtimeRoot := filepath.Join(root, "runtimes", release)
+		os.MkdirAll(runtimeRoot, 0700)
+		_ = watching.Write(watching.TurnPath(runtimeRoot, "session"), watching.Turn{Owner: watching.Owner{Session: "session"}, Repositories: []string{"edited checkout"}})
+		_ = watching.Write(filepath.Join(runtimeRoot, "activity.json"), time.Now())
 	}
 	var out bytes.Buffer
 	c := newRuntimeInfoCommand()

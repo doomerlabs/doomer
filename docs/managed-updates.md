@@ -52,3 +52,34 @@ separately. Never treat watcher replacement as hook activation.
 Older release binaries do not have `self-update`. The skill retains its verified
 bootstrap path for them until the pinned release includes the updater. Do not
 claim those older manual installations have a managed ownership record.
+
+## Side-by-side upgrades and watcher lifetime
+
+`self-update --side-by-side --version VERSION` preserves immutable releases and
+advances the managed global launcher to the newest verified installed release.
+Installing an older checkout pin never downgrades the launcher. The JSON result
+includes `launcher_version`. A retry completes launcher promotion and supervision
+even when the selected release was installed before an interrupted upgrade.
+An unmanaged global command still requires explicit adoption. Initial migration
+from a legacy launcher retains the existing repository compatibility checks.
+
+The launcher owns one lightweight supervisor per profile. It supervises older
+protocol-1 workers through their existing graceful pause mechanism. Workers
+without recent editing activity or pending review work are suspended after a
+two-minute grace period. Explicit checkout registration does not extend this
+process lifetime. Pending captures and reviews retain their worker for up to
+30 minutes, so abandoned state cannot keep it alive forever. Foreground workers
+and explicit user pauses are preserved. Failure to stop is recorded in the
+profile's `supervisor/watch.log`.
+
+An automatically suspended runtime reports `repository_status: "Idle"` and
+`paused: false` in current CLI status output. The next mutating hook renews its
+lease and resumes it. Read-only hooks do not resume idle workers. The dispatcher
+retains the current task prompt locally and replays it once before the first
+edit if the selected worker was asleep. Cross-checkout completion events still
+reach the runtimes that own their turn. Explicit user pauses disable dispatch.
+
+`runtime-info` advertises `managed_upgrade: 1` and `watch_supervisor: 1` for this
+workflow. Older releases require the separate launcher installation step and do
+not themselves guarantee bounded worker lifetime. Installing a release and
+starting supervision are distinct from repository consent and hook activation.
