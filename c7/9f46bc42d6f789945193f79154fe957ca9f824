@@ -1,0 +1,19 @@
+cmd/permission.go
+  s_884169a093fdfd::t_0cd9b1766212ab 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c79f46bc42d6f789945193f79154fe957ca9f824",
+  "prompts": {},
+  "sessions": {
+    "s_884169a093fdfd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1aefa-4a15-7fe0-a429-80c4f6fe52e8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
