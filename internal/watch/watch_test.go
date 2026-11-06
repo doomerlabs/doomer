@@ -147,6 +147,13 @@ func TestHookOwnedDeliveryAndResponseCollection(t *testing.T) {
 	}
 	base.Event = "Stop"
 	out = run(base)
+	if !strings.Contains(out, "1 area") || strings.Contains(out, "watch respond") {
+		t.Fatal("invalid public Stop summary", out)
+	}
+	inspect := base
+	inspect.Event, inspect.Tool, inspect.ToolID = "PreToolUse", "Bash", "inspect"
+	inspect.Input = json.RawMessage(`{"command":"pwd"}`)
+	out = run(inspect)
 	for _, phrase := range []string{"Investigate silently", "independently confirmed fixes", "Always include [Doomer review](https://example.com/review)", "even if all leads are dismissed", "watch respond"} {
 		if !strings.Contains(out, phrase) {
 			t.Fatal(out)
@@ -154,6 +161,18 @@ func TestHookOwnedDeliveryAndResponseCollection(t *testing.T) {
 	}
 	if strings.Contains(out, "This is a free anonymous") || strings.Contains(out, "keep the review private") {
 		t.Fatal("obsolete verbose or link-suppressing instructions")
+	}
+	inspect.Event = "PostToolUse"
+	var post struct {
+		Specific struct {
+			Context string `json:"additionalContext"`
+		} `json:"hookSpecificOutput"`
+	}
+	if out := run(inspect); json.Unmarshal([]byte(out), &post) != nil || post.Specific.Context != quietToolMessage {
+		t.Fatalf("read-only inspection repeated review context: %s", out)
+	}
+	if out := run(inspect); strings.TrimSpace(out) != "{}" {
+		t.Fatalf("duplicate PostToolUse produced context: %s", out)
 	}
 	other := base
 	other.Session = "chat-b"
