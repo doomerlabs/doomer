@@ -166,7 +166,10 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			pendingUntil = time.Now().Add(time.Hour)
 		}
 		_ = Locked(root, input.Session, func() error {
-			return Write(turnFile, Turn{Owner: owner, Prompt: input.Prompt, PendingPromptUntil: pendingUntil, Next: 1, Agent: agent})
+			var previous Turn
+			_ = Read(turnFile, &previous)
+			next := Turn{Owner: owner, Prompt: input.Prompt, PendingPromptUntil: pendingUntil, Next: 1, Agent: agent}
+			return Write(turnFile, continueReviewContext(previous, next, input.Prompt))
 		})
 		if agent == "claude" && allowed {
 			advanceClaudeActivation(root, path, owner)
@@ -289,7 +292,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		err := Locked(root, input.Session, func() error {
 			_ = Read(turnFile, &turn)
 			if turn.Owner != owner {
-				turn = Turn{Owner: owner, Next: 1, Agent: agent}
+				turn = continueReviewContext(turn, Turn{Owner: owner, Next: 1, Agent: agent}, "")
 			}
 			// A runtime installed during this turn missed its initial prompt.
 			// Recover only this checkout/session's saved onboarding request.
@@ -301,6 +304,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			if input.ToolID != "" {
 				pendingContext = turn.ReviewContext
 				turn.ReviewContext = ""
+				turn.ReviewContinuation = ""
 			}
 			turn.PendingPromptUntil = time.Time{}
 			for _, existing := range turn.Repositories {
@@ -593,6 +597,10 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 						return nil
 					}
 					current.Delivered = append(current.Delivered, key)
+					if feed.FullReviewStatus == "completed" {
+						current.ReviewContext = strings.TrimSpace(current.ReviewContext + "\n\n" + message + " Do not describe this as an overall review failure or assume there were no findings.")
+						current.ReviewContinuation = strings.TrimSpace(current.ReviewContinuation + "\n\n" + message)
+					}
 					if err := Write(turnFile, current); err != nil {
 						return err
 					}
@@ -689,20 +697,21 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 					return err
 				}
 				text.WriteString(instructions)
+				stopMessage = fmt.Sprintf("Doomer reviewed the %s and found %d %s to investigate before finishing. [Doomer review](%s)", snapshotLabel, len(feed.Leads), areaWord, feed.URL)
+				if olderSnapshot && !currentContentReviewed {
+					stopMessage += " This review covers an earlier snapshot."
+				}
 				if input.Event == "Stop" {
 					// Stop reasons are visible continuation prompts. Keep the
 					// investigation protocol for the next tool's private context.
 					turn.ReviewContext = strings.TrimSpace(turn.ReviewContext + "\n\nRepository: " + path + "\n" + text.String())
+					turn.ReviewContinuation = strings.TrimSpace(turn.ReviewContinuation + "\n\n" + stopMessage)
 				}
 				turn.Delivered = append(turn.Delivered, feed.ReviewID)
 				if e := Write(turnFile, turn); e != nil {
 					return e
 				}
 				message = text.String()
-				stopMessage = fmt.Sprintf("Doomer reviewed the %s and found %d %s to investigate before finishing. [Doomer review](%s)", snapshotLabel, len(feed.Leads), areaWord, feed.URL)
-				if olderSnapshot && !currentContentReviewed {
-					stopMessage += " This review covers an earlier snapshot."
-				}
 				return nil
 			})
 			if message != "" {
@@ -852,4 +861,22 @@ func finish(root, path string, owner Owner, ctx context.Context) {
 		}
 		return Write(StatePath(root, path), s)
 	})
+}
+
+// Stop continuations can receive a new turn ID. Preserve their undelivered
+// review protocol, but do not inject it into a different explicit user request.
+func continueReviewContext(previous, next Turn, prompt string) Turn {
+	if previous.Owner.Session != next.Owner.Session || previous.ReviewContext == "" ||
+		(prompt != "" && strings.TrimSpace(prompt) != previous.ReviewContinuation) {
+		return next
+	}
+	next.ReviewContext = previous.ReviewContext
+	next.ReviewContinuation = previous.ReviewContinuation
+	next.Pending = previous.Pending
+	next.Delivered = previous.Delivered
+	next.ResponseToken = previous.ResponseToken
+	next.Next = previous.Next
+	next.Repositories = previous.Repositories
+	next.Prompt = previous.Prompt
+	return next
 }

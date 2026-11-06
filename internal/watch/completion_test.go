@@ -234,6 +234,10 @@ func TestStopQueuesInvestigationInPrivateToolContext(t *testing.T) {
 					t.Fatal("private instructions leaked into Stop", reason)
 				}
 			}
+			continuation, _ := json.Marshal(HookInput{Session: owner.Session, Turn: "continued-turn", CWD: dir, Event: "UserPromptSubmit", Prompt: reason})
+			var continuationOutput strings.Builder
+			hookForTest(context.Background(), root, Config{Directories: []string{dir}}, strings.NewReader(string(continuation)), &continuationOutput, agent)
+			owner.Turn = "continued-turn"
 			otherInput, _ := json.Marshal(HookInput{Session: "other-session", Turn: owner.Turn, CWD: dir, Event: "PreToolUse", Tool: "Bash", ToolID: "other-tool", Input: json.RawMessage(`{"command":"pwd"}`)})
 			var otherOutput strings.Builder
 			hookForTest(context.Background(), root, Config{Directories: []string{dir}}, strings.NewReader(string(otherInput)), &otherOutput, agent)
@@ -262,5 +266,66 @@ func TestStopQueuesInvestigationInPrivateToolContext(t *testing.T) {
 				t.Fatal("private investigation was repeated", again)
 			}
 		})
+	}
+}
+
+func TestReviewContextSurvivesStopContinuation(t *testing.T) {
+	previous := Turn{
+		Owner: Owner{"session", "old-turn"}, Prompt: "original task", Agent: "codex",
+		ReviewContext: "private findings", ReviewContinuation: "public review summary",
+		ResponseToken: "token", Next: 2, Pending: []Pending{{Number: 1, ReviewID: "review"}},
+		Delivered: []string{"review"}, Repositories: []string{"/repo"},
+	}
+	for _, tc := range []struct {
+		name, session, prompt string
+		preserve              bool
+	}{
+		{"stop prompt", "session", "public review summary", true},
+		{"tool continuation", "session", "", true},
+		{"different task", "session", "a new unrelated task", false},
+		{"different session", "other", "public review summary", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			next := Turn{Owner: Owner{tc.session, "new-turn"}, Prompt: tc.prompt, Agent: "codex", Next: 1}
+			got := continueReviewContext(previous, next, tc.prompt)
+			if got.Owner != next.Owner {
+				t.Fatal("restored the previous owner")
+			}
+			if tc.preserve {
+				if got.ReviewContext != previous.ReviewContext || got.ResponseToken != previous.ResponseToken || len(got.Pending) != 1 || got.Next != 2 || got.Prompt != previous.Prompt {
+					t.Fatal("lost continuation context", got)
+				}
+			} else if got.ReviewContext != "" || len(got.Pending) != 0 || got.Prompt != next.Prompt {
+				t.Fatal("injected old review into another task", got)
+			}
+		})
+	}
+}
+
+func TestCompletedDeepReviewGuidanceStaysPrivate(t *testing.T) {
+	dir, root := repository(t), t.TempDir()
+	owner := Owner{"session", "turn"}
+	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("changed\n"), 0600)
+	digest, err := snapshotDigest(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	Write(TurnPath(root, owner.Session), Turn{Owner: owner, Repositories: []string{dir}})
+	Write(StatePath(root, dir), State{Owner: owner, Fingerprint: digest, RequestedAt: time.Now()})
+	Write(filepath.Join(root, "heartbeat.json"), time.Now())
+	Write(FeedPath(root, dir), Feed{Owner: owner, Fingerprint: digest, ReviewID: "review", URL: "https://example.com/review", AssessmentStatus: "unavailable", FullReviewStatus: "completed", Updated: time.Now()})
+	run := func(event, toolID string) string {
+		raw, _ := json.Marshal(HookInput{Session: owner.Session, Turn: owner.Turn, CWD: dir, Event: event, Tool: "Bash", ToolID: toolID, Input: json.RawMessage(`{"command":"pwd"}`)})
+		var out strings.Builder
+		hookForTest(context.Background(), root, Config{Directories: []string{dir}}, strings.NewReader(string(raw)), &out)
+		return out.String()
+	}
+	stop := run("Stop", "")
+	if !strings.Contains(stop, "deeper review completed") || strings.Contains(stop, "Do not describe") {
+		t.Fatal("incorrect public stage status", stop)
+	}
+	tool := run("PreToolUse", "inspect")
+	if !strings.Contains(tool, "additionalContext") || !strings.Contains(tool, "Do not describe this as an overall review failure") {
+		t.Fatal("lost private stage-status guidance", tool)
 	}
 }
