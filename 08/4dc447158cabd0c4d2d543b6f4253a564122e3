@@ -1,0 +1,21 @@
+internal/watch/hook.go
+  s_bcf93dbd28ebd1::t_3b1b7b67302750 140-145
+internal/watch/question_reply_test.go
+  s_bcf93dbd28ebd1::t_5f7ee1f2a48043 1-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "084dc447158cabd0c4d2d543b6f4253a564122e3",
+  "prompts": {},
+  "sessions": {
+    "s_bcf93dbd28ebd1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1af3d-56db-7d51-a618-bde489197f47",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
