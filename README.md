@@ -29,16 +29,15 @@ and each task keeps its selected version until completion.
 
 ```sh
 doomer prepare --repo . --agent codex --prompt "Your coding request"
-# Continue using the returned task handle:
-doomer task login HANDLE
-doomer task consent HANDLE --allow
+# Open the returned repository approval page, then resume:
+doomer prepare --task HANDLE
 doomer task submit HANDLE
 doomer task status HANDLE
 ```
 
 Follow the structured result from each command. Software-update authorization,
-account login, repository upload approval, and optional hook trust are separate
-steps. Consent commands require explicit user approval. Use `--agent claude`
+account login, repository upload approval, and optional hook trust remain distinct.
+The repository approval page handles login and upload approval together. Use `--agent claude`
 for Claude Code. Directly reading the bootstrap also works when a harness does
 not discover repository skills.
 

@@ -14,8 +14,9 @@ agent prose never selects the version.
   durable task. `--session ID` binds real hook events when supported.
 - `doomer prepare --task HANDLE --allow-updates` records explicit software-update
   authorization. A new policy requires new authorization.
-- `doomer task login HANDLE` creates or polls a persistent device login. It never
-  starts a localhost callback or copies credentials from another environment.
+- `doomer prepare --task HANDLE` creates or polls a persistent repository approval.
+  The hosted page handles account sign-in and repository upload permission without
+  a localhost callback. `doomer task login HANDLE` resumes the same flow.
 - `doomer task consent HANDLE --allow` records explicit repository upload
   permission for the authenticated account, profile, service, and Git identity.
 - `doomer task rollback HANDLE` rejects a bad current selection and selects the
