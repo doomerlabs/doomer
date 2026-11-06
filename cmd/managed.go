@@ -262,13 +262,17 @@ func prepareRelease(ctx context.Context, s managed.Store, task *managed.Task, al
 	if saved.Policy != policy {
 		saved = selectedRelease{Policy: policy}
 	}
-	if allow {
-		saved.Authorized = true
+	authorized, err := authorizeManagedUpdates(ctx, s, *task, allow, saved)
+	if err != nil {
+		return "", err
+	}
+	if authorized && !saved.Authorized {
+		saved.Authorized = authorized
 		if err := watch.Write(file, saved); err != nil {
 			return "", err
 		}
 	}
-	if !saved.Authorized {
+	if !authorized {
 		return "update_permission_required", nil
 	}
 	request, cancel := context.WithTimeout(ctx, 15*time.Second)
