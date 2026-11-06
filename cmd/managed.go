@@ -28,6 +28,7 @@ import (
 )
 
 type managedResult struct {
+	Consent              *managedConsentEvidence        `json:"consent,omitempty"`
 	State                string                         `json:"state"`
 	Task                 string                         `json:"task,omitempty"`
 	Release              string                         `json:"release,omitempty"`
@@ -81,6 +82,13 @@ func resultFor(task managed.Task) managedResult {
 	return r
 }
 func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedResult) error {
+	if r.Authenticated && r.UploadApproved {
+		evidence, err := savedManagedConsentEvidence(s, t)
+		if err != nil {
+			return err
+		}
+		r.Consent = evidence
+	}
 	// Operation outcomes still describe the same pinned runtime and task.
 	taskResult := resultFor(t)
 	r.Task = taskResult.Task
@@ -378,18 +386,17 @@ func managedIdentity(ctx context.Context, app *application.App, t managed.Task) 
 type repositoryConsent struct {
 	Account, Repository, API, Profile string
 	Approved                          bool
+	Source                            string `json:"source,omitempty"`
 	At                                time.Time
 }
 
 func managedConsent(s managed.Store, t managed.Task, token string, allow bool) (bool, error) {
 	// The grant follows the authenticated account, service, profile, and Git
 	// common directory. A refreshed credential for the same account can resume.
-	key := watch.Key(t.AccountID + "\x00" + t.RepositoryID + "\x00" + t.API + "\x00" + t.Profile)
-	file := filepath.Join(s.Root, "consents", key+".json")
+	file := managedConsentPath(s, t)
 	var grant repositoryConsent
 	if allow {
-		grant = repositoryConsent{t.AccountID, t.RepositoryID, t.API, t.Profile, true, time.Now().UTC()}
-		return true, watch.Write(file, grant)
+		return true, recordManagedConsent(s, t, "explicit_cli_approval")
 	}
 	err := watch.Read(file, &grant)
 	if os.IsNotExist(err) {
@@ -398,7 +405,7 @@ func managedConsent(s managed.Store, t managed.Task, token string, allow bool) (
 	if err != nil {
 		return false, err
 	}
-	return grant.Approved && grant.Account == t.AccountID && grant.Repository == t.RepositoryID && grant.API == t.API && grant.Profile == t.Profile, nil
+	return grant.matches(t), nil
 }
 
 func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Command {

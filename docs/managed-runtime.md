@@ -93,3 +93,15 @@ user skill directories. Each task persists its selected runtime root, and hooks
 persist the state location so later calls do not depend on shell exports. The default remains the user's home. Credential and task
 storage continue to use `DOOMER_CONFIG_DIR` independently; credentials need not
 be copied to change the runtime root.
+
+## Consent evidence and hook feedback
+
+Authenticated, upload-approved task results include a `consent` object with the
+saved receipt path, account, repository identity, destination, approval time,
+and covered data. Repository snapshots, task context, and finding responses
+share the standing repository grant. Older saved grants remain usable.
+
+Agents can cite this evidence in normal tool-approval review instead of asking
+for a separate grant for each finding response. Host-level restrictions still
+apply. Hook feedback contains brief state-specific guidance; full review JSON
+stays available through task commands.

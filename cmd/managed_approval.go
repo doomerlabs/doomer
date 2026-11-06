@@ -142,7 +142,7 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		}
 
 		t.AccountID = verifiedAccount
-		if _, err = managedConsent(s, *t, result.Token, true); err != nil {
+		if err = recordManagedConsent(s, *t, "browser_repository_approval"); err != nil {
 			return err
 		}
 		r.State, r.Authenticated, r.UploadApproved, r.Instructions = "ready", true, true, managed.Instructions
