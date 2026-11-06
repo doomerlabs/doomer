@@ -39,7 +39,7 @@ func newManagedInstallCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		base, err := managedRuntimeHome()
+		base, err := os.UserHomeDir()
 		if err != nil {
 			return err
 		}
@@ -137,7 +137,16 @@ func newManagedHooksCommand(app *application.App, api, profile *string) *cobra.C
 		}
 		executable := filepath.Join(home, ".local/bin/doomer")
 		command := watch.Quote(executable) + " --profile " + watch.Quote(*profile) + " --api-url " + watch.Quote(*api) + " agent-hook --agent " + agent + " --managed-task-adapter"
-		if err = watch.Install(watch.HookFile(home, agent), command, "--managed-task-adapter", false); err != nil {
+		userHome, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		state, err := managedStore()
+		if err != nil {
+			return err
+		}
+		command += " --state " + watch.Quote(state.Root)
+		if err = watch.Install(watch.HookFile(userHome, agent), command, "--managed-task-adapter", false); err != nil {
 			return err
 		}
 		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"state": "hooks_configured", "hook_activated": false, "action": "Complete the agent's hook trust controls. Bind each task with prepare --session using that agent's actual session ID."})
@@ -148,9 +157,11 @@ func newManagedHooksCommand(app *application.App, api, profile *string) *cobra.C
 func newManagedAgentHookCommand(app *application.App, api, profile *string) *cobra.Command {
 	var agent string
 	var marker bool
+	var statePath string
 	c := &cobra.Command{Use: "agent-hook", Hidden: true, Args: cobra.NoArgs}
 	c.Flags().StringVar(&agent, "agent", "codex", "agent")
 	c.Flags().BoolVar(&marker, "managed-task-adapter", false, "adapter ownership marker")
+	c.Flags().StringVar(&statePath, "state", "", "absolute managed state root recorded by hook installation")
 	c.RunE = func(c *cobra.Command, _ []string) error {
 		var event watch.HookInput
 		data, err := io.ReadAll(io.LimitReader(c.InOrStdin(), 1<<20))
@@ -164,7 +175,16 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 		if err != nil {
 			return err
 		}
-		s, err := managedStore()
+		var s managed.Store
+		if statePath != "" {
+			if !filepath.IsAbs(statePath) {
+				return fmt.Errorf("hook state must be absolute")
+			}
+			s = managed.Store{Root: statePath}
+			err = s.Init()
+		} else {
+			s, err = managedStore()
+		}
 		if err != nil {
 			return err
 		}
@@ -184,13 +204,19 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 		}
 		// Invoke the task's exact release as a separate bounded call. No watcher
 		// process needs to survive this hook invocation.
-		home, err := managedRuntimeHome()
+		home, err := taskRuntimeHome(task)
 		if err != nil {
 			return err
 		}
 		binary := runtimeversion.Binary(home, task.Release)
 		command := exec.CommandContext(c.Context(), binary, "--api-url", *api, "--profile", *profile, "task", "hook", handle)
 		command.Stdin = bytes.NewReader(data)
+		for _, entry := range os.Environ() {
+			if !strings.HasPrefix(entry, "DOOMER_CONFIG_DIR=") {
+				command.Env = append(command.Env, entry)
+			}
+		}
+		command.Env = append(command.Env, "DOOMER_CONFIG_DIR="+filepath.Dir(s.Root))
 		var output bytes.Buffer
 		command.Stdout = &output
 		command.Stderr = io.Discard
