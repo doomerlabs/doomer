@@ -163,7 +163,17 @@ func TestHookOwnedDeliveryAndResponseCollection(t *testing.T) {
 		t.Fatal("obsolete verbose or link-suppressing instructions")
 	}
 	inspect.Event = "PostToolUse"
-	run(inspect)
+	var post struct {
+		Specific struct {
+			Context string `json:"additionalContext"`
+		} `json:"hookSpecificOutput"`
+	}
+	if out := run(inspect); json.Unmarshal([]byte(out), &post) != nil || post.Specific.Context != quietToolMessage {
+		t.Fatalf("read-only inspection repeated review context: %s", out)
+	}
+	if out := run(inspect); strings.TrimSpace(out) != "{}" {
+		t.Fatalf("duplicate PostToolUse produced context: %s", out)
+	}
 	other := base
 	other.Session = "chat-b"
 	other.Event = "Stop"
