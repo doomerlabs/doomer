@@ -542,7 +542,9 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 			case "hook":
 				err = managedHook(c, s, &t, engine, auth.Token)
 			}
-			t.LastError = ""
+			if operation != "hook" {
+				t.LastError = ""
+			}
 			if err != nil {
 				t.LastError = err.Error()
 			}

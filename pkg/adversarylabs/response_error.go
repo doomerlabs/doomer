@@ -97,6 +97,9 @@ func responseError(resp *http.Response, token string) error {
 	if requestIDPattern.MatchString(requestID) {
 		message += " [request_id=" + requestID + "]"
 	}
+	if cause != nil {
+		message = cause.Error() + ": " + message
+	}
 	if token != "" {
 		message = strings.ReplaceAll(message, token, "[redacted]")
 	}

@@ -135,8 +135,8 @@ func TestManagedFailedHookWaitsForExplicitRetry(t *testing.T) {
 	if first.State != "operation_failed" || !strings.Contains(first.Error, "invalid_user_request") {
 		t.Fatal(first)
 	}
-	for i := 0; i < 3; i++ {
-		run("hook", "Stop")
+	for _, event := range []string{"PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop", "Stop"} {
+		run("hook", event)
 	}
 	if attempts != 1 {
 		t.Fatal("automatic retry loop", attempts)

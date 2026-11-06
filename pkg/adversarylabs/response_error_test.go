@@ -28,7 +28,7 @@ func TestResponseErrorExplainsUploadChecksumMismatchWithoutEchoingUnknownErrors(
 func TestMissingReviewScopeIsTypedAndRedacted(t *testing.T) {
 	response := &http.Response{StatusCode: http.StatusBadRequest, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"error":"missing_review_scope","message":"PRIVATE_SOURCE"}`))}
 	err := responseError(response, "secret")
-	if !errors.Is(err, ErrMissingReviewScope) || strings.Contains(err.Error(), "PRIVATE_SOURCE") {
+	if !strings.HasPrefix(err.Error(), "missing_review_scope: request failed: 400") || !errors.Is(err, ErrMissingReviewScope) || strings.Contains(err.Error(), "PRIVATE_SOURCE") {
 		t.Fatalf("scope error: %v", err)
 	}
 }
