@@ -15,8 +15,10 @@ activation, account authentication, or a completed review. Native skill discover
 a browser callback, session IDs, and persistent processes are optional.
 
 For per-call execution, work normally on the user's task, then run
-`doomer task submit HANDLE`. This captures the checkout and submits free Look
-Closer only. Use `doomer task status HANDLE` to retrieve the result. Each call is
+`doomer task submit HANDLE`. This captures the checkout and requests automatic
+review selection. The server runs Look Closer and enables Deep when the account
+is eligible. Use `doomer task status HANDLE` to retrieve the result. Read the
+completed Deep result and address confirmed findings before finishing. Each call is
 resumable. If pending, continue useful work and check again with a bounded delay.
 Do not start another review while this revision is pending. If a call is rejected
 by network policy, show the returned required host and retain the same handle.

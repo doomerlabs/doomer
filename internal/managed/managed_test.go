@@ -114,6 +114,10 @@ func (f *fakeReview) StartWorkspace(_ context.Context, _ string, s adversarylabs
 func (f *fakeReview) GetWorkspace(context.Context, string, string) (adversarylabs.WorkspaceReview, error) {
 	return f.result, nil
 }
+
+func (f *fakeReview) GetWorkspaceResults(ctx context.Context, token, id string) (adversarylabs.WorkspaceReview, error) {
+	return f.GetWorkspace(ctx, token, id)
+}
 func (f *fakeReview) ReportWorkspaceLead(context.Context, string, string, string, string, string, *bool) error {
 	f.feedback++
 	return nil
@@ -183,6 +187,32 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	}
 	if resumed.Release != "2026.11.6.1" {
 		t.Fatal("task release drifted")
+	}
+}
+
+func TestManagedAutomaticDeepReviewWaitsForFullResult(t *testing.T) {
+	store := Store{Root: t.TempDir()}
+	handle, _ := NewHandle()
+	yes := true
+	client := &fakeReview{result: adversarylabs.WorkspaceReview{ID: "review", Status: "running", LookCloserEnabled: &yes,
+		Early: &adversarylabs.WorkspaceAssessment{Status: "ready"}, Full: &adversarylabs.WorkspaceFullReview{Enabled: true, Status: "running"}}}
+	task := Task{Schema: Protocol, Handle: handle, Review: &client.result, ReviewedTree: "tree"}
+	engine := Engine{Store: store, Client: client, Capture: func(context.Context, Task) (sourcesnapshot.Capture, error) {
+		return sourcesnapshot.Capture{TargetTreeHash: "tree"}, nil
+	}}
+	if err := engine.Finish(context.Background(), &task, "token"); err != nil || task.Stage != "review_pending" {
+		t.Fatal(task.Stage, err)
+	}
+	client.result.Status = "completed"
+	client.result.Full.Status = "completed"
+	client.result.Full.Result = &adversarylabs.ReviewResult{Summary: "Deep reviewed"}
+	if err := engine.Finish(context.Background(), &task, "token"); err != nil || task.Stage != "complete" || task.Review.Full.Result == nil {
+		t.Fatal(task.Stage, err)
+	}
+	client.result.Status = "failed"
+	client.result.Full.Status = "failed"
+	if err := engine.Finish(context.Background(), &task, "token"); err == nil {
+		t.Fatal("completed failed deep review")
 	}
 }
 func TestTaskIsolationAndNetworkRedaction(t *testing.T) {

@@ -65,7 +65,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 				t.Error(err)
 			}
-			if input.FullReview == nil || *input.FullReview || input.UserRequest == nil || input.UserRequest.Prompt != "Fix the code" || input.Repository == "" || filepath.IsAbs(input.Repository) {
+			if input.FullReview != nil || input.UserRequest == nil || input.UserRequest.Prompt != "Fix the code" || input.Repository == "" || filepath.IsAbs(input.Repository) {
 				t.Error("incorrect task context or review mode")
 			}
 			w.Write([]byte(`{"id":"managed-review","status":"running","look_closer_enabled":true,"full_review":{"enabled":false}}`))
