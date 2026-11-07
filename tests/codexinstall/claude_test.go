@@ -137,3 +137,55 @@ func TestClaudeMeterDoesNotHoldBudgetLockDuringInference(t *testing.T) {
 		t.Fatal("inference blocked independent budget accounting")
 	}
 }
+
+func TestClaudeMeterRetainsReservationOnCancellation(t *testing.T) {
+	for _, phase := range []string{"before_headers", "after_message_start"} {
+		t.Run(phase, func(t *testing.T) {
+			m := newMeter(config{Harness: "claude", Model: "claude-haiku-5-5", Budget: .20})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			started, done := make(chan struct{}), make(chan struct{})
+			m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path == "/v1/messages/count_tokens" {
+					return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"input_tokens":1000}`))}, nil
+				}
+				if phase == "before_headers" {
+					close(started)
+					<-r.Context().Done()
+					return nil, r.Context().Err()
+				}
+				reader, writer := io.Pipe()
+				go func() {
+					_, _ = io.WriteString(writer, "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1000}}}\n\n")
+					close(started)
+					<-r.Context().Done()
+					_ = writer.CloseWithError(r.Context().Err())
+				}()
+				return &http.Response{StatusCode: 200, Body: reader}, nil
+			})}
+			go func() {
+				defer close(done)
+				m.serve(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-haiku-5-5"}`)).WithContext(ctx))
+			}()
+			select {
+			case <-started:
+			case <-done:
+				t.Fatal("request ended before cancellation point")
+			case <-time.After(2 * time.Second):
+				t.Fatal("request never reached cancellation point")
+			}
+			m.mu.Lock()
+			reserved := m.usage.Reserved
+			m.mu.Unlock()
+			cancel()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				t.Fatal("cancelled request did not finish")
+			}
+			if reserved <= 0 || m.usage.Reserved != reserved || m.usage.Unknown != 1 || m.usage.Cost != 0 {
+				t.Fatal("cancelled inference changed its conservative charge", reserved, m.usage)
+			}
+		})
+	}
+}
