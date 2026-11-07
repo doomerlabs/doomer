@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><title>Codex install replay</title>
+<style>body{font:16px system-ui;background:#10141b;color:#e1e6ed;max-width:1050px;margin:40px auto;padding:0 20px}button,input{margin:8px;padding:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#1b222e;padding:18px;border-radius:8px}small{color:#aeb9c8}#kind{font-weight:bold}</style>
+<h1>Codex install replay</h1><p>Recorded headless interaction. User approvals are scripted test responses.</p>
+<p id="summary"></p><button id="play">Play</button><button id="prev">Previous</button><button id="next">Next</button><input id="step" type="range" min="0" value="0"><span id="position"></span>
+<p><span id="kind"></span> <small id="time"></small></p><pre id="text"></pre>
+<script>
+const report = {{.}};
+const events=report.events||[];let index=0,timer=null;
+const el=id=>document.getElementById(id);
+el('summary').textContent=`${report.passed?'PASS':'FAIL'} · ${report.model} · $${report.usage.estimated_cost_usd.toFixed(6)} estimated · ${report.duration_seconds.toFixed(1)} seconds`;
+el('step').max=Math.max(0,events.length-1);
+function show(n){index=Math.max(0,Math.min(events.length-1,n));let event=events[index];el('step').value=index;el('position').textContent=`${index+1} / ${events.length}`;el('kind').textContent=event?.kind||'No recorded events';el('time').textContent=event?`+${event.seconds.toFixed(1)}s`:'';el('text').textContent=event?.text||report.error||'';}
+function stop(){clearTimeout(timer);timer=null;el('play').textContent='Play';}
+function tick(){if(index>=events.length-1){stop();return;}const delay=Math.max(100,Math.min(2500,((events[index+1].seconds-events[index].seconds)*1000)));timer=setTimeout(()=>{show(index+1);tick()},delay)}
+el('play').onclick=()=>{if(timer){stop()}else{if(index>=events.length-1)show(0);el('play').textContent='Pause';tick()}};
+el('prev').onclick=()=>{stop();show(index-1)};el('next').onclick=()=>{stop();show(index+1)};el('step').oninput=e=>{stop();show(Number(e.target.value))};show(0);
+</script>

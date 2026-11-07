@@ -1,0 +1,57 @@
+package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"io"
+	"regexp"
+)
+
+var updateState = regexp.MustCompile(`"state"\s*:\s*"update_permission_required"`)
+
+type codexTurn struct {
+	Session         string
+	Messages        []string
+	UpdateRequested bool
+	Failed          bool
+}
+
+func readCodexTurn(reader io.Reader, record func(string, string)) (codexTurn, error) {
+	var turn codexTurn
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 65536), 4000000)
+	for scanner.Scan() {
+		var event struct {
+			Type   string `json:"type"`
+			Thread string `json:"thread_id"`
+			Item   struct {
+				Type    string `json:"type"`
+				Text    string `json:"text"`
+				Command string `json:"command"`
+				Output  string `json:"aggregated_output"`
+			} `json:"item"`
+		}
+		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+			return turn, err
+		}
+		switch event.Type {
+		case "thread.started":
+			turn.Session = event.Thread
+		case "turn.failed":
+			turn.Failed = true
+			record("Codex error", string(scanner.Bytes()))
+		case "error":
+			record("Codex error", string(scanner.Bytes()))
+		case "item.completed":
+			switch event.Item.Type {
+			case "command_execution":
+				turn.UpdateRequested = turn.UpdateRequested || updateState.MatchString(event.Item.Output)
+				record("Command", event.Item.Command+"\n"+event.Item.Output)
+			case "agent_message":
+				turn.Messages = append(turn.Messages, event.Item.Text)
+				record("Codex", event.Item.Text)
+			}
+		}
+	}
+	return turn, scanner.Err()
+}
