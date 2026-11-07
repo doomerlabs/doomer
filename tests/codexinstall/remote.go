@@ -127,19 +127,26 @@ tar -xzf codex.tar.gz
 	if _, err = r.ssh(ctx, vm.Dest, nil, install); err != nil {
 		return fail(fmt.Errorf("install pinned Codex: %w", err))
 	}
-	scpArgs := append(r.args("")[:len(r.args(""))-1], binary, vm.Dest+":/tmp/doomer-codex-e2e/runner")
+	sshArgs := r.args("")
+	scpArgs := append(sshArgs[:len(sshArgs)-1], binary, vm.Dest+":/tmp/doomer-codex-e2e/runner")
 	if out, err := exec.CommandContext(ctx, "scp", scpArgs...).CombinedOutput(); err != nil {
 		return fail(fmt.Errorf("copy worker: %w: %s", err, out))
 	}
 	c.Codex = "/tmp/doomer-codex-e2e/bin/codex"
 	payload, _ := json.Marshal(c)
+	// If the worker connection is lost, keep the full run budget charged as
+	// unknown rather than reporting zero model spend.
+	result.Usage.Reserved = c.Budget
+	result.Usage.Unknown = 1
 	raw, err = r.ssh(ctx, vm.Dest, payload, "/tmp/doomer-codex-e2e/runner --worker")
 	if err != nil {
 		return fail(err)
 	}
-	if err = json.Unmarshal(raw, &result); err != nil {
+	var completed report
+	if err = json.Unmarshal(raw, &completed); err != nil {
 		return fail(fmt.Errorf("decode worker report: %w", err))
 	}
+	result = completed
 	result.VM = vm.Name
 	return result
 }
