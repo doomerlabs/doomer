@@ -2,6 +2,7 @@ package managed
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -35,9 +36,16 @@ func (e Engine) Submit(ctx context.Context, task *Task, token string) error {
 		return nil
 	}
 	capture, err := e.Capture(ctx, *task)
+	if errors.Is(err, sourcesnapshot.ErrNoChanges) && task.Review == nil && task.Submission == nil {
+		task.NoChanges = true
+		task.LastError = ""
+		task.Stage = "no_changes"
+		return e.Store.Save(task)
+	}
 	if err != nil {
 		return err
 	}
+	task.NoChanges = false
 	if capture.TargetTreeHash == task.ReviewedTree && task.Review != nil {
 		return nil
 	}
@@ -222,6 +230,17 @@ func (e Engine) Respond(ctx context.Context, task *Task, token string, items []R
 	return e.Store.Save(task)
 }
 func (e Engine) Finish(ctx context.Context, task *Task, token string) error {
+	if task.NoChanges {
+		_, err := e.Capture(ctx, *task)
+		if errors.Is(err, sourcesnapshot.ErrNoChanges) {
+			task.Stage = "complete"
+			return e.Store.Save(task)
+		}
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("checkout changed; submit this task before finishing")
+	}
 	if err := e.Status(ctx, task, token); err != nil {
 		return err
 	}

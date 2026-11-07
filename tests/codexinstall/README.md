@@ -1,7 +1,7 @@
 # Manual Codex lifecycle experiments
 
 Run real Codex CLI 0.167.0 with GPT-6.1 Terra at low reasoning in disposable
-Linux exe.dev VMs. These tests are opt-in. They are never run by normal PR CI.
+Linux exe.dev VMs or isolated local macOS test homes. These tests are opt-in. They are never run by normal PR CI.
 The local fixture supplies Doomer account, approval and review responses.
 Installation still uses the public guide and published, verified Doomer runtime.
 
@@ -34,17 +34,55 @@ go run ./tests/codexinstall --scenario list
 | `interrupted` | A new Codex process/chat resumes pending setup using its saved task and original grant request |
 | `upgrade` | Historical skill and signed runtime fixture upgrades with preserved policy/grant and one simulated PR |
 | `upgrade-defer` | Deferring the upgrade leaves files alone and suppresses a repeat offer on preparation |
+| `repeat-onboarding` | Repeated setup reuses approval, avoids repeated settings offers, and leaves no failed review |
+| `read-only` | A clean, read-only task uploads nothing and finishes without a review failure |
+| `personal` | Personal installation is discovered and completes a coding review |
+| `upgrade-untracked` | Updates untracked repository skill files without creating a PR |
+| `upgrade-personal` | Updates personal skill files without creating a PR |
+| `hooks-off` | Completes a review through per-call commands when hooks are absent |
+| `revoked-uploads` | Server-side revocation blocks subsequent content uploads |
+| `interrupted-review` | Terminated Codex resumes a pending review in a new process without duplicate submission |
+| `tui` | Real interactive terminal trusts native hooks and completes a review with activated hooks |
+| `tui-hooks-denied` | Real terminal declines native hook trust and completes through per-call commands |
 | `service-failure` | Submission failure terminates with durable state and recovers the same task when the service returns |
 
 Each invocation performs real installation first in its own fresh home and VM.
 A failed assertion remains a failed test even when it exposes a product gap.
 The upgrade fixture uses a local bare Git remote and a fake `gh` command; it
 tests the agent's PR workflow without creating a real external pull request.
-The interruption case tests process replacement between calls, not SIGKILL
-inside an in-flight upload. These are headless exec/resume tests. Interactive
-TUI, desktop UI, native hook trust and hook activation are not covered.
+The `interrupted` case replaces a process between calls. `interrupted-review`
+terminates Codex after the service accepts the review, before it completes.
+Most cases use headless exec/resume. The two `tui` cases use a real PTY and
+script the actual native hook-trust dialog. They require Python 3. Desktop UI
+and termination inside a blob upload are not covered.
 Command approval controls are bypassed inside the disposable VM only; Doomer's
 own update and upload permissions are exercised.
+
+
+## Candidate and local runs
+
+To test this checkout's unpublished CLI changes, add
+`--candidate-release 2026.11.6.12` with the exact currently installed public release.
+The runner first exercises public installation, then replaces only the disposable
+fixture's runtime and checksum record with the candidate build. It does this before
+continuing setup. This test-only injection is recorded in `candidate_version` and
+does not change release verification in the product.
+
+A local run requires a separate pinned Codex executable and a writable test
+parent outside `/tmp` because Codex does not create helpers there. The runner
+isolates HOME, CODEX_HOME, Doomer state, Git configuration and the executable path.
+It removes each temporary test home when done.
+
+```sh
+doppler run --project doomer --config test -- \
+  go run ./tests/codexinstall --scenario first-review \
+  --local-codex /path/to/dedicated/codex \
+  --local-root /path/to/disposable-test-homes --budget 0.35 \
+  --output /tmp/codex-local-review.json
+```
+
+Local runs do not use exe.dev or need its SSH key. Use the official 0.167.0 package
+for your platform and verify its published checksum before passing its executable.
 
 ## Free tests
 
@@ -82,7 +120,7 @@ GPT-6.1 Terra rates used are $1/M input, $0.05/M cached input and $5/M output.
 Check the current pricing before running after a price change. Other models
 are rejected because their budgeting has not been verified. VM fees are separate.
 
-Every invocation attempts VM deletion on completion, failure or timeout. The
+Every remote invocation attempts VM deletion on completion, failure or timeout. The
 name is printed immediately and included in the report. SIGKILL or lost access
 can prevent cleanup; use `ssh exe.dev rm VM_NAME` if that happens. Cleanup
 failure makes the test fail. Temporary private-key files and test homes are

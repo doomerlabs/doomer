@@ -53,6 +53,7 @@ type Task struct {
 	Responses        map[string]Response                `json:"responses,omitempty"`
 	Paused           bool                               `json:"paused"`
 	LastError        string                             `json:"last_error,omitempty"`
+	NoChanges        bool                               `json:"no_changes,omitempty"`
 	HookActivated    bool                               `json:"hook_activated"`
 }
 

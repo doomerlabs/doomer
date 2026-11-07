@@ -14,7 +14,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/managed"
 )
 
-var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure"}
+var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied"}
 
 func validScenario(name string) bool {
 	for _, candidate := range scenarioNames {
@@ -84,6 +84,9 @@ func (j *journey) coding(repo, prompt string) error {
 	if err != nil {
 		return err
 	}
+	if observed.PolicyOffered {
+		return fmt.Errorf("unexpected repeated Codex settings proposal")
+	}
 	if observed.UpdateRequested {
 		return fmt.Errorf("unexpected repeat update approval")
 	}
@@ -120,6 +123,7 @@ func savedTasks(home string) ([]managed.Task, error) {
 func (j *journey) git(repo string, args ...string) error {
 	cmd := exec.CommandContext(j.ctx, "git", args...)
 	cmd.Dir = repo
+	cmd.Env = j.env
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git fixture setup: %w: %s", err, out)
 	}
@@ -133,7 +137,7 @@ func (j *journey) finish() error {
 	j.f.mu.Unlock()
 	j.result.Checks["grant_reused"] = creates == 1
 	j.result.Checks["review_delivered"] = reviews > 0
-	if j.c.Scenario == "first-review" {
+	if j.c.Scenario == "first-review" || strings.HasPrefix(j.c.Scenario, "tui") {
 		j.result.Checks["finding_response_recorded"] = responses > 0
 	}
 	if j.c.Scenario == "new-chat" {
@@ -150,7 +154,18 @@ func (j *journey) afterInstall() error {
 	switch j.c.Scenario {
 	case "install", "interrupted":
 		return nil
-	case "first-review", "new-chat":
+	case "interrupted-review":
+		return j.interruptedReview()
+	case "revoked-uploads":
+		return j.revokedUploads()
+	case "tui", "tui-hooks-denied":
+		return j.tui()
+	case "first-review", "new-chat", "personal", "hooks-off":
+		if j.c.Scenario == "hooks-off" {
+			if err := os.Remove(filepath.Join(j.home, ".codex/hooks.json")); err != nil {
+				return err
+			}
+		}
 		j.f.mu.Lock()
 		j.f.Findings = j.c.Scenario == "first-review"
 		j.f.mu.Unlock()
@@ -215,6 +230,44 @@ func (j *journey) afterInstall() error {
 		j.result.Checks["review_matches_worktree"] = matched == 2
 		j.f.mu.Unlock()
 		return j.finish()
+	case "repeat-onboarding", "read-only":
+		if err := j.git(j.repo, "add", "."); err != nil {
+			return err
+		}
+		if err := j.git(j.repo, "-c", "commit.gpgsign=false", "commit", "-qm", "Installed fixture"); err != nil {
+			return err
+		}
+		prompt := "Set up Doomer in this repository again. Reuse existing setup and permissions. Do not change code."
+		if j.c.Scenario == "read-only" {
+			prompt = "Tell me the current branch and whether the working tree is clean. Do not edit files or start coding."
+		}
+		j.result.Turns++
+		turn, err := runAgent(j.ctx, j.c, j.repo, j.env, prompt, "", j.record)
+		if err != nil {
+			return err
+		}
+		j.f.mu.Lock()
+		j.result.Checks["no_new_grant"] = j.f.Creates == 1
+		j.result.Checks["no_read_only_upload"] = j.f.Uploads == 0 && len(j.f.Reviews) == 0
+		j.f.mu.Unlock()
+		j.result.Checks["no_repeat_update_permission"] = !turn.UpdateRequested
+		j.result.Checks["no_repeat_settings_proposal"] = !turn.PolicyOffered
+		tasks, err := savedTasks(j.home)
+		if err != nil {
+			return err
+		}
+		j.result.Checks["no_read_only_failure"] = true
+		for _, task := range tasks {
+			if task.LastError != "" {
+				j.result.Checks["no_read_only_failure"] = false
+			}
+		}
+		for _, ok := range j.result.Checks {
+			if !ok {
+				return fmt.Errorf("read-only or repeated onboarding assertion failed")
+			}
+		}
+		return nil
 	case "service-failure":
 		j.f.mu.Lock()
 		j.f.FailSubmit = true
@@ -259,8 +312,10 @@ func (j *journey) afterInstall() error {
 			return fmt.Errorf("failed task did not recover")
 		}
 		return j.finish()
-	case "upgrade", "upgrade-defer":
+	case "upgrade", "upgrade-defer", "upgrade-untracked", "upgrade-personal":
 		return j.upgrade()
 	}
 	return fmt.Errorf("unsupported post-install scenario")
 }
+
+func personalScenario(name string) bool { return name == "personal" || name == "upgrade-personal" }

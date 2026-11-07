@@ -7,11 +7,14 @@ import (
 	"regexp"
 )
 
+var policyProposal = regexp.MustCompile(`"codex_review_policy"\s*:\s*\{`)
+
 var updateState = regexp.MustCompile(`"state"\s*:\s*"update_permission_required"`)
 
 type codexTurn struct {
 	Session         string
 	Messages        []string
+	PolicyOffered   bool
 	UpdateRequested bool
 	Failed          bool
 }
@@ -46,6 +49,7 @@ func readCodexTurn(reader io.Reader, record func(string, string)) (codexTurn, er
 			switch event.Item.Type {
 			case "command_execution":
 				turn.UpdateRequested = turn.UpdateRequested || updateState.MatchString(event.Item.Output)
+				turn.PolicyOffered = turn.PolicyOffered || policyProposal.MatchString(event.Item.Output)
 				record("Command", event.Item.Command+"\n"+event.Item.Output)
 			case "agent_message":
 				turn.Messages = append(turn.Messages, event.Item.Text)

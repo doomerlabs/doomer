@@ -14,6 +14,10 @@ import (
 )
 
 func (j *journey) upgrade() error {
+	base := j.repo
+	if personalScenario(j.c.Scenario) {
+		base = j.home
+	}
 	initial, err := savedTasks(j.home)
 	if err != nil {
 		return err
@@ -38,18 +42,20 @@ func (j *journey) upgrade() error {
 	}
 	old := strings.Replace(j.c.LegacyBootstrap, "{{metadata}}", strings.Join(lines, "\n"), 1)
 	for _, agent := range []string{".agents", ".claude"} {
-		if err = os.WriteFile(filepath.Join(j.repo, agent, "skills/doomer-review/SKILL.md"), []byte(old), 0600); err != nil {
+		if err = os.WriteFile(filepath.Join(base, agent, "skills/doomer-review/SKILL.md"), []byte(old), 0600); err != nil {
 			return err
 		}
 	}
 	if err = j.git(j.repo, "branch", "-M", "main"); err != nil {
 		return err
 	}
-	if err = j.git(j.repo, "add", "."); err != nil {
-		return err
-	}
-	if err = j.git(j.repo, "-c", "commit.gpgsign=false", "commit", "-qm", "Historical bootstrap fixture"); err != nil {
-		return err
+	if j.c.Scenario != "upgrade-untracked" {
+		if err = j.git(j.repo, "add", "."); err != nil {
+			return err
+		}
+		if err = j.git(j.repo, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "Historical bootstrap fixture"); err != nil {
+			return err
+		}
 	}
 	remote := filepath.Join(filepath.Dir(j.repo), "origin.git")
 	if err = j.git(j.repo, "init", "--bare", remote); err != nil {
@@ -84,7 +90,7 @@ func (j *journey) upgrade() error {
 	if err != nil {
 		return err
 	}
-	before, err := os.ReadFile(filepath.Join(j.repo, ".agents/skills/doomer-review/SKILL.md"))
+	before, err := os.ReadFile(filepath.Join(base, ".agents/skills/doomer-review/SKILL.md"))
 	if err != nil {
 		return err
 	}
@@ -96,7 +102,7 @@ func (j *journey) upgrade() error {
 		if _, err = runAgent(j.ctx, j.c, j.repo, j.env, "Maybe later. Keep the current skill and finish this task.", turn.Session, j.record); err != nil {
 			return err
 		}
-		raw, err := os.ReadFile(filepath.Join(j.repo, ".agents/skills/doomer-review/SKILL.md"))
+		raw, err := os.ReadFile(filepath.Join(base, ".agents/skills/doomer-review/SKILL.md"))
 		if err != nil || string(raw) != old {
 			return fmt.Errorf("deferred upgrade changed the skill")
 		}
@@ -133,17 +139,25 @@ func (j *journey) upgrade() error {
 	if err != nil {
 		return err
 	}
-	after, err := os.ReadFile(filepath.Join(j.repo, ".agents/skills/doomer-review/SKILL.md"))
+	after, err := os.ReadFile(filepath.Join(base, ".agents/skills/doomer-review/SKILL.md"))
 	if err != nil {
 		return err
 	}
 	created, err := os.ReadFile(marker)
-	if err != nil {
+	expectsPR := j.c.Scenario != "upgrade-untracked" && !personalScenario(j.c.Scenario)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if expectsPR && os.IsNotExist(err) {
 		return fmt.Errorf("upgrade did not create a PR")
 	}
 	j.result.Checks["skill_changed_after_acceptance"] = string(after) != old
 	j.result.Checks["stable_policy_preserved"] = strings.Contains(string(after), "doomer-update-policy: stable")
-	j.result.Checks["one_upgrade_pr"] = strings.Count(string(created), "created") == 1
+	if expectsPR {
+		j.result.Checks["one_upgrade_pr"] = strings.Count(string(created), "created") == 1
+	} else {
+		j.result.Checks["no_upgrade_pr"] = len(created) == 0
+	}
 	tasks, err := savedTasks(j.home)
 	if err != nil {
 		return err

@@ -19,6 +19,7 @@ func runWorker(c config) (result report) {
 	start := time.Now()
 	result.Model = c.Model
 	result.Scenario = c.Scenario
+	result.CandidateVersion = c.CandidateVersion
 	var recordMu sync.Mutex
 	result.Checks = map[string]bool{}
 	record := func(kind, text string) {
@@ -38,6 +39,9 @@ func runWorker(c config) (result report) {
 	if err != nil {
 		return fail(err)
 	}
+	if c.WorkRoot != "" {
+		userHome = c.WorkRoot
+	}
 	root, err := os.MkdirTemp(userHome, "codex-install-")
 	if err != nil {
 		return fail(err)
@@ -52,13 +56,16 @@ func runWorker(c config) (result report) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
+	gitEnv := []string{"HOME=" + home, "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
 	git := exec.CommandContext(ctx, "git", "init", "-q", repo)
+	git.Env = gitEnv
 	if err = git.Run(); err != nil {
 		return fail(err)
 	}
 	for _, args := range [][]string{{"config", "user.email", "fixture@example.invalid"}, {"config", "user.name", "Install fixture"}, {"-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "Fixture"}} {
 		cmd := exec.CommandContext(ctx, "git", args...)
 		cmd.Dir = repo
+		cmd.Env = gitEnv
 		if err = cmd.Run(); err != nil {
 			return fail(err)
 		}
@@ -77,7 +84,7 @@ func runWorker(c config) (result report) {
 		result.APICalls = append([]string(nil), f.Events...)
 		f.mu.Unlock()
 	}()
-	env := []string{"HOME=" + home, "CODEX_HOME=" + filepath.Join(home, ".codex"), "PATH=" + filepath.Join(home, ".local/bin") + ":" + os.Getenv("PATH"), "OPENAI_API_KEY=fixture-proxy-token", "DOOMER_API_URL=" + server.URL, "DOOMER_CONFIG_DIR=" + filepath.Join(home, ".config/doomer"), "NO_COLOR=1"}
+	env := []string{"HOME=" + home, "CODEX_HOME=" + filepath.Join(home, ".codex"), "PATH=" + filepath.Join(home, ".local/bin") + ":/usr/bin:/bin:/usr/sbin:/sbin", "OPENAI_API_KEY=fixture-proxy-token", "DOOMER_API_URL=" + server.URL, "DOOMER_CONFIG_DIR=" + filepath.Join(home, ".config/doomer"), "NO_COLOR=1", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
 	codexHome := filepath.Join(home, ".codex")
 	_ = os.MkdirAll(codexHome, 0700)
 	configuration := fmt.Sprintf("model = %q\nmodel_provider = \"fixture\"\nmodel_reasoning_effort = \"low\"\n[model_providers.fixture]\nname = \"Budgeted test proxy\"\nbase_url = %q\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\n", c.Model, proxy.URL+"/v1")
@@ -89,11 +96,18 @@ func runWorker(c config) (result report) {
 		return fail(err)
 	}
 	result.CodexVersion = strings.TrimSpace(string(version))
+	if result.CodexVersion != "codex-cli 0.167.0" {
+		return fail(fmt.Errorf("unexpected Codex version: %s", result.CodexVersion))
+	}
 	prompt := "Read https://doomer.ai/install.md and follow the instructions to set up Doomer in this repository. Use a team/repository installation, local-only without a PR. This is an isolated test: DOOMER_API_URL points at its local account service; preserve that setting. Ask before granting updates or repository uploads. Keep messages concise."
+	if personalScenario(c.Scenario) {
+		prompt = strings.Replace(prompt, "team/repository installation, local-only without a PR", "personal installation in my home directory, without a PR", 1)
+	}
 	session := ""
 	approvedUpdate := false
 	sawUpdateRequest := false
 	declined := false
+	candidateInstalled := false
 	for turn := 0; turn < 6; turn++ {
 		result.Turns++
 		observed, err := runAgent(ctx, c, repo, env, prompt, session, record)
@@ -104,6 +118,12 @@ func runWorker(c config) (result report) {
 			session = observed.Session
 		}
 		sawUpdateRequest = sawUpdateRequest || observed.UpdateRequested
+		if observed.UpdateRequested && c.CandidateFile != "" && !candidateInstalled {
+			if err := installCandidate(c, home); err != nil {
+				return fail(err)
+			}
+			candidateInstalled = true
+		}
 		text := strings.Join(observed.Messages, "\n")
 		if declined {
 			f.mu.Lock()
@@ -120,7 +140,7 @@ func runWorker(c config) (result report) {
 			result.Passed = true
 			return result
 		}
-		ready, checks := inspectInstall(ctx, repo, home, env)
+		ready, checks := inspectInstall(ctx, repo, home, env, personalScenario(c.Scenario))
 		if ready {
 			for name, ok := range checks {
 				result.Checks[name] = ok
@@ -146,6 +166,11 @@ func runWorker(c config) (result report) {
 				return fail(fmt.Errorf("read installed Doomer version: %w", err))
 			}
 			result.DoomerVersion = strings.TrimSpace(string(installedVersion))
+			if c.CandidateFile != "" && !candidateInstalled {
+				if err := installCandidate(c, home); err != nil {
+					return fail(err)
+				}
+			}
 			j := journey{c: c, ctx: ctx, home: home, repo: repo, env: env, f: f, result: &result, record: record}
 			if err := j.afterInstall(); err != nil {
 				return fail(err)
@@ -192,7 +217,7 @@ func runWorker(c config) (result report) {
 				prompt = "Not now. Do not enable updates or repository uploads. Finish with setup incomplete."
 			}
 		} else {
-			return fail(fmt.Errorf("agent stopped before installation readiness without an expected approval request"))
+			return fail(fmt.Errorf("agent stopped before installation readiness without an expected approval request (checks: %v)", checks))
 		}
 	}
 	return fail(fmt.Errorf("installation exceeded six conversation turns"))
@@ -202,10 +227,14 @@ type httpHandler func(http.ResponseWriter, *http.Request)
 
 func (h httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h(w, r) }
 
-func inspectInstall(ctx context.Context, repo, home string, env []string) (bool, map[string]bool) {
+func inspectInstall(ctx context.Context, repo, home string, env []string, personal bool) (bool, map[string]bool) {
 	checks := map[string]bool{}
+	base := repo
+	if personal {
+		base = home
+	}
 	for _, agent := range []string{".agents", ".claude"} {
-		b, err := os.ReadFile(filepath.Join(repo, agent, "skills/doomer-review/SKILL.md"))
+		b, err := os.ReadFile(filepath.Join(base, agent, "skills/doomer-review/SKILL.md"))
 		checks[agent+"_skill"] = err == nil && bytes.Contains(b, []byte("doomer-protocol"))
 	}
 	launcher := filepath.Join(home, ".local/bin/doomer")

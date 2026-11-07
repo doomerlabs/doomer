@@ -29,6 +29,7 @@ import (
 )
 
 type managedResult struct {
+	NoChanges            bool                           `json:"no_changes,omitempty"`
 	CodexReviewPolicy    *codexReviewPolicy             `json:"codex_review_policy,omitempty"`
 	BootstrapUpdates     []managed.BootstrapUpdate      `json:"bootstrap_updates,omitempty"`
 	Consent              *managedConsentEvidence        `json:"consent,omitempty"`
@@ -77,6 +78,7 @@ func managedStoreLocation() (managed.Store, error) {
 func resultFor(task managed.Task) managedResult {
 	r := managedResult{Error: task.LastError, State: task.Stage, Task: task.Handle, Release: task.Release, SoftwareReady: task.Release != "", HookActivated: task.HookActivated, Review: task.Review}
 	r.PromptTruncated = len([]rune(task.Prompt)) > 4000
+	r.NoChanges = task.NoChanges
 	r.SubmittedPromptRunes = min(len([]rune(task.Prompt)), 4000)
 	r.Capabilities = task.Capabilities
 	r.UpdateAvailable = task.OfferedRelease
@@ -110,7 +112,10 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 		}
 		r.Consent = evidence
 		if evidence != nil && t.Agent == "codex" && (c.Name() == "prepare" || c.Name() == "login" || c.Name() == "consent") {
-			r.CodexReviewPolicy = proposedCodexReviewPolicy(*evidence)
+			r.CodexReviewPolicy, err = offerCodexReviewPolicy(s, *evidence)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	// Operation outcomes still describe the same pinned runtime and task.
@@ -123,6 +128,7 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 	r.PromptTruncated = taskResult.PromptTruncated
 	r.PortableSetupCommand = taskResult.PortableSetupCommand
 	r.SubmittedPromptRunes = taskResult.SubmittedPromptRunes
+	r.NoChanges = taskResult.NoChanges
 	r.UpdateAvailable = taskResult.UpdateAvailable
 	r.Review = taskResult.Review
 	r.Responses = taskResult.Responses

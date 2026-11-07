@@ -12,15 +12,15 @@ import (
 )
 
 type fixture struct {
-	mu                              sync.Mutex
-	Cancelled, Findings, FailSubmit bool
-	Reviews                         map[string]adversarylabs.WorkspaceSubmission
-	Feedback                        map[string]map[string]any
-	Attempts                        []string
-	Request, Challenge              string
-	Approved                        bool
-	Creates, Polls, Uploads         int
-	Events                          []string
+	mu                                              sync.Mutex
+	Cancelled, Findings, FailSubmit, PendingReviews bool
+	Reviews                                         map[string]adversarylabs.WorkspaceSubmission
+	Feedback                                        map[string]map[string]any
+	Attempts                                        []string
+	Request, Challenge                              string
+	Approved                                        bool
+	Creates, Polls, Uploads                         int
+	Events                                          []string
 }
 
 func (f *fixture) serve(w http.ResponseWriter, r *http.Request) {
@@ -69,7 +69,7 @@ func (f *fixture) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		send(map[string]any{"state": "approved", "token": "fixture-account-token", "account_id": "fixture-account", "portable_state": false})
 	case "/v1/auth/whoami":
-		if r.Header.Get("Authorization") != "Bearer fixture-account-token" {
+		if !f.authorized(r) {
 			http.Error(w, "unauthorized", 401)
 			return
 		}
@@ -142,6 +142,9 @@ func (f *fixture) authorized(r *http.Request) bool {
 	return f.Approved && !f.Cancelled && r.Header.Get("Authorization") == "Bearer fixture-account-token"
 }
 func (f *fixture) review(id string) map[string]any {
+	if f.PendingReviews {
+		return map[string]any{"id": id, "status": "queued", "anonymous": false, "look_closer_enabled": true, "full_review": map[string]any{"enabled": false, "status": "disabled"}}
+	}
 	leads := []map[string]any{}
 	if f.Findings {
 		leads = append(leads, map[string]any{"id": strings.Repeat("a", 64), "path": "hello.txt", "line": 1, "concern": "Verify the greeting content requested by the user is present.", "check": "Read hello.txt and record whether its content matches the requested greeting."})

@@ -12,6 +12,9 @@ func managedHookFeedback(event string, output []byte, operationErr error) map[st
 	message := "Doomer could not check the review. Resume the prepared task and inspect its status."
 	valid := operationErr == nil && json.Unmarshal(output, &result) == nil && result.State != ""
 	if valid {
+		if result.NoChanges && event != "Stop" {
+			return map[string]any{}
+		}
 		if result.State == "complete" || result.State == "paused" {
 			return map[string]any{}
 		}

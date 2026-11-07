@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path"
 	"slices"
@@ -16,6 +17,8 @@ import (
 const MaxBytes = 16 << 20
 const MaxFileBytes = 2 << 20
 const MaxFiles = 20000
+
+var ErrNoChanges = errors.New("snapshot contains no changes")
 
 // Reference-based workspace uploads send blobs independently. These limits are
 // local resource safety ceilings, separate from legacy embedded upload limits.
@@ -123,7 +126,7 @@ func (m Manifest) validate(workspace bool) error {
 		return fmt.Errorf("snapshot contains oversized or unused blobs")
 	}
 	if slices.Equal(m.Base, m.Target) {
-		return fmt.Errorf("snapshot contains no changes")
+		return ErrNoChanges
 	}
 	return nil
 }

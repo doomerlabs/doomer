@@ -56,6 +56,7 @@ func (r remote) trust(ctx context.Context, host string) error {
 	return err
 }
 func runRemote(ctx context.Context, c config, version string) (result report) {
+	result.Execution = "remote"
 	result.Model = c.Model
 	result.Scenario = c.Scenario
 	fail := func(err error) report { result.Error = err.Error(); return result }
@@ -133,6 +134,22 @@ tar -xzf codex.tar.gz
 	if out, err := exec.CommandContext(ctx, "scp", scpArgs...).CombinedOutput(); err != nil {
 		return fail(fmt.Errorf("copy worker: %w: %s", err, out))
 	}
+	if c.CandidateVersion != "" {
+		if !regexp.MustCompile(`^20[0-9]{2}\.[1-9][0-9]?\.[1-9][0-9]?\.[1-9][0-9]*$`).MatchString(c.CandidateVersion) {
+			return fail(fmt.Errorf("invalid candidate release"))
+		}
+		candidate := filepath.Join(dir, "candidate")
+		build := exec.CommandContext(ctx, "go", "build", "-ldflags", "-X github.com/doomerlabs/doomer/internal/version.Version="+c.CandidateVersion, "-o", candidate, ".")
+		build.Env = append(os.Environ(), "GOOS=linux", "GOARCH=amd64", "CGO_ENABLED=0")
+		if out, err := build.CombinedOutput(); err != nil {
+			return fail(fmt.Errorf("build candidate: %w: %s", err, out))
+		}
+		c.CandidateFile = "/tmp/doomer-codex-e2e/candidate"
+		args := append(sshArgs[:len(sshArgs)-1], candidate, vm.Dest+":"+c.CandidateFile)
+		if out, err := exec.CommandContext(ctx, "scp", args...).CombinedOutput(); err != nil {
+			return fail(fmt.Errorf("copy candidate: %w: %s", err, out))
+		}
+	}
 	c.Codex = "/tmp/doomer-codex-e2e/bin/codex"
 	payload, _ := json.Marshal(c)
 	// If the worker connection is lost, keep the full run budget charged as
@@ -148,6 +165,7 @@ tar -xzf codex.tar.gz
 		return fail(fmt.Errorf("decode worker report: %w", err))
 	}
 	result = completed
+	result.Execution = "remote"
 	result.VM = vm.Name
 	return result
 }

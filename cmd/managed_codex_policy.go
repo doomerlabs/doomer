@@ -3,12 +3,38 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/doomerlabs/doomer/internal/managed"
+	"github.com/doomerlabs/doomer/internal/watch"
 )
 
 // A proposal is returned only after verifying the account and its saved grant.
 // Installing it remains a separate user choice, handled by the coding agent.
 type codexReviewPolicy struct {
 	ExtraPolicy string `json:"extra_policy"`
+}
+
+// Remember presentation, never acceptance. A new scope or proposal can be
+// offered again, while ordinary chats keep using the existing review grant.
+func offerCodexReviewPolicy(s managed.Store, consent managedConsentEvidence) (*codexReviewPolicy, error) {
+	proposal := proposedCodexReviewPolicy(consent)
+	dir := filepath.Join(s.Root, "codex-policy-offers")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	}
+	file, err := os.OpenFile(filepath.Join(dir, watch.Key(proposal.ExtraPolicy)), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if os.IsExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err = file.Close(); err != nil {
+		return nil, err
+	}
+	return proposal, nil
 }
 
 func proposedCodexReviewPolicy(consent managedConsentEvidence) *codexReviewPolicy {

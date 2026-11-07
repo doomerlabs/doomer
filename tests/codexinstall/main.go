@@ -12,12 +12,15 @@ import (
 )
 
 type config struct {
-	APIKey          string  `json:"api_key"`
-	Model           string  `json:"model"`
-	Budget          float64 `json:"budget_usd"`
-	Codex           string  `json:"codex"`
-	Scenario        string  `json:"scenario"`
-	LegacyBootstrap string  `json:"legacy_bootstrap,omitempty"`
+	WorkRoot         string  `json:"work_root,omitempty"`
+	CandidateFile    string  `json:"candidate_file,omitempty"`
+	CandidateVersion string  `json:"candidate_version,omitempty"`
+	APIKey           string  `json:"api_key"`
+	Model            string  `json:"model"`
+	Budget           float64 `json:"budget_usd"`
+	Codex            string  `json:"codex"`
+	Scenario         string  `json:"scenario"`
+	LegacyBootstrap  string  `json:"legacy_bootstrap,omitempty"`
 }
 
 type recordedEvent struct {
@@ -27,23 +30,29 @@ type recordedEvent struct {
 }
 
 type report struct {
-	Scenario      string          `json:"scenario"`
-	DoomerVersion string          `json:"doomer_version,omitempty"`
-	Passed        bool            `json:"passed"`
-	Error         string          `json:"error,omitempty"`
-	Model         string          `json:"model"`
-	CodexVersion  string          `json:"codex_version"`
-	VM            string          `json:"vm,omitempty"`
-	Deleted       bool            `json:"vm_deleted"`
-	Duration      float64         `json:"duration_seconds"`
-	Usage         usage           `json:"usage"`
-	Turns         int             `json:"turns"`
-	APICalls      []string        `json:"api_calls"`
-	Checks        map[string]bool `json:"checks"`
-	Events        []recordedEvent `json:"events"`
+	Execution        string          `json:"execution"`
+	LocalCleaned     bool            `json:"local_cleaned,omitempty"`
+	Scenario         string          `json:"scenario"`
+	CandidateVersion string          `json:"candidate_version,omitempty"`
+	DoomerVersion    string          `json:"doomer_version,omitempty"`
+	Passed           bool            `json:"passed"`
+	Error            string          `json:"error,omitempty"`
+	Model            string          `json:"model"`
+	CodexVersion     string          `json:"codex_version"`
+	VM               string          `json:"vm,omitempty"`
+	Deleted          bool            `json:"vm_deleted"`
+	Duration         float64         `json:"duration_seconds"`
+	Usage            usage           `json:"usage"`
+	Turns            int             `json:"turns"`
+	APICalls         []string        `json:"api_calls"`
+	Checks           map[string]bool `json:"checks"`
+	Events           []recordedEvent `json:"events"`
 }
 
 func main() {
+	localCodex := flag.String("local-codex", "", "dedicated pinned Codex executable for an isolated local run")
+	localRoot := flag.String("local-root", "", "writable parent directory for disposable local test homes")
+	candidate := flag.String("candidate-release", "", "test this checkout as the given installed release after public installation")
 	scenario := flag.String("scenario", "install", "manual scenario name; use list to show available scenarios")
 	render := flag.String("render-report", "", "render an existing JSON report to PATH.html without running a test")
 	worker := flag.Bool("worker", false, "internal VM worker mode")
@@ -94,8 +103,8 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	c := config{APIKey: os.Getenv("TEST_OPENAI_API_KEY"), Model: *model, Budget: *budget, Scenario: *scenario}
-	if *scenario == "upgrade" || *scenario == "upgrade-defer" {
+	c := config{APIKey: os.Getenv("TEST_OPENAI_API_KEY"), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate}
+	if strings.HasPrefix(*scenario, "upgrade") {
 		raw, err := os.ReadFile("internal/managed/bootstrap-2026.11.6.10.md")
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -103,7 +112,13 @@ func main() {
 		}
 		c.LegacyBootstrap = string(raw)
 	}
-	r := runRemote(ctx, c, *version)
+	var r report
+	if *localCodex != "" {
+		c.Codex = *localCodex
+		r = runLocal(ctx, c, *localRoot)
+	} else {
+		r = runRemote(ctx, c, *version)
+	}
 	data, _ := json.MarshalIndent(r, "", "  ")
 	if err := os.WriteFile(*output, append(data, '\n'), 0600); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -114,7 +129,7 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("passed=%t cost=$%.6f reserved=$%.6f vm_deleted=%t report=%s\n", r.Passed, r.Usage.Cost, r.Usage.Reserved, r.Deleted, *output)
-	if !r.Passed || !r.Deleted {
+	if !r.Passed || (r.VM != "" && !r.Deleted) || (r.Execution == "local" && !r.LocalCleaned) {
 		os.Exit(1)
 	}
 }
