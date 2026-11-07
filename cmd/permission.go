@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 
@@ -74,16 +73,13 @@ func printManagedPermission(c *cobra.Command, app *application.App, api, profile
 	}
 	task := managed.Task{Repo: path, RepositoryID: id, API: api, Profile: profile}
 	_, account, err := managedIdentity(c.Context(), app, task)
-	if err != nil && !errors.Is(err, errManagedLoginRequired) {
+	if err != nil {
 		return err
 	}
-	var evidence *managedConsentEvidence
-	if err == nil {
-		task.AccountID = account
-		evidence, err = savedManagedConsentEvidence(s, task)
-		if err != nil {
-			return err
-		}
+	task.AccountID = account
+	evidence, err := savedManagedConsentEvidence(s, task)
+	if err != nil {
+		return err
 	}
 	if jsonOutput {
 		return json.NewEncoder(c.OutOrStdout()).Encode(struct {

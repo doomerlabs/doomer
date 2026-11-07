@@ -26,6 +26,38 @@ type permissionFailingWriter struct {
 	err error
 }
 
+func TestHasPermissionManagedRequiresVerifiedAccount(t *testing.T) {
+	for _, credential := range []string{"missing", "anonymous", "rejected"} {
+		t.Run(credential, func(t *testing.T) {
+			store := isolate(t)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusUnauthorized)
+			}))
+			defer server.Close()
+			if credential != "missing" {
+				token := "rejected-token"
+				if credential == "anonymous" {
+					token = adversarylabs.AnonymousTokenPrefix + "test"
+				}
+				if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: token}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			repo := newWatchTestRepo(t)
+			for _, format := range []string{"plain", "json"} {
+				args := []string{"--api-url", server.URL, "has-permission", "--managed", repo}
+				if format == "json" {
+					args = append(args, "--json")
+				}
+				output, err := execute(t, "", args...)
+				if !errors.Is(err, errManagedLoginRequired) || output != "" {
+					t.Fatalf("unverified account became a consent decision: %q %v", output, err)
+				}
+			}
+		})
+	}
+}
+
 func TestHasPermissionManagedUsesCurrentAccountAndPreservesState(t *testing.T) {
 	store := isolate(t)
 	account := "account"

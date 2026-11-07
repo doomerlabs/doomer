@@ -21,7 +21,9 @@ agent prose never selects the version.
   permission for the authenticated account, profile, service, and Git identity.
 - `doomer has-permission --managed --json PATH` verifies the current account
   and reads its saved managed upload grant without modifying setup. The default
-  mode checks legacy watcher grants only. Preparation and task results also
+  mode checks legacy watcher grants only; a negative default-mode result says
+  nothing about managed approval. Authentication failures return an error,
+  rather than a negative consent decision. Preparation and task results also
   return scoped consent evidence, including finding responses.
 - `doomer task rollback HANDLE` rejects a bad current selection and selects the
   previous verified release for future tasks. Active tasks keep their versions.
@@ -76,7 +78,8 @@ After verified approval, Codex preparation returns a `codex_review_policy`
 proposal. The coding agent offers to merge its `extra_policy` text into the
 user's existing `[auto_review].extra_policy` only after separate permission to
 change Codex settings. Existing policy and configuration are preserved. The
-proposal covers preparation, private task state, and review uploads for the
+proposal covers preparation/resumption, private task state, source snapshots,
+task context, and finding responses for the
 approved account, service, profile, and repository identity, including linked
 worktrees. Uploads still require current consent. Revocation, pause, host
 restrictions, and organization policy continue to apply. Local reviewer policy

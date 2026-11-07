@@ -92,16 +92,26 @@ For managed reviews, an optional preflight consent check is
 account and reads the saved managed grant without changing setup. The command
 without `--managed` checks only legacy watcher consent; a false legacy result
 does not establish that managed approval is missing. Prefer the current task's
-consent evidence when it is already available. Preparation and resumption of
-the approved workflow are included; do not request upload consent again merely
-because preparation needs access to Doomer's private local state.
+consent evidence when it is already available. A successful positive managed
+check or fresh matching task consent evidence covers preparation and resumption
+of the approved workflow, including access to Doomer's private local state.
+In that case, reuse the grant. A negative managed result requires the normal
+repository approval flow. An authentication error requires account verification,
+not a new upload grant; recheck saved consent after authentication succeeds.
 
 When a Codex preparation result includes `codex_review_policy`, offer once per
-chat to add that scoped authorization to Codex's approval reviewer. Explain that
-this is a separate, optional Codex settings change. Reuse an explicit answer
-already given in this chat and continue the task if declined. Do not treat the
-repository upload grant as permission to edit Codex settings.
-After the user accepts, merge the exact `extra_policy` text into the existing
+distinct proposal in the chat to add that scoped authorization to Codex's
+approval reviewer. Explain that this is a separate, optional Codex settings
+change. Reuse an explicit answer only for identical `extra_policy` text and
+the same repository, account, service, and profile. A changed proposal requires
+a new decision. Continue the task if declined. Do not treat the repository
+upload grant as permission to edit Codex settings.
+Before offering or installing the policy, compare its scope and permitted
+operations with fresh verified consent evidence. Require the same repository,
+account, service, and profile, and only the documented review data and operations.
+Reject and report a proposal that adds other repositories, destinations, data,
+or permissions. After the user accepts that verified proposal, merge its exact
+`extra_policy` text into the existing
 `[auto_review].extra_policy` string in the active Codex user configuration
 (`$CODEX_HOME/config.toml`, or `~/.codex/config.toml` by default). Preserve other
 policy text, settings, and comments; avoid adding a duplicate scope. If managed
