@@ -17,12 +17,17 @@ def read_result(root, harness, scenario, relative):
         report = {}
         passed = False
         detail = "No valid report was produced. Inspect this scenario's CI log."
+    job_file = root / relative / "ci-job-url.txt"
+    job_url = job_file.read_text().strip() if job_file.is_file() else ""
+    if not job_url.startswith("https://depot.dev/"):
+        job_url = ""
     replay = relative / "report.json.html"
     return {
         "harness": harness,
         "scenario": scenario,
         "passed": passed,
         "detail": detail,
+        "job_url": job_url,
         "replay": replay.as_posix() if (root / replay).is_file() else "",
         "cost": (report.get("usage") or {}).get("estimated_cost_usd", 0),
     }
@@ -36,7 +41,8 @@ def render(root, results):
         summary += [f"[Depot job with HTML recordings and results]({job_url})", ""]
     artifact = os.environ.get("E2E_ARTIFACT_NAME", "agent-e2e-all-recordings")
     summary += [f"Saved artifact `{artifact}`. Download it and open `index.html` to browse the conversations.", "",
-                "| Agent | Scenario | Result |", "| --- | --- | --- |"]
+                "Each recording link opens its scenario’s Depot job with the downloadable HTML artifact.", "",
+                "| Agent | Scenario | Result | Recording |", "| --- | --- | --- | --- |"]
     for result in results:
         status = "Passed" if result["passed"] else "Failed"
         link = "Unavailable"
@@ -44,7 +50,8 @@ def render(root, results):
             link = f'<a href="{html.escape(result["replay"], quote=True)}">Conversation</a>'
         rows.append("<tr>" + "".join(f"<td>{html.escape(str(result[key]))}</td>" for key in ("harness", "scenario"))
                     + f'<td>{status}</td><td>{link}</td><td>{html.escape(result["detail"])}</td></tr>')
-        summary.append(f'| {result["harness"]} | {result["scenario"]} | {status} |')
+        recording = f'[HTML artifact]({result["job_url"]})' if result["job_url"] else "See combined gallery"
+        summary.append(f'| {result["harness"]} | {result["scenario"]} | {status} | {recording} |')
     passed = sum(result["passed"] for result in results)
     billing = "Codex uses API billing. Claude uses subscription allowance, with no Anthropic API fallback."
     cost = sum(result["cost"] for result in results if result["harness"] == "codex")

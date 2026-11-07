@@ -5,6 +5,7 @@ harness=${1:?expected codex or claude}
 scenario=${2:-all}
 reports=${E2E_REPORT_DIR:?expected E2E_REPORT_DIR}
 mkdir -p "$reports"
+printf '%s\n' "${DEPOT_JOB_URL:-}" > "$reports/ci-job-url.txt"
 work=$(mktemp -d "${HOME}/doomer-agent-e2e.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/homes" "$work/agent"
