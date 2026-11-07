@@ -103,7 +103,7 @@ func runWorker(c config) (result report) {
 		return fail(err)
 	}
 	if c.Harness == "claude" {
-		env = append(env, "CLAUDECODE=1", "ANTHROPIC_API_KEY=fixture-proxy-token", "ANTHROPIC_BASE_URL="+proxy.URL, "CLAUDE_CONFIG_DIR="+filepath.Join(home, ".claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "DISABLE_AUTOUPDATER=1", "DISABLE_UPDATES=1")
+		env = append(env, "CLAUDECODE=1", "ANTHROPIC_AUTH_TOKEN=fixture-proxy-token", "ANTHROPIC_BASE_URL="+proxy.URL, "CLAUDE_CONFIG_DIR="+filepath.Join(home, ".claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "DISABLE_AUTOUPDATER=1", "DISABLE_UPDATES=1")
 	} else {
 		env = append(env, "CODEX_HOME="+filepath.Join(home, ".codex"), "OPENAI_API_KEY=fixture-proxy-token")
 	}

@@ -44,7 +44,7 @@ func validAgentVersion(c config, version string) bool {
 func configureAgent(c config, home, proxyURL string) (string, error) {
 	configuration := fmt.Sprintf("model = %q\nmodel_provider = \"fixture\"\nmodel_reasoning_effort = \"low\"\n[model_providers.fixture]\nname = \"Budgeted test proxy\"\nbase_url = %q\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\n", c.Model, proxyURL+"/v1")
 	if c.Harness == "claude" {
-		configuration = `{ "hasCompletedOnboarding": true, "theme": "dark", "autoUpdates": false, "apiKeyResponses": {"approved":["fixture-proxy-token"],"rejected":[]} }`
+		configuration = `{ "hasCompletedOnboarding": true, "theme": "dark", "autoUpdates": false }`
 	}
 	return configuration, writeAgentConfig(c, home, configuration)
 }

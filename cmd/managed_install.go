@@ -200,7 +200,7 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 				return lookupErr
 			}
 			if pending != "" {
-				message = "Continue the existing Doomer setup. Run doomer prepare --task " + watch.Quote(pending) + " --session " + watch.Quote(event.Session) + ". Do not create a replacement task. Finish setup without starting a code review."
+				message = "For an installation or approval reply, continue the existing setup with doomer prepare --task " + watch.Quote(pending) + " --session " + watch.Quote(event.Session) + ". For a new coding request, start its own task with doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " --prompt USER_REQUEST. Keep setup-only tasks separate from coding reviews."
 			}
 			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event.Event, "additionalContext": message}})
 		} else if err != nil {
