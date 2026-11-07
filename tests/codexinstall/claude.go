@@ -44,7 +44,7 @@ func validAgentVersion(c config, version string) bool {
 func configureAgent(c config, home, proxyURL string) (string, error) {
 	configuration := fmt.Sprintf("model = %q\nmodel_provider = \"fixture\"\nmodel_reasoning_effort = \"low\"\n[model_providers.fixture]\nname = \"Budgeted test proxy\"\nbase_url = %q\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\n", c.Model, proxyURL+"/v1")
 	if c.Harness == "claude" {
-		configuration = `{ "hasCompletedOnboarding": true, "theme": "dark", "autoUpdates": false }`
+		configuration = `{ "hasCompletedOnboarding": true, "theme": "dark", "autoUpdates": false, "apiKeyResponses": {"approved":["fixture-proxy-token"],"rejected":[]} }`
 	}
 	return configuration, writeAgentConfig(c, home, configuration)
 }
@@ -62,7 +62,7 @@ func writeAgentConfig(c config, home, configuration string) error {
 }
 func runClaude(ctx context.Context, c config, repo string, env []string, prompt, session string, record func(string, string)) (codexTurn, error) {
 	record("Scripted user", prompt)
-	args := []string{"--print", "--verbose", "--output-format", "stream-json", "--permission-mode", "bypassPermissions", "--model", c.Model, "--effort", "low", "--max-turns", "60"}
+	args := []string{"--print", "--verbose", "--output-format", "stream-json", "--permission-mode", "bypassPermissions", "--model", c.Model, "--effort", "low", "--max-turns", "60", "--append-system-prompt", "The active harness is Claude Code. Its Doomer agent identifier is claude."}
 	if session != "" {
 		args = append(args, "--resume", session)
 	}
