@@ -277,3 +277,29 @@ func TestUnpreparedStopDoesNotRestartSetup(t *testing.T) {
 		t.Fatal(output, err)
 	}
 }
+
+func TestPrepareReusesPendingSetupWithoutAnExplicitHandle(t *testing.T) {
+	isolate(t)
+	repo := newWatchTestRepo(t)
+	store, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, Purpose: "setup", Stage: "preparing", API: "https://doomer.ai/api", Profile: "default", Agent: "claude", Repo: repo}
+	if err := store.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	output, err := execute(t, "", "prepare", "--agent", "claude", "--repo", repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result managedResult
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatal(output, err)
+	}
+	files, err := filepath.Glob(filepath.Join(store.Root, "tasks", "*.json"))
+	if err != nil || len(files) != 1 || result.Task != handle {
+		t.Fatal(result, files, err)
+	}
+}

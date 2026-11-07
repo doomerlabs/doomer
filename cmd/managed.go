@@ -170,6 +170,21 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 		if err != nil {
 			return err
 		}
+		if handle == "" && strings.TrimSpace(prompt) == "" && session == "" {
+			root, err := watch.Root(c.Context(), repo)
+			if err != nil {
+				return err
+			}
+			setupLock, err := publock.TryAcquire(s.Root, "setup-"+watch.Key(*api+"\x00"+*profile+"\x00"+agent+"\x00"+root))
+			if err != nil {
+				return err
+			}
+			defer setupLock.Close()
+			handle, err = pendingManagedSetup(s, *api, *profile, agent, root)
+			if err != nil {
+				return err
+			}
+		}
 		var task managed.Task
 		if handle != "" {
 			task, err = s.Load(handle)
