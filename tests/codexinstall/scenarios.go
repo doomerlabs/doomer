@@ -140,7 +140,9 @@ func (j *journey) finish() error {
 	responses := len(j.f.Feedback)
 	deepPolls := j.f.DeepPolls
 	automatic := true
+	groups := map[string]bool{}
 	for _, review := range j.f.Reviews {
+		groups[review.GroupID] = true
 		automatic = automatic && review.FullReview == nil
 	}
 	j.f.mu.Unlock()
@@ -154,7 +156,7 @@ func (j *journey) finish() error {
 		j.result.Checks["automatic_review_selection"] = automatic
 	}
 	if j.c.Scenario == "new-chat" {
-		j.result.Checks["two_reviews"] = reviews == 2
+		j.result.Checks["two_reviews"] = len(groups) == 2
 	}
 	for _, ok := range j.result.Checks {
 		if !ok {
@@ -236,16 +238,18 @@ func (j *journey) afterInstall() error {
 			}
 		}
 		j.f.mu.Lock()
-		j.result.Checks["distinct_reviews"] = len(j.f.Reviews) == 2
-		matched := 0
+		groups := map[string]bool{}
+		matched := map[string]bool{}
 		for _, review := range j.f.Reviews {
+			groups[review.GroupID] = true
 			for i := 0; i < 2; i++ {
 				if review.Branch == fmt.Sprintf("work-%d", i) && strings.Contains(review.Diff, fmt.Sprintf("task-%d.txt", i)) {
-					matched++
+					matched[review.Branch] = true
 				}
 			}
 		}
-		j.result.Checks["review_matches_worktree"] = matched == 2
+		j.result.Checks["distinct_reviews"] = len(groups) == 2
+		j.result.Checks["review_matches_worktree"] = len(matched) == 2
 		j.f.mu.Unlock()
 		return j.finish()
 	case "repeat-onboarding", "read-only":

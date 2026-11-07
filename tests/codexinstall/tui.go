@@ -40,15 +40,16 @@ try:
             seen=(seen+data)[-30000:]
             plain=re.sub(rb'\x1b\[[0-?]*[ -/]*[@-~]',b'',seen)
             if os.getenv('DOOMER_TEST_HARNESS')=='claude':
-                if not claude_trusted and (b'Do you trust' in plain or b'Is this a project' in plain):
+                compact=re.sub(rb'\s',b'',plain).lower()
+                if not claude_trusted and (b'doyoutrust' in compact or b'isthisaproject' in compact):
                     claude_trusted=True
                     time.sleep(0.3)
-                    os.write(master,b'\r')
-                if not api_key_accepted and b'Use this API key' in plain:
+                    os.write(master,b'\x1b[B\r')
+                if not api_key_accepted and b'usethisapikey' in compact:
                     api_key_accepted=True
                     time.sleep(0.3)
                     os.write(master,b'\r')
-                if not bypass_accepted and b'Bypass Permissions mode' in plain and b'Yes' in plain:
+                if not bypass_accepted and b'bypasspermissionsmode' in compact and b'yes' in compact:
                     bypass_accepted=True
                     time.sleep(0.3)
                     os.write(master,b'\x1b[B\r')
@@ -65,7 +66,7 @@ try:
             if not data: break
             os.write(master,data)
 finally:
-    try: os.kill(pid,signal.SIGKILL)
+    try: os.killpg(pid,signal.SIGKILL)
     except ProcessLookupError: pass
     os.waitpid(pid,0)
 `
@@ -88,6 +89,8 @@ func (j *journey) tui() error {
 		args = append(args, prompt)
 	}
 	cmd := exec.CommandContext(j.ctx, "python3", args...)
+	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
+	cmd.WaitDelay = 5 * time.Second
 	cmd.Dir = j.repo
 	choice := "allow"
 	if j.c.Scenario == "tui-hooks-denied" {

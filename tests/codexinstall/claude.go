@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const claudeVersion = "2.1.319"
@@ -66,6 +67,7 @@ func runClaude(ctx context.Context, c config, repo string, env []string, prompt,
 		args = append(args, "--resume", session)
 	}
 	cmd := exec.CommandContext(ctx, c.Codex, args...)
+	cmd.WaitDelay = 5 * time.Second
 	cmd.Dir = repo
 	cmd.Env = env
 	cmd.Stdin = strings.NewReader(prompt)

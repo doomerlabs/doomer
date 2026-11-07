@@ -65,11 +65,19 @@ func main() {
 	worker := flag.Bool("worker", false, "internal VM worker mode")
 	model := flag.String("model", "", "model under test; defaults to the pinned harness model")
 	version := flag.String("codex-version", "0.167.0", "exact supported Codex release version")
+	suiteBudget := flag.Float64("suite-budget", 5, "maximum total API reservations when --scenario all is used")
 	budget := flag.Float64("budget", .20, "maximum reserved API spend for this run, USD")
 	output := flag.String("output", "codex-install-report.json", "sanitized JSON report")
 	flag.Parse()
 	if *scenario == "list" {
 		fmt.Println(strings.Join(scenarioNames, "\n"))
+		return
+	}
+	if *scenario == "all" {
+		if err := runSuite(*output, *budget, *suiteBudget); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		return
 	}
 	if !validScenario(*scenario) {
