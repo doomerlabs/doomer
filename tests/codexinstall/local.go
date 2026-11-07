@@ -13,8 +13,12 @@ import (
 
 func runLocal(ctx context.Context, c config, parent string) (result report) {
 	result.Execution = "local"
-	if parent == "" || c.APIKey == "" {
-		result.Error = "local runs require --local-root and TEST_OPENAI_API_KEY"
+	if parent == "" {
+		result.Error = "local runs require --local-root"
+		return result
+	}
+	if err := validateAuthentication(c); err != nil {
+		result.Error = err.Error()
 		return result
 	}
 	dir, err := os.MkdirTemp(parent, "doomer-local-")

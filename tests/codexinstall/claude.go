@@ -104,7 +104,11 @@ func runClaude(ctx context.Context, c config, repo string, env []string, prompt,
 		return turn, readErr
 	}
 	if waitErr != nil || turn.Failed {
-		return turn, fmt.Errorf("Claude execution failed: %s", strings.TrimSpace(stderr.String()))
+		detail := strings.TrimSpace(stderr.String())
+		if detail == "" && len(turn.Messages) > 0 {
+			detail = turn.Messages[len(turn.Messages)-1]
+		}
+		return turn, fmt.Errorf("Claude execution failed: %s", detail)
 	}
 	return turn, nil
 }

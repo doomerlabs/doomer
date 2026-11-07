@@ -61,8 +61,11 @@ func runRemote(ctx context.Context, c config, version string) (result report) {
 	result.Scenario = c.Scenario
 	fail := func(err error) report { result.Error = err.Error(); return result }
 	key := os.Getenv("TEST_EXE_SSH_PRIVATE_KEY")
-	if key == "" || c.APIKey == "" {
-		return fail(fmt.Errorf("set TEST_EXE_SSH_PRIVATE_KEY and TEST_OPENAI_API_KEY"))
+	if key == "" {
+		return fail(fmt.Errorf("set TEST_EXE_SSH_PRIVATE_KEY"))
+	}
+	if err := validateAuthentication(c); err != nil {
+		return fail(err)
 	}
 	if c.Harness != "claude" && version != "0.167.0" {
 		return fail(fmt.Errorf("invalid pinned Codex version"))
@@ -160,8 +163,10 @@ tar -xzf codex.tar.gz -C codex
 	payload, _ := json.Marshal(c)
 	// If the worker connection is lost, keep the full run budget charged as
 	// unknown rather than reporting zero model spend.
-	result.Usage.Reserved = c.Budget
-	result.Usage.Unknown = 1
+	if authenticationMode(c) == "api" {
+		result.Usage.Reserved = c.Budget
+		result.Usage.Unknown = 1
+	}
 	raw, err = r.ssh(ctx, vm.Dest, payload, "/tmp/doomer-codex-e2e/runner --worker")
 	if err != nil {
 		return fail(err)

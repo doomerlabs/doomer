@@ -10,14 +10,14 @@ import (
 )
 
 type suiteCase struct {
-	Scenario string  `json:"scenario"`
-	Passed   bool    `json:"passed"`
-	Report   string  `json:"report"`
-	Charged  float64 `json:"budget_charged_usd"`
+	Scenario string   `json:"scenario"`
+	Passed   bool     `json:"passed"`
+	Report   string   `json:"report"`
+	Charged  *float64 `json:"budget_charged_usd,omitempty"`
 }
 
-func runSuite(output string, perRun, totalLimit float64) error {
-	if perRun <= 0 || perRun > 1 || totalLimit <= 0 {
+func runSuite(output string, perRun, totalLimit float64, auth string) error {
+	if auth == "api" && (perRun <= 0 || perRun > 1 || totalLimit <= 0) {
 		return fmt.Errorf("invalid suite budget")
 	}
 	executable, err := os.Executable()
@@ -36,7 +36,7 @@ func runSuite(output string, perRun, totalLimit float64) error {
 	var results []suiteCase
 	failed := false
 	for _, scenario := range scenarioNames {
-		if spent+perRun > totalLimit {
+		if auth == "api" && spent+perRun > totalLimit {
 			return fmt.Errorf("suite stopped before %s: remaining budget cannot cover its reservation", scenario)
 		}
 		path := strings.TrimSuffix(output, filepath.Ext(output)) + "-" + scenario + ".json"
@@ -56,15 +56,26 @@ func runSuite(output string, perRun, totalLimit float64) error {
 		if !passed {
 			failed = true
 		}
-		spent += charged
-		results = append(results, suiteCase{scenario, passed, path, charged})
+		var runCharge *float64
+		if auth == "api" {
+			spent += charged
+			runCharge = &charged
+		}
+		results = append(results, suiteCase{scenario, passed, path, runCharge})
 		summary := struct {
-			Charged float64 `json:"budget_charged_usd"`
-			Results any     `json:"results"`
-		}{spent, results}
+			AuthMode string   `json:"auth_mode"`
+			Charged  *float64 `json:"budget_charged_usd,omitempty"`
+			Results  any      `json:"results"`
+		}{AuthMode: auth, Results: results}
+		if auth == "api" {
+			summary.Charged = &spent
+		}
 		encoded, _ := json.MarshalIndent(summary, "", "  ")
 		if err := os.WriteFile(output, append(encoded, '\n'), 0600); err != nil {
 			return err
+		}
+		if auth == "subscription" && !passed {
+			return fmt.Errorf("subscription suite stopped after %s failed; see %s", scenario, output)
 		}
 	}
 	if failed {

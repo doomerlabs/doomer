@@ -19,6 +19,7 @@ import (
 func runWorker(c config) (result report) {
 	start := time.Now()
 	result.Model = c.Model
+	result.AuthMode = authenticationMode(c)
 	result.Scenario = c.Scenario
 	result.CandidateVersion = c.CandidateVersion
 	result.InstallGuide = c.InstallGuide
@@ -31,12 +32,15 @@ func runWorker(c config) (result report) {
 	}
 	defer func() {
 		result.Duration = time.Since(start).Seconds()
-		result.Error = redact(result.Error, c.APIKey)
+		result.Error = redact(redact(result.Error, c.APIKey), c.OAuthToken)
 		for i := range result.Events {
-			result.Events[i].Text = redact(result.Events[i].Text, c.APIKey)
+			result.Events[i].Text = redact(redact(result.Events[i].Text, c.APIKey), c.OAuthToken)
 		}
 	}()
 	fail := func(err error) report { result.Error = err.Error(); return result }
+	if err := validateAuthentication(c); err != nil {
+		return fail(err)
+	}
 	userHome, err := os.UserHomeDir()
 	if err != nil {
 		return fail(err)
@@ -83,10 +87,14 @@ func runWorker(c config) (result report) {
 	server := httptest.NewServer(httpHandler(f.serve))
 	defer server.Close()
 	m := newMeter(c)
-	proxy := httptest.NewUnstartedServer(httpHandler(m.serve))
-	proxy.Config.BaseContext = func(net.Listener) context.Context { return ctx }
-	proxy.Start()
-	defer proxy.Close()
+	proxyURL := ""
+	if authenticationMode(c) == "api" {
+		proxy := httptest.NewUnstartedServer(httpHandler(m.serve))
+		proxy.Config.BaseContext = func(net.Listener) context.Context { return ctx }
+		proxy.Start()
+		defer proxy.Close()
+		proxyURL = proxy.URL
+	}
 	defer func() {
 		// Cancel stalled inference before waiting for the final accounting lock.
 		cancel()
@@ -98,15 +106,11 @@ func runWorker(c config) (result report) {
 		f.mu.Unlock()
 	}()
 	env := []string{"HOME=" + home, "PATH=" + filepath.Join(home, ".local/bin") + ":/usr/bin:/bin:/usr/sbin:/sbin", "DOOMER_API_URL=" + server.URL, "DOOMER_CONFIG_DIR=" + filepath.Join(home, ".config/doomer"), "NO_COLOR=1", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
-	configuration, err := configureAgent(c, home, proxy.URL)
+	configuration, err := configureAgent(c, home, proxyURL)
 	if err != nil {
 		return fail(err)
 	}
-	if c.Harness == "claude" {
-		env = append(env, "CLAUDECODE=1", "ANTHROPIC_AUTH_TOKEN=fixture-proxy-token", "ANTHROPIC_BASE_URL="+proxy.URL, "CLAUDE_CONFIG_DIR="+filepath.Join(home, ".claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "DISABLE_AUTOUPDATER=1", "DISABLE_UPDATES=1")
-	} else {
-		env = append(env, "CODEX_HOME="+filepath.Join(home, ".codex"), "OPENAI_API_KEY=fixture-proxy-token")
-	}
+	env = append(env, agentAuthenticationEnvironment(c, home, proxyURL)...)
 	version, err := exec.CommandContext(ctx, c.Codex, "--version").Output()
 	if err != nil {
 		return fail(err)
@@ -114,6 +118,12 @@ func runWorker(c config) (result report) {
 	result.CodexVersion = strings.TrimSpace(string(version))
 	if !validAgentVersion(c, result.CodexVersion) {
 		return fail(fmt.Errorf("unexpected agent version: %s", result.CodexVersion))
+	}
+	if authenticationMode(c) == "subscription" {
+		if err := verifyClaudeSubscription(ctx, c, repo, env); err != nil {
+			return fail(err)
+		}
+		result.Checks["subscription_authentication"] = true
 	}
 	if c.InstallGuide == "" {
 		c.InstallGuide = "https://doomer.ai/install.md"

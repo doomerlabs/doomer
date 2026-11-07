@@ -181,3 +181,32 @@ Use a new output prefix for each suite so earlier recordings remain available.
 The suite writes its result index after every case, continues past assertion
 failures, and stops before starting a case whose reservation would exceed the
 aggregate budget.
+
+### Claude subscription authentication
+
+Keep the API secrets for metered on-demand runs. Add a separate
+`TEST_CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`, then select subscription
+mode explicitly:
+
+```sh
+doppler run --project doomer --config test -- \
+  go run ./tests/codexinstall --harness claude --auth subscription \
+  --scenario first-review --output /tmp/claude-subscription-first-review.json
+```
+
+The real Claude CLI connects directly to its first-party service. Its environment
+contains the OAuth token and excludes API keys, API auth tokens, and proxy
+endpoints. There is no automatic API fallback. Authentication status must report
+`oauth_token` and `firstParty` before the scenario begins, and the model request
+must succeed for the scenario to pass. Reports and HTML recordings identify
+subscription allowance rather than displaying a zero-dollar API charge.
+
+`--auth api` remains the default, using the existing metering proxy and dollar
+limits. Subscription mode uses the existing eight-minute worker deadline and
+agent-turn limits. Dollar-budget flags apply only to API mode. A subscription
+suite stops on its first failed scenario to avoid repeatedly consuming allowance
+when authentication or the provider is unavailable. No subscription token is
+written into the worker's command line or report. Remote workers receive it over
+SSH stdin, and disposable test homes and VMs are removed after the run.
+
+Codex subscription mode and automatic PR scheduling are separate follow-up work.
