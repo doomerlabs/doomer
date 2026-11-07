@@ -3,16 +3,17 @@ package adversarylabs
 import "context"
 
 type ManagedSetupRequest struct {
-	Resumable       bool                     `json:"resumable"`
-	PortableState   bool                     `json:"portableState,omitempty"`
-	Request         string                   `json:"request"`
-	CodeChallenge   string                   `json:"codeChallenge"`
-	Callback        string                   `json:"callback"`
-	Profile         string                   `json:"profile"`
-	API             string                   `json:"api"`
-	AllRepositories bool                     `json:"allRepositories"`
-	Repositories    []ManagedSetupRepository `json:"repositories"`
-	Agents          []string                 `json:"agents"`
+	Resumable        bool                     `json:"resumable"`
+	AnonymousAllowed bool                     `json:"anonymousAllowed,omitempty"`
+	PortableState    bool                     `json:"portableState,omitempty"`
+	Request          string                   `json:"request"`
+	CodeChallenge    string                   `json:"codeChallenge"`
+	Callback         string                   `json:"callback"`
+	Profile          string                   `json:"profile"`
+	API              string                   `json:"api"`
+	AllRepositories  bool                     `json:"allRepositories"`
+	Repositories     []ManagedSetupRepository `json:"repositories"`
+	Agents           []string                 `json:"agents"`
 }
 
 type ManagedSetupRepository struct {
@@ -28,6 +29,7 @@ type ManagedSetupResponse struct {
 
 type ManagedSetupResult struct {
 	TokenResponse
+	Anonymous     bool   `json:"anonymous,omitempty"`
 	State         string `json:"state"`
 	AccountID     string `json:"account_id"`
 	PortableState *bool  `json:"portable_state"`

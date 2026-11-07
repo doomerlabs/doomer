@@ -107,8 +107,8 @@ func restorePortable(ctx context.Context, app *application.App, s managed.Store,
 	if record.Schema != 1 || record.API != t.API || record.Profile != t.Profile || record.Origin != origin || !record.Grant.Approved || record.Grant.Account == "" || record.Grant.API != t.API || record.Grant.Profile != t.Profile {
 		return fmt.Errorf("portable setup does not match this repository, service, and profile")
 	}
-	if record.Auth.Token == "" || adversarylabs.IsAnonymousToken(record.Auth.Token) {
-		return fmt.Errorf("portable setup has no account credential")
+	if record.Auth.Token == "" {
+		return fmt.Errorf("portable setup has no credential")
 	}
 	if record.Authorized && record.Policy == t.Bootstrap.Policy && record.UpdateApprovedAt.IsZero() {
 		return fmt.Errorf("portable setup is missing its update approval timestamp")
@@ -126,18 +126,24 @@ func restorePortable(ctx context.Context, app *application.App, s managed.Store,
 			return nil
 		}
 	}
-	client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, t.API)
-	identity, err := client.Whoami(ctx, record.Auth.Token)
-	if err != nil {
-		if errors.Is(err, adversarylabs.ErrNotAuthenticated) {
-			return nil
+	var identityID string
+	if adversarylabs.IsAnonymousToken(record.Auth.Token) {
+		identityID = "anonymous:" + watch.Key(record.Auth.Token)
+	} else {
+		client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, t.API)
+		identity, err := client.Whoami(ctx, record.Auth.Token)
+		if err != nil {
+			if errors.Is(err, adversarylabs.ErrNotAuthenticated) {
+				return nil
+			}
+			return managed.NetworkError("portable_account_verification", err)
 		}
-		return managed.NetworkError("portable_account_verification", err)
+		identityID = identity.ID
 	}
-	if identity.ID != record.Grant.Account {
+	if identityID != record.Grant.Account {
 		return fmt.Errorf("portable setup account mismatch")
 	}
-	if t.AccountID != "" && t.AccountID != identity.ID {
+	if t.AccountID != "" && t.AccountID != identityID {
 		return fmt.Errorf("portable setup belongs to a different task account")
 	}
 	key := adversarylabs.AuthKey(t.API, t.Profile)
@@ -146,7 +152,7 @@ func restorePortable(ctx context.Context, app *application.App, s managed.Store,
 		return err
 	}
 	local, account, err := managedIdentity(ctx, app, *t)
-	if err == nil && account != identity.ID {
+	if err == nil && account != identityID {
 		return fmt.Errorf("portable setup belongs to a different account than this profile")
 	}
 	if err != nil && !errors.Is(err, errManagedLoginRequired) {
@@ -157,7 +163,7 @@ func restorePortable(ctx context.Context, app *application.App, s managed.Store,
 			return err
 		}
 	}
-	t.AccountID = identity.ID
+	t.AccountID = identityID
 	grant := record.Grant
 	grant.Repository = t.RepositoryID
 	var previous repositoryConsent

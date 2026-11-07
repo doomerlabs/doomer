@@ -15,7 +15,6 @@ import (
 
 	"github.com/doomerlabs/doomer/internal/application"
 	"github.com/doomerlabs/doomer/internal/managed"
-	"github.com/doomerlabs/doomer/internal/runtimeversion"
 	"github.com/doomerlabs/doomer/internal/selfupdate"
 	"github.com/doomerlabs/doomer/internal/watch"
 	"github.com/spf13/cobra"
@@ -136,7 +135,15 @@ func newManagedHooksCommand(app *application.App, api, profile *string) *cobra.C
 			return err
 		}
 		executable := filepath.Join(home, ".local/bin/doomer")
-		command := watch.Quote(executable) + " --profile " + watch.Quote(*profile) + " --api-url " + watch.Quote(*api) + " agent-hook --agent " + agent + " --managed-task-adapter"
+		prefix := ""
+		if developmentRuntime(*api, *profile) {
+			executable, err = os.Executable()
+			if err != nil {
+				return err
+			}
+			prefix = "env DOOMER_DEV_CLI=1 "
+		}
+		command := prefix + watch.Quote(executable) + " --profile " + watch.Quote(*profile) + " --api-url " + watch.Quote(*api) + " agent-hook --agent " + agent + " --managed-task-adapter"
 		userHome, err := os.UserHomeDir()
 		if err != nil {
 			return err
@@ -204,11 +211,10 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 		}
 		// Invoke the task's exact release as a separate bounded call. No watcher
 		// process needs to survive this hook invocation.
-		home, err := taskRuntimeHome(task)
+		binary, err := managedTaskBinary(task)
 		if err != nil {
 			return err
 		}
-		binary := runtimeversion.Binary(home, task.Release)
 		command := exec.CommandContext(c.Context(), binary, "--api-url", *api, "--profile", *profile, "task", "hook", handle)
 		command.Stdin = bytes.NewReader(data)
 		for _, entry := range os.Environ() {

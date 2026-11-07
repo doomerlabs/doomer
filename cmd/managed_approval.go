@@ -76,6 +76,21 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 	if err := watch.Read(file, &pending); err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	if pending.Input.Request != "" && time.Now().Before(pending.Expires) && !pending.Input.AnonymousAllowed && adversarylabs.IsAnonymousToken(pending.Credential) {
+		// Re-advertise capability on the same request, retaining its PKCE verifier
+		// and browser URL. The service upgrades only matching, undecided grants.
+		status, err := client.PollManagedSetup(c.Context(), pending.Input.Request, pending.Verifier)
+		if err != nil {
+			return managed.NetworkError("repository_approval", err)
+		}
+		if status.State == "pending" {
+			pending.Input.AnonymousAllowed = true
+			pending.URL = ""
+			if err := watch.Write(file, pending); err != nil {
+				return err
+			}
+		}
+	}
 	if pending.Input.Request == "" || time.Now().After(pending.Expires) || pending.Input.PortableState != t.Portable {
 		secret := make([]byte, 96)
 		if _, err := rand.Read(secret); err != nil {
@@ -91,7 +106,7 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		if err != nil {
 			return err
 		}
-		pending.Input = adversarylabs.ManagedSetupRequest{Resumable: true, PortableState: t.Portable, Request: base64.RawURLEncoding.EncodeToString(secret[32:64]),
+		pending.Input = adversarylabs.ManagedSetupRequest{Resumable: true, AnonymousAllowed: true, PortableState: t.Portable, Request: base64.RawURLEncoding.EncodeToString(secret[32:64]),
 			CodeChallenge: base64.RawURLEncoding.EncodeToString(challenge[:]), Profile: t.Profile, API: t.API,
 			Repositories: repos, Agents: []string{t.Agent}}
 		// Persist the request identity before network I/O so a retry cannot create
@@ -128,19 +143,29 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 	case "cancelled":
 		r.State, r.Action = "approval_declined", "Repository approval was cancelled. Doomer uploads remain disabled."
 	case "approved":
-		if result.Token == "" || result.AccountID == "" {
-			return fmt.Errorf("repository approval has no authenticated account")
+		var verifiedAccount string
+		if result.Anonymous {
+			if !pending.Input.AnonymousAllowed || !adversarylabs.IsAnonymousToken(pending.Credential) || result.Token != "" || result.AccountID != "" {
+				return fmt.Errorf("invalid anonymous repository approval")
+			}
+			result.Token = pending.Credential
+			verifiedAccount = "anonymous:" + watch.Key(result.Token)
+		} else {
+			if result.Token == "" || result.AccountID == "" || adversarylabs.IsAnonymousToken(result.Token) {
+				return fmt.Errorf("repository approval has no authenticated account")
+			}
+			verified, err := client.Whoami(c.Context(), result.Token)
+			if err != nil {
+				return managed.NetworkError("account_verification", err)
+			}
+			verifiedAccount = verified.ID
+			if verifiedAccount != result.AccountID {
+				return fmt.Errorf("repository approval account mismatch")
+			}
 		}
-		if t.AccountID != "" && t.AccountID != result.AccountID {
+		upgradingAnonymous := !result.Anonymous && adversarylabs.IsAnonymousToken(pending.Credential) && t.AccountID == "anonymous:"+watch.Key(pending.Credential)
+		if t.AccountID != "" && t.AccountID != verifiedAccount && !upgradingAnonymous {
 			return fmt.Errorf("repository approval belongs to another account")
-		}
-		verified, err := client.Whoami(c.Context(), result.Token)
-		if err != nil {
-			return managed.NetworkError("account_verification", err)
-		}
-		verifiedAccount := verified.ID
-		if verifiedAccount != result.AccountID {
-			return fmt.Errorf("repository approval account mismatch")
 		}
 		if err = app.Dependencies().Auth.SetAuthCAS(authKey, expectedAuth, hadAuth, adversarylabs.Auth{Token: result.Token, ClientID: result.ClientID, ExpiresAt: result.ExpiresAt, RegistryNamespace: result.RegistryNamespace}); err != nil {
 			return err

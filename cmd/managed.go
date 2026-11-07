@@ -29,6 +29,7 @@ import (
 )
 
 type managedResult struct {
+	Anonymous            bool                           `json:"anonymous,omitempty"`
 	ReviewNotRequired    string                         `json:"review_not_required,omitempty"`
 	NoChanges            bool                           `json:"no_changes,omitempty"`
 	CodexReviewPolicy    *codexReviewPolicy             `json:"codex_review_policy,omitempty"`
@@ -78,6 +79,7 @@ func managedStoreLocation() (managed.Store, error) {
 }
 func resultFor(task managed.Task) managedResult {
 	r := managedResult{Error: task.LastError, State: task.Stage, Task: task.Handle, Release: task.Release, SoftwareReady: task.Release != "", HookActivated: task.HookActivated, Review: task.Review}
+	r.Anonymous = strings.HasPrefix(task.AccountID, "anonymous:")
 	r.PromptTruncated = len([]rune(task.Prompt)) > 4000
 	r.NoChanges = task.NoChanges
 	if task.Purpose == "setup" && task.Stage == "complete" {
@@ -87,8 +89,11 @@ func resultFor(task managed.Task) managedResult {
 	r.Capabilities = task.Capabilities
 	r.UpdateAvailable = task.OfferedRelease
 	if task.Release != "" && !task.Portable {
-		if home, err := taskRuntimeHome(task); err == nil {
-			r.PortableSetupCommand = []string{runtimeversion.Binary(home, task.Release), "--api-url", task.API, "--profile", task.Profile, "prepare", "--task", task.Handle, "--portable"}
+		if binary, err := managedTaskBinary(task); err == nil {
+			r.PortableSetupCommand = []string{binary, "--api-url", task.API, "--profile", task.Profile, "prepare", "--task", task.Handle, "--portable"}
+			if task.Release == "dev" {
+				r.PortableSetupCommand = append([]string{"env", "DOOMER_DEV_CLI=1"}, r.PortableSetupCommand...)
+			}
 		}
 	}
 	if task.Review != nil {
@@ -106,10 +111,14 @@ func resultFor(task managed.Task) managedResult {
 	return r
 }
 func managedTaskInstructions(task managed.Task) string {
+	instructions := managed.Instructions
 	if task.Purpose == "setup" {
-		return "This is a setup-only task. Finish configuring the active agent integration and verify readiness. Do not submit repository content or run a code review for this task. The coding review procedure below applies only to coding tasks.\n\n" + managed.Instructions
+		instructions = "This is a setup-only task. Finish configuring the active agent integration and verify readiness. Do not submit repository content or run a code review for this task. The coding review procedure below applies only to coding tasks.\n\n" + instructions
 	}
-	return managed.Instructions
+	if strings.HasPrefix(task.AccountID, "anonymous:") {
+		instructions = "This task uses an anonymous capability token. authenticated=true confirms that credential, not an account sign-in. The saved repository upload consent applies to this anonymous installation. Continue through the same task commands without requiring sign-in. Anonymous reviews are quick looks only.\n\n" + instructions
+	}
+	return instructions
 }
 
 func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedResult) error {
@@ -140,6 +149,7 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 	r.PortableSetupCommand = taskResult.PortableSetupCommand
 	r.SubmittedPromptRunes = taskResult.SubmittedPromptRunes
 	r.NoChanges = taskResult.NoChanges
+	r.Anonymous = taskResult.Anonymous
 	r.ReviewNotRequired = taskResult.ReviewNotRequired
 	r.UpdateAvailable = taskResult.UpdateAvailable
 	r.Review = taskResult.Review
@@ -272,6 +282,12 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 			return err
 		}
 		r = resultFor(task)
+		if task.Release != "dev" && developmentRuntime(task.API, task.Profile) {
+			task.Release = "dev"
+			if err := s.Save(&task); err != nil {
+				return err
+			}
+		}
 		if task.Release == "" {
 			state, err := prepareRelease(c.Context(), s, &task, allowUpdates)
 			if err != nil {
@@ -457,8 +473,11 @@ func managedIdentity(ctx context.Context, app *application.App, t managed.Task) 
 	if err != nil {
 		return auth, "", err
 	}
-	if !ok || auth.Token == "" || adversarylabs.IsAnonymousToken(auth.Token) {
+	if !ok || auth.Token == "" {
 		return auth, "", errManagedLoginRequired
+	}
+	if adversarylabs.IsAnonymousToken(auth.Token) {
+		return auth, "anonymous:" + watch.Key(auth.Token), nil
 	}
 	client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, t.API)
 	account, err := client.Whoami(ctx, auth.Token)
@@ -771,20 +790,28 @@ func dispatchManaged(ctx context.Context, args []string, in io.Reader, out, stde
 	if err != nil {
 		return true, err
 	}
+	// The explicit local override also applies to tasks created before the
+	// development build was installed. Prepare saves the selection under its lock.
+	if developmentRuntime(task.API, task.Profile) {
+		return false, nil
+	}
 	if task.Release == "" {
 		return false, nil
 	}
-	home, err := taskRuntimeHome(task)
+	binary, err := managedTaskBinary(task)
 	if err != nil {
 		return true, err
 	}
-	binary := runtimeversion.Binary(home, task.Release)
 	current, err := os.Executable()
 	if err != nil {
 		return true, err
 	}
 	if current == binary {
 		return false, nil
+	}
+	home, err := taskRuntimeHome(task)
+	if err != nil {
+		return true, err
 	}
 	status, err := (selfupdate.Updater{Home: home, Versioned: true}).Check(task.Release)
 	if err != nil || status.State != "ready" {
@@ -866,7 +893,7 @@ func rollbackManaged(s managed.Store, t managed.Task) error {
 // Status delivery is best effort and separately bounded. The private observation
 // remains available when the service is unreachable. No review is created here.
 func reportManagedStatus(ctx context.Context, s managed.Store, t managed.Task, state string) {
-	if t.Release == "" || t.AccountID == "" {
+	if t.Release == "" || t.Release == "dev" || t.AccountID == "" {
 		return
 	}
 	store := adversarylabs.ConfigStore{Path: filepath.Join(filepath.Dir(s.Root), "config.json")}
