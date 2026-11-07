@@ -1,0 +1,32 @@
+tests/codexinstall/claude.go
+  s_f23d7bc729b5d1::t_70fd1972e28aeb 121-125,137-147,155
+scripts/ci-agent-e2e.sh
+  s_f23d7bc729b5d1::t_d35126f99a65c6 32-36
+tests/codexinstall/auth.go
+  s_f23d7bc729b5d1::t_d35126f99a65c6 4,70-71,74
+tests/codexinstall/auth_test.go
+  s_f23d7bc729b5d1::t_d35126f99a65c6 120-133
+tests/codexinstall/claude_test.go
+  s_f23d7bc729b5d1::t_70fd1972e28aeb 17-18
+.depot/workflows/agent-e2e.yml
+  s_f23d7bc729b5d1::t_f8a519890f5931 36
+  s_f23d7bc729b5d1::t_d35126f99a65c6 22,43-52,69
+tests/codexinstall/README.md
+  s_f23d7bc729b5d1::t_d35126f99a65c6 206-207,211
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4e725a3b5094ec2032887f8bd06e036f6bdf4ff4",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
