@@ -1,0 +1,35 @@
+tests/codexinstall/claude_proxy.go
+  s_f23d7bc729b5d1::t_f35f481c94f671 78,80,86-89,91,93,99,101,138,145,158,160
+internal/managed/managed_test.go
+  s_f23d7bc729b5d1::t_0137ce9692f9cd 160-162
+cmd/managed.go
+  s_f23d7bc729b5d1::t_f35f481c94f671 259,263-268,270-272,275
+tests/codexinstall/claude_test.go
+  s_f23d7bc729b5d1::t_0137ce9692f9cd 94-121
+cmd/managed_install.go
+  s_f23d7bc729b5d1::t_f35f481c94f671 126-128,132-149,151
+tests/codexinstall/worker.go
+  s_f23d7bc729b5d1::t_f35f481c94f671 155
+cmd/managed_prompt_test.go
+  s_f23d7bc729b5d1::t_0137ce9692f9cd 224-244
+internal/managed/operations.go
+  s_f23d7bc729b5d1::t_f35f481c94f671 123,305-307
+internal/managed/no_changes_test.go
+  s_f23d7bc729b5d1::t_0137ce9692f9cd 38-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ac3a11081a54c587e2948f51d8c02bbbf34c1abb",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
