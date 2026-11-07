@@ -78,6 +78,9 @@ func managedStoreLocation() (managed.Store, error) {
 }
 func resultFor(task managed.Task) managedResult {
 	r := managedResult{Error: task.LastError, State: task.Stage, Task: task.Handle, Release: task.Release, SoftwareReady: task.Release != "", HookActivated: task.HookActivated, Review: task.Review}
+	if task.Stage == "reviewed" {
+		r.Action = "The review field contains this task's completed results. Record any outstanding finding responses, then run doomer task finish " + task.Handle + "."
+	}
 	r.PromptTruncated = len([]rune(task.Prompt)) > 4000
 	r.NoChanges = task.NoChanges
 	if task.Purpose == "setup" && task.Stage == "complete" {

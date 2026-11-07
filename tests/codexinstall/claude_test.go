@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestClaudeTranscriptKeepsOnlyVisibleContent(t *testing.T) {
@@ -95,26 +97,42 @@ func TestClaudeMeterRetainsReservationForIncompleteStream(t *testing.T) {
 func TestClaudeMeterDoesNotHoldBudgetLockDuringInference(t *testing.T) {
 	m := newMeter(config{Harness: "claude", Model: "claude-haiku-5-5", Budget: .20})
 	started, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 	m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
 		body := `{"input_tokens":1000}`
 		if r.URL.Path == "/v1/messages" {
 			close(started)
-			<-release
+			select {
+			case <-release:
+			case <-r.Context().Done():
+				return nil, r.Context().Err()
+			}
 			body = "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1000}}}\n\ndata: {\"type\":\"message_stop\"}\n\n"
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
 	})}
 	go func() {
 		defer close(done)
-		m.serve(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-haiku-5-5"}`)))
+		m.serve(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-haiku-5-5"}`)).WithContext(ctx))
 	}()
-	<-started
+	select {
+	case <-started:
+	case <-done:
+		t.Fatal("request ended before inference")
+	case <-ctx.Done():
+		t.Fatal("inference did not start within the deadline")
+	}
 	available := m.mu.TryLock()
 	if available {
 		m.mu.Unlock()
 	}
 	close(release)
-	<-done
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("request did not finish within the deadline")
+	}
 	if !available {
 		t.Fatal("inference blocked independent budget accounting")
 	}

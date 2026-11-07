@@ -324,3 +324,10 @@ func TestPrepareReusesPendingSetupWithoutAnExplicitHandle(t *testing.T) {
 		t.Fatal(result, files, err)
 	}
 }
+
+func TestReviewedTaskIncludesFinishAction(t *testing.T) {
+	result := resultFor(managed.Task{Handle: "task-handle", Stage: "reviewed"})
+	if !strings.Contains(result.Action, "doomer task finish task-handle") || !strings.Contains(result.Action, "review field") {
+		t.Fatal(result.Action)
+	}
+}
