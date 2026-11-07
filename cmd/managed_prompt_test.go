@@ -219,3 +219,28 @@ func TestPrepareDefaultsToActiveClaudeHarness(t *testing.T) {
 		t.Fatal(command.Flag("agent").DefValue)
 	}
 }
+
+func TestPendingSetupRequiresAnUnambiguousScope(t *testing.T) {
+	store := managed.Store{Root: t.TempDir()}
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, Purpose: "setup", Stage: "ready", API: "https://doomer.ai/api", Profile: "default", Agent: "claude", Repo: "/repo"}
+	if err := store.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	got, err := pendingManagedSetup(store, task.API, task.Profile, task.Agent, task.Repo)
+	if err != nil || got != handle {
+		t.Fatal(got, err)
+	}
+	got, err = pendingManagedSetup(store, task.API, task.Profile, "codex", task.Repo)
+	if err != nil || got != "" {
+		t.Fatal(got, err)
+	}
+	task.Handle, _ = managed.NewHandle()
+	if err := store.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	got, err = pendingManagedSetup(store, task.API, task.Profile, task.Agent, task.Repo)
+	if err != nil || got != "" {
+		t.Fatal("ambiguous setup selected", got, err)
+	}
+}

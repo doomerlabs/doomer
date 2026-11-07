@@ -191,7 +191,15 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 		path := filepath.Join(s.Root, "sessions", watch.Key(*api+"\x00"+*profile+"\x00"+agent+"\x00"+repo+"\x00"+event.Session)+".json")
 		var handle string
 		if err = watch.Read(path, &handle); os.IsNotExist(err) {
-			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event.Event, "additionalContext": "Doomer task is not prepared. Read the installed bootstrap and run doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " before editing. Include the actual user request with --prompt."}})
+			message := "Doomer task is not prepared. Read the installed bootstrap and run doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " before editing. Include the actual user request with --prompt."
+			pending, lookupErr := pendingManagedSetup(s, *api, *profile, agent, repo)
+			if lookupErr != nil {
+				return lookupErr
+			}
+			if pending != "" {
+				message = "Continue the existing Doomer setup. Run doomer prepare --task " + watch.Quote(pending) + " --session " + watch.Quote(event.Session) + ". Do not create a replacement task. Finish setup without starting a code review."
+			}
+			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event.Event, "additionalContext": message}})
 		} else if err != nil {
 			return err
 		}
@@ -331,4 +339,31 @@ func writeBootstrapFiles(base string, paths []string, content []byte, expected m
 	}
 	success = true
 	return nil
+}
+
+// Offer a saved handle only when one unbound setup unambiguously matches this
+// hook's complete scope. Ambiguous or coding tasks retain normal preparation.
+func pendingManagedSetup(s managed.Store, api, profile, agent, repo string) (string, error) {
+	files, err := filepath.Glob(filepath.Join(s.Root, "tasks", "*.json"))
+	if err != nil {
+		return "", err
+	}
+	handle := ""
+	for _, file := range files {
+		var task managed.Task
+		if err := watch.Read(file, &task); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return "", err
+		}
+		if task.API != api || task.Profile != profile || task.Agent != agent || task.Repo != repo || task.Purpose != "setup" || task.Paused || task.Stage == "complete" || task.Capabilities.SessionID != "" {
+			continue
+		}
+		if handle != "" {
+			return "", nil
+		}
+		handle = task.Handle
+	}
+	return handle, nil
 }
