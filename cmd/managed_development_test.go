@@ -179,7 +179,7 @@ func TestDevelopmentHooksUseLocalBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 	executable, _ := os.Executable()
-	if !strings.Contains(string(data), "env DOOMER_DEV_CLI=1") || !strings.Contains(string(data), executable) {
+	if !strings.Contains(string(data), "env DOOMER_DEV_CLI=1") || strings.Contains(string(data), executable) || !strings.Contains(string(data), "development") {
 		t.Fatal(string(data))
 	}
 }
@@ -188,5 +188,28 @@ func TestAnonymousSetupKeepsSetupOnlyInstructions(t *testing.T) {
 	instructions := managedTaskInstructions(managed.Task{AccountID: "anonymous:test", Purpose: "setup"})
 	if !strings.Contains(instructions, "anonymous capability") || !strings.Contains(instructions, "Do not submit repository content or run a code review") {
 		t.Fatal(instructions)
+	}
+}
+
+func TestDevelopmentHookBinarySurvivesSourceRemoval(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(t.TempDir(), "doomer")
+	if err := os.WriteFile(source, []byte("development binary"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	staged, err := stageDevelopmentBinary(source, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(source); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(staged)
+	if err != nil || string(contents) != "development binary" {
+		t.Fatal(string(contents), err)
+	}
+	info, err := os.Stat(staged)
+	if err != nil || info.Mode().Perm()&0100 == 0 {
+		t.Fatal("staged binary is not executable", err)
 	}
 }

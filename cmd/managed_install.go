@@ -169,6 +169,14 @@ func newManagedHooksCommand(app *application.App, api, profile *string) *cobra.C
 			if err != nil {
 				return err
 			}
+			state, stateErr := managedStore()
+			if stateErr != nil {
+				return stateErr
+			}
+			executable, err = stageDevelopmentBinary(executable, state.Root)
+			if err != nil {
+				return err
+			}
 			prefix = "env DOOMER_DEV_CLI=1 "
 		}
 		command := prefix + watch.Quote(executable) + " --profile " + watch.Quote(*profile) + " --api-url " + watch.Quote(*api) + " agent-hook --agent " + agent + " --managed-task-adapter"
