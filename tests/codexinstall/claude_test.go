@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 func TestClaudeTranscriptKeepsOnlyVisibleContent(t *testing.T) {
 	raw := `{"type":"system","session_id":"session"}
+{"type":"user","message":{"content":"a terminal prompt"}}
 {"type":"assistant","message":{"content":[{"type":"thinking","thinking":"private reasoning"},{"type":"text","text":"Please approve updates"},{"type":"tool_use","name":"Bash","input":{"command":"doomer prepare"}}]}}
 {"type":"user","message":{"content":[{"type":"tool_result","content":"{\"state\":\"update_permission_required\"}"}]}}
 {"type":"result","session_id":"session","is_error":false}`
@@ -48,5 +50,44 @@ func TestClaudeMeterCountsCacheWritesAndPreservesBudget(t *testing.T) {
 	}
 	if strings.Contains(out.Body.String(), "private-key") {
 		t.Fatal("credential leak")
+	}
+}
+
+func TestClaudeMeterRefusesOverBudgetAndLongContext(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		input  int64
+		budget float64
+	}{{"budget", 1000, .0001}, {"context", 98001, .20}} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newMeter(config{Harness: "claude", Model: "claude-haiku-5-5", Budget: tc.budget})
+			m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path != "/v1/messages/count_tokens" {
+					t.Fatal("inference must not start")
+				}
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{"input_tokens":%d}`, tc.input)))}, nil
+			})}
+			out := httptest.NewRecorder()
+			m.serve(out, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-haiku-5-5"}`)))
+			if out.Code == 200 || m.usage.Requests != 0 {
+				t.Fatal(out.Code, m.usage)
+			}
+		})
+	}
+}
+
+func TestClaudeMeterRetainsReservationForIncompleteStream(t *testing.T) {
+	m := newMeter(config{Harness: "claude", Model: "claude-haiku-5-5", Budget: .20})
+	m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		body := `{"input_tokens":1000}`
+		if r.URL.Path == "/v1/messages" {
+			body = "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1000}}}\n\n"
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	out := httptest.NewRecorder()
+	m.serve(out, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-haiku-5-5"}`)))
+	if m.usage.Unknown != 1 || m.usage.Reserved <= 0 || m.usage.Cost != 0 {
+		t.Fatal(m.usage)
 	}
 }

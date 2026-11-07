@@ -80,7 +80,25 @@ func runClaude(ctx context.Context, c config, repo string, env []string, prompt,
 	if err = cmd.Start(); err != nil {
 		return codexTurn{}, err
 	}
-	turn, readErr := readClaudeTurn(out, record)
+	type parsedTurn struct {
+		turn codexTurn
+		err  error
+	}
+	parsed := make(chan parsedTurn, 1)
+	go func() {
+		turn, err := readClaudeTurn(out, record)
+		parsed <- parsedTurn{turn, err}
+	}()
+	var result parsedTurn
+	select {
+	case result = <-parsed:
+	case <-ctx.Done():
+		// A descendant can retain stdout after Claude exits. Close our reader
+		// so cancellation also bounds transcript collection.
+		_ = out.Close()
+		result = <-parsed
+	}
+	turn, readErr := result.turn, result.err
 	waitErr := cmd.Wait()
 	if readErr != nil {
 		return turn, readErr
@@ -101,13 +119,7 @@ func readClaudeTurn(reader io.Reader, record func(string, string)) (codexTurn, e
 			IsError bool   `json:"is_error"`
 			Result  string `json:"result"`
 			Message struct {
-				Content []struct {
-					Type    string          `json:"type"`
-					Text    string          `json:"text"`
-					Name    string          `json:"name"`
-					Input   json.RawMessage `json:"input"`
-					Content json.RawMessage `json:"content"`
-				} `json:"content"`
+				Content json.RawMessage `json:"content"`
 			} `json:"message"`
 		}
 		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
@@ -120,7 +132,15 @@ func readClaudeTurn(reader io.Reader, record func(string, string)) (codexTurn, e
 			turn.Failed = true
 			record("Claude error", event.Result)
 		}
-		for _, block := range event.Message.Content {
+		var blocks []struct {
+			Type    string          `json:"type"`
+			Text    string          `json:"text"`
+			Name    string          `json:"name"`
+			Input   json.RawMessage `json:"input"`
+			Content json.RawMessage `json:"content"`
+		}
+		_ = json.Unmarshal(event.Message.Content, &blocks)
+		for _, block := range blocks {
 			switch block.Type {
 			case "text":
 				if event.Type == "assistant" {
