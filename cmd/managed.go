@@ -80,6 +80,9 @@ func managedStoreLocation() (managed.Store, error) {
 func resultFor(task managed.Task) managedResult {
 	r := managedResult{Error: task.LastError, State: task.Stage, Task: task.Handle, Release: task.Release, SoftwareReady: task.Release != "", HookActivated: task.HookActivated, Review: task.Review}
 	r.Anonymous = strings.HasPrefix(task.AccountID, "anonymous:")
+	if task.Stage == "reviewed" && task.LastError == "" && task.Review != nil {
+		r.Action = "The review field contains this task's completed results. Record any outstanding finding responses, then run doomer task finish " + task.Handle + "."
+	}
 	r.PromptTruncated = len([]rune(task.Prompt)) > 4000
 	r.NoChanges = task.NoChanges
 	if task.Purpose == "setup" && task.Stage == "complete" {
@@ -113,7 +116,7 @@ func resultFor(task managed.Task) managedResult {
 func managedTaskInstructions(task managed.Task) string {
 	instructions := managed.Instructions
 	if task.Purpose == "setup" {
-		instructions = "This is a setup-only task. Finish configuring the active agent integration and verify readiness. Do not submit repository content or run a code review for this task. The coding review procedure below applies only to coding tasks.\n\n" + instructions
+		instructions = "This is a setup-only task. Configure hooks for the active agent with `doomer hooks --agent " + task.Agent + "` and verify readiness. If a hook asks for a session binding, resume this same setup using `doomer prepare --task " + task.Handle + " --session ACTUAL_SESSION_ID` from the hook. Preserve native hook trust controls. Do not submit repository content or run a code review for this task. The coding review procedure below applies only to coding tasks.\n\n" + instructions
 	}
 	if strings.HasPrefix(task.AccountID, "anonymous:") {
 		instructions = "This task uses an anonymous capability token. authenticated=true confirms that credential, not an account sign-in. The saved repository upload consent applies to this anonymous installation. Continue through the same task commands without requiring sign-in. Anonymous reviews are quick looks only.\n\n" + instructions
@@ -179,6 +182,21 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 		s, err := managedStore()
 		if err != nil {
 			return err
+		}
+		if handle == "" && strings.TrimSpace(prompt) == "" && session == "" {
+			root, err := watch.Root(c.Context(), repo)
+			if err != nil {
+				return err
+			}
+			setupLock, err := publock.TryAcquire(s.Root, "setup-"+watch.Key(*api+"\x00"+*profile+"\x00"+agent+"\x00"+root))
+			if err != nil {
+				return err
+			}
+			defer setupLock.Close()
+			handle, err = pendingManagedSetup(s, *api, *profile, agent, root)
+			if err != nil {
+				return err
+			}
 		}
 		var task managed.Task
 		if handle != "" {
@@ -251,6 +269,26 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 		if task.API != *api || task.Profile != *profile {
 			return fmt.Errorf("resume with the original service and profile")
 		}
+		if c.Flags().Changed("session") {
+			if len(session) == 0 || len(session) > 512 {
+				return fmt.Errorf("provide a session ID between 1 and 512 bytes")
+			}
+			if session != task.Capabilities.SessionID {
+				task.Capabilities.SessionID = session
+				task.Capabilities.Hooks = true
+				if err := s.Save(&task); err != nil {
+					return err
+				}
+			}
+			// Reconcile even after a previous call saved the task but failed while
+			// updating its derived session index.
+			if err := bindManagedSession(s, task); err != nil {
+				return err
+			}
+			if err := clearStaleManagedSessions(s, task); err != nil {
+				return err
+			}
+		}
 		if task.Purpose == "setup" && strings.TrimSpace(prompt) != "" {
 			if len(prompt) > 16000 {
 				return fmt.Errorf("task prompt is too large")
@@ -318,7 +356,11 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 		return managedApproval(c, app, s, &task)
 	}
 	c.Flags().StringVar(&repo, "repo", ".", "checkout being edited")
-	c.Flags().StringVar(&agent, "agent", "codex", "active agent: codex or claude")
+	defaultAgent := "codex"
+	if os.Getenv("CLAUDECODE") != "" {
+		defaultAgent = "claude"
+	}
+	c.Flags().StringVar(&agent, "agent", defaultAgent, "active agent: codex or claude")
 	c.Flags().StringVar(&handle, "task", "", "resume an existing task handle")
 	c.Flags().StringVar(&session, "session", "", "actual harness session ID for optional hook binding")
 	c.Flags().StringVar(&prompt, "prompt", "", "original user task (stored locally until upload is approved)")
@@ -717,6 +759,9 @@ func managedHook(c *cobra.Command, s managed.Store, t *managed.Task, e managed.E
 	root, err := watch.Root(c.Context(), event.CWD)
 	if err != nil || root != t.Repo {
 		return fmt.Errorf("hook checkout does not match task")
+	}
+	if t.Capabilities.SessionID != "" && event.Session != t.Capabilities.SessionID {
+		return fmt.Errorf("hook session no longer owns this task")
 	}
 	if event.Event == "UserPromptSubmit" && t.Submission == nil && strings.TrimSpace(t.Prompt) == "" && strings.TrimSpace(event.Prompt) != "" {
 		t.Prompt = event.Prompt

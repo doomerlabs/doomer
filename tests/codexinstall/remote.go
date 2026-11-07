@@ -64,7 +64,7 @@ func runRemote(ctx context.Context, c config, version string) (result report) {
 	if key == "" || c.APIKey == "" {
 		return fail(fmt.Errorf("set TEST_EXE_SSH_PRIVATE_KEY and TEST_OPENAI_API_KEY"))
 	}
-	if version != "0.167.0" {
+	if c.Harness != "claude" && version != "0.167.0" {
 		return fail(fmt.Errorf("invalid pinned Codex version"))
 	}
 	dir, err := os.MkdirTemp("", "doomer-codex-e2e-")
@@ -126,6 +126,9 @@ curl -fsSL --retry 2 https://github.com/openai/codex/releases/download/rust-v0.1
 printf '%s  codex.tar.gz\n' 3bbf75e83de6b58aed28f2cf6e33ad423ec31fd4700a1457b94be557ea5a7c6e | sha256sum -c -
 tar -xzf codex.tar.gz -C codex
 `
+	if c.Harness == "claude" {
+		install = claudeRemoteInstall
+	}
 	if _, err = r.ssh(ctx, vm.Dest, nil, install); err != nil {
 		return fail(fmt.Errorf("install pinned Codex: %w", err))
 	}
@@ -151,6 +154,9 @@ tar -xzf codex.tar.gz -C codex
 		}
 	}
 	c.Codex = "/tmp/doomer-codex-e2e/codex/bin/codex"
+	if c.Harness == "claude" {
+		c.Codex = "/tmp/doomer-codex-e2e/claude"
+	}
 	payload, _ := json.Marshal(c)
 	// If the worker connection is lost, keep the full run budget charged as
 	// unknown rather than reporting zero model spend.

@@ -123,11 +123,15 @@ func (e Engine) send(ctx context.Context, task *Task, token string) error {
 		return fmt.Errorf("anonymous review cannot enable deep review")
 	}
 	task.Review = &result
+	task.LastError = ""
 	task.Stage = "review_pending"
 	return e.Store.Save(task)
 }
 func (e Engine) Status(ctx context.Context, task *Task, token string) error {
 	if task.Stage == "submitting" {
+		if task.LastError != "" {
+			return errors.New(task.LastError)
+		}
 		if err := e.send(ctx, task, token); err != nil {
 			return err
 		}
@@ -298,14 +302,23 @@ func (e Engine) Finish(ctx context.Context, task *Task, token string) error {
 	return e.Store.Save(task)
 }
 
-// Retry starts a new revision only after the previous review is terminal.
-// Network retries use Submit/Status and retain their existing request identity.
+// Retry resumes an interrupted submission with its existing request identity.
+// A new revision is created only after a previous review has failed.
 func (e Engine) Retry(ctx context.Context, task *Task, token string) error {
+	if task.Stage == "complete" {
+		return fmt.Errorf("task is already complete")
+	}
+	if task.Stage == "submitting" || task.Review == nil {
+		return e.Submit(ctx, task, token)
+	}
 	if err := e.Status(ctx, task, token); err != nil {
 		return err
 	}
 	if task.Stage != "review_failed" {
-		return fmt.Errorf("review is not terminal; resume its existing submission")
+		if task.Stage == "reviewed" || task.Stage == "responses_required" {
+			return fmt.Errorf("review has completed; record any outstanding finding responses and run doomer task finish %s", task.Handle)
+		}
+		return fmt.Errorf("review has not failed; check doomer task status %s and continue its existing submission", task.Handle)
 	}
 	task.Review = nil
 	task.Submission = nil

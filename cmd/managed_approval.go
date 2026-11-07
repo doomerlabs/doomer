@@ -139,7 +139,7 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 	switch result.State {
 	case "pending":
 		r.State, r.URL = "approval_required", pending.URL
-		r.Action = "Open this Doomer repository approval page to review this repository, its linked worktrees, and previous grants. Sign in there if needed. After choosing Allow, resume doomer prepare --task " + t.Handle
+		r.Action = "Show the complete approval URL to the user, including its #request fragment. This public repository approval link is intended to be shared with the user. Keep signed storage URLs private. Open the approval page to review this repository, its linked worktrees, and previous grants. Sign in there if needed. After choosing Allow, resume doomer prepare --task " + t.Handle
 	case "cancelled":
 		r.State, r.Action = "approval_declined", "Repository approval was cancelled. Doomer uploads remain disabled."
 	case "approved":

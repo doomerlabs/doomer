@@ -149,8 +149,16 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = engine.Submit(context.Background(), &resumed, "token"); err != nil {
+	resumed.LastError = "recorded submission failure"
+	attempts := len(client.ids)
+	if err := engine.Status(context.Background(), &resumed, "token"); err == nil || len(client.ids) != attempts {
+		t.Fatal("status retried a recorded failed submission")
+	}
+	if err = engine.Retry(context.Background(), &resumed, "token"); err != nil {
 		t.Fatal(err)
+	}
+	if resumed.LastError != "" {
+		t.Fatal("successful retry retained failure", resumed.LastError)
 	}
 	if len(client.ids) != 2 || client.ids[0] != client.ids[1] {
 		t.Fatal("submission id changed on resume", client.ids)
@@ -178,8 +186,8 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	if err = engine.Finish(context.Background(), &resumed, "token"); err == nil {
 		t.Fatal("accepted unreviewed edits")
 	}
-	if err := engine.Retry(context.Background(), &resumed, "token"); err == nil {
-		t.Fatal("retry replaced a nonterminal review")
+	if err := engine.Retry(context.Background(), &resumed, "token"); err == nil || !strings.Contains(err.Error(), "review has completed") || !strings.Contains(err.Error(), "task finish") {
+		t.Fatal("retry must preserve the completed review and explain how to finish", err)
 	}
 	client.result.Status = "failed"
 	client.result.Early = nil

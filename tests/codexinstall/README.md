@@ -125,7 +125,7 @@ The JSON distinguishes measured token-based cost estimates from charged budget.
 
 GPT-6.1 Terra rates used are $1/M input, $0.05/M cached input and $5/M output.
 Check the current pricing before running after a price change. Other models
-are rejected because their budgeting has not been verified. VM fees are separate.
+are rejected because their budgeting has not been verified. These estimates cover model calls only.
 
 Every remote invocation attempts VM deletion on completion, failure or timeout. The
 name is printed immediately and included in the report. SIGKILL or lost access
@@ -139,3 +139,45 @@ Sources
 - https://developers.openai.com/api/docs/guides/token-counting
 - https://developers.openai.com/api/docs/pricing
 - https://exe.dev/docs/api
+
+## Claude Code
+
+Use `--harness claude` to run the same journeys with Claude Code 2.1.319 and
+`claude-haiku-5-5` at low effort. Supply `TEST_ANTHROPIC_API_KEY` instead of the
+OpenAI key. The Anthropic metering proxy retains the real key, enforces a short
+context and output cap, reserves each request before inference, and records
+cache-read and cache-write usage. Agent processes receive a dummy credential.
+
+```sh
+doppler run --project doomer --config test -- \
+  go run ./tests/codexinstall --harness claude --scenario first-review \
+  --budget 0.20 --output /tmp/claude-first-review.json
+```
+
+For macOS use `--local-claude /path/to/dedicated/claude --local-root /path/to/test-homes`.
+The pinned native binaries are checked against the official release manifest.
+Claude's terminal cases accept workspace trust, then exercise either enabled
+hooks or the supported `disableAllHooks` setting. The disabled case tests that
+setting and the per-call fallback; it does not simulate a Codex-specific hook
+approval dialog. Desktop GUI clients require separate validation.
+
+Sources
+
+- https://downloads.claude.ai/claude-code-releases/2.1.319/manifest.json
+- https://code.claude.com/docs/en/headless
+- https://code.claude.com/docs/en/cli-reference
+- https://code.claude.com/docs/en/hooks
+- https://platform.claude.com/docs/en/models/haiku-5-5/overview
+
+Run all scenarios sequentially with a per-case cap and an aggregate cap:
+
+```sh
+doppler run --project doomer --config test -- \
+  go run ./tests/codexinstall --harness claude --scenario all \
+  --budget 0.20 --suite-budget 5 --output /tmp/claude-suite.json
+```
+
+Use a new output prefix for each suite so earlier recordings remain available.
+The suite writes its result index after every case, continues past assertion
+failures, and stops before starting a case whose reservation would exceed the
+aggregate budget.
