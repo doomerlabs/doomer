@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -97,5 +98,22 @@ exit 1
 	_, err := runClaude(context.Background(), config{Codex: path}, t.TempDir(), []string{"PATH=/usr/bin:/bin"}, "hello", "", func(string, string) {})
 	if err == nil || !strings.Contains(err.Error(), "401 Invalid bearer token") {
 		t.Fatal(err)
+	}
+}
+
+func TestSubscriptionReportOmitsUnmeteredAPICost(t *testing.T) {
+	for _, mode := range []string{"api", "subscription"} {
+		data, err := json.Marshal(report{AuthMode: mode})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(data, &fields); err != nil {
+			t.Fatal(err)
+		}
+		_, present := fields["usage"]
+		if present != (mode == "api") {
+			t.Fatal(string(data))
+		}
 	}
 }
