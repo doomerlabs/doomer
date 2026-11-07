@@ -1,0 +1,25 @@
+docs/managed-runtime.md
+  s_0a149749cc4856::t_454b3737ad0b1e 24-26,81-82
+cmd/permission.go
+  s_0a149749cc4856::t_454b3737ad0b1e 76,79-82
+internal/managed/instructions.md
+  s_0a149749cc4856::t_454b3737ad0b1e 95-100,103-114
+cmd/permission_test.go
+  s_0a149749cc4856::t_454b3737ad0b1e 29-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "598ff43d7f8630ffb0fd966b78e046d2c670b6b8",
+  "prompts": {},
+  "sessions": {
+    "s_0a149749cc4856": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b453-0e3e-7ee3-bff7-6ac43dbfa98a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
