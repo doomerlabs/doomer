@@ -1,0 +1,29 @@
+tests/codexinstall/worker.go
+  s_f23d7bc729b5d1::t_f22841c5260632 133-141
+cmd/managed_bootstrap.go
+  s_f23d7bc729b5d1::t_2c31a20c5dd239 124,146-151,156-157
+cmd/managed_bootstrap_test.go
+  s_f23d7bc729b5d1::t_ba204ef1c7e4c6 48-55
+internal/managed/bootstrap-2026.11.6.11.md
+  s_f23d7bc729b5d1::t_6bdc260c5c31e8 1-70
+internal/managed/bootstrap.md
+  s_f23d7bc729b5d1::t_b81e1dd333acec 56-57
+internal/managed/bootstrap_update.go
+  s_f23d7bc729b5d1::t_cb6b5ce2c1085c 14,23-25,99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea409a23498b8b022971b434ee5a14040354e9d4",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
