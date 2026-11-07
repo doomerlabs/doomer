@@ -194,6 +194,88 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	}
 }
 
+func TestSubmitPreservesReviewUntilFindingResponsesAreSent(t *testing.T) {
+	store := Store{Root: t.TempDir()}
+	handle, _ := NewHandle()
+	first, second := strings.Repeat("a", 64), strings.Repeat("b", 64)
+	review := adversarylabs.WorkspaceReview{ID: "original-review", Early: &adversarylabs.WorkspaceAssessment{
+		Status: "ready", Leads: []adversarylabs.WorkspaceLead{{ID: first}, {ID: second}},
+	}}
+	task := Task{Schema: Protocol, Handle: handle, Stage: "responses_required", Revision: 1, Review: &review, ReviewedTree: "old-tree"}
+	yes, no := true, false
+	client := &fakeReview{result: adversarylabs.WorkspaceReview{ID: "next-review", LookCloserEnabled: &yes, Full: &adversarylabs.WorkspaceFullReview{}}}
+	manifest := sourcesnapshot.Manifest{Version: 1, Scope: "worktree", Base: []sourcesnapshot.Entry{}, Target: []sourcesnapshot.Entry{}, Blobs: map[string][]byte{}}
+	content := []byte("changed\n")
+	hash := sourcesnapshot.Digest(content)
+	manifest.Target = []sourcesnapshot.Entry{{Path: "file.txt", Hash: hash, Mode: "100644"}}
+	manifest.Blobs[hash] = content
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	captures := 0
+	engine := Engine{Store: store, Client: client, Capture: func(context.Context, Task) (sourcesnapshot.Capture, error) {
+		captures++
+		return sourcesnapshot.Capture{Bytes: raw, TargetTreeHash: "new-tree"}, nil
+	}, Upload: func(context.Context, Task, string, string, sourcesnapshot.Manifest) (string, string, string, error) {
+		return "repo", "base", "head", nil
+	}}
+	// PostToolUse runs after edits and can also run while the agent obtains
+	// approval to send its response. Neither may replace the reviewed revision.
+	for _, responses := range [][]Response{nil, {{LeadID: first, Status: "dismissed", Agrees: &no, Reason: "Checked the implementation"}}} {
+		if responses != nil {
+			if err := engine.Respond(context.Background(), &task, "token", responses); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := engine.Submit(context.Background(), &task, "token"); err != nil {
+			t.Fatal(err)
+		}
+		if captures != 0 || len(client.submissions) != 0 || task.Review.ID != review.ID || task.Revision != 1 || task.ReviewedTree != "old-tree" {
+			t.Fatal("replaced review with outstanding responses", task)
+		}
+	}
+	// The guard also applies after restoring the task's on-disk journal.
+	task, err = store.Load(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Respond(context.Background(), &task, "token", []Response{{LeadID: second, Status: "fixed", Agrees: &yes, Reason: "Fixed and verified"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Submit(context.Background(), &task, "token"); err != nil {
+		t.Fatal(err)
+	}
+	if captures != 1 || len(client.submissions) != 1 || client.feedback != 2 || task.Review.ID != "next-review" || task.Revision != 2 {
+		t.Fatal("did not review new edits after sending responses", task)
+	}
+}
+
+func TestFailedAssessmentAcceptsResponsesWithoutCompleting(t *testing.T) {
+	store := Store{Root: t.TempDir()}
+	handle, _ := NewHandle()
+	lead := strings.Repeat("a", 64)
+	result := adversarylabs.WorkspaceReview{ID: "failed-review", Status: "completed", Early: &adversarylabs.WorkspaceAssessment{
+		Status: "ready", FailureCode: "model_request_failed", Leads: []adversarylabs.WorkspaceLead{{ID: lead}},
+	}}
+	task := Task{Schema: Protocol, Handle: handle, Stage: "review_failed", Review: &result}
+	client := &fakeReview{result: result}
+	engine := Engine{Store: store, Client: client}
+	if err := engine.Submit(context.Background(), &task, "token"); err != nil {
+		t.Fatal(err)
+	}
+	no := false
+	if err := engine.Respond(context.Background(), &task, "token", []Response{{LeadID: lead, Status: "dismissed", Agrees: &no, Reason: "Verified compatibility"}}); err != nil {
+		t.Fatal(err)
+	}
+	if client.feedback != 1 || !task.Responses[result.ID+":"+lead].Sent || task.Stage != "review_failed" {
+		t.Fatal("failed review lost its response or failure state", task)
+	}
+	if err := engine.Finish(context.Background(), &task, "token"); err == nil {
+		t.Fatal("response incorrectly completed a failed review")
+	}
+}
+
 func TestManagedAutomaticDeepReviewWaitsForFullResult(t *testing.T) {
 	store := Store{Root: t.TempDir()}
 	handle, _ := NewHandle()

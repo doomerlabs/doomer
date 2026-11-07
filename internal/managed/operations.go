@@ -34,6 +34,15 @@ func (e Engine) Submit(ctx context.Context, task *Task, token string) error {
 	if task.Review != nil && (task.Review.Early == nil || task.Review.Early.Status != "ready") {
 		return nil
 	}
+	// A tool hook can run between reading findings and sending their responses.
+	// Keep that review addressable until every response has been acknowledged.
+	if task.Review != nil {
+		for _, lead := range task.Review.Early.Leads {
+			if !task.Responses[task.Review.ID+":"+lead.ID].Sent {
+				return nil
+			}
+		}
+	}
 	capture, err := e.Capture(ctx, *task)
 	if err != nil {
 		return err
@@ -168,9 +177,12 @@ func ValidateResponse(r Response) error {
 	return nil
 }
 func (e Engine) Respond(ctx context.Context, task *Task, token string, items []Response) error {
-	if task.Review == nil || task.Review.Early == nil || task.Review.Early.Status != "ready" || task.Review.Early.FailureCode != "" {
+	if task.Review == nil || task.Review.Early == nil || task.Review.Early.Status != "ready" {
 		return fmt.Errorf("review results are not ready")
 	}
+	// A failed assessment can still contain actionable findings. Recording their
+	// responses must not turn the incomplete review into a successful one.
+	failed := task.Stage == "review_failed" || task.Review.Early.FailureCode != ""
 	if task.Responses == nil {
 		task.Responses = map[string]Response{}
 	}
@@ -218,6 +230,9 @@ func (e Engine) Respond(ctx context.Context, task *Task, token string, items []R
 		if !task.Responses[task.Review.ID+":"+lead.ID].Sent {
 			task.Stage = "responses_required"
 		}
+	}
+	if failed {
+		task.Stage = "review_failed"
 	}
 	return e.Store.Save(task)
 }
