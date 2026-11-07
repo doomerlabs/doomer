@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -50,7 +54,10 @@ finally:
     os.waitpid(pid,0)
 `
 
+var terminalEscapes = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
+
 func (j *journey) tui() error {
+	started := time.Now()
 	prompt := "Create hello.txt containing hello followed by a newline. Follow the installed Doomer skill and finish its review, recording responses to any findings. Keep Codex approval reviewer settings unchanged."
 	j.record("Scripted user", prompt)
 	j.f.mu.Lock()
@@ -91,7 +98,8 @@ wait:
 			break wait
 		case err = <-done:
 			input.Close()
-			j.record("Command", "Interactive Codex terminal\n"+output.String())
+			j.record("Command", "Interactive Codex terminal\n"+terminalEscapes.ReplaceAllString(output.String(), ""))
+			j.recordTerminalMessages(started)
 			return fmt.Errorf("interactive Codex exited before completing the review: %v", err)
 		case <-ticker.C:
 			tasks, readErr := savedTasks(j.home)
@@ -109,7 +117,8 @@ wait:
 	}
 	input.Close()
 	<-done
-	j.record("Command", "Interactive Codex terminal\n"+output.String())
+	j.record("Command", "Interactive Codex terminal\n"+terminalEscapes.ReplaceAllString(output.String(), ""))
+	j.recordTerminalMessages(started)
 	if !complete {
 		return fmt.Errorf("interactive Codex did not finish within the terminal timeout")
 	}
@@ -123,4 +132,39 @@ wait:
 		j.result.Checks["native_hook_stayed_inactive"] = !hookActivated
 	}
 	return j.finish()
+}
+
+// Only agent_message events are user-facing transcript text. Reasoning and
+// response-item payloads are intentionally excluded from the recording.
+func (j *journey) recordTerminalMessages(started time.Time) {
+	root := filepath.Join(j.home, ".codex", "sessions")
+	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".jsonl") {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil || info.ModTime().Before(started) {
+			return nil
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return nil
+		}
+		defer file.Close()
+		scanner := bufio.NewScanner(file)
+		scanner.Buffer(make([]byte, 65536), 4<<20)
+		for scanner.Scan() {
+			var event struct {
+				Type    string `json:"type"`
+				Payload struct {
+					Type    string `json:"type"`
+					Message string `json:"message"`
+				} `json:"payload"`
+			}
+			if json.Unmarshal(scanner.Bytes(), &event) == nil && event.Type == "event_msg" && event.Payload.Type == "agent_message" && event.Payload.Message != "" {
+				j.record("Codex", event.Payload.Message)
+			}
+		}
+		return nil
+	})
 }

@@ -12,6 +12,7 @@ import (
 )
 
 type config struct {
+	InstallGuide     string  `json:"install_guide"`
 	WorkRoot         string  `json:"work_root,omitempty"`
 	CandidateFile    string  `json:"candidate_file,omitempty"`
 	CandidateVersion string  `json:"candidate_version,omitempty"`
@@ -30,6 +31,7 @@ type recordedEvent struct {
 }
 
 type report struct {
+	InstallGuide     string          `json:"install_guide"`
 	Execution        string          `json:"execution"`
 	LocalCleaned     bool            `json:"local_cleaned,omitempty"`
 	Scenario         string          `json:"scenario"`
@@ -50,6 +52,7 @@ type report struct {
 }
 
 func main() {
+	guide := flag.String("install-guide", "https://doomer.ai/install.md", "verified installation guide to exercise")
 	localCodex := flag.String("local-codex", "", "dedicated pinned Codex executable for an isolated local run")
 	localRoot := flag.String("local-root", "", "writable parent directory for disposable local test homes")
 	candidate := flag.String("candidate-release", "", "test this checkout as the given installed release after public installation")
@@ -103,7 +106,7 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	c := config{APIKey: os.Getenv("TEST_OPENAI_API_KEY"), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate}
+	c := config{APIKey: os.Getenv("TEST_OPENAI_API_KEY"), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate, InstallGuide: *guide}
 	if strings.HasPrefix(*scenario, "upgrade") {
 		raw, err := os.ReadFile("internal/managed/bootstrap-2026.11.6.10.md")
 		if err != nil {
@@ -128,7 +131,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	fmt.Printf("passed=%t cost=$%.6f reserved=$%.6f vm_deleted=%t report=%s\n", r.Passed, r.Usage.Cost, r.Usage.Reserved, r.Deleted, *output)
+	cleaned := r.Deleted
+	if r.Execution == "local" {
+		cleaned = r.LocalCleaned
+	}
+	fmt.Printf("passed=%t cost=$%.6f reserved=$%.6f cleanup_complete=%t report=%s\n", r.Passed, r.Usage.Cost, r.Usage.Reserved, cleaned, *output)
 	if !r.Passed || (r.VM != "" && !r.Deleted) || (r.Execution == "local" && !r.LocalCleaned) {
 		os.Exit(1)
 	}

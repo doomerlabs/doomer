@@ -14,6 +14,9 @@ import (
 type fixture struct {
 	mu                                              sync.Mutex
 	Cancelled, Findings, FailSubmit, PendingReviews bool
+	Deep                                            bool
+	PortableChoice                                  bool
+	DeepPolls                                       int
 	Reviews                                         map[string]adversarylabs.WorkspaceSubmission
 	Feedback                                        map[string]map[string]any
 	Attempts                                        []string
@@ -67,7 +70,7 @@ func (f *fixture) serve(w http.ResponseWriter, r *http.Request) {
 			send(map[string]string{"state": "pending"})
 			return
 		}
-		send(map[string]any{"state": "approved", "token": "fixture-account-token", "account_id": "fixture-account", "portable_state": false})
+		send(map[string]any{"state": "approved", "token": "fixture-account-token", "account_id": "fixture-account", "portable_state": f.PortableChoice})
 	case "/v1/auth/whoami":
 		if !f.authorized(r) {
 			http.Error(w, "unauthorized", 401)
@@ -128,6 +131,9 @@ func (f *fixture) serve(w http.ResponseWriter, r *http.Request) {
 				send(map[string]bool{"accepted": true})
 				return
 			}
+			if f.Deep {
+				f.DeepPolls++
+			}
 			send(f.review(id))
 			return
 		}
@@ -144,6 +150,14 @@ func (f *fixture) authorized(r *http.Request) bool {
 func (f *fixture) review(id string) map[string]any {
 	if f.PendingReviews {
 		return map[string]any{"id": id, "status": "queued", "anonymous": false, "look_closer_enabled": true, "full_review": map[string]any{"enabled": false, "status": "disabled"}}
+	}
+	if f.Deep {
+		full := map[string]any{"enabled": true, "status": "running"}
+		if f.DeepPolls >= 2 {
+			full["status"] = "completed"
+			full["result"] = map[string]any{"summary": "Fixture deep review verified.", "findings": []any{}}
+		}
+		return map[string]any{"id": id, "status": "completed", "url": "https://example.invalid/reviews/" + id, "anonymous": false, "look_closer_enabled": true, "full_review": full, "early_assessment": map[string]any{"status": "ready", "stage": "analysis", "leads": []any{}}}
 	}
 	leads := []map[string]any{}
 	if f.Findings {

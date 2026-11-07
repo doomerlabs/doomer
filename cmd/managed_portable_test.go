@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -15,6 +16,41 @@ import (
 	"github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
+
+func TestFailedPortableRequestLeavesExistingTaskResumable(t *testing.T) {
+	isolate(t)
+	repo := newWatchTestRepo(t)
+	id, err := watch.RepositoryIdentity(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, Repo: repo, RepositoryID: id, API: "https://doomer.ai/api", Profile: "default", Paused: true}
+	if err = s.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	api, profile := task.API, task.Profile
+	command := newPrepareCommand(nil, &api, &profile)
+	command.SetArgs([]string{"--task", handle, "--portable"})
+	if err = command.Execute(); err == nil {
+		t.Fatal("accepted portable setup without origin")
+	}
+	saved, err := s.Load(handle)
+	if err != nil || saved.Portable {
+		t.Fatal("failed request changed saved task", saved, err)
+	}
+	command = newPrepareCommand(nil, &api, &profile)
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetArgs([]string{"--task", handle})
+	if err = command.Execute(); err != nil {
+		t.Fatal("ordinary retry failed", err)
+	}
+}
 
 func TestPortableSetupAcrossHomesAndMountPaths(t *testing.T) {
 	isolate(t)

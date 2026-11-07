@@ -14,7 +14,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/managed"
 )
 
-var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied"}
+var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart"}
 
 func validScenario(name string) bool {
 	for _, candidate := range scenarioNames {
@@ -26,14 +26,15 @@ func validScenario(name string) bool {
 }
 
 type journey struct {
-	c          config
-	ctx        context.Context
-	home, repo string
-	env        []string
-	f          *fixture
-	result     *report
-	record     func(string, string)
-	mu         sync.Mutex
+	c           config
+	ctx         context.Context
+	home, repo  string
+	env         []string
+	f           *fixture
+	result      *report
+	codexConfig string
+	record      func(string, string)
+	mu          sync.Mutex
 }
 
 func runAgent(ctx context.Context, c config, repo string, env []string, prompt, session string, record func(string, string)) (codexTurn, error) {
@@ -84,7 +85,7 @@ func (j *journey) coding(repo, prompt string) error {
 	if err != nil {
 		return err
 	}
-	if observed.PolicyOffered {
+	if observed.PolicyOffered && j.c.Scenario != "portable-restart" {
 		return fmt.Errorf("unexpected repeated Codex settings proposal")
 	}
 	if observed.UpdateRequested {
@@ -134,11 +135,20 @@ func (j *journey) finish() error {
 	creates := j.f.Creates
 	reviews := len(j.f.Reviews)
 	responses := len(j.f.Feedback)
+	deepPolls := j.f.DeepPolls
+	automatic := true
+	for _, review := range j.f.Reviews {
+		automatic = automatic && review.FullReview == nil
+	}
 	j.f.mu.Unlock()
 	j.result.Checks["grant_reused"] = creates == 1
 	j.result.Checks["review_delivered"] = reviews > 0
 	if j.c.Scenario == "first-review" || strings.HasPrefix(j.c.Scenario, "tui") {
 		j.result.Checks["finding_response_recorded"] = responses > 0
+	}
+	if j.c.Scenario == "deep-review" {
+		j.result.Checks["waited_for_deep"] = deepPolls >= 2
+		j.result.Checks["automatic_review_selection"] = automatic
 	}
 	if j.c.Scenario == "new-chat" {
 		j.result.Checks["two_reviews"] = reviews == 2
@@ -154,13 +164,17 @@ func (j *journey) afterInstall() error {
 	switch j.c.Scenario {
 	case "install", "interrupted":
 		return nil
+	case "portable-restart":
+		return j.portableRestart()
+	case "portable-invalid":
+		return j.invalidPortable()
 	case "interrupted-review":
 		return j.interruptedReview()
 	case "revoked-uploads":
 		return j.revokedUploads()
 	case "tui", "tui-hooks-denied":
 		return j.tui()
-	case "first-review", "new-chat", "personal", "hooks-off":
+	case "first-review", "new-chat", "personal", "hooks-off", "deep-review":
 		if j.c.Scenario == "hooks-off" {
 			if err := os.Remove(filepath.Join(j.home, ".codex/hooks.json")); err != nil {
 				return err
@@ -168,6 +182,7 @@ func (j *journey) afterInstall() error {
 		}
 		j.f.mu.Lock()
 		j.f.Findings = j.c.Scenario == "first-review"
+		j.f.Deep = j.c.Scenario == "deep-review"
 		j.f.mu.Unlock()
 		if err := j.coding(j.repo, "Create hello.txt containing hello followed by a newline. Follow the repository's installed instructions and complete the task."); err != nil {
 			return err
@@ -312,7 +327,7 @@ func (j *journey) afterInstall() error {
 			return fmt.Errorf("failed task did not recover")
 		}
 		return j.finish()
-	case "upgrade", "upgrade-defer", "upgrade-untracked", "upgrade-personal":
+	case "upgrade", "upgrade-defer", "upgrade-untracked", "upgrade-personal", "upgrade-custom":
 		return j.upgrade()
 	}
 	return fmt.Errorf("unsupported post-install scenario")

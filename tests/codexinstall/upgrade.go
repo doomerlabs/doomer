@@ -41,6 +41,9 @@ func (j *journey) upgrade() error {
 		lines[i] = "  " + lines[i]
 	}
 	old := strings.Replace(j.c.LegacyBootstrap, "{{metadata}}", strings.Join(lines, "\n"), 1)
+	if j.c.Scenario == "upgrade-custom" {
+		old += "\nKeep the user custom note intact.\n"
+	}
 	for _, agent := range []string{".agents", ".claude"} {
 		if err = os.WriteFile(filepath.Join(base, agent, "skills/doomer-review/SKILL.md"), []byte(old), 0600); err != nil {
 			return err
@@ -96,6 +99,21 @@ func (j *journey) upgrade() error {
 	}
 	if string(before) != old {
 		return fmt.Errorf("skill updated before acceptance")
+	}
+	if j.c.Scenario == "upgrade-custom" {
+		j.result.Turns++
+		if _, err = runAgent(j.ctx, j.c, j.repo, j.env, "Preserve the customized skill exactly as it is. Use no automated upgrade and finish this inspection.", turn.Session, j.record); err != nil {
+			return err
+		}
+		after, err := os.ReadFile(filepath.Join(base, ".agents/skills/doomer-review/SKILL.md"))
+		if err != nil || string(after) != old {
+			return fmt.Errorf("customized skill was overwritten")
+		}
+		if _, err := os.Stat(marker); !os.IsNotExist(err) {
+			return fmt.Errorf("customized skill unexpectedly produced a PR")
+		}
+		j.result.Checks["custom_skill_preserved"] = true
+		return nil
 	}
 	if j.c.Scenario == "upgrade-defer" {
 		j.result.Turns++

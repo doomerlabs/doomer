@@ -187,6 +187,11 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 				return e
 			}
 			task = managed.Task{RuntimeHome: runtimeHome, Schema: managed.Protocol, Handle: handle, Repo: root, RepositoryID: id, API: *api, Profile: *profile, Agent: agent, Bootstrap: bootstrap, Prompt: prompt, Portable: portable, Created: time.Now().UTC(), Stage: "preparing", Capabilities: managed.Capabilities{DurableStorage: true, SessionID: session, Hooks: session != ""}}
+			if portable {
+				if _, _, err := portableLocation(c.Context(), task); err != nil {
+					return err
+				}
+			}
 			// Capture the task baseline before any edits. The task retains this commit
 			// even if HEAD advances later or another process resumes the task.
 			base, e := exec.CommandContext(c.Context(), "git", "-C", root, "rev-parse", "HEAD").Output()
@@ -217,6 +222,9 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 			return fmt.Errorf("resume with the original service and profile")
 		}
 		if portable && !task.Portable {
+			if _, _, err := portableLocation(c.Context(), task); err != nil {
+				return err
+			}
 			task.Portable = true
 			if err := s.Save(&task); err != nil {
 				return err

@@ -3,8 +3,40 @@ package main
 import (
 	"context"
 	"fmt"
+	"os/exec"
+	"path/filepath"
 	"time"
 )
+
+func (j *journey) invalidPortable() error {
+	tasks, err := savedTasks(j.home)
+	if err != nil || len(tasks) != 1 {
+		return fmt.Errorf("expected original setup task")
+	}
+	handle := tasks[0].Handle
+	cmd := exec.CommandContext(j.ctx, filepath.Join(j.home, ".local/bin/doomer"), "prepare", "--task", handle, "--portable")
+	cmd.Dir, cmd.Env = j.repo, j.env
+	output, err := cmd.CombinedOutput()
+	j.record("Command", "Request portable setup without an origin remote\n"+string(output))
+	if err == nil {
+		return fmt.Errorf("portable setup unexpectedly accepted a missing origin")
+	}
+	tasks, err = savedTasks(j.home)
+	if err != nil || len(tasks) != 1 || tasks[0].Portable {
+		return fmt.Errorf("failed portable request changed the task")
+	}
+	j.result.Turns++
+	_, err = runAgent(j.ctx, j.c, j.repo, j.env, "The optional portable setup request failed because this local repository has no origin. Resume the original ordinary Doomer task "+handle+" and verify setup. Preserve the repository and reuse existing approvals.", "", j.record)
+	if err != nil {
+		return err
+	}
+	tasks, err = savedTasks(j.home)
+	if err != nil || len(tasks) != 1 || tasks[0].Portable || tasks[0].LastError != "" {
+		return fmt.Errorf("ordinary setup did not recover")
+	}
+	j.result.Checks["failed_portable_request_recovered"] = true
+	return nil
+}
 
 func (j *journey) revokedUploads() error {
 	j.f.mu.Lock()

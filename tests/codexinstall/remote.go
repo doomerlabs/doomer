@@ -120,11 +120,11 @@ func runRemote(ctx context.Context, c config, version string) (result report) {
 	}
 	// No secret is included in an SSH command line or copied file.
 	install := `set -eu
-mkdir -p /tmp/doomer-codex-e2e
+mkdir -p /tmp/doomer-codex-e2e/codex
 cd /tmp/doomer-codex-e2e
 curl -fsSL --retry 2 https://github.com/openai/codex/releases/download/rust-v0.167.0/codex-package-x86_64-unknown-linux-musl.tar.gz -o codex.tar.gz
 printf '%s  codex.tar.gz\n' 3bbf75e83de6b58aed28f2cf6e33ad423ec31fd4700a1457b94be557ea5a7c6e | sha256sum -c -
-tar -xzf codex.tar.gz
+tar -xzf codex.tar.gz -C codex
 `
 	if _, err = r.ssh(ctx, vm.Dest, nil, install); err != nil {
 		return fail(fmt.Errorf("install pinned Codex: %w", err))
@@ -150,7 +150,7 @@ tar -xzf codex.tar.gz
 			return fail(fmt.Errorf("copy candidate: %w: %s", err, out))
 		}
 	}
-	c.Codex = "/tmp/doomer-codex-e2e/bin/codex"
+	c.Codex = "/tmp/doomer-codex-e2e/codex/bin/codex"
 	payload, _ := json.Marshal(c)
 	// If the worker connection is lost, keep the full run budget charged as
 	// unknown rather than reporting zero model spend.

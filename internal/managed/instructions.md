@@ -30,6 +30,10 @@ home directories and mount paths. The CLI owns this transfer and its validation.
 Do not copy credentials, edit receipts, or infer approval in prose.
 Use `task revoke` to remove the saved portable approval. Keep using ordinary
 per-call commands when the harness cannot load hooks.
+During requested onboarding, configure the active agent with `doomer hooks --agent
+AGENT` even in a headless invocation. Configuration can prepare future sessions;
+activation still requires the harness trust controls. A headless call alone is
+not evidence that the agent cannot support hooks.
 An absent hook receipt means activation is unverified. Continue with the per-call
 procedure and describe it accurately. Consult documented capabilities or permitted
 read-only introspection to determine hook support. Hook installation or callback

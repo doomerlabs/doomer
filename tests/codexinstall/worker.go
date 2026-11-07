@@ -20,6 +20,7 @@ func runWorker(c config) (result report) {
 	result.Model = c.Model
 	result.Scenario = c.Scenario
 	result.CandidateVersion = c.CandidateVersion
+	result.InstallGuide = c.InstallGuide
 	var recordMu sync.Mutex
 	result.Checks = map[string]bool{}
 	record := func(kind, text string) {
@@ -70,7 +71,14 @@ func runWorker(c config) (result report) {
 			return fail(err)
 		}
 	}
-	f := &fixture{}
+	f := &fixture{PortableChoice: c.Scenario == "portable-restart"}
+	if c.Scenario == "portable-restart" {
+		cmd := exec.CommandContext(ctx, "git", "-C", repo, "remote", "add", "origin", "https://github.com/example/portable-fixture.git")
+		cmd.Env = gitEnv
+		if err := cmd.Run(); err != nil {
+			return fail(err)
+		}
+	}
 	server := httptest.NewServer(httpHandler(f.serve))
 	defer server.Close()
 	m := newMeter(c)
@@ -99,7 +107,10 @@ func runWorker(c config) (result report) {
 	if result.CodexVersion != "codex-cli 0.167.0" {
 		return fail(fmt.Errorf("unexpected Codex version: %s", result.CodexVersion))
 	}
-	prompt := "Read https://doomer.ai/install.md and follow the instructions to set up Doomer in this repository. Use a team/repository installation, local-only without a PR. This is an isolated test: DOOMER_API_URL points at its local account service; preserve that setting. Ask before granting updates or repository uploads. Keep messages concise."
+	if c.InstallGuide == "" {
+		c.InstallGuide = "https://doomer.ai/install.md"
+	}
+	prompt := "Read " + c.InstallGuide + " and follow the instructions to set up Doomer in this repository. Use a team/repository installation, local-only without a PR. This is an isolated test: DOOMER_API_URL points at its local account service; preserve that setting. Ask before granting updates or repository uploads. Keep messages concise."
 	if personalScenario(c.Scenario) {
 		prompt = strings.Replace(prompt, "team/repository installation, local-only without a PR", "personal installation in my home directory, without a PR", 1)
 	}
@@ -108,6 +119,23 @@ func runWorker(c config) (result report) {
 	sawUpdateRequest := false
 	declined := false
 	candidateInstalled := false
+	if c.CandidateFile != "" {
+		result.Turns++
+		software, err := runAgent(ctx, c, repo, env, prompt+" Install the verified runtime and skill files only in this turn. Do not run doomer prepare or begin onboarding yet. Stop after the install command completes.", "", record)
+		if err != nil {
+			return fail(err)
+		}
+		session = software.Session
+		if err := installCandidate(c, home); err != nil {
+			return fail(err)
+		}
+		candidateInstalled = true
+		prompt = "The installed build has been checked. Continue onboarding Doomer in this repository using its existing installed files and original scope. This test home persists for the scenario, so use ordinary setup without --portable. Ask for the required user approvals."
+	}
+	if c.Scenario == "portable-restart" {
+		prompt = strings.Replace(prompt, "This test home persists for the scenario, so use ordinary setup without --portable.", "This scenario restarts the home, so use --portable.", 1)
+		prompt += " I will choose reusable setup at the browser approval."
+	}
 	for turn := 0; turn < 6; turn++ {
 		result.Turns++
 		observed, err := runAgent(ctx, c, repo, env, prompt, session, record)
@@ -171,7 +199,7 @@ func runWorker(c config) (result report) {
 					return fail(err)
 				}
 			}
-			j := journey{c: c, ctx: ctx, home: home, repo: repo, env: env, f: f, result: &result, record: record}
+			j := journey{c: c, ctx: ctx, home: home, repo: repo, env: env, f: f, result: &result, record: record, codexConfig: configuration}
 			if err := j.afterInstall(); err != nil {
 				return fail(err)
 			}
