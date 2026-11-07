@@ -38,7 +38,7 @@ jobs:
         run: scripts/ci-agent-e2e.sh '${{ matrix.harness }}'
       - name: Build recording index
         if: always()
-        run: GITHUB_STEP_SUMMARY= python3 scripts/ci-agent-e2e-report.py "$E2E_REPORT_DIR" '${{ matrix.harness }}'
+        run: GITHUB_STEP_SUMMARY='' python3 scripts/ci-agent-e2e-report.py "$E2E_REPORT_DIR" '${{ matrix.harness }}'
       - name: Save HTML recordings and JSON results
         if: always()
         id: recordings
@@ -51,5 +51,5 @@ jobs:
       - name: Link recordings in job summary
         if: always()
         env:
-          E2E_ARTIFACT_URL: ${{ steps.recordings.outputs.artifact-url }}
+          E2E_ARTIFACT_NAME: agent-e2e-${{ matrix.harness }}
         run: python3 scripts/ci-agent-e2e-report.py "$E2E_REPORT_DIR" '${{ matrix.harness }}'

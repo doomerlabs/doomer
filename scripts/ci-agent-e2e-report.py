@@ -8,14 +8,15 @@ import sys
 
 reports = Path(sys.argv[1])
 harness = sys.argv[2]
-artifact_url = os.environ.get("E2E_ARTIFACT_URL", "")
+artifact_url = os.environ.get("DEPOT_JOB_URL", "")
+artifact_name = os.environ.get("E2E_ARTIFACT_NAME", "agent-e2e-" + harness)
 suite_file = reports / "suite.json"
 suite = json.loads(suite_file.read_text()) if suite_file.exists() else {"results": []}
 results = suite["results"]
 rows = []
 summary = [f"## {harness.title()} lifecycle E2E", ""]
 if artifact_url:
-    summary += [f"[Download HTML recordings and results]({artifact_url})", "", "Open `index.html` in the downloaded artifact to browse every recorded conversation.", ""]
+    summary += [f"[Depot job with HTML recordings and results]({artifact_url})", "", f"Saved artifact `{artifact_name}`. Download it and open `index.html` to browse every recorded conversation.", ""]
 summary += ["| Scenario | Result | Recording |", "| --- | --- | --- |"]
 for result in results:
     name = result["scenario"]
