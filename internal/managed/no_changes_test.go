@@ -44,3 +44,21 @@ func TestNoChangesCompletesWithoutUploadAndDetectsLaterEdits(t *testing.T) {
 		t.Fatal("retained no-change result after new edits")
 	}
 }
+
+func TestSetupTaskNeverCapturesOrUploadsAReview(t *testing.T) {
+	handle, _ := NewHandle()
+	task := Task{Schema: Protocol, Handle: handle, Purpose: "setup", Stage: "ready"}
+	engine := Engine{Store: Store{Root: t.TempDir()}, Capture: func(context.Context, Task) (sourcesnapshot.Capture, error) {
+		t.Fatal("setup attempted to capture repository content")
+		return sourcesnapshot.Capture{}, nil
+	}}
+	if err := engine.Submit(context.Background(), &task, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Finish(context.Background(), &task, ""); err != nil {
+		t.Fatal(err)
+	}
+	if task.Stage != "complete" || task.Submission != nil || task.Review != nil {
+		t.Fatalf("unexpected setup state: %+v", task)
+	}
+}

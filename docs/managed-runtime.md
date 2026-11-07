@@ -46,6 +46,11 @@ agent prose never selects the version.
 - `doomer hooks --agent codex|claude` installs the optional thin adapter. The user
   still controls trust. Real callbacks alone establish live activation.
 
+New tasks without a coding prompt are setup-only. Their submit/finish operations
+complete with `review_not_required: setup_only` and never upload a review. Supplying
+explicit task context changes the task into a coding task. Existing task records
+without this purpose field preserve their original behavior.
+
 An unchanged checkout returns `no_changes: true` without uploading or starting
 an empty review. `task finish` verifies it is still unchanged and completes the
 task. New edits require submission before completion.

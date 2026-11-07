@@ -29,6 +29,7 @@ import (
 )
 
 type managedResult struct {
+	ReviewNotRequired    string                         `json:"review_not_required,omitempty"`
 	NoChanges            bool                           `json:"no_changes,omitempty"`
 	CodexReviewPolicy    *codexReviewPolicy             `json:"codex_review_policy,omitempty"`
 	BootstrapUpdates     []managed.BootstrapUpdate      `json:"bootstrap_updates,omitempty"`
@@ -79,6 +80,9 @@ func resultFor(task managed.Task) managedResult {
 	r := managedResult{Error: task.LastError, State: task.Stage, Task: task.Handle, Release: task.Release, SoftwareReady: task.Release != "", HookActivated: task.HookActivated, Review: task.Review}
 	r.PromptTruncated = len([]rune(task.Prompt)) > 4000
 	r.NoChanges = task.NoChanges
+	if task.Purpose == "setup" && task.Stage == "complete" {
+		r.ReviewNotRequired = "setup_only"
+	}
 	r.SubmittedPromptRunes = min(len([]rune(task.Prompt)), 4000)
 	r.Capabilities = task.Capabilities
 	r.UpdateAvailable = task.OfferedRelease
@@ -101,6 +105,13 @@ func resultFor(task managed.Task) managedResult {
 	}
 	return r
 }
+func managedTaskInstructions(task managed.Task) string {
+	if task.Purpose == "setup" {
+		return "This is a setup-only task. Finish configuring the active agent integration and verify readiness. Do not submit repository content or run a code review for this task. The coding review procedure below applies only to coding tasks.\n\n" + managed.Instructions
+	}
+	return managed.Instructions
+}
+
 func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedResult) error {
 	if c.Name() == "prepare" && t.Bootstrap.Path != "" {
 		r.BootstrapUpdates = managedBootstrapUpdates(t)
@@ -129,6 +140,7 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 	r.PortableSetupCommand = taskResult.PortableSetupCommand
 	r.SubmittedPromptRunes = taskResult.SubmittedPromptRunes
 	r.NoChanges = taskResult.NoChanges
+	r.ReviewNotRequired = taskResult.ReviewNotRequired
 	r.UpdateAvailable = taskResult.UpdateAvailable
 	r.Review = taskResult.Review
 	r.Responses = taskResult.Responses
@@ -187,6 +199,11 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 				return e
 			}
 			task = managed.Task{RuntimeHome: runtimeHome, Schema: managed.Protocol, Handle: handle, Repo: root, RepositoryID: id, API: *api, Profile: *profile, Agent: agent, Bootstrap: bootstrap, Prompt: prompt, Portable: portable, Created: time.Now().UTC(), Stage: "preparing", Capabilities: managed.Capabilities{DurableStorage: true, SessionID: session, Hooks: session != ""}}
+			if strings.TrimSpace(prompt) == "" {
+				task.Purpose = "setup"
+			} else {
+				task.Purpose = "coding"
+			}
 			if portable {
 				if _, _, err := portableLocation(c.Context(), task); err != nil {
 					return err
@@ -508,6 +525,7 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 					return fmt.Errorf("provide a task summary of at most 4000 characters")
 				}
 				t.Prompt = string(data)
+				t.Purpose = "coding"
 				if err = s.Save(&t); err != nil {
 					return err
 				}

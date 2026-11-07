@@ -67,7 +67,7 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 				return err
 			}
 			r := resultFor(*t)
-			r.Authenticated, r.UploadApproved, r.Instructions = true, true, managed.Instructions
+			r.Authenticated, r.UploadApproved, r.Instructions = true, true, managedTaskInstructions(*t)
 			return outputManaged(c, s, *t, r)
 		}
 	}
@@ -162,7 +162,7 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 			t.PortableApproved = *result.PortableState
 			t.PortableDeclined = !*result.PortableState
 		}
-		r.State, r.Authenticated, r.UploadApproved, r.Instructions = "ready", true, true, managed.Instructions
+		r.State, r.Authenticated, r.UploadApproved, r.Instructions = "ready", true, true, managedTaskInstructions(*t)
 	default:
 		return fmt.Errorf("invalid repository approval state")
 	}

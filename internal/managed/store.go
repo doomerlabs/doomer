@@ -39,6 +39,7 @@ type Task struct {
 	Capabilities     Capabilities                       `json:"capabilities"`
 	Base             string                             `json:"base"`
 	Prompt           string                             `json:"prompt"`
+	Purpose          string                             `json:"purpose,omitempty"`
 	AccountID        string                             `json:"account_id,omitempty"`
 	Portable         bool                               `json:"portable,omitempty"`
 	PortableApproved bool                               `json:"portable_approved,omitempty"`

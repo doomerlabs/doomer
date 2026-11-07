@@ -29,6 +29,11 @@ type Engine struct {
 // Submit journals the exact request before sending it. A lost HTTP response
 // retries the same server idempotency key and the same uploaded snapshots.
 func (e Engine) Submit(ctx context.Context, task *Task, token string) error {
+	if task.Purpose == "setup" {
+		task.Stage = "complete"
+		task.LastError = ""
+		return e.Store.Save(task)
+	}
 	if task.Stage == "submitting" {
 		return e.send(ctx, task, token)
 	}
@@ -230,6 +235,10 @@ func (e Engine) Respond(ctx context.Context, task *Task, token string, items []R
 	return e.Store.Save(task)
 }
 func (e Engine) Finish(ctx context.Context, task *Task, token string) error {
+	if task.Purpose == "setup" {
+		task.Stage = "complete"
+		return e.Store.Save(task)
+	}
 	if task.NoChanges {
 		_, err := e.Capture(ctx, *task)
 		if errors.Is(err, sourcesnapshot.ErrNoChanges) {
