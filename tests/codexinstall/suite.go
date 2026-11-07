@@ -74,9 +74,6 @@ func runSuite(output string, perRun, totalLimit float64, auth string) error {
 		if err := os.WriteFile(output, append(encoded, '\n'), 0600); err != nil {
 			return err
 		}
-		if auth == "subscription" && !passed {
-			return fmt.Errorf("subscription suite stopped after %s failed; see %s", scenario, output)
-		}
 	}
 	if failed {
 		return fmt.Errorf("one or more lifecycle scenarios failed; see %s", output)

@@ -13,6 +13,9 @@ import (
 
 type config struct {
 	Harness          string  `json:"harness,omitempty"`
+	SkillsGuide      string  `json:"skills_guide,omitempty"`
+	SkillsInstaller  string  `json:"skills_installer,omitempty"`
+	SkillsBootstrap  string  `json:"skills_bootstrap,omitempty"`
 	AuthMode         string  `json:"auth_mode,omitempty"`
 	OAuthToken       string  `json:"oauth_token,omitempty"`
 	InstallGuide     string  `json:"install_guide"`
@@ -60,6 +63,7 @@ func main() {
 	harness := flag.String("harness", "codex", "agent harness: codex or claude")
 	auth := flag.String("auth", "api", "authentication mode: api or subscription (Claude only)")
 	localClaude := flag.String("local-claude", "", "dedicated pinned Claude executable for an isolated local run")
+	skillsSource := flag.String("skills-source", "", "candidate skills repository to exercise in the isolated fixture")
 	guide := flag.String("install-guide", "https://doomer.ai/install.md", "verified installation guide to exercise")
 	localCodex := flag.String("local-codex", "", "dedicated pinned Codex executable for an isolated local run")
 	localRoot := flag.String("local-root", "", "writable parent directory for disposable local test homes")
@@ -143,6 +147,12 @@ func main() {
 	if *auth == "subscription" {
 		c.APIKey = ""
 		c.OAuthToken = os.Getenv("TEST_CLAUDE_CODE_OAUTH_TOKEN")
+	}
+	if *skillsSource != "" {
+		if err := loadCandidateSkills(&c, *skillsSource); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 	if strings.HasPrefix(*scenario, "upgrade") {
 		raw, err := os.ReadFile("internal/managed/bootstrap-2026.11.6.10.md")

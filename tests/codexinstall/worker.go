@@ -125,6 +125,15 @@ func runWorker(c config) (result report) {
 		}
 		result.Checks["subscription_authentication"] = true
 	}
+	if c.SkillsGuide != "" {
+		guide, err := writeCandidateSkills(c, root)
+		if err != nil {
+			return fail(err)
+		}
+		c.InstallGuide = guide
+		result.InstallGuide = guide
+		record("fixture", "Testing candidate skills installer, guide, and bootstrap")
+	}
 	if c.InstallGuide == "" {
 		c.InstallGuide = "https://doomer.ai/install.md"
 	}
@@ -140,25 +149,32 @@ func runWorker(c config) (result report) {
 	sawUpdateRequest := false
 	declined := false
 	candidateInstalled := false
-	if c.CandidateFile != "" {
+	if c.CandidateFile != "" || c.SkillsGuide != "" {
 		result.Turns++
 		software, err := runAgent(ctx, c, repo, env, prompt+" Install the verified runtime and skill files only in this turn. Do not run doomer prepare or begin onboarding yet. Stop after the install command completes.", "", record)
 		if err != nil {
 			return fail(err)
 		}
 		session = software.Session
-		if err := installCandidate(c, home); err != nil {
-			return fail(err)
+		if c.CandidateFile != "" {
+			if err := installCandidate(c, home); err != nil {
+				return fail(err)
+			}
+			candidateInstalled = true
+			args := []string{"bootstrap", "upgrade", "--accept", "--repo", repo}
+			if personalScenario(c.Scenario) {
+				args = []string{"bootstrap", "upgrade", "--accept", "--personal"}
+			}
+			bootstrap := exec.CommandContext(ctx, c.CandidateFile, args...)
+			bootstrap.Dir, bootstrap.Env = repo, env
+			if output, err := bootstrap.CombinedOutput(); err != nil {
+				return fail(fmt.Errorf("candidate bootstrap assembly: %w: %s", err, output))
+			}
 		}
-		candidateInstalled = true
-		args := []string{"bootstrap", "upgrade", "--accept", "--repo", repo}
-		if personalScenario(c.Scenario) {
-			args = []string{"bootstrap", "upgrade", "--accept", "--personal"}
-		}
-		bootstrap := exec.CommandContext(ctx, c.CandidateFile, args...)
-		bootstrap.Dir, bootstrap.Env = repo, env
-		if output, err := bootstrap.CombinedOutput(); err != nil {
-			return fail(fmt.Errorf("candidate bootstrap assembly: %w: %s", err, output))
+		if c.SkillsBootstrap != "" {
+			if err := installCandidateSkills(c, home, repo); err != nil {
+				return fail(err)
+			}
 		}
 		prompt = "The installed build has been checked. Continue onboarding Doomer in this repository using its existing installed files and original scope. This test home persists for the scenario, so use ordinary setup without --portable. Ask for the required user approvals."
 	}
