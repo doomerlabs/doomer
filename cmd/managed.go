@@ -245,12 +245,16 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 			if len(session) == 0 || len(session) > 512 {
 				return fmt.Errorf("provide a session ID between 1 and 512 bytes")
 			}
+			oldSession := task.Capabilities.SessionID
 			task.Capabilities.SessionID = session
 			task.Capabilities.Hooks = true
 			if err := bindManagedSession(s, task); err != nil {
 				return err
 			}
 			if err := s.Save(&task); err != nil {
+				return err
+			}
+			if err := clearManagedSession(s, task, oldSession); err != nil {
 				return err
 			}
 		}
@@ -715,6 +719,9 @@ func managedHook(c *cobra.Command, s managed.Store, t *managed.Task, e managed.E
 	root, err := watch.Root(c.Context(), event.CWD)
 	if err != nil || root != t.Repo {
 		return fmt.Errorf("hook checkout does not match task")
+	}
+	if t.Capabilities.SessionID != "" && event.Session != t.Capabilities.SessionID {
+		return fmt.Errorf("hook session no longer owns this task")
 	}
 	if event.Event == "UserPromptSubmit" && t.Submission == nil && strings.TrimSpace(t.Prompt) == "" && strings.TrimSpace(event.Prompt) != "" {
 		t.Prompt = event.Prompt

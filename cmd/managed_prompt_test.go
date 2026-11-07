@@ -208,6 +208,20 @@ func TestPrepareBindsSessionWhenResumingSetup(t *testing.T) {
 	if err := watch.Read(filepath.Join(store.Root, "sessions", key+".json"), &bound); err != nil || bound != handle {
 		t.Fatal(bound, err)
 	}
+	if _, err := execute(t, "", "prepare", "--task", handle, "--session", "replacement-session"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(store.Root, "sessions", key+".json")); !os.IsNotExist(err) {
+		t.Fatal("old session still owns task", err)
+	}
+	current, err := store.Load(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Capabilities.SessionID != "replacement-session" {
+		t.Fatal(current.Capabilities)
+	}
+
 }
 
 func TestPrepareDefaultsToActiveClaudeHarness(t *testing.T) {

@@ -142,6 +142,12 @@ wait:
 			}
 		}
 	}
+	if complete {
+		select {
+		case <-time.After(2 * time.Second):
+		case <-j.ctx.Done():
+		}
+	}
 	input.Close()
 	<-done
 	j.record("Command", "Interactive Codex terminal\n"+terminalEscapes.ReplaceAllString(output.String(), ""))

@@ -123,6 +123,29 @@ func bindManagedSession(s managed.Store, t managed.Task) error {
 	return watch.Write(path, t.Handle)
 }
 
+func clearManagedSession(s managed.Store, task managed.Task, session string) error {
+	if session == "" {
+		return nil
+	}
+	key := watch.Key(task.API + "\x00" + task.Profile + "\x00" + task.Agent + "\x00" + task.Repo + "\x00" + session)
+	unlock, err := watchLock(s.Root, "session-"+key)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	path := filepath.Join(s.Root, "sessions", key+".json")
+	var handle string
+	if err := watch.Read(path, &handle); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if handle != task.Handle {
+		return nil
+	}
+	return os.Remove(path)
+}
+
 func newManagedHooksCommand(app *application.App, api, profile *string) *cobra.Command {
 	var agent string
 	c := &cobra.Command{Use: "hooks", Short: "Install the thin managed task hook adapter", Args: cobra.NoArgs}
