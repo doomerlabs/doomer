@@ -183,3 +183,14 @@ func TestReviewFixtureRequiresAccountAndRecordsFeedback(t *testing.T) {
 		t.Fatal("failed submission created a review")
 	}
 }
+
+func TestLocalProcessCleanupIsScopedToExecutablePath(t *testing.T) {
+	output := "100 /private/test run/home/bin/codex app-server\n" +
+		"101 /private/test run-other/bin/codex\n" +
+		"102 /bin/sh -c /private/test run/home/bin/codex\n" +
+		"103 /Users/person/.codex/bin/codex app-server\n"
+	pids := localProcessIDs(output, "/private/test run")
+	if len(pids) != 1 || pids[0] != 100 {
+		t.Fatal(pids)
+	}
+}

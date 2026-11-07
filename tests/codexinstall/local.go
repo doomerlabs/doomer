@@ -6,6 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 )
 
 func runLocal(ctx context.Context, c config, parent string) (result report) {
@@ -20,7 +23,9 @@ func runLocal(ctx context.Context, c config, parent string) (result report) {
 		return result
 	}
 	defer func() {
-		result.LocalCleaned = os.RemoveAll(dir) == nil
+		processErr := stopLocalProcesses(dir)
+		removeErr := os.RemoveAll(dir)
+		result.LocalCleaned = processErr == nil && removeErr == nil
 		if !result.LocalCleaned {
 			result.Passed = false
 			result.Error += "; local cleanup failed"
@@ -38,4 +43,49 @@ func runLocal(ctx context.Context, c config, parent string) (result report) {
 	result = runWorker(c)
 	result.Execution = "local"
 	return result
+}
+
+// Codex TUI may leave its managed daemon running after the client exits.
+// Restrict cleanup to executables located inside this run's private directory.
+func stopLocalProcesses(dir string) error {
+	for attempt := 0; attempt < 3; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		output, err := exec.CommandContext(ctx, "ps", "-axo", "pid=,command=").Output()
+		cancel()
+		if err != nil {
+			return fmt.Errorf("inspect local test processes: %w", err)
+		}
+		pids := localProcessIDs(string(output), dir)
+		if len(pids) == 0 {
+			return nil
+		}
+		if attempt == 2 {
+			return fmt.Errorf("local test processes survived cleanup")
+		}
+		for _, pid := range pids {
+			process, err := os.FindProcess(pid)
+			if err == nil {
+				_ = process.Kill()
+				_ = process.Release()
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return nil
+}
+
+func localProcessIDs(output, dir string) []int {
+	var pids []int
+	prefix := filepath.Clean(dir) + string(os.PathSeparator)
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		separator := strings.IndexAny(line, " \t")
+		if separator < 0 || !strings.HasPrefix(strings.TrimSpace(line[separator:]), prefix) {
+			continue
+		}
+		if pid, err := strconv.Atoi(line[:separator]); err == nil && pid > 0 {
+			pids = append(pids, pid)
+		}
+	}
+	return pids
 }
