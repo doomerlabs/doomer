@@ -113,11 +113,14 @@ func (e Engine) send(ctx context.Context, task *Task, token string) error {
 	if err != nil {
 		return NetworkError("review_submission", err)
 	}
-	if result.Anonymous {
-		return fmt.Errorf("account-linked review required; server returned anonymous review")
+	if result.Anonymous != adversarylabs.IsAnonymousToken(token) {
+		return fmt.Errorf("review credential identity mismatch")
 	}
 	if result.Full == nil || result.LookCloserEnabled == nil || !*result.LookCloserEnabled {
 		return fmt.Errorf("server did not confirm the enabled review stages")
+	}
+	if result.Anonymous && result.Full.Enabled {
+		return fmt.Errorf("anonymous review cannot enable deep review")
 	}
 	task.Review = &result
 	task.LastError = ""
@@ -140,7 +143,7 @@ func (e Engine) Status(ctx context.Context, task *Task, token string) error {
 	if err != nil {
 		return NetworkError("review_status", err)
 	}
-	if result.ID != task.Review.ID || result.Anonymous {
+	if result.ID != task.Review.ID || result.Anonymous != adversarylabs.IsAnonymousToken(token) || (result.Anonymous && result.Full != nil && result.Full.Enabled) {
 		return fmt.Errorf("review identity mismatch")
 	}
 	if result.Full != nil && result.Full.Enabled && result.Full.Status == "completed" {
