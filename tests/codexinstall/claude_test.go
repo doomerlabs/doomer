@@ -14,7 +14,8 @@ import (
 )
 
 func TestClaudeTranscriptKeepsOnlyVisibleContent(t *testing.T) {
-	raw := `{"type":"system","session_id":"session"}
+	raw := `{"type":"system","session_id":"session","message":"CLI status notice"}
+{"type":"rate_limit_event","message":"temporary provider status"}
 {"type":"user","message":{"content":"a terminal prompt"}}
 {"type":"assistant","message":{"content":[{"type":"thinking","thinking":"private reasoning"},{"type":"text","text":"Please approve updates"},{"type":"tool_use","name":"Bash","input":{"command":"doomer prepare"}}]}}
 {"type":"user","message":{"content":[{"type":"tool_result","content":"{\"state\":\"update_permission_required\"}"}]}}

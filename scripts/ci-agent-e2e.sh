@@ -29,8 +29,11 @@ case "$harness" in
 esac
 go build -o "$work/runner" ./tests/codexinstall
 # The published version labels the fixture; source comes from the checked-out CLI.
-release=$(curl -fsSL --retry 3 https://api.github.com/repos/doomerlabs/doomer/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
-[[ $release =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}\.[1-9][0-9]*$ ]]
+release=${E2E_CANDIDATE_RELEASE:?expected the published release from the CI plan job}
+if [[ ! $release =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}\.[1-9][0-9]*$ ]]; then
+  echo "Invalid Doomer release supplied by the CI plan job" >&2
+  exit 1
+fi
 candidate_args=(--candidate-release "$release")
 if [[ -n ${E2E_SKILLS_SOURCE:-} ]]; then
   candidate_args+=(--skills-source "$E2E_SKILLS_SOURCE")

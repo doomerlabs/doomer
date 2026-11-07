@@ -117,3 +117,17 @@ func TestSubscriptionReportOmitsUnmeteredAPICost(t *testing.T) {
 		}
 	}
 }
+
+func TestSubscriptionAuthErrorKeepsSafeDiagnostics(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell fixture")
+	}
+	path := filepath.Join(t.TempDir(), "claude")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\necho 'expired credential subscription-secret' >&2\nexit 2\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	err := verifyClaudeSubscription(context.Background(), config{Codex: path, OAuthToken: "subscription-secret"}, t.TempDir(), []string{"PATH=/usr/bin:/bin"})
+	if err == nil || !strings.Contains(err.Error(), "exit status 2") || !strings.Contains(err.Error(), "expired credential") || strings.Contains(err.Error(), "subscription-secret") {
+		t.Fatal(err)
+	}
+}

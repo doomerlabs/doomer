@@ -203,13 +203,12 @@ subscription allowance rather than displaying a zero-dollar API charge.
 
 `--auth api` remains the default, using the existing metering proxy and dollar
 limits. Subscription mode uses the existing eight-minute worker deadline and
-agent-turn limits. Dollar-budget flags apply only to API mode. A subscription
-suite stops on its first failed scenario to avoid repeatedly consuming allowance
-when authentication or the provider is unavailable. No subscription token is
+agent-turn limits. Dollar-budget flags apply only to API mode. Both authentication modes continue through the full requested suite and report
+every failed scenario. No subscription token is
 written into the worker's command line or report. Remote workers receive it over
 SSH stdin, and disposable test homes and VMs are removed after the run.
 
-Codex subscription mode and automatic PR scheduling are separate follow-up work.
+Codex subscription mode remains separate follow-up work.
 
 ## Depot pull request CI
 

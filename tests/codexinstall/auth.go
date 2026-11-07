@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -66,9 +67,11 @@ func agentAuthenticationEnvironment(c config, home, proxyURL string) []string {
 func verifyClaudeSubscription(ctx context.Context, c config, repo string, env []string) error {
 	cmd := exec.CommandContext(ctx, c.Codex, "auth", "status")
 	cmd.Dir, cmd.Env = repo, env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	raw, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("Claude subscription authentication check failed")
+		return fmt.Errorf("Claude subscription authentication check failed: %w: %s", err, redact(redact(stderr.String(), c.OAuthToken), c.APIKey))
 	}
 	var status struct {
 		LoggedIn bool   `json:"loggedIn"`
