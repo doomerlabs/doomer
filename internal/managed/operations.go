@@ -128,6 +128,9 @@ func (e Engine) send(ctx context.Context, task *Task, token string) error {
 	return e.Store.Save(task)
 }
 func (e Engine) Status(ctx context.Context, task *Task, token string) error {
+	if task.Stage == "complete" {
+		return nil
+	}
 	if task.Stage == "submitting" {
 		if task.LastError != "" {
 			return errors.New(task.LastError)

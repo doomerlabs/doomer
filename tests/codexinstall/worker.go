@@ -290,7 +290,7 @@ func runWorker(c config) (result report) {
 					return fail(fmt.Errorf("missing durable setup task"))
 				}
 				session = ""
-				prompt = "The original Doomer installation was interrupted. I approved repository access. Finish the original installation, including " + agentName(c) + " hook configuration. Resume Doomer task " + tasks[0].Handle + " and verify setup without creating a replacement task."
+				prompt = "The original Doomer installation was interrupted. I approved repository access. This is the same persistent test home and repository; preserve DOOMER_API_URL and use ordinary setup without --portable. Run doomer prepare --task " + tasks[0].Handle + " to finish the original installation, including " + agentName(c) + " hook configuration. Verify setup without creating a replacement task."
 				result.Checks["fresh_agent_resumed_setup"] = true
 			}
 		} else if sawUpdateRequest && !approvedUpdate && (strings.Contains(strings.ToLower(text), "update") || strings.Contains(strings.ToLower(text), "permission")) {
