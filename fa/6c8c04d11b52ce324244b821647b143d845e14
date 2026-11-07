@@ -1,0 +1,23 @@
+tests/codexinstall/README.md
+  s_f23d7bc729b5d1::t_8ccd48fd109b1d 53-55
+scripts/ci-agent-e2e-report.py
+  s_f23d7bc729b5d1::t_8ccd48fd109b1d 27
+tests/codexinstall/worker.go
+  s_f23d7bc729b5d1::t_8ccd48fd109b1d 141,181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fa6c8c04d11b52ce324244b821647b143d845e14",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
