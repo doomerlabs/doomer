@@ -58,7 +58,10 @@ settings_url, and docs_url as clickable links. Explain the connection's purpose
 and guide the user to their active organization's network allowlist (Code or
 Capabilities, depending on the Claude interface). Let the owner save the exact
 host after deciding whether to allow it. Network access is separate from upload
-consent. After confirmation, run retry_command once; if still blocked, follow
+consent. After confirmation, run retry_command once. Submission recovery uses
+`task submit` with the existing request identity, including when network access
+interrupted an explicitly requested `task retry`. It never authorizes a new
+terminal-review retry. If still blocked, follow
 the guide's existing-session checks. Do not assume every 403 is network policy,
 change settings automatically, or create a replacement Doomer task.
 

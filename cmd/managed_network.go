@@ -25,8 +25,10 @@ func addManagedNetworkHelp(c *cobra.Command, r *managedResult, t managed.Task, e
 	}
 	retry := "prepare --task " + watch.Quote(t.Handle)
 	switch c.Name() {
-	case "submit", "status", "finish", "retry":
+	case "submit", "status", "finish":
 		retry = "task " + c.Name() + " " + watch.Quote(t.Handle)
+	case "retry":
+		retry = "task submit " + watch.Quote(t.Handle)
 	case "respond":
 		retry = "task status " + watch.Quote(t.Handle)
 	}

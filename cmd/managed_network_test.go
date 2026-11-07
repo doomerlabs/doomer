@@ -15,7 +15,7 @@ import (
 )
 
 func TestManagedNetworkHelpPreservesTaskAndOperation(t *testing.T) {
-	for _, operation := range []string{"prepare", "submit", "status", "respond"} {
+	for _, operation := range []string{"prepare", "submit", "status", "respond", "retry"} {
 		t.Run(operation, func(t *testing.T) {
 			task := managed.Task{Handle: strings.Repeat("a", 48), API: "https://doomer.example/api", Profile: "team profile"}
 			err := managed.NetworkError("upload", &url.Error{URL: "https://storage.example/private?secret=token", Err: errors.New("denied")})
@@ -31,6 +31,8 @@ func TestManagedNetworkHelpPreservesTaskAndOperation(t *testing.T) {
 			want := "task " + operation
 			if operation == "prepare" {
 				want = "prepare --task"
+			} else if operation == "retry" {
+				want = "task submit"
 			} else if operation == "respond" {
 				want = "task status"
 			}
