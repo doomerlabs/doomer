@@ -89,7 +89,7 @@ func (j *journey) coding(repo, prompt string) error {
 		return err
 	}
 	if observed.PolicyOffered && j.c.Scenario != "portable-restart" {
-		return fmt.Errorf("unexpected repeated Codex settings proposal")
+		return fmt.Errorf("unexpected repeated agent settings proposal")
 	}
 	if observed.UpdateRequested {
 		return fmt.Errorf("unexpected repeat update approval")

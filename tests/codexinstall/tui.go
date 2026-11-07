@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// A real terminal is required for Codex's interactive frontend. Python's
+// A real terminal is required for the interactive agent frontend. Python's
 // standard-library PTY keeps this opt-in Linux test free of extra dependencies.
 const terminalDriver = `import os,pty,sys,select,signal,time,fcntl,termios,struct,re
 pid,master=pty.fork()
@@ -75,7 +75,7 @@ var terminalEscapes = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x
 
 func (j *journey) tui() error {
 	started := time.Now()
-	prompt := "Create hello.txt containing hello followed by a newline. Follow the installed Doomer skill and finish its review, recording responses to any findings. Keep Codex approval reviewer settings unchanged."
+	prompt := "Create hello.txt containing hello followed by a newline. Follow the installed Doomer skill and finish its review, recording responses to any findings. Keep agent approval settings unchanged."
 	j.record("Scripted user", prompt)
 	j.f.mu.Lock()
 	j.f.Findings = true
@@ -96,7 +96,7 @@ func (j *journey) tui() error {
 	if j.c.Scenario == "tui-hooks-denied" {
 		choice = "deny"
 	}
-	j.record("Scripted user", "At the native hook trust screen, choose "+choice+". Keep Codex approval reviewer settings unchanged.")
+	j.record("Scripted user", "At the native hook trust screen, choose "+choice+". Keep agent approval settings unchanged.")
 	cmd.Env = append(j.env, "TERM=xterm-256color", "DOOMER_TEST_HARNESS="+j.c.Harness, "DOOMER_TEST_TRUST_HOOKS="+choice, "DOOMER_TEST_TERMINAL_LOG="+filepath.Join(j.home, "terminal.log"))
 	var output bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &output, &output
@@ -125,9 +125,9 @@ wait:
 			break wait
 		case err = <-done:
 			input.Close()
-			j.record("Command", "Interactive Codex terminal\n"+terminalEscapes.ReplaceAllString(output.String(), ""))
+			j.record("Command", "Interactive "+agentName(j.c)+" terminal\n"+terminalEscapes.ReplaceAllString(output.String(), ""))
 			j.recordTerminalMessages(started)
-			return fmt.Errorf("interactive Codex exited before completing the review: %v", err)
+			return fmt.Errorf("interactive %s exited before completing the review: %v", agentName(j.c), err)
 		case <-ticker.C:
 			tasks, readErr := savedTasks(j.home)
 			if readErr != nil {
@@ -150,10 +150,10 @@ wait:
 	}
 	input.Close()
 	<-done
-	j.record("Command", "Interactive Codex terminal\n"+terminalEscapes.ReplaceAllString(output.String(), ""))
+	j.record("Command", "Interactive "+agentName(j.c)+" terminal\n"+terminalEscapes.ReplaceAllString(output.String(), ""))
 	j.recordTerminalMessages(started)
 	if !complete {
-		return fmt.Errorf("interactive Codex did not finish within the terminal timeout")
+		return fmt.Errorf("interactive %s did not finish within the terminal timeout", agentName(j.c))
 	}
 	raw, err := os.ReadFile(filepath.Join(j.repo, "hello.txt"))
 	if err != nil || strings.TrimSpace(string(raw)) != "hello" {
