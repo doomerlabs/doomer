@@ -1,0 +1,52 @@
+tests/codexinstall/portable.go
+  s_f23d7bc729b5d1::t_a10a145538b758 21
+tests/codexinstall/replay.html
+  s_f23d7bc729b5d1::t_a2bd996f064468 25,52-53,55
+tests/codexinstall/main.go
+  s_f23d7bc729b5d1::t_a2bd996f064468 15,35,108-120,137-142
+  s_f23d7bc729b5d1::t_a10a145538b758 57-58,66,107,121,126,136,149
+tests/codexinstall/tui.go
+  s_f23d7bc729b5d1::t_2821da846f8489 27-29,42-54,82-90,97,165-167,181-184
+cmd/managed_prompt_test.go
+  s_f23d7bc729b5d1::t_1cb5fa8811153c 187-221
+tests/codexinstall/claude.go
+  s_f23d7bc729b5d1::t_7725ac3c725479 1-3,14-25,30-31,36-37,42,49,61,90,139-140,158
+  s_f23d7bc729b5d1::t_a2bd996f064468 4-13,26-29,32-35,38-41,43-48,50-60,62-89,91-138,141-157
+cmd/managed.go
+  s_f23d7bc729b5d1::t_1cb5fa8811153c 244-256,318-322
+tests/codexinstall/claude_proxy.go
+  s_f23d7bc729b5d1::t_a2bd996f064468 1-50,54-78,80-101,109-127,129,131-151
+  s_f23d7bc729b5d1::t_9e403dadde7da8 51-53,79,102-108,128,130
+tests/codexinstall/scenarios.go
+  s_f23d7bc729b5d1::t_a2bd996f064468 41-43
+  s_f23d7bc729b5d1::t_a10a145538b758 182
+tests/codexinstall/proxy.go
+  s_f23d7bc729b5d1::t_a2bd996f064468 16-23,28,38-41,142
+tests/codexinstall/claude_test.go
+  s_f23d7bc729b5d1::t_382ab22eaf5b6b 1-52
+tests/codexinstall/worker.go
+  s_f23d7bc729b5d1::t_25a957901bc0c7 100,106-108,125-126
+  s_f23d7bc729b5d1::t_a2bd996f064468 101-102,105,109,115-116,127,291,302
+  s_f23d7bc729b5d1::t_a10a145538b758 191,256,278
+tests/codexinstall/remote.go
+  s_f23d7bc729b5d1::t_a2bd996f064468 129-131,157-159
+  s_f23d7bc729b5d1::t_a10a145538b758 67
+tests/codexinstall/upgrade.go
+  s_f23d7bc729b5d1::t_a10a145538b758 127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "32bae12d68f9daec8e3886dd1f77bb2bc66ef6e8",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
