@@ -62,7 +62,10 @@ that there were no changes to review, and do not describe it as a failed review.
 If submission fails, read the safe service error from task status. Automatic
 hooks stop resubmitting a failed call. Report the review as incomplete and end
 the turn if recovery is unavailable; do not enter a stop-hook retry loop.
-Use an explicit task command to retry after addressing the cause. Never describe
+Allow at most one immediate retry of the same failed operation. If it fails again,
+stop until the cause is addressed. Use `doomer task submit HANDLE` to resume a
+failed submission with its existing request identity. Reserve `doomer task retry
+HANDLE` for a review that status explicitly marks `review_failed`. Never describe
 a failed submission as a completed review.
 
 If status reports `review_failed`, the review is terminal. Report incomplete

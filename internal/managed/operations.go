@@ -302,7 +302,10 @@ func (e Engine) Retry(ctx context.Context, task *Task, token string) error {
 		return err
 	}
 	if task.Stage != "review_failed" {
-		return fmt.Errorf("review is not terminal; resume its existing submission")
+		if task.Stage == "reviewed" || task.Stage == "responses_required" {
+			return fmt.Errorf("review has completed; record any outstanding finding responses and run doomer task finish %s", task.Handle)
+		}
+		return fmt.Errorf("review has not failed; check doomer task status %s and continue its existing submission", task.Handle)
 	}
 	task.Review = nil
 	task.Submission = nil

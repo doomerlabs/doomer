@@ -178,8 +178,8 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	if err = engine.Finish(context.Background(), &resumed, "token"); err == nil {
 		t.Fatal("accepted unreviewed edits")
 	}
-	if err := engine.Retry(context.Background(), &resumed, "token"); err == nil {
-		t.Fatal("retry replaced a nonterminal review")
+	if err := engine.Retry(context.Background(), &resumed, "token"); err == nil || !strings.Contains(err.Error(), "review has completed") || !strings.Contains(err.Error(), "task finish") {
+		t.Fatal("retry must preserve the completed review and explain how to finish", err)
 	}
 	client.result.Status = "failed"
 	client.result.Early = nil
