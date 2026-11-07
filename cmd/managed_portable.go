@@ -173,6 +173,15 @@ func restorePortable(ctx context.Context, app *application.App, s managed.Store,
 		grantPath = integrationConsentPath(s, *t)
 	} else {
 		grant.Repository = t.RepositoryID
+		var integration repositoryConsent
+		err := watch.Read(integrationConsentPath(s, *t), &integration)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err == nil && !integration.Approved && !grant.At.After(integration.At) {
+			t.PortableApproved = false
+			return nil
+		}
 	}
 	var previous repositoryConsent
 	if err := watch.Read(grantPath, &previous); err == nil && !previous.Approved {

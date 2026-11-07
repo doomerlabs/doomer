@@ -28,6 +28,8 @@ type permissionFailingWriter struct {
 
 func TestHasPermissionReusesIntegrationAcrossRepositories(t *testing.T) {
 	store := isolate(t)
+	// An explicit integration identity takes precedence over inherited context.
+	t.Setenv("CLAUDECODE", "1")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/auth/whoami" || r.Header.Get("Authorization") != "Bearer integration-token" {
 			t.Errorf("unexpected request %s", r.URL.Path)

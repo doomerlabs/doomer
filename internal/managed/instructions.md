@@ -44,7 +44,8 @@ Readiness fields are separate. Software readiness is not upload consent, hook
 activation, account authentication, or a completed review. Native skill discovery,
 a browser callback, session IDs, and persistent processes are optional.
 
-When Doomer is ready, work on the user's task and run
+When the CLI reports authenticated=true and upload_approved=true and the host
+permits the upload, reuse that saved approval and run
 `doomer task submit HANDLE`. This captures the checkout and requests automatic
 review selection. The server runs Look Closer and enables Deep when the account
 is eligible. Use `doomer task status HANDLE` to retrieve the result. If the status

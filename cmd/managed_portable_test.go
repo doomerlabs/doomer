@@ -176,6 +176,25 @@ func TestPortableSetupAcrossHomesAndMountPaths(t *testing.T) {
 			if err := savePortable(ctx, app, s, task, false); err == nil {
 				t.Fatal("a concurrent refresh recreated revoked portable access")
 			}
+			if err := savePortable(ctx, app, s, task, true); err != nil {
+				t.Fatal(err)
+			}
+			if err := recordIntegrationConsent(s, task, "integration_revoked", false); err != nil {
+				t.Fatal(err)
+			}
+			if !integration {
+				if err := os.Remove(managedConsentPath(s, task)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := restorePortable(ctx, app, s, &task); err != nil || task.PortableApproved {
+				t.Fatal("restored portable approval after integration revocation", err)
+			}
+			if !integration {
+				if _, err := os.Stat(managedConsentPath(s, task)); !os.IsNotExist(err) {
+					t.Fatal("restored an older repository grant after integration revocation", err)
+				}
+			}
 		})
 	}
 }

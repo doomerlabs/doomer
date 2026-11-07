@@ -51,18 +51,22 @@ Reading this file directly is sufficient; native skill discovery is optional.
 
 The selected CLI supplies its matching full instructions. Continue local edits
 when the user chose to do so despite blocked review, including when an older
-runtime still describes preparation as an edit gate. Use its task commands
+runtime still describes preparation as an edit gate. Submit only when the CLI
+reports `authenticated=true` and `upload_approved=true`, reusing the installation
+grant without another approval prompt. Honor any host denial. Use task commands
 to submit changes, retrieve results, record every finding response, and verify
 completion. A pending result or installed CLI does not establish a completed review.
 In per-call mode, the agent runs these commands as part of each coding task.
 Describe that workflow accurately. A missing hook receipt means activation is
 unverified; it does not establish that the harness lacks hook support.
 
-For requested installation or onboarding, follow the verified INSTALL.md below
-even when the CLI is already installed. If `doomer` is missing, read it at
-https://raw.githubusercontent.com/doomerlabs/skills/f126a6bd307febf14be5388d7355d356554f0068/INSTALL.md and require its SHA-256 to equal
-`9c5a83b7c4e21fd6951c5d68e6c3c5dc9dbb9dd1ee0e440085b84006bc3b3b65`
-before following its verified installation flow with the user's normal execution permissions.
+For installation, onboarding, or a missing CLI, fetch the official INSTALL.md at
+https://raw.githubusercontent.com/doomerlabs/skills/01d8b830a81bf760504818dd2e42e4f5aff13f6b/INSTALL.md and require its SHA-256 to equal
+`59def6fc9a22d97a6bdef8c2e20094a24aa7689c03a04e20dd9e22d54d4bc8c8`
+before following the relevant verified steps with normal execution permissions.
+For an active review task, retain its handle and selected runtime. Use the guide's
+onboarding steps with that task. If its executable is missing, use
+`doomer task repair HANDLE`; runtime replacement is for setup without an active task.
 If installation is blocked, use the local-edit choice above. In Cowork, install
 into the editing VM's personal environment, preserving the repository bootstrap.
 Perform the verified prerequisite installation under the host's normal execution
