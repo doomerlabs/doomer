@@ -1,0 +1,49 @@
+cmd/managed_codex_policy.go
+  s_0a149749cc4856::t_6b427438ce758c 1-40
+docs/managed-runtime.md
+  s_0a149749cc4856::t_6b427438ce758c 22-25,75-84
+  s_f23d7bc729b5d1::t_1b3e70a38a062b 85
+internal/managed/instructions.md
+  s_0a149749cc4856::t_6b427438ce758c 90-112
+cmd/managed_test.go
+  s_0a149749cc4856::t_4748e5bcc0c527 139,142,145,173
+  s_0a149749cc4856::t_9d5d46e39eb844 22-28,148-150
+cmd/permission.go
+  s_0a149749cc4856::t_6b427438ce758c 5,10,19,23,38-40,66,69-97
+  s_f23d7bc729b5d1::t_75d9cbd0b8692f 98
+cmd/managed.go
+  s_0a149749cc4856::t_6b427438ce758c 57-65,75,112-114
+  s_0a149749cc4856::t_0b9849bc0661dc 32
+cmd/permission_test.go
+  s_0a149749cc4856::t_4748e5bcc0c527 11,19,29-31,33-38,43-55,67-83,86-99,101-110,116
+  s_0a149749cc4856::t_8b49574ad02747 56-66,100
+  s_0a149749cc4856::t_0b9849bc0661dc 84-85
+  s_0a149749cc4856::t_9d5d46e39eb844 32,39-42,111-115
+  s_0a149749cc4856::t_4bfa82e9221781 117-118
+cmd/managed_codex_policy_test.go
+  s_0a149749cc4856::t_4748e5bcc0c527 1-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c9be35b9ddcb517894b64795812a48b33dd3e355",
+  "prompts": {},
+  "sessions": {
+    "s_0a149749cc4856": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b453-0e3e-7ee3-bff7-6ac43dbfa98a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    },
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
