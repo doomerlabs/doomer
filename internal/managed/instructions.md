@@ -53,6 +53,14 @@ finishing. Each call is
 resumable. If pending, continue useful work and check again with a bounded delay.
 Do not start another review while this revision is pending. If a call is rejected
 by network policy, show the returned required host and retain the same handle.
+When a result includes network_access, present its required_host for copying,
+settings_url, and docs_url as clickable links. Explain the connection's purpose
+and guide the user to their active organization's network allowlist (Code or
+Capabilities, depending on the Claude interface). Let the owner save the exact
+host after deciding whether to allow it. Network access is separate from upload
+consent. After confirmation, run retry_command once; if still blocked, follow
+the guide's existing-session checks. Do not assume every 403 is network policy,
+change settings automatically, or create a replacement Doomer task.
 
 For setup-only or read-only work, no code review is needed. If submission returns
 `no_changes: true`, run `doomer task finish HANDLE` to complete it without a review

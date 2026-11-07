@@ -155,3 +155,16 @@ Agents can cite this evidence in normal tool-approval review instead of asking
 for a separate grant for each finding response. Host-level restrictions still
 apply. Hook feedback contains brief state-specific guidance; full review JSON
 stays available through task commands.
+
+## Network access recovery
+
+Connection errors and unrecognized HTTP 403 responses can return
+`network_access` with `required_host`, `settings_url`, `docs_url`, and
+`retry_command`. The host contains no path, query string, or credentials.
+Prepare retains its task handle even when account verification or repository
+approval cannot connect. Known service error codes retain their existing
+service diagnosis. Review operations keep their existing failure states and
+request identities while adding recovery guidance.
+
+Follow the [network access setup guide](network-access.md) to help a Claude
+organization owner review and save an allowlist entry, then retry the same task.

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"time"
 
@@ -86,7 +87,12 @@ func FetchCatalog(ctx context.Context, client *http.Client) (Catalog, error) {
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return Catalog{}, fmt.Errorf("release service returned HTTP %d", response.StatusCode)
+		err := fmt.Errorf("release service returned HTTP %d", response.StatusCode)
+		if response.StatusCode == http.StatusForbidden {
+			host, _ := url.Parse(CatalogURL)
+			return Catalog{}, &ConnectionError{Host: host.Hostname(), err: err}
+		}
+		return Catalog{}, err
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
 	if err != nil {
