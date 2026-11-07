@@ -241,6 +241,19 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 		if task.API != *api || task.Profile != *profile {
 			return fmt.Errorf("resume with the original service and profile")
 		}
+		if task.Purpose == "setup" && strings.TrimSpace(prompt) != "" {
+			if len(prompt) > 16000 {
+				return fmt.Errorf("task prompt is too large")
+			}
+			task.Prompt = prompt
+			task.Purpose = "coding"
+			if task.Stage == "complete" {
+				task.Stage = "ready"
+			}
+			if err := s.Save(&task); err != nil {
+				return err
+			}
+		}
 		if portable && !task.Portable {
 			if _, _, err := portableLocation(c.Context(), task); err != nil {
 				return err
