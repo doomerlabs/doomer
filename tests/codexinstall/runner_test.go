@@ -138,3 +138,45 @@ func TestCodexUpdateStateIgnoresJSONWhitespace(t *testing.T) {
 		}
 	}
 }
+
+func TestScenarioNames(t *testing.T) {
+	for _, name := range scenarioNames {
+		if !validScenario(name) {
+			t.Fatal(name)
+		}
+	}
+	if validScenario("anything") {
+		t.Fatal("unknown scenario accepted")
+	}
+}
+
+func TestReviewFixtureRequiresAccountAndRecordsFeedback(t *testing.T) {
+	f := &fixture{Approved: true, Findings: true}
+	call := func(path, body, token string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		out := httptest.NewRecorder()
+		f.serve(out, req)
+		return out
+	}
+	if out := call("/v1/reviews/workspace", `{"review_id":"review-test"}`, "wrong"); out.Code != 403 {
+		t.Fatal(out.Code)
+	}
+	if out := call("/v1/reviews/workspace", `{"review_id":"review-test"}`, "fixture-account-token"); out.Code != 200 {
+		t.Fatal(out.Body.String())
+	}
+	body := `{"lead_id":"` + strings.Repeat("a", 64) + `","status":"dismissed","reason":"verified fixture greeting","agrees":false}`
+	if out := call("/v1/reviews/workspace/review-test/feedback", body, "fixture-account-token"); out.Code != 200 {
+		t.Fatal(out.Body.String())
+	}
+	if len(f.Reviews) != 1 || len(f.Feedback) != 1 {
+		t.Fatal(f.Reviews, f.Feedback)
+	}
+	f.FailSubmit = true
+	if out := call("/v1/reviews/workspace", `{"review_id":"failed-review"}`, "fixture-account-token"); out.Code != 503 {
+		t.Fatal(out.Code)
+	}
+	if len(f.Reviews) != 1 {
+		t.Fatal("failed submission created a review")
+	}
+}

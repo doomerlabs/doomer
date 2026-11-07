@@ -57,6 +57,7 @@ func (r remote) trust(ctx context.Context, host string) error {
 }
 func runRemote(ctx context.Context, c config, version string) (result report) {
 	result.Model = c.Model
+	result.Scenario = c.Scenario
 	fail := func(err error) report { result.Error = err.Error(); return result }
 	key := os.Getenv("TEST_EXE_SSH_PRIVATE_KEY")
 	if key == "" || c.APIKey == "" {

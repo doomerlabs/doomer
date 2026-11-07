@@ -7,14 +7,17 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
 type config struct {
-	APIKey string  `json:"api_key"`
-	Model  string  `json:"model"`
-	Budget float64 `json:"budget_usd"`
-	Codex  string  `json:"codex"`
+	APIKey          string  `json:"api_key"`
+	Model           string  `json:"model"`
+	Budget          float64 `json:"budget_usd"`
+	Codex           string  `json:"codex"`
+	Scenario        string  `json:"scenario"`
+	LegacyBootstrap string  `json:"legacy_bootstrap,omitempty"`
 }
 
 type recordedEvent struct {
@@ -24,6 +27,7 @@ type recordedEvent struct {
 }
 
 type report struct {
+	Scenario      string          `json:"scenario"`
 	DoomerVersion string          `json:"doomer_version,omitempty"`
 	Passed        bool            `json:"passed"`
 	Error         string          `json:"error,omitempty"`
@@ -40,6 +44,7 @@ type report struct {
 }
 
 func main() {
+	scenario := flag.String("scenario", "install", "manual scenario name; use list to show available scenarios")
 	render := flag.String("render-report", "", "render an existing JSON report to PATH.html without running a test")
 	worker := flag.Bool("worker", false, "internal VM worker mode")
 	model := flag.String("model", "gpt-6.1-terra", "model under test")
@@ -47,6 +52,14 @@ func main() {
 	budget := flag.Float64("budget", .20, "maximum reserved API spend for this run, USD")
 	output := flag.String("output", "codex-install-report.json", "sanitized JSON report")
 	flag.Parse()
+	if *scenario == "list" {
+		fmt.Println(strings.Join(scenarioNames, "\n"))
+		return
+	}
+	if !validScenario(*scenario) {
+		fmt.Fprintln(os.Stderr, "unknown scenario")
+		os.Exit(1)
+	}
 	if *render != "" {
 		data, err := os.ReadFile(*render)
 		if err != nil {
@@ -81,7 +94,16 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	r := runRemote(ctx, config{APIKey: os.Getenv("TEST_OPENAI_API_KEY"), Model: *model, Budget: *budget}, *version)
+	c := config{APIKey: os.Getenv("TEST_OPENAI_API_KEY"), Model: *model, Budget: *budget, Scenario: *scenario}
+	if *scenario == "upgrade" || *scenario == "upgrade-defer" {
+		raw, err := os.ReadFile("internal/managed/bootstrap-2026.11.6.10.md")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		c.LegacyBootstrap = string(raw)
+	}
+	r := runRemote(ctx, c, *version)
 	data, _ := json.MarshalIndent(r, "", "  ")
 	if err := os.WriteFile(*output, append(data, '\n'), 0600); err != nil {
 		fmt.Fprintln(os.Stderr, err)

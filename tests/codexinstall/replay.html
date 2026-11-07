@@ -14,12 +14,13 @@ footer{position:fixed;bottom:0;left:0;right:0;z-index:3;background:linear-gradie
 </style>
 </head>
 <body>
-<header><div class="heading"><div class="mark" aria-hidden="true">›_</div><div><h1>Doomer installation</h1><div class="subtitle">Codex · recorded test conversation</div></div><span class="badge" id="result"></span></div></header>
+<header><div class="heading"><div class="mark" aria-hidden="true">›_</div><div><h1 id="title">Doomer installation</h1><div class="subtitle">Codex · recorded test conversation</div></div><span class="badge" id="result"></span></div></header>
 <main><div class="intro" id="summary"></div><div id="conversation" aria-label="Recorded conversation"></div></main>
 <footer><div class="player"><div class="player-top"><button id="play">Replay</button><button id="prev" aria-label="Previous event">←</button><button id="next" aria-label="Next event">→</button><button id="all">Show all</button><span class="position" id="position"></span></div><div class="scrubber"><input id="step" aria-label="Replay position" type="range" min="0" value="0"><span id="time" class="clock"></span></div></div><div class="note">Headless recording · user replies are scripted · long pauses shortened during playback</div></footer>
 <script>
 const report = {{.}};
 const events = report.events || [];
+if (report.scenario) document.getElementById('title').textContent = 'Doomer · ' + report.scenario.replaceAll('-', ' ');
 const el = id => document.getElementById(id);
 let index = Math.max(0, events.length - 1), timer = null, playing = false;
 el('result').textContent = report.passed ? 'Passed' : 'Failed';
@@ -74,7 +75,7 @@ function show(n, scroll = false) {
   }
   flush();
   if (!events.length) fragment.append(node('p', 'content', report.error || 'No events were recorded.'));
-  if (events.length && index === events.length - 1) fragment.append(node('div', 'end', report.passed ? 'Installation verified' : 'Recording ended · test failed'));
+  if (events.length && index === events.length - 1) fragment.append(node('div', 'end', report.passed ? 'Scenario verified' : 'Recording ended · test failed'));
   el('conversation').replaceChildren(fragment);
   el('step').value = index;
   el('position').textContent = `${events.length ? index + 1 : 0} / ${events.length}`;

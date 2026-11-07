@@ -11,14 +11,19 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
 func runWorker(c config) (result report) {
 	start := time.Now()
 	result.Model = c.Model
+	result.Scenario = c.Scenario
+	var recordMu sync.Mutex
 	result.Checks = map[string]bool{}
 	record := func(kind, text string) {
+		recordMu.Lock()
+		defer recordMu.Unlock()
 		result.Events = append(result.Events, recordedEvent{Seconds: time.Since(start).Seconds(), Kind: kind, Text: text})
 	}
 	defer func() {
@@ -88,42 +93,33 @@ func runWorker(c config) (result report) {
 	session := ""
 	approvedUpdate := false
 	sawUpdateRequest := false
+	declined := false
 	for turn := 0; turn < 6; turn++ {
 		result.Turns++
-		record("Scripted user", prompt)
-		args := []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox"}
-		if session != "" {
-			args = append(args, "resume", session)
-		} else {
-			args = append(args, "-C", repo)
-		}
-		args = append(args, "-")
-		cmd := exec.CommandContext(ctx, c.Codex, args...)
-		cmd.Dir = repo
-		cmd.Env = env
-		cmd.Stdin = strings.NewReader(prompt)
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		out, err := cmd.StdoutPipe()
+		observed, err := runAgent(ctx, c, repo, env, prompt, session, record)
 		if err != nil {
 			return fail(err)
-		}
-		if err = cmd.Start(); err != nil {
-			return fail(err)
-		}
-		observed, readErr := readCodexTurn(out, record)
-		waitErr := cmd.Wait()
-		if readErr != nil {
-			return fail(readErr)
-		}
-		if observed.Failed || waitErr != nil {
-			return fail(fmt.Errorf("Codex execution failed: %s", strings.TrimSpace(stderr.String())))
 		}
 		if observed.Session != "" {
 			session = observed.Session
 		}
 		sawUpdateRequest = sawUpdateRequest || observed.UpdateRequested
 		text := strings.Join(observed.Messages, "\n")
+		if declined {
+			f.mu.Lock()
+			safe := !f.Approved && f.Uploads == 0
+			creates := f.Creates
+			f.mu.Unlock()
+			if c.Scenario == "decline-updates" {
+				safe = safe && creates == 0
+			}
+			if !safe {
+				return fail(fmt.Errorf("declined permission was not respected"))
+			}
+			result.Checks["decline_respected"] = true
+			result.Passed = true
+			return result
+		}
 		ready, checks := inspectInstall(ctx, repo, home, env)
 		if ready {
 			for name, ok := range checks {
@@ -133,10 +129,11 @@ func runWorker(c config) (result report) {
 			result.Checks["one_repository_approval"] = f.Creates == 1 && f.Approved
 			result.Checks["no_repository_upload"] = f.Uploads == 0
 			result.Checks["asked_update_permission"] = approvedUpdate && sawUpdateRequest
+
+			f.mu.Unlock()
 			if !result.Checks["presented_approval_link"] {
 				return fail(fmt.Errorf("repository approval link was not presented"))
 			}
-			f.mu.Unlock()
 			for _, ok := range result.Checks {
 				if !ok {
 					return fail(fmt.Errorf("installation assertion failed"))
@@ -149,6 +146,10 @@ func runWorker(c config) (result report) {
 				return fail(fmt.Errorf("read installed Doomer version: %w", err))
 			}
 			result.DoomerVersion = strings.TrimSpace(string(installedVersion))
+			j := journey{c: c, ctx: ctx, home: home, repo: repo, env: env, f: f, result: &result, record: record}
+			if err := j.afterInstall(); err != nil {
+				return fail(err)
+			}
 			result.Passed = true
 			return result
 		}
@@ -161,14 +162,35 @@ func runWorker(c config) (result report) {
 				return fail(fmt.Errorf("agent did not present the repository approval link"))
 			}
 			f.mu.Lock()
-			f.Approved = true
+			if c.Scenario == "decline-uploads" {
+				f.Cancelled = true
+				declined = true
+			} else {
+				f.Approved = true
+			}
 			f.mu.Unlock()
 			result.Checks["presented_approval_link"] = true
 			prompt = "I chose Allow on the repository approval page. Continue setup and verify it."
+			if declined {
+				prompt = "I declined repository uploads. Finish setup without uploads."
+			}
+			if c.Scenario == "interrupted" {
+				tasks, e := savedTasks(home)
+				if e != nil || len(tasks) != 1 {
+					return fail(fmt.Errorf("missing durable setup task"))
+				}
+				session = ""
+				prompt = "The previous agent process ended. I approved repository access. Resume Doomer task " + tasks[0].Handle + " and verify setup."
+				result.Checks["fresh_agent_resumed_setup"] = true
+			}
 		} else if sawUpdateRequest && !approvedUpdate && (strings.Contains(strings.ToLower(text), "update") || strings.Contains(strings.ToLower(text), "permission")) {
 			approvedUpdate = true
 			result.Checks["asked_update_permission"] = true
 			prompt = "Allow automatic updates (recommended). Continue setup."
+			if c.Scenario == "decline-updates" {
+				declined = true
+				prompt = "Not now. Do not enable updates or repository uploads. Finish with setup incomplete."
+			}
 		} else {
 			return fail(fmt.Errorf("agent stopped before installation readiness without an expected approval request"))
 		}
