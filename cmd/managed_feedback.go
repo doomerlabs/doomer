@@ -12,9 +12,6 @@ func managedHookFeedback(event string, output []byte, operationErr error) map[st
 	message := "Doomer could not check the review. Resume the prepared task and inspect its status."
 	valid := operationErr == nil && json.Unmarshal(output, &result) == nil && result.State != ""
 	if valid {
-		if result.NoChanges && event != "Stop" {
-			return map[string]any{}
-		}
 		if result.State == "complete" || result.State == "paused" {
 			return map[string]any{}
 		}
@@ -26,9 +23,14 @@ func managedHookFeedback(event string, output []byte, operationErr error) map[st
 				}
 			}
 		}
+		if result.State == "no_changes" && remaining == 0 && event != "Stop" {
+			return map[string]any{}
+		}
 		switch {
 		case remaining > 0:
 			message = fmt.Sprintf("Doomer needs responses to its review findings (%d pending). Read the prepared task's status and consent evidence, then record the responses before finishing.", remaining)
+		case result.State == "no_changes":
+			message = "No changes need review. Run the prepared task’s finish command to complete it."
 		case result.State == "review_pending":
 			message = "Doomer review is still running. Wait for the prepared task's result before finishing."
 		case result.State == "authentication_required" || result.State == "consent_required" || result.State == "approval_required":

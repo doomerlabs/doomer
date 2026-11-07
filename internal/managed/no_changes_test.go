@@ -13,7 +13,11 @@ func TestNoChangesCompletesWithoutUploadAndDetectsLaterEdits(t *testing.T) {
 	handle, _ := NewHandle()
 	task := Task{Schema: Protocol, Handle: handle, Stage: "ready"}
 	changed := false
-	engine := Engine{Store: store, Capture: func(context.Context, Task) (sourcesnapshot.Capture, error) {
+	uploads := 0
+	engine := Engine{Store: store, Upload: func(context.Context, Task, string, string, sourcesnapshot.Manifest) (string, string, string, error) {
+		uploads++
+		return "", "", "", fmt.Errorf("unexpected upload")
+	}, Capture: func(context.Context, Task) (sourcesnapshot.Capture, error) {
 		if !changed {
 			return sourcesnapshot.Capture{}, fmt.Errorf("capture: %w", sourcesnapshot.ErrNoChanges)
 		}
@@ -28,8 +32,8 @@ func TestNoChangesCompletesWithoutUploadAndDetectsLaterEdits(t *testing.T) {
 	if err := engine.Finish(context.Background(), &task, ""); err != nil {
 		t.Fatal(err)
 	}
-	if task.Stage != "complete" {
-		t.Fatal(task.Stage)
+	if task.Stage != "complete" || task.Review != nil || uploads != 0 {
+		t.Fatal(task.Stage, task.Review, uploads)
 	}
 	changed = true
 	if err := engine.Finish(context.Background(), &task, ""); err == nil {

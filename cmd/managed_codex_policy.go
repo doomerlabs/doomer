@@ -20,21 +20,29 @@ type codexReviewPolicy struct {
 // offered again, while ordinary chats keep using the existing review grant.
 func offerCodexReviewPolicy(s managed.Store, consent managedConsentEvidence) (*codexReviewPolicy, error) {
 	proposal := proposedCodexReviewPolicy(consent)
-	dir := filepath.Join(s.Root, "codex-policy-offers")
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return nil, err
-	}
-	file, err := os.OpenFile(filepath.Join(dir, watch.Key(proposal.ExtraPolicy)), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if os.IsExist(err) {
+	_, err := os.Stat(codexReviewPolicyOfferPath(s, proposal))
+	if err == nil {
 		return nil, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-	if err = file.Close(); err != nil {
+	if !os.IsNotExist(err) {
 		return nil, err
 	}
 	return proposal, nil
+}
+
+func codexReviewPolicyOfferPath(s managed.Store, proposal *codexReviewPolicy) string {
+	return filepath.Join(s.Root, "codex-policy-offers", watch.Key(proposal.ExtraPolicy))
+}
+
+func markCodexReviewPolicyOffered(s managed.Store, proposal *codexReviewPolicy) error {
+	if proposal == nil {
+		return nil
+	}
+	path := codexReviewPolicyOfferPath(s, proposal)
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte("delivered\n"), 0600)
 }
 
 func proposedCodexReviewPolicy(consent managedConsentEvidence) *codexReviewPolicy {

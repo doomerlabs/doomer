@@ -50,6 +50,7 @@ func (m *meter) serve(w http.ResponseWriter, r *http.Request) {
 	body["max_output_tokens"] = 4096
 	body["service_tier"] = "default"
 	body["store"] = false
+	body["stream"] = true
 	raw, _ = json.Marshal(body)
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -132,10 +133,12 @@ func (m *meter) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func newMeter(c config) *meter {
-	return &meter{key: c.APIKey, model: c.Model, limit: c.Budget, client: &http.Client{Timeout: 90 * time.Second}}
+	return &meter{key: c.APIKey, model: c.Model, limit: c.Budget, client: &http.Client{}}
 }
 
 func (m *meter) countInput(ctx context.Context, body map[string]any) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	fields := map[string]any{}
 	for _, name := range []string{"model", "conversation", "input", "instructions", "parallel_tool_calls", "personality", "previous_response_id", "reasoning", "text", "tool_choice", "tools", "truncation"} {
 		if value, ok := body[name]; ok {

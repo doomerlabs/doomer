@@ -154,7 +154,10 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 		}
 	}
 	reportManagedStatus(c.Context(), s, t, r.State)
-	return json.NewEncoder(c.OutOrStdout()).Encode(r)
+	if err := json.NewEncoder(c.OutOrStdout()).Encode(r); err != nil {
+		return err
+	}
+	return markCodexReviewPolicyOffered(s, r.CodexReviewPolicy)
 }
 
 func newPrepareCommand(app *application.App, api, profile *string) *cobra.Command {

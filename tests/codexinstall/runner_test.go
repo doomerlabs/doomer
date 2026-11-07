@@ -20,6 +20,9 @@ func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f
 
 func TestMeterCountsUsageAndLimitsOutput(t *testing.T) {
 	m := newMeter(config{APIKey: "private-test-key", Model: "gpt-6.1-terra", Budget: .2})
+	if m.client.Timeout != 0 {
+		t.Fatal("streaming request has a whole-response timeout")
+	}
 	m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
 		if r.URL.Path == "/v1/responses/input_tokens" {
 			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"input_tokens":1000}`))}, nil
@@ -29,7 +32,7 @@ func TestMeterCountsUsageAndLimitsOutput(t *testing.T) {
 		}
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if body["max_output_tokens"] != float64(4096) || body["service_tier"] != "default" {
+		if body["max_output_tokens"] != float64(4096) || body["service_tier"] != "default" || body["stream"] != true {
 			t.Fatal(body)
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":1000,\"output_tokens\":100,\"input_tokens_details\":{\"cached_tokens\":500}}}}\n\n"))}, nil

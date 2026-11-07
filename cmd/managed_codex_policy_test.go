@@ -33,6 +33,14 @@ func TestCodexReviewPolicyOfferPersistsWithoutGrantingSettings(t *testing.T) {
 	if err != nil || first == nil {
 		t.Fatal(first, err)
 	}
+	// Preparing output does not mark an undelivered proposal as shown.
+	undelivered, err := offerCodexReviewPolicy(s, consent)
+	if err != nil || undelivered == nil {
+		t.Fatal("undelivered proposal was lost", undelivered, err)
+	}
+	if err := markCodexReviewPolicyOffered(s, first); err != nil {
+		t.Fatal(err)
+	}
 	// A new Store represents a later CLI process/chat.
 	later, err := offerCodexReviewPolicy(managed.Store{Root: s.Root}, consent)
 	if err != nil || later != nil {
