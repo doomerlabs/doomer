@@ -1,0 +1,42 @@
+tests/codexinstall/remote.go
+  s_f23d7bc729b5d1::t_696383f68751c9 166
+  s_f23d7bc729b5d1::t_9d2d01a2690ab6 64-68,167-169
+tests/codexinstall/suite.go
+  s_f23d7bc729b5d1::t_696383f68751c9 16,19-20,39,59,64,69
+  s_f23d7bc729b5d1::t_206e9a22e17161 77-79
+  s_f23d7bc729b5d1::t_9d2d01a2690ab6 13-15,60-63,66-68,70-72
+tests/codexinstall/README.md
+  s_f23d7bc729b5d1::t_206e9a22e17161 184-212
+tests/codexinstall/auth.go
+  s_f23d7bc729b5d1::t_9d2d01a2690ab6 1-82
+tests/codexinstall/main.go
+  s_f23d7bc729b5d1::t_9d2d01a2690ab6 16-17,38,61,81-83,144-146,170,185-188
+  s_f23d7bc729b5d1::t_696383f68751c9 80,85,136,142-143,184
+tests/codexinstall/auth_test.go
+  s_f23d7bc729b5d1::t_206e9a22e17161 1-101
+tests/codexinstall/local.go
+  s_f23d7bc729b5d1::t_696383f68751c9 16-17
+  s_f23d7bc729b5d1::t_9d2d01a2690ab6 20-21
+  s_f23d7bc729b5d1::t_7821a63d8db77f 18-19
+tests/codexinstall/replay.html
+  s_f23d7bc729b5d1::t_696383f68751c9 29-30
+tests/codexinstall/worker.go
+  s_f23d7bc729b5d1::t_696383f68751c9 35,37,90-97,109,113,122,126-127
+  s_f23d7bc729b5d1::t_9d2d01a2690ab6 22,41-43,123-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eb5582a7b685fe7e49edad21d47b0e8990484e66",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
