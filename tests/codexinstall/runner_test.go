@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 type roundTrip func(*http.Request) (*http.Response, error)
@@ -192,5 +194,39 @@ func TestLocalProcessCleanupIsScopedToExecutablePath(t *testing.T) {
 	pids := localProcessIDs(output, "/private/test run")
 	if len(pids) != 1 || pids[0] != 100 {
 		t.Fatal(pids)
+	}
+}
+
+func TestRelocateHomeEnvironmentPreservesSiblingPaths(t *testing.T) {
+	for _, entry := range []struct{ input, want string }{
+		{"HOME=/old/home", "HOME=/new/home"},
+		{"CODEX_HOME=/old/home/.codex", "CODEX_HOME=/new/home/.codex"},
+		{"TMPDIR=/old/home-scratch", "TMPDIR=/old/home-scratch"},
+		{"CDPATH=/old/homeother", "CDPATH=/old/homeother"},
+		{"PATH=/old/home/bin:/old/home-other/bin:/usr/bin", "PATH=/new/home/bin:/old/home-other/bin:/usr/bin"},
+	} {
+		if got := relocateHomeEnvironment(entry.input, "/old/home", "/new/home"); got != entry.want {
+			t.Fatal(entry.input, got, entry.want)
+		}
+	}
+}
+
+func TestMeterCancellationReleasesAccountingLock(t *testing.T) {
+	m := newMeter(config{Model: "gpt-6.1-terra", Budget: .2})
+	m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/v1/responses/input_tokens" {
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"input_tokens":1}`))}, nil
+		}
+		<-r.Context().Done()
+		return nil, r.Context().Err()
+	})}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	r := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{"model":"gpt-6.1-terra"}`)).WithContext(ctx)
+	m.serve(httptest.NewRecorder(), r)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.usage.Unknown != 1 || m.usage.Reserved == 0 {
+		t.Fatal("cancelled request lost its conservative budget reservation", m.usage)
 	}
 }

@@ -9,7 +9,10 @@ import (
 )
 
 func (j *journey) portableRestart() error {
-	fresh := filepath.Join(filepath.Dir(j.home), "restarted-home")
+	fresh, err := os.MkdirTemp(filepath.Dir(j.home), "restarted-home-")
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Join(fresh, ".codex"), 0700); err != nil {
 		return err
 	}
@@ -20,7 +23,7 @@ func (j *journey) portableRestart() error {
 	}
 	old := j.home
 	for i, value := range j.env {
-		j.env[i] = strings.ReplaceAll(value, old, fresh)
+		j.env[i] = relocateHomeEnvironment(value, old, fresh)
 	}
 	cmd := exec.CommandContext(j.ctx, filepath.Join(old, ".local/bin/doomer"), "install", "--runtime", "--repo", j.repo)
 	cmd.Dir, cmd.Env = j.repo, j.env
@@ -41,4 +44,21 @@ func (j *journey) portableRestart() error {
 	}
 	j.result.Checks["fresh_home_reused_grant"] = true
 	return j.finish()
+}
+
+func relocateHomeEnvironment(entry, old, fresh string) string {
+	key, value, ok := strings.Cut(entry, "=")
+	if !ok {
+		return entry
+	}
+	values := []string{value}
+	if key == "PATH" {
+		values = filepath.SplitList(value)
+	}
+	for i, path := range values {
+		if path == old || strings.HasPrefix(path, old+string(os.PathSeparator)) {
+			values[i] = fresh + strings.TrimPrefix(path, old)
+		}
+	}
+	return key + "=" + strings.Join(values, string(os.PathListSeparator))
 }

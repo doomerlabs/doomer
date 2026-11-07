@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -82,9 +83,13 @@ func runWorker(c config) (result report) {
 	server := httptest.NewServer(httpHandler(f.serve))
 	defer server.Close()
 	m := newMeter(c)
-	proxy := httptest.NewServer(httpHandler(m.serve))
+	proxy := httptest.NewUnstartedServer(httpHandler(m.serve))
+	proxy.Config.BaseContext = func(net.Listener) context.Context { return ctx }
+	proxy.Start()
 	defer proxy.Close()
 	defer func() {
+		// Cancel stalled inference before waiting for the final accounting lock.
+		cancel()
 		m.mu.Lock()
 		result.Usage = m.usage
 		m.mu.Unlock()
