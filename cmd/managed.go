@@ -29,6 +29,7 @@ import (
 )
 
 type managedResult struct {
+	CodexReviewPolicy    *codexReviewPolicy             `json:"codex_review_policy,omitempty"`
 	BootstrapUpdates     []managed.BootstrapUpdate      `json:"bootstrap_updates,omitempty"`
 	Consent              *managedConsentEvidence        `json:"consent,omitempty"`
 	State                string                         `json:"state"`
@@ -53,6 +54,15 @@ type managedResult struct {
 }
 
 func managedStore() (managed.Store, error) {
+	s, err := managedStoreLocation()
+	if err != nil {
+		return s, err
+	}
+	return s, s.Init()
+}
+
+// Read-only consent checks must not create or chmod the managed state directory.
+func managedStoreLocation() (managed.Store, error) {
 	dir := os.Getenv("DOOMER_CONFIG_DIR")
 	if dir == "" {
 		var err error
@@ -62,7 +72,7 @@ func managedStore() (managed.Store, error) {
 		}
 	}
 	s := managed.Store{Root: filepath.Join(dir, "managed")}
-	return s, s.Init()
+	return s, nil
 }
 func resultFor(task managed.Task) managedResult {
 	r := managedResult{Error: task.LastError, State: task.Stage, Task: task.Handle, Release: task.Release, SoftwareReady: task.Release != "", HookActivated: task.HookActivated, Review: task.Review}
@@ -99,6 +109,9 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 			return err
 		}
 		r.Consent = evidence
+		if evidence != nil && t.Agent == "codex" && (c.Name() == "prepare" || c.Name() == "login" || c.Name() == "consent") {
+			r.CodexReviewPolicy = proposedCodexReviewPolicy(*evidence)
+		}
 	}
 	// Operation outcomes still describe the same pinned runtime and task.
 	taskResult := resultFor(t)

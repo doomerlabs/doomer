@@ -19,6 +19,13 @@ import (
 
 func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	isolate(t)
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	config := filepath.Join(codexHome, "config.toml")
+	originalConfig := "# Existing policy\n[auto_review]\nextra_policy = 'Keep my policy'\n"
+	if err := os.WriteFile(config, []byte(originalConfig), 0600); err != nil {
+		t.Fatal(err)
+	}
 	repo := newWatchTestRepo(t)
 	reviewGit(t, repo, "remote", "add", "origin", "https://github.com/example/project.git")
 	var submissions int
@@ -129,14 +136,17 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 		}
 		return result
 	}
-	if r := run("", "task", "submit", handle); r.State != "authentication_required" {
+	if r := run("", "task", "submit", handle); r.State != "authentication_required" || r.CodexReviewPolicy != nil {
 		t.Fatal(r)
 	}
-	if r := run("", "task", "login", handle); r.State != "approval_required" || !r.SoftwareReady || !strings.Contains(r.URL, "/cli/setup#request=") {
+	if r := run("", "task", "login", handle); r.State != "approval_required" || !r.SoftwareReady || !strings.Contains(r.URL, "/cli/setup#request=") || r.CodexReviewPolicy != nil {
 		t.Fatal(r)
 	}
-	if r := run("", "task", "login", handle); r.State != "ready" || !r.Authenticated || !r.UploadApproved || r.Consent == nil || r.Consent.Source != "browser_repository_approval" {
+	if r := run("", "task", "login", handle); r.State != "ready" || !r.Authenticated || !r.UploadApproved || r.Consent == nil || r.Consent.Source != "browser_repository_approval" || r.CodexReviewPolicy == nil {
 		t.Fatal(r)
+	}
+	if data, err := os.ReadFile(config); err != nil || string(data) != originalConfig {
+		t.Fatal("offering reviewer policy changed Codex settings", err)
 	}
 	portablePath, _, err := portableLocation(context.Background(), task)
 	if err != nil {
@@ -160,7 +170,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if r := run("", "task", "submit", handle); r.State != "review_pending" {
 		t.Fatal(r)
 	}
-	if r := run("", "task", "status", handle); r.State != "responses_required" || r.Consent == nil || strings.Join(r.Consent.Includes, ",") != "repository_snapshots,task_context,finding_responses" || r.Consent.Account != "user-account" || r.Consent.Repository != id || r.Consent.Service != server.URL {
+	if r := run("", "task", "status", handle); r.State != "responses_required" || r.Consent == nil || strings.Join(r.Consent.Includes, ",") != "repository_snapshots,task_context,finding_responses" || r.Consent.Account != "user-account" || r.Consent.Repository != id || r.Consent.Service != server.URL || r.CodexReviewPolicy != nil {
 		t.Fatal(r)
 	}
 	input := `[{"lead_id":"` + lead + `","status":"dismissed","agrees":false,"reason":"Checked the implementation"}]`
