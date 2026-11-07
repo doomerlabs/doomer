@@ -1,0 +1,21 @@
+scripts/ci-agent-e2e-report.py
+  s_f23d7bc729b5d1::t_470afa4e61d835 11-12,19
+.depot/workflows/agent-e2e.yml
+  s_f23d7bc729b5d1::t_470afa4e61d835 41,54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a239546fdb6db33d183038d025cdfdec92af3440",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
