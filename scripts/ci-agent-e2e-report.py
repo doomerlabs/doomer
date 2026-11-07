@@ -24,7 +24,7 @@ def read_result(root, harness, scenario, relative):
         "passed": passed,
         "detail": detail,
         "replay": replay.as_posix() if (root / replay).is_file() else "",
-        "cost": report.get("usage", {}).get("estimated_cost_usd", 0),
+        "cost": (report.get("usage") or {}).get("estimated_cost_usd", 0),
     }
 
 

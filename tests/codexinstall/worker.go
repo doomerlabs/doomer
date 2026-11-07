@@ -138,6 +138,7 @@ func runWorker(c config) (result report) {
 		c.InstallGuide = "https://doomer.ai/install.md"
 	}
 	prompt := "Read " + c.InstallGuide + " and follow the instructions to set up Doomer in this repository. Use a team/repository installation, local-only without a PR. This is an isolated test: DOOMER_API_URL points at its local account service; preserve that setting. Ask before granting updates or repository uploads. Keep messages concise."
+	prompt += " Use --agent " + agentName(c) + " when preparing Doomer and configuring this integration."
 	if personalScenario(c.Scenario) {
 		prompt = strings.Replace(prompt, "team/repository installation, local-only without a PR", "personal installation in my home directory, without a PR", 1)
 	}
@@ -177,7 +178,7 @@ func runWorker(c config) (result report) {
 				return fail(err)
 			}
 		}
-		prompt = "The installed build has been checked. Continue onboarding Doomer in this repository using its existing installed files and original scope. This test home persists for the scenario, so use ordinary setup without --portable. Ask for the required user approvals."
+		prompt = "The installed build has been checked. Continue onboarding Doomer in this repository using its existing installed files and original scope. This test home persists for the scenario, so use ordinary setup without --portable. Ask for the required user approvals. Use --agent " + agentName(c) + " when preparing Doomer and configuring this integration."
 	}
 	if c.Harness == "claude" && (c.CandidateFile != "" || c.SkillsGuide != "") {
 		prompt = "In this Claude Code session, " + prompt

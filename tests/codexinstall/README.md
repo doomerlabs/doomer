@@ -50,7 +50,9 @@ go run ./tests/codexinstall --scenario list
 | `deep-review` | Automatic selection permits Deep and waits for its completed result |
 | `service-failure` | Submission failure terminates with durable state and recovers the same task when the service returns |
 
-Each invocation performs real installation first in its own fresh home and VM.
+Each invocation performs real installation first in its own fresh home. The setup
+prompt explicitly selects the requested Codex or Claude integration; readiness
+assertions verify the CLI records that same agent.
 A failed assertion remains a failed test even when it exposes a product gap.
 The upgrade fixture uses a local bare Git remote and a fake `gh` command; it
 tests the agent's PR workflow without creating a real external pull request.
