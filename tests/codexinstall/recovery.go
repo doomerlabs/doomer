@@ -101,7 +101,7 @@ wait:
 	if handle == "" {
 		return fmt.Errorf("review did not reach the interruption point")
 	}
-	j.record("Fixture", "Terminated Codex while its submitted review was pending. Resuming in a new process.")
+	j.record("Fixture", "Terminated "+agentName(j.c)+" while its submitted review was pending. Resuming in a new process.")
 	j.f.mu.Lock()
 	j.f.PendingReviews = false
 	j.f.mu.Unlock()

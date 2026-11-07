@@ -35,6 +35,9 @@ func TestNoChangesCompletesWithoutUploadAndDetectsLaterEdits(t *testing.T) {
 	if task.Stage != "complete" || task.Review != nil || uploads != 0 {
 		t.Fatal(task.Stage, task.Review, uploads)
 	}
+	if err := engine.Retry(context.Background(), &task, ""); err == nil || task.Stage != "complete" {
+		t.Fatal("retry reopened a completed no-change task", err, task.Stage)
+	}
 	changed = true
 	if err := engine.Finish(context.Background(), &task, ""); err == nil {
 		t.Fatal("completed without checking new edits")

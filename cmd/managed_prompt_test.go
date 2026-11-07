@@ -160,6 +160,20 @@ func TestManagedFailedHookWaitsForExplicitRetry(t *testing.T) {
 	if err != nil || saved.LastError != "" {
 		t.Fatal(saved.LastError, err)
 	}
+	// An explicit successful status refresh clears a stale error before
+	// rendering the finish action for an existing completed review.
+	saved.Stage = "reviewed"
+	saved.LastError = "old status request failed"
+	if err := store.Save(&saved); err != nil {
+		t.Fatal(err)
+	}
+	result := run("status", "")
+	if result.State != "reviewed" || result.Error != "" || !strings.Contains(result.Action, "doomer task finish "+handle) {
+		t.Fatal("status did not restore finish guidance", result)
+	}
+	if result := run("finish", ""); result.State != "complete" || result.Error != "" {
+		t.Fatal(result)
+	}
 }
 
 func TestPrepareResumesSetupAsCodingWithExplicitPrompt(t *testing.T) {
@@ -182,5 +196,164 @@ func TestPrepareResumesSetupAsCodingWithExplicitPrompt(t *testing.T) {
 	}
 	if strings.Contains(managedTaskInstructions(saved), "This is a setup-only task") {
 		t.Fatal("coding resume retained setup-only instructions")
+	}
+}
+
+func TestPrepareBindsSessionWhenResumingSetup(t *testing.T) {
+	isolate(t)
+	store, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, Agent: "claude", Repo: "/fixture/repo", API: "https://doomer.ai/api", Profile: "default", Paused: true, Stage: "ready"}
+	if err := store.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := execute(t, "", "prepare", "--task", handle, "--session", "claude-session"); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.Load(handle)
+	if err != nil || saved.Capabilities.SessionID != "claude-session" || !saved.Capabilities.Hooks {
+		t.Fatal(saved, err)
+	}
+	key := watch.Key(task.API + "\x00" + task.Profile + "\x00" + task.Agent + "\x00" + task.Repo + "\x00claude-session")
+	var bound string
+	if err := watch.Read(filepath.Join(store.Root, "sessions", key+".json"), &bound); err != nil || bound != handle {
+		t.Fatal(bound, err)
+	}
+	if _, err := execute(t, "", "prepare", "--task", handle, "--session", "replacement-session"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(store.Root, "sessions", key+".json")); !os.IsNotExist(err) {
+		t.Fatal("old session still owns task", err)
+	}
+	current, err := store.Load(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Capabilities.SessionID != "replacement-session" {
+		t.Fatal(current.Capabilities)
+	}
+	newKey := watch.Key(task.API + "\x00" + task.Profile + "\x00" + task.Agent + "\x00" + task.Repo + "\x00replacement-session")
+	newPath := filepath.Join(store.Root, "sessions", newKey+".json")
+	if err := watch.Read(newPath, &bound); err != nil || bound != handle {
+		t.Fatal("replacement binding missing", bound, err)
+	}
+	// Simulate a crash after saving the new session but before repairing its index.
+	if err := os.Remove(newPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.Write(filepath.Join(store.Root, "sessions", key+".json"), handle); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := execute(t, "", "prepare", "--task", handle, "--session", "replacement-session"); err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.Read(newPath, &bound); err != nil || bound != handle {
+		t.Fatal(bound, err)
+	}
+	if _, err := os.Stat(filepath.Join(store.Root, "sessions", key+".json")); !os.IsNotExist(err) {
+		t.Fatal("stale binding survived repair", err)
+	}
+
+}
+
+func TestPrepareDefaultsToActiveClaudeHarness(t *testing.T) {
+	isolate(t)
+	t.Setenv("CLAUDECODE", "1")
+	api, profile := "https://doomer.ai/api", "default"
+	command := newPrepareCommand(nil, &api, &profile)
+	if command.Flag("agent").DefValue != "claude" {
+		t.Fatal(command.Flag("agent").DefValue)
+	}
+}
+
+func TestPendingSetupRequiresAnUnambiguousScope(t *testing.T) {
+	store := managed.Store{Root: t.TempDir()}
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, Purpose: "setup", Stage: "ready", API: "https://doomer.ai/api", Profile: "default", Agent: "claude", Repo: "/repo"}
+	if err := store.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	got, err := pendingManagedSetup(store, task.API, task.Profile, task.Agent, task.Repo)
+	if err != nil || got != handle {
+		t.Fatal(got, err)
+	}
+	got, err = pendingManagedSetup(store, task.API, task.Profile, "codex", task.Repo)
+	if err != nil || got != "" {
+		t.Fatal(got, err)
+	}
+	task.Handle, _ = managed.NewHandle()
+	if err := store.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	got, err = pendingManagedSetup(store, task.API, task.Profile, task.Agent, task.Repo)
+	if err != nil || got != "" {
+		t.Fatal("ambiguous setup selected", got, err)
+	}
+}
+
+func TestUnpreparedStopDoesNotRestartSetup(t *testing.T) {
+	isolate(t)
+	repo := newWatchTestRepo(t)
+	raw, _ := json.Marshal(watch.HookInput{Event: "Stop", Session: "new-session", CWD: repo})
+	output, err := execute(t, string(raw), "agent-hook", "--agent", "claude", "--managed-task-adapter")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var feedback map[string]any
+	if err := json.Unmarshal([]byte(output), &feedback); err != nil || len(feedback) != 0 {
+		t.Fatal(output, err)
+	}
+	raw, _ = json.Marshal(watch.HookInput{Event: "PreToolUse", Session: "new-session", CWD: repo})
+	output, err = execute(t, string(raw), "agent-hook", "--agent", "claude", "--managed-task-adapter")
+	if err != nil || !strings.Contains(output, "prepare") {
+		t.Fatal(output, err)
+	}
+}
+
+func TestPrepareReusesPendingSetupWithoutAnExplicitHandle(t *testing.T) {
+	isolate(t)
+	repo := newWatchTestRepo(t)
+	store, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, Purpose: "setup", Stage: "preparing", API: "https://doomer.ai/api", Profile: "default", Agent: "claude", Repo: repo}
+	if err := store.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	output, err := execute(t, "", "prepare", "--agent", "claude", "--repo", repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result managedResult
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatal(output, err)
+	}
+	files, err := filepath.Glob(filepath.Join(store.Root, "tasks", "*.json"))
+	if err != nil || len(files) != 1 || result.Task != handle {
+		t.Fatal(result, files, err)
+	}
+}
+
+func TestReviewedTaskIncludesFinishAction(t *testing.T) {
+	task := managed.Task{Handle: "task-handle", Stage: "reviewed", Review: &adversarylabs.WorkspaceReview{ID: "review"}}
+	result := resultFor(task)
+	if !strings.Contains(result.Action, "doomer task finish task-handle") || !strings.Contains(result.Action, "review field") {
+		t.Fatal(result.Action)
+	}
+	task.LastError = "recorded failure"
+	result = resultFor(task)
+	if result.Action != "" || result.Error != task.LastError {
+		t.Fatal("failed task offered completion", result)
+	}
+	task.LastError = ""
+	task.Review = nil
+	result = resultFor(task)
+	if result.Action != "" {
+		t.Fatal("missing review offered completion", result)
 	}
 }

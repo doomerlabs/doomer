@@ -13,17 +13,19 @@ import (
 )
 
 type usage struct {
-	Input    int64   `json:"input_tokens"`
-	Cached   int64   `json:"cached_input_tokens"`
-	Output   int64   `json:"output_tokens"`
-	Cost     float64 `json:"estimated_cost_usd"`
-	Reserved float64 `json:"budget_charged_usd"`
-	Requests int     `json:"requests"`
-	Unknown  int     `json:"requests_without_usage"`
+	CacheCreated int64   `json:"cache_creation_input_tokens,omitempty"`
+	Input        int64   `json:"input_tokens"`
+	Cached       int64   `json:"cached_input_tokens"`
+	Output       int64   `json:"output_tokens"`
+	Cost         float64 `json:"estimated_cost_usd"`
+	Reserved     float64 `json:"budget_charged_usd"`
+	Requests     int     `json:"requests"`
+	Unknown      int     `json:"requests_without_usage"`
 }
 type meter struct {
 	mu         sync.Mutex
 	key, model string
+	harness    string
 	limit      float64
 	usage      usage
 	client     *http.Client
@@ -33,6 +35,10 @@ func tokenCost(input, cached, output int64) float64 {
 	return (float64(input-cached) + float64(cached)*.05 + float64(output)*5) / 1e6
 }
 func (m *meter) serve(w http.ResponseWriter, r *http.Request) {
+	if m.harness == "claude" {
+		m.serveClaude(w, r)
+		return
+	}
 	if r.Method != "POST" || r.URL.Path != "/v1/responses" {
 		http.Error(w, "unsupported test endpoint", 404)
 		return
@@ -133,7 +139,7 @@ func (m *meter) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func newMeter(c config) *meter {
-	return &meter{key: c.APIKey, model: c.Model, limit: c.Budget, client: &http.Client{}}
+	return &meter{key: c.APIKey, model: c.Model, harness: c.Harness, limit: c.Budget, client: &http.Client{}}
 }
 
 func (m *meter) countInput(ctx context.Context, body map[string]any) (int64, error) {

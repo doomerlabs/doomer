@@ -79,7 +79,7 @@ func (j *journey) upgrade() error {
 	if err = os.WriteFile(filepath.Join(bin, "doomer"), []byte(oldLauncher), 0700); err != nil {
 		return err
 	}
-	shim := fmt.Sprintf("#!/bin/sh\ncase \"$*\" in\n *--help*) echo 'Usage: gh pr create [flags]'; exit 0 ;;\nesac\ncase \"$1 $2\" in\n 'pr create') printf 'created\\n' >> '%s'; echo https://example.invalid/pull/1 ;;\n 'pr list') echo '[]' ;;\n 'repo view') echo '{\"defaultBranchRef\":{\"name\":\"main\"}}' ;;\n 'auth status') exit 0 ;;\n *) exit 0 ;;\nesac\n", marker)
+	shim := fmt.Sprintf("#!/bin/sh\ncase \"$*\" in\n *--help*) echo 'Usage: gh pr create [flags]'; exit 0 ;;\nesac\ncase \"$1 $2\" in\n 'pr create') printf 'created\\n' >> '%s'; git branch --show-current > '%s.branch'; echo https://example.invalid/pull/1 ;;\n 'pr list') echo '[]' ;;\n 'repo view') echo '{\"defaultBranchRef\":{\"name\":\"main\"}}' ;;\n 'auth status') exit 0 ;;\n *) exit 0 ;;\nesac\n", marker, marker)
 	if err = os.WriteFile(filepath.Join(bin, "gh"), []byte(shim), 0700); err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func (j *journey) upgrade() error {
 		if err != nil || string(raw) != old {
 			return fmt.Errorf("deferred upgrade changed the skill")
 		}
-		cmd := exec.CommandContext(j.ctx, filepath.Join(j.home, ".local/bin/doomer"), "prepare", "--agent", "codex", "--repo", j.repo, "--prompt", "Check readiness after deferring the update")
+		cmd := exec.CommandContext(j.ctx, filepath.Join(j.home, ".local/bin/doomer"), "prepare", "--agent", agentName(j.c), "--repo", j.repo, "--prompt", "Check readiness after deferring the update")
 		cmd.Env = j.env
 		output, err := cmd.Output()
 		if err != nil {
@@ -168,6 +168,18 @@ func (j *journey) upgrade() error {
 	}
 	if expectsPR && os.IsNotExist(err) {
 		return fmt.Errorf("upgrade did not create a PR")
+	}
+	if expectsPR {
+		branch, readErr := os.ReadFile(marker + ".branch")
+		if readErr != nil {
+			return readErr
+		}
+		show := exec.CommandContext(j.ctx, "git", "show", strings.TrimSpace(string(branch))+":.agents/skills/doomer-review/SKILL.md")
+		show.Dir, show.Env = j.repo, j.env
+		after, err = show.Output()
+		if err != nil {
+			return err
+		}
 	}
 	j.result.Checks["skill_changed_after_acceptance"] = string(after) != old
 	j.result.Checks["stable_policy_preserved"] = strings.Contains(string(after), "doomer-update-policy: stable")

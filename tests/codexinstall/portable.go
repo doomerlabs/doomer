@@ -18,7 +18,7 @@ func (j *journey) portableRestart() error {
 	}
 	// Only the dummy model-provider configuration moves. Doomer must restore
 	// account and repository permission itself from the approved portable grant.
-	if err := os.WriteFile(filepath.Join(fresh, ".codex/config.toml"), []byte(j.codexConfig), 0600); err != nil {
+	if err := writeAgentConfig(j.c, fresh, j.codexConfig); err != nil {
 		return err
 	}
 	old := j.home

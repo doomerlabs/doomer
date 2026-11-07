@@ -12,6 +12,7 @@ import (
 )
 
 type config struct {
+	Harness          string  `json:"harness,omitempty"`
 	InstallGuide     string  `json:"install_guide"`
 	WorkRoot         string  `json:"work_root,omitempty"`
 	CandidateFile    string  `json:"candidate_file,omitempty"`
@@ -31,6 +32,7 @@ type recordedEvent struct {
 }
 
 type report struct {
+	Harness          string          `json:"harness,omitempty"`
 	InstallGuide     string          `json:"install_guide"`
 	Execution        string          `json:"execution"`
 	LocalCleaned     bool            `json:"local_cleaned,omitempty"`
@@ -52,6 +54,8 @@ type report struct {
 }
 
 func main() {
+	harness := flag.String("harness", "codex", "agent harness: codex or claude")
+	localClaude := flag.String("local-claude", "", "dedicated pinned Claude executable for an isolated local run")
 	guide := flag.String("install-guide", "https://doomer.ai/install.md", "verified installation guide to exercise")
 	localCodex := flag.String("local-codex", "", "dedicated pinned Codex executable for an isolated local run")
 	localRoot := flag.String("local-root", "", "writable parent directory for disposable local test homes")
@@ -59,13 +63,21 @@ func main() {
 	scenario := flag.String("scenario", "install", "manual scenario name; use list to show available scenarios")
 	render := flag.String("render-report", "", "render an existing JSON report to PATH.html without running a test")
 	worker := flag.Bool("worker", false, "internal VM worker mode")
-	model := flag.String("model", "gpt-6.1-terra", "model under test")
+	model := flag.String("model", "", "model under test; defaults to the pinned harness model")
 	version := flag.String("codex-version", "0.167.0", "exact supported Codex release version")
+	suiteBudget := flag.Float64("suite-budget", 5, "maximum total API reservations when --scenario all is used")
 	budget := flag.Float64("budget", .20, "maximum reserved API spend for this run, USD")
 	output := flag.String("output", "codex-install-report.json", "sanitized JSON report")
 	flag.Parse()
 	if *scenario == "list" {
 		fmt.Println(strings.Join(scenarioNames, "\n"))
+		return
+	}
+	if *scenario == "all" {
+		if err := runSuite(*output, *budget, *suiteBudget); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		return
 	}
 	if !validScenario(*scenario) {
@@ -100,13 +112,26 @@ func main() {
 		_ = json.NewEncoder(os.Stdout).Encode(r)
 		return
 	}
-	if *model != "gpt-6.1-terra" || *budget <= 0 || *budget > 1 {
-		fmt.Fprintln(os.Stderr, "this experiment supports gpt-6.1-terra and a budget above zero and at most $1")
+	if *harness != "codex" && *harness != "claude" {
+		fmt.Fprintln(os.Stderr, "unknown harness")
+		os.Exit(1)
+	}
+	expectedModel := "gpt-6.1-terra"
+	keyName := "TEST_OPENAI_API_KEY"
+	if *harness == "claude" {
+		expectedModel = "claude-haiku-5-5"
+		keyName = "TEST_ANTHROPIC_API_KEY"
+	}
+	if *model == "" {
+		*model = expectedModel
+	}
+	if *model != expectedModel || *budget <= 0 || *budget > 1 {
+		fmt.Fprintln(os.Stderr, "use the pinned harness model and a budget above zero and at most $1")
 		os.Exit(1)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	c := config{APIKey: os.Getenv("TEST_OPENAI_API_KEY"), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate, InstallGuide: *guide}
+	c := config{Harness: *harness, APIKey: os.Getenv(keyName), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate, InstallGuide: *guide}
 	if strings.HasPrefix(*scenario, "upgrade") {
 		raw, err := os.ReadFile("internal/managed/bootstrap-2026.11.6.10.md")
 		if err != nil {
@@ -116,12 +141,20 @@ func main() {
 		c.LegacyBootstrap = string(raw)
 	}
 	var r report
+	if *localClaude != "" {
+		if *harness != "claude" {
+			fmt.Fprintln(os.Stderr, "--local-claude requires --harness claude")
+			os.Exit(1)
+		}
+		*localCodex = *localClaude
+	}
 	if *localCodex != "" {
 		c.Codex = *localCodex
 		r = runLocal(ctx, c, *localRoot)
 	} else {
 		r = runRemote(ctx, c, *version)
 	}
+	r.Harness = c.Harness
 	data, _ := json.MarshalIndent(r, "", "  ")
 	if err := os.WriteFile(*output, append(data, '\n'), 0600); err != nil {
 		fmt.Fprintln(os.Stderr, err)
