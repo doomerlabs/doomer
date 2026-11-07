@@ -125,7 +125,7 @@ The JSON distinguishes measured token-based cost estimates from charged budget.
 
 GPT-6.1 Terra rates used are $1/M input, $0.05/M cached input and $5/M output.
 Check the current pricing before running after a price change. Other models
-are rejected because their budgeting has not been verified. VM fees are separate.
+are rejected because their budgeting has not been verified. These estimates cover model calls only.
 
 Every remote invocation attempts VM deletion on completion, failure or timeout. The
 name is printed immediately and included in the report. SIGKILL or lost access
