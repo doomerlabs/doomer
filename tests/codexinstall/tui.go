@@ -24,6 +24,9 @@ fcntl.ioctl(master,termios.TIOCSWINSZ,struct.pack('HHHH',40,120,0,0))
 deadline=time.monotonic()+180
 seen=b''
 trusted=False
+claude_trusted=False
+api_key_accepted=False
+bypass_accepted=False
 try:
     while time.monotonic()<deadline:
         ready,_,_=select.select([master,sys.stdin],[],[],0.2)
@@ -36,6 +39,19 @@ try:
             if b'\x1b[6n' in data: os.write(master,b'\x1b[1;1R')
             seen=(seen+data)[-30000:]
             plain=re.sub(rb'\x1b\[[0-?]*[ -/]*[@-~]',b'',seen)
+            if os.getenv('DOOMER_TEST_HARNESS')=='claude':
+                if not claude_trusted and (b'Do you trust' in plain or b'Is this a project' in plain):
+                    claude_trusted=True
+                    time.sleep(0.3)
+                    os.write(master,b'\r')
+                if not api_key_accepted and b'Use this API key' in plain:
+                    api_key_accepted=True
+                    time.sleep(0.3)
+                    os.write(master,b'\r')
+                if not bypass_accepted and b'Bypass Permissions mode' in plain and b'Yes' in plain:
+                    bypass_accepted=True
+                    time.sleep(0.3)
+                    os.write(master,b'\x1b[B\r')
             if not trusted and b'Hooks need review' in plain:
                 trusted=True
                 deny=os.getenv('DOOMER_TEST_TRUST_HOOKS')=='deny'
@@ -63,14 +79,22 @@ func (j *journey) tui() error {
 	j.f.mu.Lock()
 	j.f.Findings = true
 	j.f.mu.Unlock()
-	cmd := exec.CommandContext(j.ctx, "python3", "-c", terminalDriver, j.c.Codex, "--no-alt-screen", "--dangerously-bypass-approvals-and-sandbox", "-C", j.repo, prompt)
+	args := []string{"-c", terminalDriver, j.c.Codex, "--no-alt-screen", "--dangerously-bypass-approvals-and-sandbox", "-C", j.repo, prompt}
+	if j.c.Harness == "claude" {
+		args = []string{"-c", terminalDriver, j.c.Codex, "--permission-mode", "bypassPermissions", "--model", j.c.Model, "--effort", "low"}
+		if j.c.Scenario == "tui-hooks-denied" {
+			args = append(args, "--settings", `{"disableAllHooks":true}`)
+		}
+		args = append(args, prompt)
+	}
+	cmd := exec.CommandContext(j.ctx, "python3", args...)
 	cmd.Dir = j.repo
 	choice := "allow"
 	if j.c.Scenario == "tui-hooks-denied" {
 		choice = "deny"
 	}
 	j.record("Scripted user", "At the native hook trust screen, choose "+choice+". Keep Codex approval reviewer settings unchanged.")
-	cmd.Env = append(j.env, "TERM=xterm-256color", "DOOMER_TEST_TRUST_HOOKS="+choice, "DOOMER_TEST_TERMINAL_LOG="+filepath.Join(j.home, "terminal.log"))
+	cmd.Env = append(j.env, "TERM=xterm-256color", "DOOMER_TEST_HARNESS="+j.c.Harness, "DOOMER_TEST_TRUST_HOOKS="+choice, "DOOMER_TEST_TERMINAL_LOG="+filepath.Join(j.home, "terminal.log"))
 	var output bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &output, &output
 	input, err := cmd.StdinPipe()
@@ -138,6 +162,9 @@ wait:
 // response-item payloads are intentionally excluded from the recording.
 func (j *journey) recordTerminalMessages(started time.Time) {
 	root := filepath.Join(j.home, ".codex", "sessions")
+	if j.c.Harness == "claude" {
+		root = filepath.Join(j.home, ".claude", "projects")
+	}
 	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".jsonl") {
 			return nil
@@ -151,6 +178,10 @@ func (j *journey) recordTerminalMessages(started time.Time) {
 			return nil
 		}
 		defer file.Close()
+		if j.c.Harness == "claude" {
+			_, _ = readClaudeTurn(file, j.record)
+			return nil
+		}
 		scanner := bufio.NewScanner(file)
 		scanner.Buffer(make([]byte, 65536), 4<<20)
 		for scanner.Scan() {

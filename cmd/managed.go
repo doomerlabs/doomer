@@ -241,6 +241,19 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 		if task.API != *api || task.Profile != *profile {
 			return fmt.Errorf("resume with the original service and profile")
 		}
+		if c.Flags().Changed("session") && session != task.Capabilities.SessionID {
+			if len(session) == 0 || len(session) > 512 {
+				return fmt.Errorf("provide a session ID between 1 and 512 bytes")
+			}
+			task.Capabilities.SessionID = session
+			task.Capabilities.Hooks = true
+			if err := bindManagedSession(s, task); err != nil {
+				return err
+			}
+			if err := s.Save(&task); err != nil {
+				return err
+			}
+		}
 		if task.Purpose == "setup" && strings.TrimSpace(prompt) != "" {
 			if len(prompt) > 16000 {
 				return fmt.Errorf("task prompt is too large")
@@ -302,7 +315,11 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 		return managedApproval(c, app, s, &task)
 	}
 	c.Flags().StringVar(&repo, "repo", ".", "checkout being edited")
-	c.Flags().StringVar(&agent, "agent", "codex", "active agent: codex or claude")
+	defaultAgent := "codex"
+	if os.Getenv("CLAUDECODE") != "" {
+		defaultAgent = "claude"
+	}
+	c.Flags().StringVar(&agent, "agent", defaultAgent, "active agent: codex or claude")
 	c.Flags().StringVar(&handle, "task", "", "resume an existing task handle")
 	c.Flags().StringVar(&session, "session", "", "actual harness session ID for optional hook binding")
 	c.Flags().StringVar(&prompt, "prompt", "", "original user task (stored locally until upload is approved)")

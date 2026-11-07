@@ -38,6 +38,9 @@ type journey struct {
 }
 
 func runAgent(ctx context.Context, c config, repo string, env []string, prompt, session string, record func(string, string)) (codexTurn, error) {
+	if c.Harness == "claude" {
+		return runClaude(ctx, c, repo, env, prompt, session, record)
+	}
 	record("Scripted user", prompt)
 	args := []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox"}
 	if session != "" {
@@ -176,7 +179,7 @@ func (j *journey) afterInstall() error {
 		return j.tui()
 	case "first-review", "new-chat", "personal", "hooks-off", "deep-review":
 		if j.c.Scenario == "hooks-off" {
-			if err := os.Remove(filepath.Join(j.home, ".codex/hooks.json")); err != nil {
+			if err := os.Remove(agentHooksPath(j.c, j.home)); err != nil {
 				return err
 			}
 		}

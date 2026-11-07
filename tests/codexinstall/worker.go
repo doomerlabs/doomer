@@ -97,20 +97,23 @@ func runWorker(c config) (result report) {
 		result.APICalls = append([]string(nil), f.Events...)
 		f.mu.Unlock()
 	}()
-	env := []string{"HOME=" + home, "CODEX_HOME=" + filepath.Join(home, ".codex"), "PATH=" + filepath.Join(home, ".local/bin") + ":/usr/bin:/bin:/usr/sbin:/sbin", "OPENAI_API_KEY=fixture-proxy-token", "DOOMER_API_URL=" + server.URL, "DOOMER_CONFIG_DIR=" + filepath.Join(home, ".config/doomer"), "NO_COLOR=1", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
-	codexHome := filepath.Join(home, ".codex")
-	_ = os.MkdirAll(codexHome, 0700)
-	configuration := fmt.Sprintf("model = %q\nmodel_provider = \"fixture\"\nmodel_reasoning_effort = \"low\"\n[model_providers.fixture]\nname = \"Budgeted test proxy\"\nbase_url = %q\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\n", c.Model, proxy.URL+"/v1")
-	if err = os.WriteFile(filepath.Join(codexHome, "config.toml"), []byte(configuration), 0600); err != nil {
+	env := []string{"HOME=" + home, "PATH=" + filepath.Join(home, ".local/bin") + ":/usr/bin:/bin:/usr/sbin:/sbin", "DOOMER_API_URL=" + server.URL, "DOOMER_CONFIG_DIR=" + filepath.Join(home, ".config/doomer"), "NO_COLOR=1", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
+	configuration, err := configureAgent(c, home, proxy.URL)
+	if err != nil {
 		return fail(err)
+	}
+	if c.Harness == "claude" {
+		env = append(env, "CLAUDECODE=1", "ANTHROPIC_API_KEY=fixture-proxy-token", "ANTHROPIC_BASE_URL="+proxy.URL, "CLAUDE_CONFIG_DIR="+filepath.Join(home, ".claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "DISABLE_AUTOUPDATER=1", "DISABLE_UPDATES=1")
+	} else {
+		env = append(env, "CODEX_HOME="+filepath.Join(home, ".codex"), "OPENAI_API_KEY=fixture-proxy-token")
 	}
 	version, err := exec.CommandContext(ctx, c.Codex, "--version").Output()
 	if err != nil {
 		return fail(err)
 	}
 	result.CodexVersion = strings.TrimSpace(string(version))
-	if result.CodexVersion != "codex-cli 0.167.0" {
-		return fail(fmt.Errorf("unexpected Codex version: %s", result.CodexVersion))
+	if !validAgentVersion(c, result.CodexVersion) {
+		return fail(fmt.Errorf("unexpected agent version: %s", result.CodexVersion))
 	}
 	if c.InstallGuide == "" {
 		c.InstallGuide = "https://doomer.ai/install.md"
@@ -118,6 +121,9 @@ func runWorker(c config) (result report) {
 	prompt := "Read " + c.InstallGuide + " and follow the instructions to set up Doomer in this repository. Use a team/repository installation, local-only without a PR. This is an isolated test: DOOMER_API_URL points at its local account service; preserve that setting. Ask before granting updates or repository uploads. Keep messages concise."
 	if personalScenario(c.Scenario) {
 		prompt = strings.Replace(prompt, "team/repository installation, local-only without a PR", "personal installation in my home directory, without a PR", 1)
+	}
+	if c.Harness == "claude" {
+		prompt = "In this Claude Code session, read " + strings.TrimPrefix(prompt, "Read ")
 	}
 	session := ""
 	approvedUpdate := false
@@ -182,7 +188,7 @@ func runWorker(c config) (result report) {
 			result.Passed = true
 			return result
 		}
-		ready, checks := inspectInstall(ctx, repo, home, env, personalScenario(c.Scenario))
+		ready, checks := inspectInstall(ctx, repo, home, env, personalScenario(c.Scenario), c.Harness)
 		if ready {
 			for name, ok := range checks {
 				result.Checks[name] = ok
@@ -247,7 +253,7 @@ func runWorker(c config) (result report) {
 					return fail(fmt.Errorf("missing durable setup task"))
 				}
 				session = ""
-				prompt = "The original Doomer installation was interrupted. I approved repository access. Finish the original installation, including Codex hook configuration. Resume Doomer task " + tasks[0].Handle + " and verify setup without creating a replacement task."
+				prompt = "The original Doomer installation was interrupted. I approved repository access. Finish the original installation, including " + agentName(c) + " hook configuration. Resume Doomer task " + tasks[0].Handle + " and verify setup without creating a replacement task."
 				result.Checks["fresh_agent_resumed_setup"] = true
 			}
 		} else if sawUpdateRequest && !approvedUpdate && (strings.Contains(strings.ToLower(text), "update") || strings.Contains(strings.ToLower(text), "permission")) {
@@ -269,7 +275,7 @@ type httpHandler func(http.ResponseWriter, *http.Request)
 
 func (h httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h(w, r) }
 
-func inspectInstall(ctx context.Context, repo, home string, env []string, personal bool) (bool, map[string]bool) {
+func inspectInstall(ctx context.Context, repo, home string, env []string, personal bool, harness string) (bool, map[string]bool) {
 	checks := map[string]bool{}
 	base := repo
 	if personal {
@@ -282,7 +288,7 @@ func inspectInstall(ctx context.Context, repo, home string, env []string, person
 	launcher := filepath.Join(home, ".local/bin/doomer")
 	_, err := os.Stat(launcher)
 	checks["launcher"] = err == nil
-	hooks, _ := os.ReadFile(filepath.Join(home, ".codex/hooks.json"))
+	hooks, _ := os.ReadFile(agentHooksPath(config{Harness: harness}, home))
 	checks["hooks_configured"] = bytes.Contains(hooks, []byte("--managed-task-adapter"))
 	if !checks["launcher"] {
 		return false, checks
@@ -293,11 +299,13 @@ func inspectInstall(ctx context.Context, repo, home string, env []string, person
 	}
 	var task struct {
 		Handle string `json:"handle"`
+		Agent  string `json:"agent"`
 	}
 	data, _ := os.ReadFile(tasks[0])
 	if json.Unmarshal(data, &task) != nil || task.Handle == "" {
 		return false, checks
 	}
+	checks["correct_agent"] = task.Agent == agentName(config{Harness: harness})
 	cmd := exec.CommandContext(ctx, launcher, "prepare", "--task", task.Handle)
 	cmd.Dir = repo
 	cmd.Env = env

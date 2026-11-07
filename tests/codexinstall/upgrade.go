@@ -124,7 +124,7 @@ func (j *journey) upgrade() error {
 		if err != nil || string(raw) != old {
 			return fmt.Errorf("deferred upgrade changed the skill")
 		}
-		cmd := exec.CommandContext(j.ctx, filepath.Join(j.home, ".local/bin/doomer"), "prepare", "--agent", "codex", "--repo", j.repo, "--prompt", "Check readiness after deferring the update")
+		cmd := exec.CommandContext(j.ctx, filepath.Join(j.home, ".local/bin/doomer"), "prepare", "--agent", agentName(j.c), "--repo", j.repo, "--prompt", "Check readiness after deferring the update")
 		cmd.Env = j.env
 		output, err := cmd.Output()
 		if err != nil {

@@ -1,0 +1,52 @@
+package main
+
+import (
+	"encoding/json"
+	"io"
+	"math"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestClaudeTranscriptKeepsOnlyVisibleContent(t *testing.T) {
+	raw := `{"type":"system","session_id":"session"}
+{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"private reasoning"},{"type":"text","text":"Please approve updates"},{"type":"tool_use","name":"Bash","input":{"command":"doomer prepare"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"{\"state\":\"update_permission_required\"}"}]}}
+{"type":"result","session_id":"session","is_error":false}`
+	var records []string
+	turn, err := readClaudeTurn(strings.NewReader(raw), func(kind, text string) { records = append(records, kind+text) })
+	if err != nil || turn.Session != "session" || !turn.UpdateRequested || len(turn.Messages) != 1 {
+		t.Fatal(turn, err)
+	}
+	if strings.Contains(strings.Join(records, "\n"), "private reasoning") {
+		t.Fatal(records)
+	}
+}
+func TestClaudeMeterCountsCacheWritesAndPreservesBudget(t *testing.T) {
+	m := newMeter(config{Harness: "claude", APIKey: "private-key", Model: "claude-haiku-5-5", Budget: .20})
+	m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		if r.Header.Get("x-api-key") != "private-key" {
+			t.Fatal("missing authentication")
+		}
+		if r.URL.Path == "/v1/messages/count_tokens" {
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"input_tokens":1000}`))}, nil
+		}
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body["max_tokens"] != float64(4096) || body["stream"] != true {
+			t.Fatal(body)
+		}
+		response := "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":200,\"cache_read_input_tokens\":500,\"cache_creation_input_tokens\":300}}}\n\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":100}}\n\ndata: {\"type\":\"message_stop\"}\n\n"
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(response))}, nil
+	})}
+	out := httptest.NewRecorder()
+	m.serve(out, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-haiku-5-5"}`)))
+	if out.Code != 200 || m.usage.Input != 1000 || m.usage.Cached != 500 || m.usage.CacheCreated != 300 || m.usage.Output != 100 || m.usage.Unknown != 0 || math.Abs(m.usage.Reserved-claudeTokenCost(1000, 500, 300, 100)) > 1e-10 {
+		t.Fatal(out.Code, m.usage)
+	}
+	if strings.Contains(out.Body.String(), "private-key") {
+		t.Fatal("credential leak")
+	}
+}

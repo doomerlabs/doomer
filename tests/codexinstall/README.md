@@ -139,3 +139,32 @@ Sources
 - https://developers.openai.com/api/docs/guides/token-counting
 - https://developers.openai.com/api/docs/pricing
 - https://exe.dev/docs/api
+
+## Claude Code
+
+Use `--harness claude` to run the same journeys with Claude Code 2.1.319 and
+`claude-haiku-5-5` at low effort. Supply `TEST_ANTHROPIC_API_KEY` instead of the
+OpenAI key. The Anthropic metering proxy retains the real key, enforces a short
+context and output cap, reserves each request before inference, and records
+cache-read and cache-write usage. Agent processes receive a dummy credential.
+
+```sh
+doppler run --project doomer --config test -- \
+  go run ./tests/codexinstall --harness claude --scenario first-review \
+  --budget 0.20 --output /tmp/claude-first-review.json
+```
+
+For macOS use `--local-claude /path/to/dedicated/claude --local-root /path/to/test-homes`.
+The pinned native binaries are checked against the official release manifest.
+Claude's terminal cases accept workspace trust, then exercise either enabled
+hooks or the supported `disableAllHooks` setting. The disabled case tests that
+setting and the per-call fallback; it does not simulate a Codex-specific hook
+approval dialog. Desktop GUI clients require separate validation.
+
+Sources
+
+- https://downloads.claude.ai/claude-code-releases/2.1.319/manifest.json
+- https://code.claude.com/docs/en/headless
+- https://code.claude.com/docs/en/cli-reference
+- https://code.claude.com/docs/en/hooks
+- https://platform.claude.com/docs/en/models/haiku-5-5/overview

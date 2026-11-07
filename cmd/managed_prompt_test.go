@@ -184,3 +184,38 @@ func TestPrepareResumesSetupAsCodingWithExplicitPrompt(t *testing.T) {
 		t.Fatal("coding resume retained setup-only instructions")
 	}
 }
+
+func TestPrepareBindsSessionWhenResumingSetup(t *testing.T) {
+	isolate(t)
+	store, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, Agent: "claude", Repo: "/fixture/repo", API: "https://doomer.ai/api", Profile: "default", Paused: true, Stage: "ready"}
+	if err := store.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := execute(t, "", "prepare", "--task", handle, "--session", "claude-session"); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.Load(handle)
+	if err != nil || saved.Capabilities.SessionID != "claude-session" || !saved.Capabilities.Hooks {
+		t.Fatal(saved, err)
+	}
+	key := watch.Key(task.API + "\x00" + task.Profile + "\x00" + task.Agent + "\x00" + task.Repo + "\x00claude-session")
+	var bound string
+	if err := watch.Read(filepath.Join(store.Root, "sessions", key+".json"), &bound); err != nil || bound != handle {
+		t.Fatal(bound, err)
+	}
+}
+
+func TestPrepareDefaultsToActiveClaudeHarness(t *testing.T) {
+	isolate(t)
+	t.Setenv("CLAUDECODE", "1")
+	api, profile := "https://doomer.ai/api", "default"
+	command := newPrepareCommand(nil, &api, &profile)
+	if command.Flag("agent").DefValue != "claude" {
+		t.Fatal(command.Flag("agent").DefValue)
+	}
+}

@@ -22,6 +22,7 @@ const report = {{.}};
 const events = report.events || [];
 if (report.scenario) document.getElementById('title').textContent = 'Doomer · ' + report.scenario.replaceAll('-', ' ');
 const el = id => document.getElementById(id);
+if (report.harness === 'claude') document.querySelector('.subtitle').textContent = 'Claude · recorded test conversation';
 let index = Math.max(0, events.length - 1), timer = null, playing = false;
 el('result').textContent = report.passed ? 'Passed' : 'Failed';
 el('result').classList.toggle('failed', !report.passed);
@@ -48,9 +49,10 @@ function inline(parent, text) {
 function message(event) {
   const user = event.kind === 'Scripted user';
   const wrapper = node('section', 'message ' + (user ? 'user' : 'assistant'));
-  const label = node('div', 'message-label', user ? 'You · scripted reply' : event.kind === 'Codex error' ? 'Codex · error' : 'Codex');
+  const name = report.harness === 'claude' ? 'Claude' : 'Codex';
+  const label = node('div', 'message-label', user ? 'You · scripted reply' : event.kind.endsWith('error') ? name + ' · error' : name);
   label.append(node('time', '', `+${event.seconds.toFixed(1)}s`)); wrapper.append(label);
-  const body = node('div', (user ? 'bubble content' : 'content') + (event.kind === 'Codex error' ? ' error' : ''));
+  const body = node('div', (user ? 'bubble content' : 'content') + (event.kind.endsWith('error') ? ' error' : ''));
   for (const paragraph of event.text.split(/\n\n+/)) {const p = node('p'); inline(p, paragraph); body.append(p);}
   wrapper.append(body); return wrapper;
 }
