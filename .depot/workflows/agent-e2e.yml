@@ -14,6 +14,8 @@ concurrency:
 
 jobs:
   lifecycle:
+    # Fork PRs never run credential-bearing jobs, even after manual run approval.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: full lifecycle (${{ matrix.harness }})
     runs-on: ubuntu-24.04
     environment: agent-e2e
