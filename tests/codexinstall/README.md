@@ -44,6 +44,10 @@ go run ./tests/codexinstall --scenario list
 | `interrupted-review` | Terminated Codex resumes a pending review in a new process without duplicate submission |
 | `tui` | Real interactive terminal trusts native hooks and completes a review with activated hooks |
 | `tui-hooks-denied` | Real terminal declines native hook trust and completes through per-call commands |
+| `upgrade-custom` | Customized wrapper instructions remain intact |
+| `portable-invalid` | A failed portable request leaves ordinary setup resumable |
+| `portable-restart` | The CLI restores an approved reusable grant in a fresh home without copied credentials |
+| `deep-review` | Automatic selection permits Deep and waits for its completed result |
 | `service-failure` | Submission failure terminates with durable state and recovers the same task when the service returns |
 
 Each invocation performs real installation first in its own fresh home and VM.
@@ -55,7 +59,7 @@ terminates Codex after the service accepts the review, before it completes.
 Most cases use headless exec/resume. The two `tui` cases use a real PTY and
 script the actual native hook-trust dialog. They require Python 3. Desktop UI
 and termination inside a blob upload are not covered.
-Command approval controls are bypassed inside the disposable VM only; Doomer's
+Command approval controls are bypassed inside the isolated test processes only; Doomer's
 own update and upload permissions are exercised.
 
 
@@ -63,13 +67,15 @@ own update and upload permissions are exercised.
 
 To test this checkout's unpublished CLI changes, add
 `--candidate-release 2026.11.6.12` with the exact currently installed public release.
-The runner first exercises public installation, then replaces only the disposable
+The runner first exercises verified installation, then replaces only the disposable
 fixture's runtime and checksum record with the candidate build. It does this before
-continuing setup. This test-only injection is recorded in `candidate_version` and
+continuing setup. `--install-guide URL` can select a pinned candidate installer
+guide to validate an unpublished installer change. The default is the public guide. This test-only injection is recorded in `candidate_version` and
 does not change release verification in the product.
 
 A local run requires a separate pinned Codex executable and a writable test
-parent outside `/tmp` because Codex does not create helpers there. The runner
+parent outside `/tmp` because Codex does not create helpers there. Keep that parent outside the Codex package directory as well, so its daemon
+can verify the immutable package. The runner
 isolates HOME, CODEX_HOME, Doomer state, Git configuration and the executable path.
 It removes each temporary test home when done.
 
