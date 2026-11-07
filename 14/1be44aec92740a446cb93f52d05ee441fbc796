@@ -1,0 +1,16 @@
+docs/managed-runtime.md
+  h_aa44c3b5b60dec 41-45,49-52,87-88,131-133
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 47-50,62,70,72-73,77-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "141be44aec92740a446cb93f52d05ee441fbc796",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
