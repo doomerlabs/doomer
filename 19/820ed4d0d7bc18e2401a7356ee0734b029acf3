@@ -1,0 +1,33 @@
+tests/codexinstall/main.go
+  s_f23d7bc729b5d1::t_3c27655953a87e 200
+tests/codexinstall/portable.go
+  s_f23d7bc729b5d1::t_3c27655953a87e 28
+tests/codexinstall/worker.go
+  s_f23d7bc729b5d1::t_3c27655953a87e 152,182,265-271
+.depot/workflows/agent-e2e.yml
+  s_f23d7bc729b5d1::t_e513f0e93b2cc3 32-41
+tests/codexinstall/README.md
+  s_f23d7bc729b5d1::t_ee2e98f25cdc04 1,229
+internal/managed/no_changes_test.go
+  s_f23d7bc729b5d1::t_e987f7376e018b 72-94
+internal/managed/operations.go
+  s_f23d7bc729b5d1::t_e987f7376e018b 264,267-268
+scripts/ci-agent-e2e.sh
+  s_f23d7bc729b5d1::t_e987f7376e018b 31-34,36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "19820ed4d0d7bc18e2401a7356ee0734b029acf3",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
