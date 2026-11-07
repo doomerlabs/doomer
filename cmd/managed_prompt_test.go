@@ -160,6 +160,20 @@ func TestManagedFailedHookWaitsForExplicitRetry(t *testing.T) {
 	if err != nil || saved.LastError != "" {
 		t.Fatal(saved.LastError, err)
 	}
+	// An explicit successful status refresh clears a stale error before
+	// rendering the finish action for an existing completed review.
+	saved.Stage = "reviewed"
+	saved.LastError = "old status request failed"
+	if err := store.Save(&saved); err != nil {
+		t.Fatal(err)
+	}
+	result := run("status", "")
+	if result.State != "reviewed" || result.Error != "" || !strings.Contains(result.Action, "doomer task finish "+handle) {
+		t.Fatal("status did not restore finish guidance", result)
+	}
+	if result := run("finish", ""); result.State != "complete" || result.Error != "" {
+		t.Fatal(result)
+	}
 }
 
 func TestPrepareResumesSetupAsCodingWithExplicitPrompt(t *testing.T) {
