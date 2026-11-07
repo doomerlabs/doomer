@@ -221,7 +221,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 			}
 			if state != "ready" {
 				r.State = state
-				r.Action = "Ask the user to allow verified software updates under this bootstrap policy and reporting of version/task-state metadata to " + displayManagedService(task.API) + ". Repository content requires separate upload consent. After approval, resume with --allow-updates"
+				r.Action = "Ask the user: ‘Allow Doomer to stay up to date automatically?’ Present choices in this order: ‘Allow automatic updates (recommended)’, ‘Not now’. Explain that this also allows reporting of version/task-state metadata to " + displayManagedService(task.API) + ". Repository content requires separate upload consent. Only after approval, resume with --allow-updates."
 				return outputManaged(c, s, task, r)
 			}
 			r = resultFor(task)

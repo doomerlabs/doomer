@@ -229,6 +229,17 @@ func TestManagedInstallAndMissingDiscovery(t *testing.T) {
 	if result.State != "update_permission_required" || result.Task == "" {
 		t.Fatal(result)
 	}
+	for _, text := range []string{
+		"Allow Doomer to stay up to date automatically?",
+		"‘Allow automatic updates (recommended)’, ‘Not now’",
+		"reporting of version/task-state metadata to doomer.ai",
+		"Repository content requires separate upload consent.",
+		"Only after approval, resume with --allow-updates.",
+	} {
+		if !strings.Contains(result.Action, text) {
+			t.Fatalf("update permission prompt missing %q: %s", text, result.Action)
+		}
+	}
 	// No native skill catalog, callback, session ID, or daemon is involved.
 	output, err = execute(t, "", "prepare", "--task", result.Task)
 	if err != nil || !strings.Contains(output, "update_permission_required") {
