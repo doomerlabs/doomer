@@ -1,0 +1,14 @@
+tests/codexinstall/upgrade.go
+  h_aa44c3b5b60dec 123-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2b703b726d150d7d1fe32d26bddf08fd414d6a0c",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
