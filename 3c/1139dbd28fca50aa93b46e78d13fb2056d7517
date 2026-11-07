@@ -1,0 +1,16 @@
+internal/managed/managed_test.go
+  h_aa44c3b5b60dec 157
+internal/managed/operations.go
+  h_aa44c3b5b60dec 301-302,304-306
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3c1139dbd28fca50aa93b46e78d13fb2056d7517",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
