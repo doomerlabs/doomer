@@ -29,8 +29,16 @@ jobs:
       - name: Discover all lifecycle scenarios
         id: scenarios
         run: |
-          scenarios=$(go run ./tests/codexinstall --scenario list | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().splitlines()))')
-          printf 'scenarios=%s\n' "$scenarios" >> "$GITHUB_OUTPUT"
+          go run ./tests/codexinstall --scenario list > "$RUNNER_TEMP/e2e-scenarios.txt"
+          python3 - "$RUNNER_TEMP/e2e-scenarios.txt" >> "$GITHUB_OUTPUT" <<'PY'
+          import json, pathlib, re, sys
+          scenarios = pathlib.Path(sys.argv[1]).read_text().splitlines()
+          if not scenarios or len(set(scenarios)) != len(scenarios):
+              raise SystemExit("Scenario discovery returned an empty or duplicate list")
+          if any(not re.fullmatch(r"[a-z0-9-]+", name) for name in scenarios):
+              raise SystemExit("Scenario discovery returned an invalid name")
+          print("scenarios=" + json.dumps(scenarios))
+          PY
 
   lifecycle:
     needs: plan

@@ -261,9 +261,11 @@ func (e Engine) Finish(ctx context.Context, task *Task, token string) error {
 		task.Stage = "complete"
 		return e.Store.Save(task)
 	}
-	if task.NoChanges {
+	if task.NoChanges || (task.Review == nil && task.Submission == nil) {
 		_, err := e.Capture(ctx, *task)
 		if errors.Is(err, sourcesnapshot.ErrNoChanges) {
+			task.NoChanges = true
+			task.LastError = ""
 			task.Stage = "complete"
 			return e.Store.Save(task)
 		}

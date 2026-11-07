@@ -25,7 +25,7 @@ func (j *journey) portableRestart() error {
 	for i, value := range j.env {
 		j.env[i] = relocateHomeEnvironment(value, old, fresh)
 	}
-	cmd := exec.CommandContext(j.ctx, filepath.Join(old, ".local/bin/doomer"), "install", "--runtime", "--repo", j.repo)
+	cmd := exec.CommandContext(j.ctx, filepath.Join(old, ".local/bin/doomer"), "install", "--runtime", "--personal")
 	cmd.Dir, cmd.Env = j.repo, j.env
 	output, err := cmd.CombinedOutput()
 	j.record("Command", "Install software into a fresh home, preserving Git metadata\n"+string(output))

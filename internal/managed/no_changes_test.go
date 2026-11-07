@@ -69,3 +69,26 @@ func TestSetupTaskNeverCapturesOrUploadsAReview(t *testing.T) {
 		t.Fatalf("unexpected setup state: %+v", task)
 	}
 }
+
+func TestFinishUnsubmittedTaskChecksForChanges(t *testing.T) {
+	for _, changed := range []bool{false, true} {
+		t.Run(fmt.Sprint("changed=", changed), func(t *testing.T) {
+			handle, _ := NewHandle()
+			task := Task{Schema: Protocol, Handle: handle, Stage: "ready", LastError: "previous failure"}
+			engine := Engine{Store: Store{Root: t.TempDir()}, Capture: func(context.Context, Task) (sourcesnapshot.Capture, error) {
+				if !changed {
+					return sourcesnapshot.Capture{}, sourcesnapshot.ErrNoChanges
+				}
+				return sourcesnapshot.Capture{}, nil
+			}}
+			err := engine.Finish(context.Background(), &task, "")
+			if changed {
+				if err == nil || task.Stage == "complete" || task.NoChanges {
+					t.Fatal("finished unreviewed changes", task, err)
+				}
+			} else if err != nil || task.Stage != "complete" || !task.NoChanges || task.LastError != "" {
+				t.Fatal("unchanged checkout did not finish cleanly", task, err)
+			}
+		})
+	}
+}

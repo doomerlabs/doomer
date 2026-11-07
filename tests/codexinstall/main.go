@@ -197,6 +197,7 @@ func main() {
 		fmt.Printf("passed=%t cost=$%.6f reserved=$%.6f cleanup_complete=%t report=%s\n", r.Passed, r.Usage.Cost, r.Usage.Reserved, cleaned, *output)
 	}
 	if !r.Passed || (r.VM != "" && !r.Deleted) || (r.Execution == "local" && !r.LocalCleaned) {
+		fmt.Fprintln(os.Stderr, redact(redact(r.Error, c.APIKey), c.OAuthToken))
 		os.Exit(1)
 	}
 }

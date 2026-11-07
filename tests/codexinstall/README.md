@@ -1,4 +1,4 @@
-# Manual Codex lifecycle experiments
+# Agent lifecycle E2E tests
 
 Run real Codex CLI 0.167.0 with GPT-6.1 Terra at low reasoning in disposable
 Linux exe.dev VMs or isolated local macOS test homes. Depot runs all scenarios for both harnesses on pull requests. Manual runs remain available.
@@ -226,7 +226,7 @@ repositories, the `agent-e2e` environment, and `agent-e2e.yml`. Fork pull reques
 receive no secrets and cannot run the authenticated suite.
 
 The CLI job builds the proposed checkout after exercising public installation.
-The skills job uses `--skills-source` to exercise that PR's `INSTALL.md`, installer
+The skills job pairs its pinned CLI source with `--skills-source` to exercise that PR's `INSTALL.md`, installer
 (with a fixture-local URL and recomputed checksum), and wrapper. Runtime downloads
 retain their normal HTTPS and checksum verification. Skills' runner dependency is
 pinned to a reviewed CLI commit.

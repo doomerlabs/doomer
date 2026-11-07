@@ -149,6 +149,7 @@ func runWorker(c config) (result report) {
 	sawUpdateRequest := false
 	declined := false
 	candidateInstalled := false
+	approvalLinkRetries := 0
 	if c.CandidateFile != "" || c.SkillsGuide != "" {
 		result.Turns++
 		software, err := runAgent(ctx, c, repo, env, prompt+" Install the verified runtime and skill files only in this turn. Do not run doomer prepare or begin onboarding yet. Stop after the install command completes.", "", record)
@@ -178,7 +179,7 @@ func runWorker(c config) (result report) {
 		}
 		prompt = "The installed build has been checked. Continue onboarding Doomer in this repository using its existing installed files and original scope. This test home persists for the scenario, so use ordinary setup without --portable. Ask for the required user approvals."
 	}
-	if c.Harness == "claude" && c.CandidateFile != "" {
+	if c.Harness == "claude" && (c.CandidateFile != "" || c.SkillsGuide != "") {
 		prompt = "In this Claude Code session, " + prompt
 	}
 	if c.Scenario == "portable-restart" {
@@ -261,7 +262,13 @@ func runWorker(c config) (result report) {
 		f.mu.Unlock()
 		if pending {
 			if !strings.Contains(text, approvalURL) {
-				return fail(fmt.Errorf("agent did not present the repository approval link"))
+				if approvalLinkRetries > 0 {
+					return fail(fmt.Errorf("agent did not present the exact repository approval link after correction"))
+				}
+				approvalLinkRetries++
+				record("Scripted user", "The approval link is missing or incorrect. Repository access has not been approved.")
+				prompt = "The approval link is missing or incorrect. I have not approved repository access. Copy the exact complete approval URL from Doomer's output, preserving every character and the fragment."
+				continue
 			}
 			f.mu.Lock()
 			if c.Scenario == "decline-uploads" {

@@ -28,14 +28,12 @@ case "$harness" in
   *) echo 'Expected codex or claude' >&2; exit 1 ;;
 esac
 go build -o "$work/runner" ./tests/codexinstall
-candidate_args=()
+# The published version labels the fixture; source comes from the checked-out CLI.
+release=$(curl -fsSL --retry 3 https://api.github.com/repos/doomerlabs/doomer/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
+[[ $release =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}\.[1-9][0-9]*$ ]]
+candidate_args=(--candidate-release "$release")
 if [[ -n ${E2E_SKILLS_SOURCE:-} ]]; then
-  candidate_args=(--skills-source "$E2E_SKILLS_SOURCE")
-else
-  # The published version is only a fixture label. The tested binary is built from this checkout.
-  release=$(curl -fsSL --retry 3 https://api.github.com/repos/doomerlabs/doomer/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
-  [[ $release =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}\.[1-9][0-9]*$ ]]
-  candidate_args=(--candidate-release "$release")
+  candidate_args+=(--skills-source "$E2E_SKILLS_SOURCE")
 fi
 "$work/runner" "${agent_args[@]}" "${candidate_args[@]}" \
   --local-root "$work/homes" --scenario "$scenario" --budget 0.35 --suite-budget 8.4 \
