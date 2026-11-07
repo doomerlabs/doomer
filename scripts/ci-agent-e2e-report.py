@@ -48,7 +48,7 @@ def render(root, results):
     passed = sum(result["passed"] for result in results)
     billing = "Codex uses API billing. Claude uses subscription allowance, with no Anthropic API fallback."
     cost = sum(result["cost"] for result in results if result["harness"] == "codex")
-    summary += ["", f"{passed}/{len(results)} scenarios passed.", "", f"Codex model cost estimate: ${cost:.4f}.", "", billing]
+    summary += ["", f"{passed}/{len(results)} scenarios passed.", "", f"Estimated Codex model cost is ${cost:.4f}.", "", billing]
     root.mkdir(parents=True, exist_ok=True)
     (root / "index.html").write_text(
         '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'

@@ -75,6 +75,7 @@ jobs:
           name: agent-e2e-${{ matrix.harness }}-${{ matrix.scenario }}
           path: ${{ env.E2E_REPORT_DIR }}
           retention-days: 14
+          overwrite: true
           if-no-files-found: error
 
   report:
@@ -105,4 +106,5 @@ jobs:
           name: agent-e2e-all-recordings
           path: e2e-artifacts
           retention-days: 14
+          overwrite: true
           if-no-files-found: error
