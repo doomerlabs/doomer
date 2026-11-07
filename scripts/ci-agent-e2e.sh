@@ -2,6 +2,7 @@
 # Run the full real-agent suite in disposable homes on the Depot runner.
 set -euo pipefail
 harness=${1:?expected codex or claude}
+scenario=${2:-all}
 reports=${E2E_REPORT_DIR:?expected E2E_REPORT_DIR}
 mkdir -p "$reports"
 work=$(mktemp -d "${HOME}/doomer-agent-e2e.XXXXXX")
@@ -37,5 +38,5 @@ else
   candidate_args=(--candidate-release "$release")
 fi
 "$work/runner" "${agent_args[@]}" "${candidate_args[@]}" \
-  --local-root "$work/homes" --scenario all --budget 0.35 --suite-budget 8.4 \
-  --output "$reports/suite.json"
+  --local-root "$work/homes" --scenario "$scenario" --budget 0.35 --suite-budget 8.4 \
+  --output "$reports/report.json"

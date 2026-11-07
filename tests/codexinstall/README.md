@@ -214,7 +214,7 @@ Codex subscription mode and automatic PR scheduling are separate follow-up work.
 ## Depot pull request CI
 
 `.depot/workflows/agent-e2e.yml` runs the full 24-scenario suite for Codex and
-Claude in separate Linux jobs, including the real terminal cases. Each scenario
+Claude in parallel Linux jobs, one per agent and scenario, including the real terminal cases. Each scenario
 uses a fresh isolated home on the disposable Depot runner. No developer agent
 installation or exe.dev machine is used. Desktop GUI clients are outside this suite.
 
@@ -231,8 +231,8 @@ The skills job uses `--skills-source` to exercise that PR's `INSTALL.md`, instal
 retain their normal HTTPS and checksum verification. Skills' runner dependency is
 pinned to a reviewed CLI commit.
 
-Every job retains JSON results, HTML conversations, and an offline `index.html`
+Every scenario job retains JSON results and HTML conversations. A final job collects all recordings into one offline `index.html` gallery
 for 14 days, including on test failure. The job summary links to the artifact and
-lists each scenario result. Download the artifact and open `index.html` to browse
+lists every scenario result, including missing or malformed reports as failures. Download the artifact and open `index.html` to browse
 recordings. Codex reserves at most $0.35 per scenario and $8.40 per suite. Claude
 uses subscription allowance, which is not reported as zero-dollar API usage.

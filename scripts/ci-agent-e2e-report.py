@@ -1,47 +1,87 @@
 #!/usr/bin/env python3
-"""Build an offline HTML recording index and a Depot job summary, including failures."""
+"""Build offline HTML recordings and Depot summaries, including missing reports."""
 import html
 import json
 import os
 from pathlib import Path
 import sys
 
-reports = Path(sys.argv[1])
-harness = sys.argv[2]
-artifact_url = os.environ.get("DEPOT_JOB_URL", "")
-artifact_name = os.environ.get("E2E_ARTIFACT_NAME", "agent-e2e-" + harness)
-suite_file = reports / "suite.json"
-suite = json.loads(suite_file.read_text()) if suite_file.exists() else {"results": []}
-results = suite["results"]
-rows = []
-summary = [f"## {harness.title()} lifecycle E2E", ""]
-if artifact_url:
-    summary += [f"[Depot job with HTML recordings and results]({artifact_url})", "", f"Saved artifact `{artifact_name}`. Download it and open `index.html` to browse every recorded conversation.", ""]
-summary += ["| Scenario | Result | Recording |", "| --- | --- | --- |"]
-for result in results:
-    name = result["scenario"]
-    filename = Path(result["report"]).name
-    replay = filename + ".html"
-    status = "Passed" if result["passed"] else "Failed"
-    link = f'<a href="{html.escape(replay, quote=True)}">Conversation</a>' if (reports / replay).exists() else "Unavailable"
-    rows.append(f"<tr><td>{html.escape(name)}</td><td>{status}</td><td>{link}</td></tr>")
-    summary.append(f"| {name} | {status} | `{replay}` |")
-if not results:
-    summary.append("The runner failed before writing any scenario results. Inspect the job log.")
-if suite.get("auth_mode") == "subscription":
-    billing = "Claude subscription allowance. No Anthropic API billing or fallback."
-else:
-    billing = f'Codex API reserved spend: ${suite.get("budget_charged_usd", 0):.4f}.'
-summary += ["", billing]
-reports.mkdir(parents=True, exist_ok=True)
-(reports / "index.html").write_text(
-    '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
-    f'<title>{html.escape(harness)} E2E recordings</title>'
-    '<style>body{font:16px system-ui;max-width:1000px;margin:3rem auto;padding:1rem}'
-    'table{width:100%;border-collapse:collapse}td,th{padding:.65rem;text-align:left;border-bottom:1px solid #ddd}</style>'
-    f'<h1>{html.escape(harness.title())} E2E recordings</h1><p>{html.escape(billing)}</p>'
-    '<table><tr><th>Scenario</th><th>Result</th><th>Recording</th></tr>' + "".join(rows) + '</table>'
-)
-if os.environ.get("GITHUB_STEP_SUMMARY"):
-    with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
-        output.write("\n".join(summary) + "\n")
+
+def read_result(root, harness, scenario, relative):
+    path = root / relative / "report.json"
+    try:
+        report = json.loads(path.read_text())
+        passed = report.get("passed") is True
+        detail = report.get("error", "")
+    except (OSError, ValueError):
+        report = {}
+        passed = False
+        detail = "No valid report was produced. Inspect this scenario's CI log."
+    replay = relative / "report.json.html"
+    return {
+        "harness": harness,
+        "scenario": scenario,
+        "passed": passed,
+        "detail": detail,
+        "replay": replay.as_posix() if (root / replay).is_file() else "",
+        "cost": report.get("usage", {}).get("estimated_cost_usd", 0),
+    }
+
+
+def render(root, results):
+    rows = []
+    summary = ["## Agent lifecycle E2E", ""]
+    job_url = os.environ.get("DEPOT_JOB_URL", "")
+    if job_url:
+        summary += [f"[Depot job with HTML recordings and results]({job_url})", ""]
+    artifact = os.environ.get("E2E_ARTIFACT_NAME", "agent-e2e-all-recordings")
+    summary += [f"Saved artifact `{artifact}`. Download it and open `index.html` to browse the conversations.", "",
+                "| Agent | Scenario | Result |", "| --- | --- | --- |"]
+    for result in results:
+        status = "Passed" if result["passed"] else "Failed"
+        link = "Unavailable"
+        if result["replay"]:
+            link = f'<a href="{html.escape(result["replay"], quote=True)}">Conversation</a>'
+        rows.append("<tr>" + "".join(f"<td>{html.escape(str(result[key]))}</td>" for key in ("harness", "scenario"))
+                    + f'<td>{status}</td><td>{link}</td><td>{html.escape(result["detail"])}</td></tr>')
+        summary.append(f'| {result["harness"]} | {result["scenario"]} | {status} |')
+    passed = sum(result["passed"] for result in results)
+    billing = "Codex uses API billing. Claude uses subscription allowance, with no Anthropic API fallback."
+    cost = sum(result["cost"] for result in results if result["harness"] == "codex")
+    summary += ["", f"{passed}/{len(results)} scenarios passed.", "", f"Codex model cost estimate: ${cost:.4f}.", "", billing]
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "index.html").write_text(
+        '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
+        '<title>Agent E2E recordings</title>'
+        '<style>body{font:16px system-ui;max-width:1200px;margin:3rem auto;padding:1rem}'
+        'table{width:100%;border-collapse:collapse}td,th{padding:.65rem;text-align:left;border-bottom:1px solid #ddd}</style>'
+        f'<h1>Agent E2E recordings</h1><p>{passed}/{len(results)} passed.</p><p>{billing}</p>'
+        '<table><tr><th>Agent</th><th>Scenario</th><th>Result</th><th>Recording</th><th>Details</th></tr>'
+        + "".join(rows) + '</table>'
+    )
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        with open(summary_path, "a") as output:
+            output.write("\n".join(summary) + "\n")
+
+
+def main():
+    mode, directory = sys.argv[1:3]
+    root = Path(directory)
+    if mode == "--single":
+        harness, scenario = sys.argv[3:5]
+        results = [read_result(root, harness, scenario, Path("."))]
+    elif mode == "--all":
+        scenarios = json.loads(os.environ["E2E_SCENARIOS"])
+        results = [read_result(root, harness, scenario, Path(f"agent-e2e-{harness}-{scenario}"))
+                   for harness in ("codex", "claude") for scenario in scenarios]
+    else:
+        raise ValueError("expected --single or --all")
+    render(root, results)
+    if mode == "--all" and (not results or not all(result["passed"] for result in results)):
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

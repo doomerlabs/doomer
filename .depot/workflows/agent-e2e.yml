@@ -13,19 +13,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lifecycle:
-    # Fork PRs never run credential-bearing jobs, even after manual run approval.
+  plan:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    name: full lifecycle (${{ matrix.harness }})
     runs-on: ubuntu-24.04
-    environment: agent-e2e
-    timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      matrix:
-        harness: [codex, claude]
-    env:
-      E2E_REPORT_DIR: ${{ github.workspace }}/e2e-reports/${{ matrix.harness }}
+    timeout-minutes: 10
+    outputs:
+      scenarios: ${{ steps.scenarios.outputs.scenarios }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -33,25 +26,83 @@ jobs:
       - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
-      - name: Run every lifecycle scenario
+      - name: Discover all lifecycle scenarios
+        id: scenarios
+        run: |
+          scenarios=$(go run ./tests/codexinstall --scenario list | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().splitlines()))')
+          printf 'scenarios=%s\n' "$scenarios" >> "$GITHUB_OUTPUT"
+
+  lifecycle:
+    needs: plan
+    # Fork PRs never run credential-bearing jobs, even after manual run approval.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    name: ${{ matrix.harness }} / ${{ matrix.scenario }}
+    runs-on: ubuntu-24.04
+    environment: agent-e2e
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 48
+      matrix:
+        harness: [codex, claude]
+        scenario: ${{ fromJSON(needs.plan.outputs.scenarios) }}
+    env:
+      E2E_REPORT_DIR: ${{ github.workspace }}/e2e-reports
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version-file: go.mod
+      - name: Run lifecycle scenario
         env:
           TEST_OPENAI_API_KEY: ${{ matrix.harness == 'codex' && secrets.TEST_OPENAI_API_KEY || '' }}
           TEST_CLAUDE_CODE_OAUTH_TOKEN: ${{ matrix.harness == 'claude' && secrets.TEST_CLAUDE_CODE_OAUTH_TOKEN || '' }}
-        run: scripts/ci-agent-e2e.sh '${{ matrix.harness }}'
+          E2E_SCENARIO: ${{ matrix.scenario }}
+          E2E_HARNESS: ${{ matrix.harness }}
+        run: scripts/ci-agent-e2e.sh "$E2E_HARNESS" "$E2E_SCENARIO"
       - name: Build recording index
         if: always()
-        run: GITHUB_STEP_SUMMARY='' python3 scripts/ci-agent-e2e-report.py "$E2E_REPORT_DIR" '${{ matrix.harness }}'
-      - name: Save HTML recordings and JSON results
+        env:
+          E2E_SCENARIO: ${{ matrix.scenario }}
+          E2E_HARNESS: ${{ matrix.harness }}
+        run: GITHUB_STEP_SUMMARY='' python3 scripts/ci-agent-e2e-report.py --single "$E2E_REPORT_DIR" "$E2E_HARNESS" "$E2E_SCENARIO"
+      - name: Save HTML recording and JSON result
         if: always()
-        id: recordings
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: agent-e2e-${{ matrix.harness }}
+          name: agent-e2e-${{ matrix.harness }}-${{ matrix.scenario }}
           path: ${{ env.E2E_REPORT_DIR }}
           retention-days: 14
           if-no-files-found: error
-      - name: Link recordings in job summary
+
+  report:
+    name: all lifecycle results
+    needs: [plan, lifecycle]
+    if: always() && !cancelled() && needs.plan.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      E2E_SCENARIOS: ${{ needs.plan.outputs.scenarios }}
+      E2E_ARTIFACT_NAME: agent-e2e-all-recordings
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Collect all scenario recordings
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: agent-e2e-*
+          path: e2e-artifacts
+      - name: Summarize every scenario including failures
         if: always()
-        env:
-          E2E_ARTIFACT_NAME: agent-e2e-${{ matrix.harness }}
-        run: python3 scripts/ci-agent-e2e-report.py "$E2E_REPORT_DIR" '${{ matrix.harness }}'
+        run: python3 scripts/ci-agent-e2e-report.py --all e2e-artifacts
+      - name: Save combined HTML recording gallery
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agent-e2e-all-recordings
+          path: e2e-artifacts
+          retention-days: 14
+          if-no-files-found: error
