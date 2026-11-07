@@ -1,0 +1,23 @@
+tests/codexinstall/replay.html
+  s_f23d7bc729b5d1::t_e60d953b96c627 1-19,22-96,98-99
+tests/codexinstall/main.go
+  s_f23d7bc729b5d1::t_e60d953b96c627 43,50-67
+tests/codexinstall/README.md
+  s_f23d7bc729b5d1::t_1f663aaae6a283 66-68,81-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "326554b202fb344c1a1d9179b813b537b28c010a",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
