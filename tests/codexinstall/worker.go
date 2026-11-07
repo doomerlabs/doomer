@@ -130,6 +130,15 @@ func runWorker(c config) (result report) {
 			return fail(err)
 		}
 		candidateInstalled = true
+		args := []string{"bootstrap", "upgrade", "--accept", "--repo", repo}
+		if personalScenario(c.Scenario) {
+			args = []string{"bootstrap", "upgrade", "--accept", "--personal"}
+		}
+		bootstrap := exec.CommandContext(ctx, c.CandidateFile, args...)
+		bootstrap.Dir, bootstrap.Env = repo, env
+		if output, err := bootstrap.CombinedOutput(); err != nil {
+			return fail(fmt.Errorf("candidate bootstrap assembly: %w: %s", err, output))
+		}
 		prompt = "The installed build has been checked. Continue onboarding Doomer in this repository using its existing installed files and original scope. This test home persists for the scenario, so use ordinary setup without --portable. Ask for the required user approvals."
 	}
 	if c.Scenario == "portable-restart" {
@@ -233,7 +242,7 @@ func runWorker(c config) (result report) {
 					return fail(fmt.Errorf("missing durable setup task"))
 				}
 				session = ""
-				prompt = "The previous agent process ended. I approved repository access. Resume Doomer task " + tasks[0].Handle + " and verify setup."
+				prompt = "The original Doomer installation was interrupted. I approved repository access. Finish the original installation, including Codex hook configuration. Resume Doomer task " + tasks[0].Handle + " and verify setup without creating a replacement task."
 				result.Checks["fresh_agent_resumed_setup"] = true
 			}
 		} else if sawUpdateRequest && !approvedUpdate && (strings.Contains(strings.ToLower(text), "update") || strings.Contains(strings.ToLower(text), "permission")) {

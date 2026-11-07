@@ -67,8 +67,9 @@ own update and upload permissions are exercised.
 
 To test this checkout's unpublished CLI changes, add
 `--candidate-release 2026.11.6.12` with the exact currently installed public release.
-The runner first exercises verified installation, then replaces only the disposable
-fixture's runtime and checksum record with the candidate build. It does this before
+The runner first exercises verified installation, then assembles the candidate
+runtime and matching wrappers only inside the disposable fixture. Its checksum
+record is local test state. It does this before
 continuing setup. `--install-guide URL` can select a pinned candidate installer
 guide to validate an unpublished installer change. The default is the public guide. This test-only injection is recorded in `candidate_version` and
 does not change release verification in the product.

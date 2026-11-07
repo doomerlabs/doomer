@@ -121,6 +121,7 @@ func managedBootstrapUpdates(task managed.Task) []managed.BootstrapUpdate {
 		return nil
 	}
 	base := filepath.Clean(filepath.Join(filepath.Dir(task.Bootstrap.Path), "../../.."))
+	executable, executableErr := os.Executable()
 	identity, identityErr := bootstrapDeferralIdentity(context.Background(), task.Bootstrap.Scope, base)
 	store, storeErr := managedStoreLocation()
 	deferred := identityErr == nil && storeErr == nil && store.BootstrapDeferred(identity, managed.BootstrapVersion, time.Now())
@@ -142,11 +143,18 @@ func managedBootstrapUpdates(task managed.Task) []managed.BootstrapUpdate {
 			if deferred {
 				continue
 			}
+			if executableErr != nil {
+				update.State = "inspection_failed"
+				update.Action = "Could not locate the maintenance executable. Run bootstrap status through the current verified CLI. The task can continue."
+				updates = append(updates, update)
+				continue
+			}
 			target := "--repo " + watch.Quote(base)
 			if task.Bootstrap.Scope == "personal" {
 				target = "--personal"
 			}
-			update.Action = managed.BootstrapUpgradeOffer(task.Bootstrap.Scope) + " Only after acceptance run doomer bootstrap upgrade --accept " + target + ". If the user chooses Maybe later, run doomer bootstrap defer " + target + " to suppress this version's offer for 24 hours. The task keeps its release and update policy."
+			command := watch.Quote(executable)
+			update.Action = managed.BootstrapUpgradeOffer(task.Bootstrap.Scope) + " Only after acceptance run " + command + " bootstrap upgrade --accept " + target + ". If the user chooses Maybe later, run " + command + " bootstrap defer " + target + " to suppress this version's offer for 24 hours. Use this exact executable because the PATH launcher may be older. The task keeps its release and update policy."
 		}
 		updates = append(updates, update)
 	}
