@@ -57,7 +57,7 @@ func (c Client) Whoami(ctx context.Context, token string) (WhoamiResponse, error
 		return WhoamiResponse{}, ErrNotAuthenticated
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return WhoamiResponse{}, fmt.Errorf("whoami failed: %s", resp.Status)
+		return WhoamiResponse{}, responseError(resp, token)
 	}
 	var out WhoamiResponse
 	if err := decodeLimited(resp.Body, &out); err != nil {

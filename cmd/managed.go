@@ -29,6 +29,7 @@ import (
 )
 
 type managedResult struct {
+	NetworkAccess        *managedNetworkAccess          `json:"network_access,omitempty"`
 	Anonymous            bool                           `json:"anonymous,omitempty"`
 	ReviewNotRequired    string                         `json:"review_not_required,omitempty"`
 	NoChanges            bool                           `json:"no_changes,omitempty"`
@@ -317,7 +318,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 			return outputManaged(c, s, task, r)
 		}
 		if err := restorePortable(c.Context(), app, s, &task); err != nil {
-			return err
+			return outputManagedNetworkError(c, s, task, err)
 		}
 		r = resultFor(task)
 		if task.Release != "dev" && developmentRuntime(task.API, task.Profile) {
@@ -331,6 +332,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 			if err != nil {
 				r.State = "software_unavailable"
 				r.Error = err.Error()
+				addManagedNetworkHelp(c, &r, task, err)
 				return outputManaged(c, s, task, r)
 			}
 			if state != "ready" {
@@ -353,7 +355,10 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 				return err
 			}
 		}
-		return managedApproval(c, app, s, &task)
+		if err := managedApproval(c, app, s, &task); err != nil {
+			return outputManagedNetworkError(c, s, task, err)
+		}
+		return nil
 	}
 	c.Flags().StringVar(&repo, "repo", ".", "checkout being edited")
 	defaultAgent := "codex"
@@ -633,7 +638,9 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 			}
 			auth, account, err := managedIdentity(c.Context(), app, t)
 			if err != nil {
-				return outputManaged(c, s, t, managedResult{State: "authentication_required", Task: t.Handle, Error: err.Error()})
+				r := managedResult{State: "authentication_required", Task: t.Handle, Error: err.Error()}
+				addManagedNetworkHelp(c, &r, t, err)
+				return outputManaged(c, s, t, r)
 			}
 			if t.AccountID != "" && t.AccountID != account {
 				return fmt.Errorf("task account changed; original account login required")
@@ -726,6 +733,7 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 			if err != nil {
 				r.State = "operation_failed"
 				r.Error = err.Error()
+				addManagedNetworkHelp(c, &r, t, err)
 			}
 			return outputManaged(c, s, t, r)
 		}
@@ -795,7 +803,10 @@ func managedHook(c *cobra.Command, s managed.Store, t *managed.Task, e managed.E
 }
 
 func managedLogin(c *cobra.Command, app *application.App, s managed.Store, t managed.Task) error {
-	return managedApproval(c, app, s, &t)
+	if err := managedApproval(c, app, s, &t); err != nil {
+		return outputManagedNetworkError(c, s, t, err)
+	}
+	return nil
 }
 
 // Explicit task routing precedes checkout policy routing. This is how two tasks

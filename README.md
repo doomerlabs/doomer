@@ -41,6 +41,11 @@ The repository approval page handles login and upload approval together. Use `--
 for Claude Code. Directly reading the bootstrap also works when a harness does
 not discover repository skills.
 
+If Claude cannot reach the service, ask your agent to show the reported
+`network_access.required_host` and follow the [network access setup guide](docs/network-access.md).
+It walks organization owners through adding the exact domain and resuming the
+same task after saving the setting.
+
 Reviews resume across separate CLI calls using the durable handle. Record
 finding responses with `doomer task respond HANDLE`, then use
 `doomer task finish HANDLE` to verify the reviewed tree and delivery. Optional

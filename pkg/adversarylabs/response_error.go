@@ -13,6 +13,7 @@ import (
 // ResponseError contains only allowlisted server diagnostics, never a raw body.
 type ResponseError struct {
 	StatusCode int
+	Host       string
 	Code       string
 	message    string
 	cause      error
@@ -103,5 +104,9 @@ func responseError(resp *http.Response, token string) error {
 	if token != "" {
 		message = strings.ReplaceAll(message, token, "[redacted]")
 	}
-	return &ResponseError{StatusCode: resp.StatusCode, Code: safeCode, message: message, cause: cause}
+	host := ""
+	if resp.Request != nil && resp.Request.URL != nil {
+		host = resp.Request.URL.Hostname()
+	}
+	return &ResponseError{StatusCode: resp.StatusCode, Host: host, Code: safeCode, message: message, cause: cause}
 }
