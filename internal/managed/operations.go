@@ -128,6 +128,9 @@ func (e Engine) send(ctx context.Context, task *Task, token string) error {
 	return e.Store.Save(task)
 }
 func (e Engine) Status(ctx context.Context, task *Task, token string) error {
+	if task.Stage == "complete" {
+		return nil
+	}
 	if task.Stage == "submitting" {
 		if task.LastError != "" {
 			return errors.New(task.LastError)
@@ -261,9 +264,11 @@ func (e Engine) Finish(ctx context.Context, task *Task, token string) error {
 		task.Stage = "complete"
 		return e.Store.Save(task)
 	}
-	if task.NoChanges {
+	if task.NoChanges || (task.Review == nil && task.Submission == nil) {
 		_, err := e.Capture(ctx, *task)
 		if errors.Is(err, sourcesnapshot.ErrNoChanges) {
+			task.NoChanges = true
+			task.LastError = ""
 			task.Stage = "complete"
 			return e.Store.Save(task)
 		}

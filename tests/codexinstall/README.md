@@ -1,7 +1,7 @@
-# Manual Codex lifecycle experiments
+# Agent lifecycle E2E tests
 
 Run real Codex CLI 0.167.0 with GPT-6.1 Terra at low reasoning in disposable
-Linux exe.dev VMs or isolated local macOS test homes. These tests are opt-in. They are never run by normal PR CI.
+Linux exe.dev VMs or isolated local macOS test homes. Depot runs all scenarios for both harnesses on pull requests. Manual runs remain available.
 The local fixture supplies Doomer account, approval and review responses.
 Installation still uses the public guide and published, verified Doomer runtime.
 
@@ -50,7 +50,9 @@ go run ./tests/codexinstall --scenario list
 | `deep-review` | Automatic selection permits Deep and waits for its completed result |
 | `service-failure` | Submission failure terminates with durable state and recovers the same task when the service returns |
 
-Each invocation performs real installation first in its own fresh home and VM.
+Each invocation performs real installation first in its own fresh home. The setup
+prompt explicitly selects the requested Codex or Claude integration; readiness
+assertions verify the CLI records that same agent.
 A failed assertion remains a failed test even when it exposes a product gap.
 The upgrade fixture uses a local bare Git remote and a fake `gh` command; it
 tests the agent's PR workflow without creating a real external pull request.
@@ -181,3 +183,57 @@ Use a new output prefix for each suite so earlier recordings remain available.
 The suite writes its result index after every case, continues past assertion
 failures, and stops before starting a case whose reservation would exceed the
 aggregate budget.
+
+### Claude subscription authentication
+
+Keep the API secrets for metered on-demand runs. Add a separate
+`TEST_CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`, then select subscription
+mode explicitly:
+
+```sh
+doppler run --project doomer --config test -- \
+  go run ./tests/codexinstall --harness claude --auth subscription \
+  --scenario first-review --output /tmp/claude-subscription-first-review.json
+```
+
+The real Claude CLI connects directly to its first-party service. Its environment
+contains the OAuth token and excludes API keys, API auth tokens, and proxy
+endpoints. There is no automatic API fallback. Authentication status must report
+`oauth_token` and `firstParty` before the scenario begins, and the model request
+must succeed for the scenario to pass. Reports and HTML recordings identify
+subscription allowance rather than displaying a zero-dollar API charge.
+
+`--auth api` remains the default, using the existing metering proxy and dollar
+limits. Subscription mode uses the existing eight-minute worker deadline and
+agent-turn limits. Dollar-budget flags apply only to API mode. Both authentication modes continue through the full requested suite and report
+every failed scenario. No subscription token is
+written into the worker's command line or report. Remote workers receive it over
+SSH stdin, and disposable test homes and VMs are removed after the run.
+
+Codex subscription mode remains separate follow-up work.
+
+## Depot pull request CI
+
+`.depot/workflows/agent-e2e.yml` runs the full 24-scenario suite for Codex and
+Claude in parallel Linux jobs, one per agent and scenario, including the real terminal cases. Each scenario
+uses a fresh isolated home on the disposable Depot runner. No developer agent
+installation or exe.dev machine is used. Desktop GUI clients are outside this suite.
+
+Codex uses `TEST_OPENAI_API_KEY`. Claude requires
+`TEST_CLAUDE_CODE_OAUTH_TOKEN` with `--auth subscription`; a missing or expired
+OAuth token fails the check. There is no Anthropic API credential in the workflow
+or fallback. Store the two test credentials in Depot, restricted to the two
+repositories, the `agent-e2e` environment, and `agent-e2e.yml`. Fork pull requests
+receive no secrets and cannot run the authenticated suite.
+
+The CLI job builds the proposed checkout after exercising public installation.
+The skills job pairs its pinned CLI source with `--skills-source` to exercise that PR's `INSTALL.md`, installer
+(with a fixture-local URL and recomputed checksum), and wrapper. Runtime downloads
+retain their normal HTTPS and checksum verification. Skills' runner dependency is
+pinned to a reviewed CLI commit.
+
+Every scenario job retains JSON results and HTML conversations. A final job collects all recordings into one offline `index.html` gallery
+for 14 days, including on test failure. The job summary links to the Depot job, identifies the recording artifact, and
+lists every scenario result, including missing or malformed reports as failures. Download the artifact and open `index.html` to browse
+recordings. Codex reserves at most $0.35 per scenario and $8.40 per suite. Claude
+uses subscription allowance, which is not reported as zero-dollar API usage.

@@ -26,7 +26,7 @@ func (j *journey) invalidPortable() error {
 		return fmt.Errorf("failed portable request changed the task")
 	}
 	j.result.Turns++
-	_, err = runAgent(j.ctx, j.c, j.repo, j.env, "The optional portable setup request failed because this local repository has no origin. Resume the original ordinary Doomer task "+handle+" and verify setup. Preserve the repository and reuse existing approvals.", "", j.record)
+	_, err = runAgent(j.ctx, j.c, j.repo, j.env, "The optional portable setup request failed because this local repository has no origin. Run doomer prepare --task "+handle+" in this same persistent home, without --portable, to verify the original ordinary setup. Preserve DOOMER_API_URL and reuse existing approvals without creating a replacement task.", "", j.record)
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ wait:
 	j.f.PendingReviews = false
 	j.f.mu.Unlock()
 	j.result.Turns++
-	_, err := runAgent(j.ctx, j.c, j.repo, j.env, "The previous process ended. Resume Doomer task "+handle+" and finish the existing review without submitting a replacement.", "", j.record)
+	_, err := runAgent(j.ctx, j.c, j.repo, j.env, "The previous process ended, but this is the same persistent test home and repository. Preserve DOOMER_API_URL. Run doomer prepare --task "+handle+" and finish that existing review without submitting a replacement.", "", j.record)
 	if err != nil {
 		return err
 	}

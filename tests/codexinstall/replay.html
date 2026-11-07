@@ -26,7 +26,8 @@ if (report.harness === 'claude') document.querySelector('.subtitle').textContent
 let index = Math.max(0, events.length - 1), timer = null, playing = false;
 el('result').textContent = report.passed ? 'Passed' : 'Failed';
 el('result').classList.toggle('failed', !report.passed);
-el('summary').textContent = `${report.model} · ${report.duration_seconds.toFixed(1)}s · ${(report.usage.estimated_cost_usd * 100).toFixed(2)}¢ estimated API cost`;
+const billing = report.auth_mode === 'subscription' ? 'Subscription allowance · API cost not metered' : `${(report.usage.estimated_cost_usd * 100).toFixed(2)}¢ estimated API cost`;
+el('summary').textContent = `${report.model} · ${report.duration_seconds.toFixed(1)}s · ${billing}`;
 el('step').max = Math.max(0, events.length - 1);
 function node(tag, className, text) {
   const result = document.createElement(tag);

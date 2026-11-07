@@ -104,7 +104,11 @@ func runClaude(ctx context.Context, c config, repo string, env []string, prompt,
 		return turn, readErr
 	}
 	if waitErr != nil || turn.Failed {
-		return turn, fmt.Errorf("Claude execution failed: %s", strings.TrimSpace(stderr.String()))
+		detail := strings.TrimSpace(stderr.String())
+		if detail == "" && len(turn.Messages) > 0 {
+			detail = turn.Messages[len(turn.Messages)-1]
+		}
+		return turn, fmt.Errorf("Claude execution failed: %s", detail)
 	}
 	return turn, nil
 }
@@ -114,13 +118,11 @@ func readClaudeTurn(reader io.Reader, record func(string, string)) (codexTurn, e
 	scanner.Buffer(make([]byte, 65536), 4<<20)
 	for scanner.Scan() {
 		var event struct {
-			Type    string `json:"type"`
-			Session string `json:"session_id"`
-			IsError bool   `json:"is_error"`
-			Result  string `json:"result"`
-			Message struct {
-				Content json.RawMessage `json:"content"`
-			} `json:"message"`
+			Type    string          `json:"type"`
+			Session string          `json:"session_id"`
+			IsError bool            `json:"is_error"`
+			Result  string          `json:"result"`
+			Message json.RawMessage `json:"message"`
 		}
 		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
 			return turn, err
@@ -132,6 +134,17 @@ func readClaudeTurn(reader io.Reader, record func(string, string)) (codexTurn, e
 			turn.Failed = true
 			record("Claude error", event.Result)
 		}
+		// Status and diagnostic events may use a string message. Only user and
+		// assistant events carry the structured content blocks we need.
+		if event.Type != "assistant" && event.Type != "user" {
+			continue
+		}
+		var message struct {
+			Content json.RawMessage `json:"content"`
+		}
+		if err := json.Unmarshal(event.Message, &message); err != nil {
+			return turn, fmt.Errorf("decode Claude %s message: %w", event.Type, err)
+		}
 		var blocks []struct {
 			Type    string          `json:"type"`
 			Text    string          `json:"text"`
@@ -139,7 +152,7 @@ func readClaudeTurn(reader io.Reader, record func(string, string)) (codexTurn, e
 			Input   json.RawMessage `json:"input"`
 			Content json.RawMessage `json:"content"`
 		}
-		_ = json.Unmarshal(event.Message.Content, &blocks)
+		_ = json.Unmarshal(message.Content, &blocks)
 		for _, block := range blocks {
 			switch block.Type {
 			case "text":

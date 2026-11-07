@@ -13,6 +13,11 @@ import (
 
 type config struct {
 	Harness          string  `json:"harness,omitempty"`
+	SkillsGuide      string  `json:"skills_guide,omitempty"`
+	SkillsInstaller  string  `json:"skills_installer,omitempty"`
+	SkillsBootstrap  string  `json:"skills_bootstrap,omitempty"`
+	AuthMode         string  `json:"auth_mode,omitempty"`
+	OAuthToken       string  `json:"oauth_token,omitempty"`
 	InstallGuide     string  `json:"install_guide"`
 	WorkRoot         string  `json:"work_root,omitempty"`
 	CandidateFile    string  `json:"candidate_file,omitempty"`
@@ -33,6 +38,7 @@ type recordedEvent struct {
 
 type report struct {
 	Harness          string          `json:"harness,omitempty"`
+	AuthMode         string          `json:"auth_mode,omitempty"`
 	InstallGuide     string          `json:"install_guide"`
 	Execution        string          `json:"execution"`
 	LocalCleaned     bool            `json:"local_cleaned,omitempty"`
@@ -55,7 +61,9 @@ type report struct {
 
 func main() {
 	harness := flag.String("harness", "codex", "agent harness: codex or claude")
+	auth := flag.String("auth", "api", "authentication mode: api or subscription (Claude only)")
 	localClaude := flag.String("local-claude", "", "dedicated pinned Claude executable for an isolated local run")
+	skillsSource := flag.String("skills-source", "", "candidate skills repository to exercise in the isolated fixture")
 	guide := flag.String("install-guide", "https://doomer.ai/install.md", "verified installation guide to exercise")
 	localCodex := flag.String("local-codex", "", "dedicated pinned Codex executable for an isolated local run")
 	localRoot := flag.String("local-root", "", "writable parent directory for disposable local test homes")
@@ -73,8 +81,12 @@ func main() {
 		fmt.Println(strings.Join(scenarioNames, "\n"))
 		return
 	}
+	if err := validateAuthMode(*harness, *auth); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if *scenario == "all" {
-		if err := runSuite(*output, *budget, *suiteBudget); err != nil {
+		if err := runSuite(*output, *budget, *suiteBudget, *auth); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -125,13 +137,23 @@ func main() {
 	if *model == "" {
 		*model = expectedModel
 	}
-	if *model != expectedModel || *budget <= 0 || *budget > 1 {
+	if *model != expectedModel || (*auth == "api" && (*budget <= 0 || *budget > 1)) {
 		fmt.Fprintln(os.Stderr, "use the pinned harness model and a budget above zero and at most $1")
 		os.Exit(1)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	c := config{Harness: *harness, APIKey: os.Getenv(keyName), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate, InstallGuide: *guide}
+	c := config{Harness: *harness, AuthMode: *auth, APIKey: os.Getenv(keyName), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate, InstallGuide: *guide}
+	if *auth == "subscription" {
+		c.APIKey = ""
+		c.OAuthToken = os.Getenv("TEST_CLAUDE_CODE_OAUTH_TOKEN")
+	}
+	if *skillsSource != "" {
+		if err := loadCandidateSkills(&c, *skillsSource); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
 	if strings.HasPrefix(*scenario, "upgrade") {
 		raw, err := os.ReadFile("internal/managed/bootstrap-2026.11.6.10.md")
 		if err != nil {
@@ -155,6 +177,7 @@ func main() {
 		r = runRemote(ctx, c, *version)
 	}
 	r.Harness = c.Harness
+	r.AuthMode = authenticationMode(c)
 	data, _ := json.MarshalIndent(r, "", "  ")
 	if err := os.WriteFile(*output, append(data, '\n'), 0600); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -168,8 +191,13 @@ func main() {
 	if r.Execution == "local" {
 		cleaned = r.LocalCleaned
 	}
-	fmt.Printf("passed=%t cost=$%.6f reserved=$%.6f cleanup_complete=%t report=%s\n", r.Passed, r.Usage.Cost, r.Usage.Reserved, cleaned, *output)
+	if r.AuthMode == "subscription" {
+		fmt.Printf("passed=%t auth=subscription billing=subscription_allowance cleanup_complete=%t report=%s\n", r.Passed, cleaned, *output)
+	} else {
+		fmt.Printf("passed=%t cost=$%.6f reserved=$%.6f cleanup_complete=%t report=%s\n", r.Passed, r.Usage.Cost, r.Usage.Reserved, cleaned, *output)
+	}
 	if !r.Passed || (r.VM != "" && !r.Deleted) || (r.Execution == "local" && !r.LocalCleaned) {
+		fmt.Fprintln(os.Stderr, redact(redact(r.Error, c.APIKey), c.OAuthToken))
 		os.Exit(1)
 	}
 }

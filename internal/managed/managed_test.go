@@ -415,3 +415,15 @@ func TestSubmissionOmitsUnavailablePrompt(t *testing.T) {
 		})
 	}
 }
+
+func TestStatusPreservesCompletedTask(t *testing.T) {
+	for _, review := range []*adversarylabs.WorkspaceReview{nil, {ID: "completed-review"}} {
+		task := Task{Stage: "complete", Review: review}
+		// A completed task already retains its final result. Status must not fetch
+		// another result and demote it back to reviewed or pending.
+		engine := Engine{}
+		if err := engine.Status(context.Background(), &task, "token"); err != nil || task.Stage != "complete" {
+			t.Fatal(task, err)
+		}
+	}
+}

@@ -19,6 +19,7 @@ import (
 func runWorker(c config) (result report) {
 	start := time.Now()
 	result.Model = c.Model
+	result.AuthMode = authenticationMode(c)
 	result.Scenario = c.Scenario
 	result.CandidateVersion = c.CandidateVersion
 	result.InstallGuide = c.InstallGuide
@@ -31,12 +32,15 @@ func runWorker(c config) (result report) {
 	}
 	defer func() {
 		result.Duration = time.Since(start).Seconds()
-		result.Error = redact(result.Error, c.APIKey)
+		result.Error = redact(redact(result.Error, c.APIKey), c.OAuthToken)
 		for i := range result.Events {
-			result.Events[i].Text = redact(result.Events[i].Text, c.APIKey)
+			result.Events[i].Text = redact(redact(result.Events[i].Text, c.APIKey), c.OAuthToken)
 		}
 	}()
 	fail := func(err error) report { result.Error = err.Error(); return result }
+	if err := validateAuthentication(c); err != nil {
+		return fail(err)
+	}
 	userHome, err := os.UserHomeDir()
 	if err != nil {
 		return fail(err)
@@ -83,10 +87,14 @@ func runWorker(c config) (result report) {
 	server := httptest.NewServer(httpHandler(f.serve))
 	defer server.Close()
 	m := newMeter(c)
-	proxy := httptest.NewUnstartedServer(httpHandler(m.serve))
-	proxy.Config.BaseContext = func(net.Listener) context.Context { return ctx }
-	proxy.Start()
-	defer proxy.Close()
+	proxyURL := ""
+	if authenticationMode(c) == "api" {
+		proxy := httptest.NewUnstartedServer(httpHandler(m.serve))
+		proxy.Config.BaseContext = func(net.Listener) context.Context { return ctx }
+		proxy.Start()
+		defer proxy.Close()
+		proxyURL = proxy.URL
+	}
 	defer func() {
 		// Cancel stalled inference before waiting for the final accounting lock.
 		cancel()
@@ -98,15 +106,11 @@ func runWorker(c config) (result report) {
 		f.mu.Unlock()
 	}()
 	env := []string{"HOME=" + home, "PATH=" + filepath.Join(home, ".local/bin") + ":/usr/bin:/bin:/usr/sbin:/sbin", "DOOMER_API_URL=" + server.URL, "DOOMER_CONFIG_DIR=" + filepath.Join(home, ".config/doomer"), "NO_COLOR=1", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
-	configuration, err := configureAgent(c, home, proxy.URL)
+	configuration, err := configureAgent(c, home, proxyURL)
 	if err != nil {
 		return fail(err)
 	}
-	if c.Harness == "claude" {
-		env = append(env, "CLAUDECODE=1", "ANTHROPIC_AUTH_TOKEN=fixture-proxy-token", "ANTHROPIC_BASE_URL="+proxy.URL, "CLAUDE_CONFIG_DIR="+filepath.Join(home, ".claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "DISABLE_AUTOUPDATER=1", "DISABLE_UPDATES=1")
-	} else {
-		env = append(env, "CODEX_HOME="+filepath.Join(home, ".codex"), "OPENAI_API_KEY=fixture-proxy-token")
-	}
+	env = append(env, agentAuthenticationEnvironment(c, home, proxyURL)...)
 	version, err := exec.CommandContext(ctx, c.Codex, "--version").Output()
 	if err != nil {
 		return fail(err)
@@ -115,10 +119,26 @@ func runWorker(c config) (result report) {
 	if !validAgentVersion(c, result.CodexVersion) {
 		return fail(fmt.Errorf("unexpected agent version: %s", result.CodexVersion))
 	}
+	if authenticationMode(c) == "subscription" {
+		if err := verifyClaudeSubscription(ctx, c, repo, env); err != nil {
+			return fail(err)
+		}
+		result.Checks["subscription_authentication"] = true
+	}
+	if c.SkillsGuide != "" {
+		guide, err := writeCandidateSkills(c, root)
+		if err != nil {
+			return fail(err)
+		}
+		c.InstallGuide = guide
+		result.InstallGuide = guide
+		record("fixture", "Testing candidate skills installer, guide, and bootstrap")
+	}
 	if c.InstallGuide == "" {
 		c.InstallGuide = "https://doomer.ai/install.md"
 	}
 	prompt := "Read " + c.InstallGuide + " and follow the instructions to set up Doomer in this repository. Use a team/repository installation, local-only without a PR. This is an isolated test: DOOMER_API_URL points at its local account service; preserve that setting. Ask before granting updates or repository uploads. Keep messages concise."
+	prompt += " Use --agent " + agentName(c) + " when preparing Doomer and configuring this integration."
 	if personalScenario(c.Scenario) {
 		prompt = strings.Replace(prompt, "team/repository installation, local-only without a PR", "personal installation in my home directory, without a PR", 1)
 	}
@@ -130,29 +150,37 @@ func runWorker(c config) (result report) {
 	sawUpdateRequest := false
 	declined := false
 	candidateInstalled := false
-	if c.CandidateFile != "" {
+	approvalLinkRetries := 0
+	if c.CandidateFile != "" || c.SkillsGuide != "" {
 		result.Turns++
 		software, err := runAgent(ctx, c, repo, env, prompt+" Install the verified runtime and skill files only in this turn. Do not run doomer prepare or begin onboarding yet. Stop after the install command completes.", "", record)
 		if err != nil {
 			return fail(err)
 		}
 		session = software.Session
-		if err := installCandidate(c, home); err != nil {
-			return fail(err)
+		if c.CandidateFile != "" {
+			if err := installCandidate(c, home); err != nil {
+				return fail(err)
+			}
+			candidateInstalled = true
+			args := []string{"bootstrap", "upgrade", "--accept", "--repo", repo}
+			if personalScenario(c.Scenario) {
+				args = []string{"bootstrap", "upgrade", "--accept", "--personal"}
+			}
+			bootstrap := exec.CommandContext(ctx, c.CandidateFile, args...)
+			bootstrap.Dir, bootstrap.Env = repo, env
+			if output, err := bootstrap.CombinedOutput(); err != nil {
+				return fail(fmt.Errorf("candidate bootstrap assembly: %w: %s", err, output))
+			}
 		}
-		candidateInstalled = true
-		args := []string{"bootstrap", "upgrade", "--accept", "--repo", repo}
-		if personalScenario(c.Scenario) {
-			args = []string{"bootstrap", "upgrade", "--accept", "--personal"}
+		if c.SkillsBootstrap != "" {
+			if err := installCandidateSkills(c, home, repo); err != nil {
+				return fail(err)
+			}
 		}
-		bootstrap := exec.CommandContext(ctx, c.CandidateFile, args...)
-		bootstrap.Dir, bootstrap.Env = repo, env
-		if output, err := bootstrap.CombinedOutput(); err != nil {
-			return fail(fmt.Errorf("candidate bootstrap assembly: %w: %s", err, output))
-		}
-		prompt = "The installed build has been checked. Continue onboarding Doomer in this repository using its existing installed files and original scope. This test home persists for the scenario, so use ordinary setup without --portable. Ask for the required user approvals."
+		prompt = "The installed build has been checked. Continue onboarding Doomer in this repository using its existing installed files and original scope. This test home persists for the scenario, so use ordinary setup without --portable. Ask for the required user approvals. Use --agent " + agentName(c) + " when preparing Doomer and configuring this integration."
 	}
-	if c.Harness == "claude" && c.CandidateFile != "" {
+	if c.Harness == "claude" && (c.CandidateFile != "" || c.SkillsGuide != "") {
 		prompt = "In this Claude Code session, " + prompt
 	}
 	if c.Scenario == "portable-restart" {
@@ -235,7 +263,13 @@ func runWorker(c config) (result report) {
 		f.mu.Unlock()
 		if pending {
 			if !strings.Contains(text, approvalURL) {
-				return fail(fmt.Errorf("agent did not present the repository approval link"))
+				if approvalLinkRetries > 0 {
+					return fail(fmt.Errorf("agent did not present the exact repository approval link after correction"))
+				}
+				approvalLinkRetries++
+				record("Scripted user", "The approval link is missing or incorrect. Repository access has not been approved.")
+				prompt = "The approval link is missing or incorrect. I have not approved repository access. Copy the exact complete approval URL from Doomer's output, preserving every character and the fragment."
+				continue
 			}
 			f.mu.Lock()
 			if c.Scenario == "decline-uploads" {
@@ -256,7 +290,7 @@ func runWorker(c config) (result report) {
 					return fail(fmt.Errorf("missing durable setup task"))
 				}
 				session = ""
-				prompt = "The original Doomer installation was interrupted. I approved repository access. Finish the original installation, including " + agentName(c) + " hook configuration. Resume Doomer task " + tasks[0].Handle + " and verify setup without creating a replacement task."
+				prompt = "The original Doomer installation was interrupted. I approved repository access. This is the same persistent test home and repository; preserve DOOMER_API_URL and use ordinary setup without --portable. Run doomer prepare --task " + tasks[0].Handle + " to finish the original installation, including " + agentName(c) + " hook configuration. Verify setup without creating a replacement task."
 				result.Checks["fresh_agent_resumed_setup"] = true
 			}
 		} else if sawUpdateRequest && !approvedUpdate && (strings.Contains(strings.ToLower(text), "update") || strings.Contains(strings.ToLower(text), "permission")) {
