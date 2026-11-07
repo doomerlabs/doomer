@@ -233,7 +233,7 @@ retain their normal HTTPS and checksum verification. Skills' runner dependency i
 pinned to a reviewed CLI commit.
 
 Every scenario job retains JSON results and HTML conversations. A final job collects all recordings into one offline `index.html` gallery
-for 14 days, including on test failure. The job summary links to the artifact and
+for 14 days, including on test failure. The job summary links to the Depot job, identifies the recording artifact, and
 lists every scenario result, including missing or malformed reports as failures. Download the artifact and open `index.html` to browse
 recordings. Codex reserves at most $0.35 per scenario and $8.40 per suite. Claude
 uses subscription allowance, which is not reported as zero-dollar API usage.
