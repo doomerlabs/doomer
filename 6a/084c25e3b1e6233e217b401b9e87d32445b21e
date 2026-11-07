@@ -1,0 +1,46 @@
+README.md
+  s_cb34cfead93dba::t_abcf2872c6ea51 44-48
+internal/managed/releases.go
+  s_cb34cfead93dba::t_fd5fe03b0c6fa0 14,90-95
+cmd/managed_network.go
+  s_cb34cfead93dba::t_da9cfd27c42dd8 1-7,9-20,22-25,34-37,39,52-55,57-63
+  s_cb34cfead93dba::t_abcf2872c6ea51 8,21,26-33,38,56
+  s_cb34cfead93dba::t_a02aee03040519 40-51
+internal/managed/instructions.md
+  s_cb34cfead93dba::t_abcf2872c6ea51 56-63
+internal/managed/network_test.go
+  s_cb34cfead93dba::t_a02aee03040519 6,9,33-76
+pkg/adversarylabs/publishing.go
+  s_cb34cfead93dba::t_e7ce4f135e7760 60
+pkg/adversarylabs/response_error.go
+  s_cb34cfead93dba::t_da9cfd27c42dd8 16,107-111
+docs/managed-runtime.md
+  s_cb34cfead93dba::t_abcf2872c6ea51 158-170
+docs/network-access.md
+  s_cb34cfead93dba::t_abcf2872c6ea51 1-73
+internal/managed/network.go
+  s_cb34cfead93dba::t_da9cfd27c42dd8 6,8-9,12-21,27-33,39-40
+cmd/managed_network_test.go
+  s_cb34cfead93dba::t_a6e66b0e823a11 45,66
+  s_cb34cfead93dba::t_a02aee03040519 1-44,46-61,63-65,67-93
+  s_cb34cfead93dba::t_5637c5e2f8ff25 62
+cmd/managed.go
+  s_cb34cfead93dba::t_abcf2872c6ea51 335,642,736
+  s_cb34cfead93dba::t_da9cfd27c42dd8 32,321,358-361,641,643,806-809
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6a084c25e3b1e6233e217b401b9e87d32445b21e",
+  "prompts": {},
+  "sessions": {
+    "s_cb34cfead93dba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b7bf-9115-72c0-8361-b1ba1b9fb803",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
