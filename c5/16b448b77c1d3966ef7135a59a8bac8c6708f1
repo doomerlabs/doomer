@@ -1,0 +1,60 @@
+cmd/managed_codex_policy_test.go
+  s_d6b126657ca74b::t_86f22cd8d3934d 55-69
+cmd/permission.go
+  s_d6b126657ca74b::t_f34a4b3e6444f1 19-22,42-45,73,77,82
+cmd/permission_test.go
+  s_d6b126657ca74b::t_089f2a39672215 29-52,55-65
+  s_d6b126657ca74b::t_50d0d9d5799f4d 53-54
+internal/managed/bootstrap_update_test.go
+  s_d6b126657ca74b::t_4882cb7b5e82c9 59,63,71
+cmd/managed_install.go
+  s_d6b126657ca74b::t_6940586bd941f8 240,248
+internal/managed/bootstrap.md
+  s_d6b126657ca74b::t_ab34b4598f8055 3,10,17-24,52-54,61-64,66
+  s_d6b126657ca74b::t_b650bf1e192750 67
+cmd/managed_test.go
+  s_d6b126657ca74b::t_4b1599f00774fb 51,145,173
+cmd/managed_portable.go
+  s_d6b126657ca74b::t_c26fa18cc49eb5 113-115
+  s_d6b126657ca74b::t_f34a4b3e6444f1 171-176,178,185,218-219
+cmd/managed_consent_test.go
+  s_d6b126657ca74b::t_86f22cd8d3934d 69-123
+cmd/managed.go
+  s_d6b126657ca74b::t_59def8cf52e16d 545-546,553-554,558-559,567,570-572,651-656,669-678
+cmd/managed_codex_policy.go
+  s_d6b126657ca74b::t_8e85187fb19c42 56-57,59-60,62,69-70
+  s_d6b126657ca74b::t_cb00bca14bddab 58,61,72-73,81
+  s_d6b126657ca74b::t_ab34b4598f8055 50-55
+cmd/managed_consent.go
+  s_d6b126657ca74b::t_10b86954e02236 23-24,33-74,84-85,99-100
+  s_d6b126657ca74b::t_59def8cf52e16d 4
+internal/managed/bootstrap_update.go
+  s_d6b126657ca74b::t_ab34b4598f8055 14-15,26-28,103
+internal/managed/instructions.md
+  s_d6b126657ca74b::t_ab34b4598f8055 9-22,47,91-95,102-103,114-115,120,128,137,143,145-147,153-155,165-171,177-184
+  s_d6b126657ca74b::t_c26fa18cc49eb5 134-136
+  s_d6b126657ca74b::t_6ddcc6528312be 144
+cmd/managed_portable_test.go
+  s_d6b126657ca74b::t_4b1599f00774fb 56-59,61-116,118-179
+cmd/managed_approval.go
+  s_d6b126657ca74b::t_f4463d2e7c42c2 142-146
+  s_d6b126657ca74b::t_f34a4b3e6444f1 111,179-185
+internal/managed/bootstrap-2026.11.6.13.md
+  s_d6b126657ca74b::t_ab34b4598f8055 1-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c516b448b77c1d3966ef7135a59a8bac8c6708f1",
+  "prompts": {},
+  "sessions": {
+    "s_d6b126657ca74b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b836-efba-7c81-a589-7f492085b86e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
