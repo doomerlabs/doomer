@@ -53,118 +53,130 @@ func TestFailedPortableRequestLeavesExistingTaskResumable(t *testing.T) {
 }
 
 func TestPortableSetupAcrossHomesAndMountPaths(t *testing.T) {
-	isolate(t)
-	ctx := context.Background()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") == "Bearer other-account-token" {
-			w.Write([]byte(`{"id":"other-account"}`))
-			return
+	for _, integration := range []bool{false, true} {
+		name := "repository"
+		if integration {
+			name = "integration"
 		}
-		if r.Header.Get("Authorization") != "Bearer account-token" {
-			t.Error("unexpected credential")
-		}
-		w.Write([]byte(`{"id":"account"}`))
-	}))
-	defer server.Close()
-	repo := newWatchTestRepo(t)
-	reviewGit(t, repo, "remote", "add", "origin", "https://github.com/example/project.git")
-	id, err := watch.RepositoryIdentity(ctx, repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	store := adversarylabs.ConfigStore{Path: filepath.Join(t.TempDir(), "config.json")}
-	app := &application.App{Deps: application.Dependencies{Auth: store}}
-	auth := adversarylabs.Auth{Token: "account-token", ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339)}
-	if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), auth); err != nil {
-		t.Fatal(err)
-	}
-	s := managed.Store{Root: filepath.Join(t.TempDir(), "managed")}
-	handle, _ := managed.NewHandle()
-	policy := managed.Policy{Protocol: 2, Channel: "stable"}
-	task := managed.Task{Schema: 2, Handle: handle, Repo: repo, RepositoryID: id, API: server.URL,
-		Profile: "default", AccountID: "account", Portable: true, PortableApproved: true,
-		Bootstrap: managed.Bootstrap{Path: filepath.Join(repo, ".claude/skills/doomer-review/SKILL.md"), Policy: policy}}
-	if err := recordManagedConsent(s, task, "browser_repository_approval"); err != nil {
-		t.Fatal(err)
-	}
-	if err := watch.Write(filepath.Join(s.Root, "selections", watch.Key(task.Bootstrap.Path)+".json"), selectedRelease{Policy: policy, Authorized: true}); err != nil {
-		t.Fatal(err)
-	}
-	if err := watch.Write(filepath.Join(s.Root, "update-authorizations", updateAuthorizationKey(task)+".json"), updateAuthorization{Authorized: true, ApprovedAt: time.Now().UTC()}); err != nil {
-		t.Fatal(err)
-	}
-	if err := savePortable(ctx, app, s, task, true); err != nil {
-		t.Fatal(err)
-	}
-	path, _, err := portableLocation(ctx, task)
-	if err != nil {
-		t.Fatal(err)
-	}
-	original, err := readPortable(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+		t.Run(name, func(t *testing.T) {
+			isolate(t)
+			ctx := context.Background()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Authorization") == "Bearer other-account-token" {
+					w.Write([]byte(`{"id":"other-account"}`))
+					return
+				}
+				if r.Header.Get("Authorization") != "Bearer account-token" {
+					t.Error("unexpected credential")
+				}
+				w.Write([]byte(`{"id":"account"}`))
+			}))
+			defer server.Close()
+			repo := newWatchTestRepo(t)
+			reviewGit(t, repo, "remote", "add", "origin", "https://github.com/example/project.git")
+			id, err := watch.RepositoryIdentity(ctx, repo)
+			if err != nil {
+				t.Fatal(err)
+			}
+			store := adversarylabs.ConfigStore{Path: filepath.Join(t.TempDir(), "config.json")}
+			app := &application.App{Deps: application.Dependencies{Auth: store}}
+			auth := adversarylabs.Auth{Token: "account-token", ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339)}
+			if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), auth); err != nil {
+				t.Fatal(err)
+			}
+			s := managed.Store{Root: filepath.Join(t.TempDir(), "managed")}
+			handle, _ := managed.NewHandle()
+			policy := managed.Policy{Protocol: 2, Channel: "stable"}
+			task := managed.Task{Schema: 2, Handle: handle, Repo: repo, RepositoryID: id, API: server.URL,
+				Profile: "default", AccountID: "account", Agent: "codex", Portable: true, PortableApproved: true,
+				Bootstrap: managed.Bootstrap{Path: filepath.Join(repo, ".claude/skills/doomer-review/SKILL.md"), Policy: policy}}
+			if integration {
+				if err := recordIntegrationConsent(s, task, "browser_integration_approval", true); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := recordManagedConsent(s, task, "browser_repository_approval"); err != nil {
+				t.Fatal(err)
+			}
+			if err := watch.Write(filepath.Join(s.Root, "selections", watch.Key(task.Bootstrap.Path)+".json"), selectedRelease{Policy: policy, Authorized: true}); err != nil {
+				t.Fatal(err)
+			}
+			if err := watch.Write(filepath.Join(s.Root, "update-authorizations", updateAuthorizationKey(task)+".json"), updateAuthorization{Authorized: true, ApprovedAt: time.Now().UTC()}); err != nil {
+				t.Fatal(err)
+			}
+			if err := savePortable(ctx, app, s, task, true); err != nil {
+				t.Fatal(err)
+			}
+			path, _, err := portableLocation(ctx, task)
+			if err != nil {
+				t.Fatal(err)
+			}
+			original, err := readPortable(path)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	// The same shared Git storage is mounted at a new path with an empty home.
-	moved := filepath.Join(t.TempDir(), "mounted-checkout")
-	if err := os.Rename(repo, moved); err != nil {
-		t.Fatal(err)
-	}
-	task.Repo = moved
-	task.RepositoryID, err = watch.RepositoryIdentity(ctx, moved)
-	if err != nil {
-		t.Fatal(err)
-	}
-	task.Bootstrap.Path = filepath.Join(moved, ".claude/skills/doomer-review/SKILL.md")
-	task.AccountID, task.Portable, task.PortableApproved = "", false, false
-	fresh := adversarylabs.ConfigStore{Path: filepath.Join(t.TempDir(), "config.json")}
-	app.Deps.Auth = fresh
-	s = managed.Store{Root: filepath.Join(t.TempDir(), "managed")}
-	if err := restorePortable(ctx, app, s, &task); err != nil {
-		t.Fatal(err)
-	}
-	got, exists, err := fresh.StoredAuthE(adversarylabs.AuthKey(server.URL, "default"))
-	if err != nil || !exists || got != auth || !task.PortableApproved {
-		t.Fatal("account was not restored", exists, err)
-	}
-	consent, err := savedManagedConsentEvidence(s, task)
-	if err != nil || consent == nil || consent.Repository != task.RepositoryID || !consent.ApprovedAt.Equal(original.Grant.At) {
-		t.Fatal("original grant was not preserved across the mount change", consent, err)
-	}
-	var selection selectedRelease
-	if err := watch.Read(filepath.Join(s.Root, "selections", watch.Key(task.Bootstrap.Path)+".json"), &selection); err != nil || !selection.Authorized {
-		t.Fatal("update policy was not restored", err)
-	}
-	var updates updateAuthorization
-	if err := watch.Read(filepath.Join(s.Root, "update-authorizations", updateAuthorizationKey(task)+".json"), &updates); err != nil || !updates.Authorized || !updates.ApprovedAt.Equal(original.UpdateApprovedAt) {
-		t.Fatal("update approval evidence was not preserved", err)
-	}
-	if err := checkPortable(ctx, task); err != nil {
-		t.Fatal(err)
-	}
-	reviewGit(t, moved, "remote", "set-url", "origin", "https://github.com/example/different.git")
-	if err := restorePortable(ctx, app, s, &task); err == nil {
-		t.Fatal("restored access after the repository remote changed")
-	}
-	reviewGit(t, moved, "remote", "set-url", "origin", "https://github.com/example/project.git")
-	if err := fresh.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: "other-account-token"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := restorePortable(ctx, app, s, &task); err == nil {
-		t.Fatal("replaced a different signed-in account")
-	}
-	if err := fresh.SetAuth(adversarylabs.AuthKey(server.URL, "default"), auth); err != nil {
-		t.Fatal(err)
-	}
-	task.PortableApproved = true
-	if err := removePortable(ctx, task); err != nil {
-		t.Fatal(err)
-	}
-	if err := checkPortable(ctx, task); err == nil {
-		t.Fatal("revoked portable approval remained usable")
-	}
-	if err := savePortable(ctx, app, s, task, false); err == nil {
-		t.Fatal("a concurrent refresh recreated revoked portable access")
+			// The same shared Git storage is mounted at a new path with an empty home.
+			moved := filepath.Join(t.TempDir(), "mounted-checkout")
+			if err := os.Rename(repo, moved); err != nil {
+				t.Fatal(err)
+			}
+			task.Repo = moved
+			task.RepositoryID, err = watch.RepositoryIdentity(ctx, moved)
+			if err != nil {
+				t.Fatal(err)
+			}
+			task.Bootstrap.Path = filepath.Join(moved, ".claude/skills/doomer-review/SKILL.md")
+			task.AccountID, task.Portable, task.PortableApproved = "", false, false
+			fresh := adversarylabs.ConfigStore{Path: filepath.Join(t.TempDir(), "config.json")}
+			app.Deps.Auth = fresh
+			s = managed.Store{Root: filepath.Join(t.TempDir(), "managed")}
+			if err := restorePortable(ctx, app, s, &task); err != nil {
+				t.Fatal(err)
+			}
+			got, exists, err := fresh.StoredAuthE(adversarylabs.AuthKey(server.URL, "default"))
+			if err != nil || !exists || got != auth || !task.PortableApproved {
+				t.Fatal("account was not restored", exists, err)
+			}
+			consent, err := savedManagedConsentEvidence(s, task)
+			if err != nil || consent == nil || consent.AllRepositories != integration || (!integration && consent.Repository != task.RepositoryID) || !consent.ApprovedAt.Equal(original.Grant.At) {
+				t.Fatal("original grant was not preserved across the mount change", consent, err)
+			}
+			var selection selectedRelease
+			if err := watch.Read(filepath.Join(s.Root, "selections", watch.Key(task.Bootstrap.Path)+".json"), &selection); err != nil || !selection.Authorized {
+				t.Fatal("update policy was not restored", err)
+			}
+			var updates updateAuthorization
+			if err := watch.Read(filepath.Join(s.Root, "update-authorizations", updateAuthorizationKey(task)+".json"), &updates); err != nil || !updates.Authorized || !updates.ApprovedAt.Equal(original.UpdateApprovedAt) {
+				t.Fatal("update approval evidence was not preserved", err)
+			}
+			if err := checkPortable(ctx, task); err != nil {
+				t.Fatal(err)
+			}
+			reviewGit(t, moved, "remote", "set-url", "origin", "https://github.com/example/different.git")
+			if err := restorePortable(ctx, app, s, &task); err == nil {
+				t.Fatal("restored access after the repository remote changed")
+			}
+			reviewGit(t, moved, "remote", "set-url", "origin", "https://github.com/example/project.git")
+			if err := fresh.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: "other-account-token"}); err != nil {
+				t.Fatal(err)
+			}
+			if err := restorePortable(ctx, app, s, &task); err == nil {
+				t.Fatal("replaced a different signed-in account")
+			}
+			if err := fresh.SetAuth(adversarylabs.AuthKey(server.URL, "default"), auth); err != nil {
+				t.Fatal(err)
+			}
+			task.PortableApproved = true
+			if err := removePortable(ctx, task); err != nil {
+				t.Fatal(err)
+			}
+			if err := checkPortable(ctx, task); err == nil {
+				t.Fatal("revoked portable approval remained usable")
+			}
+			if err := savePortable(ctx, app, s, task, false); err == nil {
+				t.Fatal("a concurrent refresh recreated revoked portable access")
+			}
+		})
 	}
 }
 

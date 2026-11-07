@@ -110,6 +110,9 @@ func restorePortable(ctx context.Context, app *application.App, s managed.Store,
 	if record.Auth.Token == "" {
 		return fmt.Errorf("portable setup has no credential")
 	}
+	if record.Grant.AllRepositories && record.Grant.Agent != t.Agent {
+		return fmt.Errorf("portable integration approval belongs to another coding agent")
+	}
 	if record.Authorized && record.Policy == t.Bootstrap.Policy && record.UpdateApprovedAt.IsZero() {
 		return fmt.Errorf("portable setup is missing its update approval timestamp")
 	}
@@ -165,16 +168,21 @@ func restorePortable(ctx context.Context, app *application.App, s managed.Store,
 	}
 	t.AccountID = identityID
 	grant := record.Grant
-	grant.Repository = t.RepositoryID
+	grantPath := managedConsentPath(s, *t)
+	if grant.AllRepositories {
+		grantPath = integrationConsentPath(s, *t)
+	} else {
+		grant.Repository = t.RepositoryID
+	}
 	var previous repositoryConsent
-	if err := watch.Read(managedConsentPath(s, *t), &previous); err == nil && !previous.Approved {
+	if err := watch.Read(grantPath, &previous); err == nil && !previous.Approved {
 		t.Portable = true
 		t.PortableApproved = false
 		return nil
 	} else if err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	if err := watch.Write(managedConsentPath(s, *t), grant); err != nil {
+	if err := watch.Write(grantPath, grant); err != nil {
 		return err
 	}
 	if record.Authorized && record.Policy == t.Bootstrap.Policy {
@@ -207,8 +215,8 @@ func savePortable(ctx context.Context, app *application.App, s managed.Store, t 
 	if err != nil || account != t.AccountID {
 		return fmt.Errorf("verify account before saving portable setup")
 	}
-	var grant repositoryConsent
-	if err := watch.Read(managedConsentPath(s, t), &grant); err != nil {
+	grant, _, err := readManagedConsent(s, t)
+	if err != nil {
 		return err
 	}
 	if !grant.matches(t) {

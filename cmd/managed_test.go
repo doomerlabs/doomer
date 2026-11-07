@@ -48,7 +48,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 				t.Fatal(err)
 			}
-			if !input.Resumable || !input.PortableState || input.Callback != "" || len(input.Repositories) != 1 {
+			if !input.Resumable || !input.PortableState || !input.AllRepositories || input.Callback != "" || len(input.Repositories) != 1 {
 				t.Fatal(input)
 			}
 			approvalRequest = input.Request
@@ -142,7 +142,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if r := run("", "task", "login", handle); r.State != "approval_required" || !r.SoftwareReady || !strings.Contains(r.URL, "/cli/setup#request=") || r.CodexReviewPolicy != nil {
 		t.Fatal(r)
 	}
-	if r := run("", "task", "login", handle); r.State != "ready" || !r.Authenticated || !r.UploadApproved || r.Consent == nil || r.Consent.Source != "browser_repository_approval" || r.CodexReviewPolicy == nil {
+	if r := run("", "task", "login", handle); r.State != "ready" || !r.Authenticated || !r.UploadApproved || r.Consent == nil || r.Consent.Source != "browser_integration_approval" || !r.Consent.AllRepositories || r.CodexReviewPolicy == nil {
 		t.Fatal(r)
 	}
 	if data, err := os.ReadFile(config); err != nil || string(data) != originalConfig {
@@ -170,7 +170,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if r := run("", "task", "submit", handle); r.State != "review_pending" {
 		t.Fatal(r)
 	}
-	if r := run("", "task", "status", handle); r.State != "responses_required" || r.Consent == nil || strings.Join(r.Consent.Includes, ",") != "repository_snapshots,task_context,finding_responses" || r.Consent.Account != "user-account" || r.Consent.Repository != id || r.Consent.Service != server.URL || r.CodexReviewPolicy != nil {
+	if r := run("", "task", "status", handle); r.State != "responses_required" || r.Consent == nil || strings.Join(r.Consent.Includes, ",") != "repository_snapshots,task_context,finding_responses" || r.Consent.Account != "user-account" || r.Consent.Repository != "" || !r.Consent.AllRepositories || r.Consent.Service != server.URL || r.CodexReviewPolicy != nil {
 		t.Fatal(r)
 	}
 	input := `[{"lead_id":"` + lead + `","status":"dismissed","agrees":false,"reason":"Checked the implementation"}]`

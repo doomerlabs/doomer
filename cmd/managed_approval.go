@@ -108,7 +108,7 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		}
 		pending.Input = adversarylabs.ManagedSetupRequest{Resumable: true, AnonymousAllowed: true, PortableState: t.Portable, Request: base64.RawURLEncoding.EncodeToString(secret[32:64]),
 			CodeChallenge: base64.RawURLEncoding.EncodeToString(challenge[:]), Profile: t.Profile, API: t.API,
-			Repositories: repos, Agents: []string{t.Agent}}
+			AllRepositories: true, Repositories: repos, Agents: []string{t.Agent}}
 		// Persist the request identity before network I/O so a retry cannot create
 		// another approval when the first response was lost.
 		if err = watch.Write(file, pending); err != nil {
@@ -139,7 +139,11 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 	switch result.State {
 	case "pending":
 		r.State, r.URL = "approval_required", pending.URL
-		r.Action = "Show the complete approval URL to the user, including its #request fragment. This public repository approval link is intended to be shared with the user. Keep signed storage URLs private. Open the approval page to review this repository, its linked worktrees, and previous grants. Sign in there if needed. After choosing Allow, resume doomer prepare --task " + t.Handle
+		scope := "this repository and its linked worktrees"
+		if pending.Input.AllRepositories {
+			scope = "all current and future repositories used by this coding agent with the displayed Doomer account, service, and profile"
+		}
+		r.Action = "Show the complete approval URL to the user, including its #request fragment. Open the approval page to authorize repository snapshots, task context, and finding responses for " + scope + ". Reuse this approval across chats within that scope. Sign in there if needed. After choosing Allow, resume doomer prepare --task " + t.Handle
 	case "cancelled":
 		r.State, r.Action = "approval_declined", "Repository approval was cancelled. Doomer uploads remain disabled."
 	case "approved":
@@ -172,7 +176,13 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		}
 
 		t.AccountID = verifiedAccount
-		if err = recordManagedConsent(s, *t, "browser_repository_approval"); err != nil {
+		// Pending requests created by older CLIs retain their original scope.
+		if pending.Input.AllRepositories {
+			err = recordIntegrationConsent(s, *t, "browser_integration_approval", true)
+		} else {
+			err = recordManagedConsent(s, *t, "browser_repository_approval")
+		}
+		if err != nil {
 			return err
 		}
 		if t.Portable {

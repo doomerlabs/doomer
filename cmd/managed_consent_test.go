@@ -66,3 +66,58 @@ func TestManagedConsentEvidenceIncludesFindingResponsesAndSurvivesOldRecords(t *
 		t.Fatal(evidence, err)
 	}
 }
+
+func TestIntegrationConsentAcrossRepositoriesAndRevocation(t *testing.T) {
+	s := managed.Store{Root: t.TempDir()}
+	task := managed.Task{AccountID: "account", RepositoryID: "/first/.git", API: "https://doomer.ai/api", Profile: "default", Agent: "codex"}
+	if err := recordManagedConsent(s, task, "legacy"); err != nil {
+		t.Fatal(err)
+	}
+	other := task
+	other.RepositoryID = "/second/.git"
+	if evidence, err := savedManagedConsentEvidence(s, other); err != nil || evidence != nil {
+		t.Fatal("legacy grant expanded", evidence, err)
+	}
+	if err := recordIntegrationConsent(s, task, "explicit_integration_approval", true); err != nil {
+		t.Fatal(err)
+	}
+	for _, current := range []managed.Task{task, other} {
+		evidence, err := savedManagedConsentEvidence(s, current)
+		if err != nil || evidence == nil || !evidence.AllRepositories || evidence.Agent != "codex" || evidence.Repository != "" {
+			t.Fatal("missing integration evidence", evidence, err)
+		}
+	}
+	for _, field := range []string{"account", "service", "profile", "agent"} {
+		changed := other
+		switch field {
+		case "account":
+			changed.AccountID = "other"
+		case "service":
+			changed.API = "https://other.example/api"
+		case "profile":
+			changed.Profile = "other"
+		case "agent":
+			changed.Agent = "claude"
+		}
+		if evidence, err := savedManagedConsentEvidence(s, changed); err != nil || evidence != nil {
+			t.Fatal("integration crossed scope", field, evidence, err)
+		}
+	}
+	if err := recordIntegrationConsent(s, task, "integration_revoked", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, current := range []managed.Task{task, other} {
+		if evidence, err := savedManagedConsentEvidence(s, current); err != nil || evidence != nil {
+			t.Fatal("revocation revived a prior grant", evidence, err)
+		}
+	}
+	if err := recordManagedConsent(s, task, "explicit_cli_approval"); err != nil {
+		t.Fatal(err)
+	}
+	if evidence, err := savedManagedConsentEvidence(s, task); err != nil || evidence == nil || evidence.AllRepositories {
+		t.Fatal("later repository approval unavailable", evidence, err)
+	}
+	if evidence, err := savedManagedConsentEvidence(s, other); err != nil || evidence != nil {
+		t.Fatal("repository approval restored integration", evidence, err)
+	}
+}
