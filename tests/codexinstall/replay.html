@@ -1,17 +1,99 @@
-<!doctype html><meta charset="utf-8"><title>Codex install replay</title>
-<style>body{font:16px system-ui;background:#10141b;color:#e1e6ed;max-width:1050px;margin:40px auto;padding:0 20px}button,input{margin:8px;padding:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#1b222e;padding:18px;border-radius:8px}small{color:#aeb9c8}#kind{font-weight:bold}</style>
-<h1>Codex install replay</h1><p>Recorded headless interaction. User approvals are scripted test responses.</p>
-<p id="summary"></p><button id="play">Play</button><button id="prev">Previous</button><button id="next">Next</button><input id="step" type="range" min="0" value="0"><span id="position"></span>
-<p><span id="kind"></span> <small id="time"></small></p><pre id="text"></pre>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Doomer installation · Codex replay</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#e5e5e7;background:#141517;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0}button,input{font:inherit}button{cursor:pointer;color:inherit;border:1px solid #37383c;background:#242528;border-radius:8px;padding:8px 12px}button:hover{background:#303136}button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid #94b9e7;outline-offset:4px}button:disabled{opacity:.35;cursor:default}
+header{position:sticky;top:0;z-index:2;background:#141517ed;backdrop-filter:blur(14px);border-bottom:1px solid #292a2e}.heading{max-width:980px;margin:auto;padding:22px 28px;display:flex;align-items:center;gap:14px}.mark{display:grid;place-items:center;width:32px;height:32px;border:1px solid #46474c;border-radius:9px;font:17px ui-monospace,monospace;color:#b7b8be}h1{font-size:16px;line-height:1.4;margin:0;font-weight:550}.subtitle{color:#94959d;font-size:12px;margin-top:4px}.badge{margin-left:auto;border:1px solid #345441;border-radius:20px;padding:5px 10px;color:#a9cdb1;font-size:12px;white-space:nowrap}.badge.failed{color:#e1aca5;border-color:#754b45}
+main{max-width:860px;margin:0 auto;padding:38px 28px 150px}.intro{font-size:12px;color:#85868e;text-align:center;margin-bottom:42px}.message{margin:0 0 34px}.message.user{display:flex;flex-direction:column;align-items:flex-end}.message-label{font-size:11px;color:#898a92;margin:0 0 9px;display:flex;align-items:center;gap:8px}.bubble{max-width:85%;background:#28292d;border:1px solid #303136;padding:15px 20px;border-radius:20px;line-height:1.65;font-size:15px}.assistant .message-label{font-size:12px;color:#bcbcc2}.assistant .message-label:before{content:'✳';font-size:18px;color:#dadadd}.content{font-size:15px;line-height:1.8;overflow-wrap:anywhere}.content p{margin:0 0 15px;white-space:pre-wrap}.content p:last-child{margin-bottom:0}code{font:13px ui-monospace,SFMono-Regular,Consolas,monospace;background:#2a2b30;border-radius:5px;padding:2px 5px}a{color:#b5cceb;text-decoration:underline;text-underline-offset:3px}time{color:#777983;font-size:11px;font-variant-numeric:tabular-nums}.commands{margin:0 0 30px;color:#9b9ca4;font-size:13px}.commands summary{cursor:pointer;padding:10px 0;user-select:none}.commands summary:hover{color:#d5d6dd}.command{border:1px solid #303136;border-radius:10px;background:#1b1c1f;margin:8px 0 12px;overflow:hidden}.command-title{font-size:11px;padding:10px 14px;border-bottom:1px solid #303136;display:flex;justify-content:space-between;color:#a7a8af}pre{margin:0;padding:15px;font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:#c4c5cc;max-height:360px;overflow:auto}.error{border-left:2px solid #b3766e;padding-left:16px;color:#deb8b1}.end{display:flex;justify-content:center;align-items:center;gap:8px;color:#8b9e8f;font-size:12px;margin-top:40px}.end:before{content:'✓'}
+footer{position:fixed;bottom:0;left:0;right:0;z-index:3;background:linear-gradient(transparent,#141517 22%);padding:24px 20px 18px}.player{max-width:840px;margin:auto;border:1px solid #38393e;background:#202124;border-radius:16px;padding:12px 16px;box-shadow:0 8px 30px #0003}.player-top{display:flex;gap:8px;align-items:center}.player-top button:first-child{min-width:86px}.position{margin-left:auto;color:#aaabb4;font-size:12px;font-variant-numeric:tabular-nums}.scrubber{display:flex;align-items:center;gap:12px;margin-top:8px}input[type=range]{width:100%;accent-color:#b3b5c0;height:16px;cursor:pointer}.clock{color:#92949d;font-size:11px;min-width:47px;text-align:right}.note{text-align:center;color:#777983;font-size:10px;margin-top:9px}
+@media(max-width:600px){.heading{padding:17px 18px}main{padding:26px 18px 160px}.bubble{max-width:94%;font-size:14px}.content{font-size:14px}.intro{line-height:1.6;margin-bottom:30px}.subtitle{font-size:11px}.position{font-size:11px}.player{padding:10px}.player-top button{padding:8px 10px}footer{padding:24px 10px 12px}}
+</style>
+</head>
+<body>
+<header><div class="heading"><div class="mark" aria-hidden="true">›_</div><div><h1>Doomer installation</h1><div class="subtitle">Codex · recorded test conversation</div></div><span class="badge" id="result"></span></div></header>
+<main><div class="intro" id="summary"></div><div id="conversation" aria-label="Recorded conversation"></div></main>
+<footer><div class="player"><div class="player-top"><button id="play">Replay</button><button id="prev" aria-label="Previous event">←</button><button id="next" aria-label="Next event">→</button><button id="all">Show all</button><span class="position" id="position"></span></div><div class="scrubber"><input id="step" aria-label="Replay position" type="range" min="0" value="0"><span id="time" class="clock"></span></div></div><div class="note">Headless recording · user replies are scripted · long pauses shortened during playback</div></footer>
 <script>
 const report = {{.}};
-const events=report.events||[];let index=0,timer=null;
-const el=id=>document.getElementById(id);
-el('summary').textContent=`${report.passed?'PASS':'FAIL'} · ${report.model} · $${report.usage.estimated_cost_usd.toFixed(6)} estimated · ${report.duration_seconds.toFixed(1)} seconds`;
-el('step').max=Math.max(0,events.length-1);
-function show(n){index=Math.max(0,Math.min(events.length-1,n));let event=events[index];el('step').value=index;el('position').textContent=`${index+1} / ${events.length}`;el('kind').textContent=event?.kind||'No recorded events';el('time').textContent=event?`+${event.seconds.toFixed(1)}s`:'';el('text').textContent=event?.text||report.error||'';}
-function stop(){clearTimeout(timer);timer=null;el('play').textContent='Play';}
-function tick(){if(index>=events.length-1){stop();return;}const delay=Math.max(100,Math.min(2500,((events[index+1].seconds-events[index].seconds)*1000)));timer=setTimeout(()=>{show(index+1);tick()},delay)}
-el('play').onclick=()=>{if(timer){stop()}else{if(index>=events.length-1)show(0);el('play').textContent='Pause';tick()}};
-el('prev').onclick=()=>{stop();show(index-1)};el('next').onclick=()=>{stop();show(index+1)};el('step').oninput=e=>{stop();show(Number(e.target.value))};show(0);
+const events = report.events || [];
+const el = id => document.getElementById(id);
+let index = Math.max(0, events.length - 1), timer = null, playing = false;
+el('result').textContent = report.passed ? 'Passed' : 'Failed';
+el('result').classList.toggle('failed', !report.passed);
+el('summary').textContent = `${report.model} · ${report.duration_seconds.toFixed(1)}s · ${(report.usage.estimated_cost_usd * 100).toFixed(2)}¢ estimated API cost`;
+el('step').max = Math.max(0, events.length - 1);
+function node(tag, className, text) {
+  const result = document.createElement(tag);
+  if (className) result.className = className;
+  if (text !== undefined) result.textContent = text;
+  return result;
+}
+function inline(parent, text) {
+  const pattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*/g;
+  let offset = 0;
+  for (const match of text.matchAll(pattern)) {
+    parent.append(document.createTextNode(text.slice(offset, match.index)));
+    if (match[1]) {
+      const link = node('a', '', match[1]); link.href = match[2]; link.target = '_blank'; link.rel = 'noopener noreferrer'; parent.append(link);
+    } else parent.append(node(match[3] ? 'code' : 'strong', '', match[3] || match[4]));
+    offset = match.index + match[0].length;
+  }
+  parent.append(document.createTextNode(text.slice(offset)));
+}
+function message(event) {
+  const user = event.kind === 'Scripted user';
+  const wrapper = node('section', 'message ' + (user ? 'user' : 'assistant'));
+  const label = node('div', 'message-label', user ? 'You · scripted reply' : event.kind === 'Codex error' ? 'Codex · error' : 'Codex');
+  label.append(node('time', '', `+${event.seconds.toFixed(1)}s`)); wrapper.append(label);
+  const body = node('div', (user ? 'bubble content' : 'content') + (event.kind === 'Codex error' ? ' error' : ''));
+  for (const paragraph of event.text.split(/\n\n+/)) {const p = node('p'); inline(p, paragraph); body.append(p);}
+  wrapper.append(body); return wrapper;
+}
+function commands(group) {
+  const details = node('details', 'commands');
+  details.append(node('summary', '', `›_  Ran ${group.length === 1 ? 'a command' : group.length + ' commands'}`));
+  for (const event of group) {
+    const command = node('div', 'command');
+    const title = node('div', 'command-title', 'Command and output'); title.append(node('time', '', `+${event.seconds.toFixed(1)}s`));
+    command.append(title, node('pre', '', event.text)); details.append(command);
+  }
+  return details;
+}
+function show(n, scroll = false) {
+  const oldOpen = [...el('conversation').querySelectorAll('details')].map(detail => detail.open);
+  index = Math.max(0, Math.min(events.length - 1, n));
+  const fragment = document.createDocumentFragment(); let group = [], groupIndex = 0;
+  const flush = () => {if (group.length) {const item = commands(group); item.open = !!oldOpen[groupIndex++]; fragment.append(item); group = [];}};
+  for (const event of events.slice(0, index + 1)) {
+    if (event.kind === 'Command') group.push(event);
+    else {flush(); fragment.append(message(event));}
+  }
+  flush();
+  if (!events.length) fragment.append(node('p', 'content', report.error || 'No events were recorded.'));
+  if (events.length && index === events.length - 1) fragment.append(node('div', 'end', report.passed ? 'Installation verified' : 'Recording ended · test failed'));
+  el('conversation').replaceChildren(fragment);
+  el('step').value = index;
+  el('position').textContent = `${events.length ? index + 1 : 0} / ${events.length}`;
+  el('time').textContent = `+${(events[index]?.seconds || 0).toFixed(1)}s`;
+  el('prev').disabled = index === 0; el('next').disabled = index >= events.length - 1; el('play').disabled = !events.length;
+  if (scroll) window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});
+}
+function stop() {clearTimeout(timer); timer = null; playing = false; el('play').textContent = 'Replay';}
+function tick() {
+  if (index >= events.length - 1) {stop(); return;}
+  const delay = Math.max(100, Math.min(2500, (events[index + 1].seconds - events[index].seconds) * 1000));
+  timer = setTimeout(() => {show(index + 1, true); tick();}, delay);
+}
+el('play').onclick = () => {if (playing) {stop(); return;} playing = true; el('play').textContent = 'Pause'; if (index >= events.length - 1) show(0, true); tick();};
+el('prev').onclick = () => {stop(); show(index - 1);};
+el('next').onclick = () => {stop(); show(index + 1, true);};
+el('all').onclick = () => {stop(); show(events.length - 1);};
+el('step').oninput = event => {stop(); show(Number(event.target.value));};
+show(index);
 </script>
+</body>
+</html>

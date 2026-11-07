@@ -63,8 +63,9 @@ even on failure or timeout. The VM name is printed immediately and included in
 the report. A process killed with SIGKILL or a lost SSH connection can prevent
 cleanup; in that case use `ssh exe.dev rm VM_NAME`. A failed cleanup makes the
 run fail. Local temporary key copies and remote test homes are removed.
-Each JSON report has an adjacent `.html` replay with a timeline, Play/Pause,
-Previous/Next and a step slider. It records actual headless agent messages,
+Each JSON report has an adjacent `.html` replay styled as a chat conversation,
+with collapsible command groups, Play/Pause, Previous/Next and a step slider.
+The full conversation is visible initially. It records actual headless agent messages,
 completed commands and results, and explicitly labels scripted user replies.
 It is not a screen recording of the interactive Codex TUI. Playback compresses
 long pauses to 2.5 seconds while retaining original timestamps. There are no
@@ -77,3 +78,9 @@ Codex distribution source and API contracts:
 - https://github.com/openai/codex/releases/tag/rust-v0.167.0
 - https://developers.openai.com/api/docs/guides/token-counting
 - https://exe.dev/docs/api
+
+Restyle an existing recording without an API call or VM:
+
+```sh
+go run ./tests/codexinstall --render-report /tmp/codex-install-report.json
+```

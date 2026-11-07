@@ -40,12 +40,31 @@ type report struct {
 }
 
 func main() {
+	render := flag.String("render-report", "", "render an existing JSON report to PATH.html without running a test")
 	worker := flag.Bool("worker", false, "internal VM worker mode")
 	model := flag.String("model", "gpt-6.1-terra", "model under test")
 	version := flag.String("codex-version", "0.167.0", "exact supported Codex release version")
 	budget := flag.Float64("budget", .20, "maximum reserved API spend for this run, USD")
 	output := flag.String("output", "codex-install-report.json", "sanitized JSON report")
 	flag.Parse()
+	if *render != "" {
+		data, err := os.ReadFile(*render)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		var r report
+		if err := json.Unmarshal(data, &r); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if err := writeReplay(*render+".html", r); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(*render + ".html")
+		return
+	}
 	if *worker {
 		var c config
 		if err := json.NewDecoder(os.Stdin).Decode(&c); err != nil {
