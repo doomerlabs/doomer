@@ -1,0 +1,18 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 81
+cmd/managed_prompt_test.go
+  h_aa44c3b5b60dec 329-330,334-344
+tests/codexinstall/claude_test.go
+  h_aa44c3b5b60dec 140-191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a54f782f930b1c051ea1296a5a9692892731ff3e",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
