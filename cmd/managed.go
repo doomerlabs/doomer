@@ -107,7 +107,7 @@ func resultFor(task managed.Task) managedResult {
 }
 func managedTaskInstructions(task managed.Task) string {
 	if task.Purpose == "setup" {
-		return "This is a setup-only task. Finish configuring the active agent integration and verify readiness. Do not submit repository content or run a code review for this task. The coding review procedure below applies only to coding tasks.\n\n" + managed.Instructions
+		return "This is a setup-only task. Configure hooks for the active agent with `doomer hooks --agent " + task.Agent + "` and verify readiness. If a hook asks for a session binding, resume this same setup using `doomer prepare --task " + task.Handle + " --session ACTUAL_SESSION_ID` from the hook. Preserve native hook trust controls. Do not submit repository content or run a code review for this task. The coding review procedure below applies only to coding tasks.\n\n" + managed.Instructions
 	}
 	return managed.Instructions
 }

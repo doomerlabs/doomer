@@ -267,6 +267,8 @@ func runWorker(c config) (result report) {
 				declined = true
 				prompt = "Not now. Do not enable updates or repository uploads. Finish with setup incomplete."
 			}
+		} else if checks["authenticated"] && !checks["hooks_configured"] && strings.Contains(strings.ToLower(text), "hook") {
+			prompt = "I approve configuring the active agent's Doomer hooks as part of this installation. Preserve native trust controls. Complete setup and verify it."
 		} else {
 			return fail(fmt.Errorf("agent stopped before installation readiness without an expected approval request (checks: %v)", checks))
 		}

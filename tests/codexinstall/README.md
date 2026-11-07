@@ -168,3 +168,16 @@ Sources
 - https://code.claude.com/docs/en/cli-reference
 - https://code.claude.com/docs/en/hooks
 - https://platform.claude.com/docs/en/models/haiku-5-5/overview
+
+Run all scenarios sequentially with a per-case cap and an aggregate cap:
+
+```sh
+doppler run --project doomer --config test -- \
+  go run ./tests/codexinstall --harness claude --scenario all \
+  --budget 0.20 --suite-budget 5 --output /tmp/claude-suite.json
+```
+
+Use a new output prefix for each suite so earlier recordings remain available.
+The suite writes its result index after every case, continues past assertion
+failures, and stops before starting a case whose reservation would exceed the
+aggregate budget.

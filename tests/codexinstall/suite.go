@@ -9,6 +9,13 @@ import (
 	"strings"
 )
 
+type suiteCase struct {
+	Scenario string  `json:"scenario"`
+	Passed   bool    `json:"passed"`
+	Report   string  `json:"report"`
+	Charged  float64 `json:"budget_charged_usd"`
+}
+
 func runSuite(output string, perRun, totalLimit float64) error {
 	if perRun <= 0 || perRun > 1 || totalLimit <= 0 {
 		return fmt.Errorf("invalid suite budget")
@@ -17,13 +24,16 @@ func runSuite(output string, perRun, totalLimit float64) error {
 	if err != nil {
 		return err
 	}
-	spent := 0.0
-	var results []struct {
-		Scenario string  `json:"scenario"`
-		Passed   bool    `json:"passed"`
-		Report   string  `json:"report"`
-		Charged  float64 `json:"budget_charged_usd"`
+	for _, scenario := range scenarioNames {
+		path := strings.TrimSuffix(output, filepath.Ext(output)) + "-" + scenario + ".json"
+		if _, err := os.Stat(path); err == nil {
+			return fmt.Errorf("existing report %s; choose a new output prefix", path)
+		} else if !os.IsNotExist(err) {
+			return err
+		}
 	}
+	spent := 0.0
+	var results []suiteCase
 	failed := false
 	for _, scenario := range scenarioNames {
 		if spent+perRun > totalLimit {
@@ -47,12 +57,7 @@ func runSuite(output string, perRun, totalLimit float64) error {
 			failed = true
 		}
 		spent += charged
-		results = append(results, struct {
-			Scenario string  `json:"scenario"`
-			Passed   bool    `json:"passed"`
-			Report   string  `json:"report"`
-			Charged  float64 `json:"budget_charged_usd"`
-		}{scenario, passed, path, charged})
+		results = append(results, suiteCase{scenario, passed, path, charged})
 		summary := struct {
 			Charged float64 `json:"budget_charged_usd"`
 			Results any     `json:"results"`

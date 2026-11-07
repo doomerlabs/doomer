@@ -244,3 +244,22 @@ func TestPendingSetupRequiresAnUnambiguousScope(t *testing.T) {
 		t.Fatal("ambiguous setup selected", got, err)
 	}
 }
+
+func TestUnpreparedStopDoesNotRestartSetup(t *testing.T) {
+	isolate(t)
+	repo := newWatchTestRepo(t)
+	raw, _ := json.Marshal(watch.HookInput{Event: "Stop", Session: "new-session", CWD: repo})
+	output, err := execute(t, string(raw), "agent-hook", "--agent", "claude", "--managed-task-adapter")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var feedback map[string]any
+	if err := json.Unmarshal([]byte(output), &feedback); err != nil || len(feedback) != 0 {
+		t.Fatal(output, err)
+	}
+	raw, _ = json.Marshal(watch.HookInput{Event: "PreToolUse", Session: "new-session", CWD: repo})
+	output, err = execute(t, string(raw), "agent-hook", "--agent", "claude", "--managed-task-adapter")
+	if err != nil || !strings.Contains(output, "prepare") {
+		t.Fatal(output, err)
+	}
+}
