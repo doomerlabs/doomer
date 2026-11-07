@@ -154,8 +154,7 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	if err := engine.Status(context.Background(), &resumed, "token"); err == nil || len(client.ids) != attempts {
 		t.Fatal("status retried a recorded failed submission")
 	}
-	resumed.LastError = ""
-	if err = engine.Submit(context.Background(), &resumed, "token"); err != nil {
+	if err = engine.Retry(context.Background(), &resumed, "token"); err != nil {
 		t.Fatal(err)
 	}
 	if len(client.ids) != 2 || client.ids[0] != client.ids[1] {
