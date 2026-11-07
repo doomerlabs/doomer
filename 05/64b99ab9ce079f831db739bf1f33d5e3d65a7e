@@ -1,0 +1,55 @@
+cmd/managed_portable_test.go
+  s_f23d7bc729b5d1::t_7c3df9ab7dd098 4,20-53
+  s_f23d7bc729b5d1::t_b4c2cce210b75f 54
+tests/codexinstall/worker.go
+  s_f23d7bc729b5d1::t_04aad3f9946129 23,110-113
+  s_f23d7bc729b5d1::t_2c3c6faab26058 74-81,135,202
+  s_f23d7bc729b5d1::t_9c181520c3386e 122-133,138
+  s_f23d7bc729b5d1::t_b261cceed8b3c6 136-137
+  s_f23d7bc729b5d1::t_b5b8e46777d8c9 134
+tests/codexinstall/upgrade.go
+  s_f23d7bc729b5d1::t_dc7ea8fac04e1c 44-46,104-117
+  s_f23d7bc729b5d1::t_01ca72ee435033 103
+tests/codexinstall/fixture.go
+  s_f23d7bc729b5d1::t_2c3c6faab26058 18-19,73
+  s_f23d7bc729b5d1::t_219b22d6a70050 17,134-136,154-161
+tests/codexinstall/portable.go
+  s_f23d7bc729b5d1::t_5d4af8380f34cd 1-44
+internal/managed/instructions.md
+  s_f23d7bc729b5d1::t_a4efeb78aadca2 33-36
+cmd/managed.go
+  s_f23d7bc729b5d1::t_7c3df9ab7dd098 190-194,225-227
+tests/codexinstall/scenarios.go
+  s_f23d7bc729b5d1::t_2c3c6faab26058 17,29-35,167-168
+  s_f23d7bc729b5d1::t_01ca72ee435033 169-170,177,185,330
+  s_f23d7bc729b5d1::t_fe5e1ae0881c25 138-142,149-152
+  s_f23d7bc729b5d1::t_b261cceed8b3c6 88
+  s_f23d7bc729b5d1::t_d4ea8c1129623a 36-37
+tests/codexinstall/main.go
+  s_f23d7bc729b5d1::t_04aad3f9946129 15,34,55,109
+  s_f23d7bc729b5d1::t_5a710625c2a8e2 134-138
+tests/codexinstall/recovery.go
+  s_f23d7bc729b5d1::t_dc7ea8fac04e1c 13-15,21-23,25-27,30-32,34-36
+  s_f23d7bc729b5d1::t_19de8ded6d2162 6-7,11-12,16-20,24,28-29,33,37-39
+  s_f23d7bc729b5d1::t_af776cff217442 40
+tests/codexinstall/remote.go
+  s_f23d7bc729b5d1::t_ec9994c8a15288 123,127,153
+tests/codexinstall/tui.go
+  s_f23d7bc729b5d1::t_fbf1eabbe379a7 4,6,8,12,57-58,60,101-102,120-121,136-170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0564b99ab9ce079f831db739bf1f33d5e3d65a7e",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
