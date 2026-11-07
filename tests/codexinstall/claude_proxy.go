@@ -51,8 +51,6 @@ func (m *meter) serveClaude(w http.ResponseWriter, r *http.Request) {
 	body["service_tier"] = "standard_only"
 	delete(body, "speed")
 	delete(body, "inference_geo")
-	m.mu.Lock()
-	defer m.mu.Unlock()
 	countBody := map[string]any{}
 	for _, field := range []string{"model", "messages", "system", "tools", "tool_choice", "thinking"} {
 		if value, ok := body[field]; ok {
@@ -77,21 +75,30 @@ func (m *meter) serveClaude(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reserve := (float64(count.Input+1024)*.20 + 4096*.5) / 1e6
+	m.mu.Lock()
 	if m.usage.Reserved+reserve > m.limit {
+		m.mu.Unlock()
 		http.Error(w, "test API budget exhausted", 429)
 		return
 	}
 	m.usage.Reserved += reserve
 	m.usage.Requests++
-	response, err := m.claudeRequest(r.Context(), "/v1/messages", body, r)
+	m.mu.Unlock()
+	relayCtx, relayCancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer relayCancel()
+	response, err := m.claudeRequest(relayCtx, "/v1/messages", body, r)
 	if err != nil {
+		m.mu.Lock()
 		m.usage.Unknown++
+		m.mu.Unlock()
 		http.Error(w, "upstream request failed", 502)
 		return
 	}
 	defer response.Body.Close()
 	if response.StatusCode != 200 {
+		m.mu.Lock()
 		m.usage.Unknown++
+		m.mu.Unlock()
 		http.Error(w, fmt.Sprintf("Anthropic returned HTTP %d", response.StatusCode), response.StatusCode)
 		return
 	}
@@ -128,12 +135,14 @@ func (m *meter) serveClaude(w http.ResponseWriter, r *http.Request) {
 				if event.Type == "message_stop" && !recorded && observed.Input+observed.Cached+observed.Created > 0 {
 					input := observed.Input + observed.Cached + observed.Created
 					cost := claudeTokenCost(input, observed.Cached, observed.Created, observed.Output) + float64(observed.Creation.Hour)*.075/1e6
+					m.mu.Lock()
 					m.usage.Input += input
 					m.usage.Cached += observed.Cached
 					m.usage.CacheCreated += observed.Created
 					m.usage.Output += observed.Output
 					m.usage.Cost += cost
 					m.usage.Reserved += cost - reserve
+					m.mu.Unlock()
 					recorded = true
 				}
 			}
@@ -146,6 +155,8 @@ func (m *meter) serveClaude(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !recorded {
+		m.mu.Lock()
 		m.usage.Unknown++
+		m.mu.Unlock()
 	}
 }

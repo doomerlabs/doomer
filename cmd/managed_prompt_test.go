@@ -221,6 +221,27 @@ func TestPrepareBindsSessionWhenResumingSetup(t *testing.T) {
 	if current.Capabilities.SessionID != "replacement-session" {
 		t.Fatal(current.Capabilities)
 	}
+	newKey := watch.Key(task.API + "\x00" + task.Profile + "\x00" + task.Agent + "\x00" + task.Repo + "\x00replacement-session")
+	newPath := filepath.Join(store.Root, "sessions", newKey+".json")
+	if err := watch.Read(newPath, &bound); err != nil || bound != handle {
+		t.Fatal("replacement binding missing", bound, err)
+	}
+	// Simulate a crash after saving the new session but before repairing its index.
+	if err := os.Remove(newPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.Write(filepath.Join(store.Root, "sessions", key+".json"), handle); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := execute(t, "", "prepare", "--task", handle, "--session", "replacement-session"); err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.Read(newPath, &bound); err != nil || bound != handle {
+		t.Fatal(bound, err)
+	}
+	if _, err := os.Stat(filepath.Join(store.Root, "sessions", key+".json")); !os.IsNotExist(err) {
+		t.Fatal("stale binding survived repair", err)
+	}
 
 }
 

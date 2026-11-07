@@ -123,27 +123,32 @@ func bindManagedSession(s managed.Store, t managed.Task) error {
 	return watch.Write(path, t.Handle)
 }
 
-func clearManagedSession(s managed.Store, task managed.Task, session string) error {
-	if session == "" {
-		return nil
-	}
-	key := watch.Key(task.API + "\x00" + task.Profile + "\x00" + task.Agent + "\x00" + task.Repo + "\x00" + session)
-	unlock, err := watchLock(s.Root, "session-"+key)
+func clearStaleManagedSessions(s managed.Store, task managed.Task) error {
+	current := watch.Key(task.API + "\x00" + task.Profile + "\x00" + task.Agent + "\x00" + task.Repo + "\x00" + task.Capabilities.SessionID)
+	files, err := filepath.Glob(filepath.Join(s.Root, "sessions", "*.json"))
 	if err != nil {
 		return err
 	}
-	defer unlock()
-	path := filepath.Join(s.Root, "sessions", key+".json")
-	var handle string
-	if err := watch.Read(path, &handle); os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
-		return err
+	for _, path := range files {
+		key := strings.TrimSuffix(filepath.Base(path), ".json")
+		if key == current {
+			continue
+		}
+		unlock, err := watchLock(s.Root, "session-"+key)
+		if err != nil {
+			return err
+		}
+		var handle string
+		err = watch.Read(path, &handle)
+		if err == nil && handle == task.Handle {
+			err = os.Remove(path)
+		}
+		unlock()
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
 	}
-	if handle != task.Handle {
-		return nil
-	}
-	return os.Remove(path)
+	return nil
 }
 
 func newManagedHooksCommand(app *application.App, api, profile *string) *cobra.Command {

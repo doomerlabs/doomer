@@ -120,6 +120,7 @@ func (e Engine) send(ctx context.Context, task *Task, token string) error {
 		return fmt.Errorf("server did not confirm the enabled review stages")
 	}
 	task.Review = &result
+	task.LastError = ""
 	task.Stage = "review_pending"
 	return e.Store.Save(task)
 }
@@ -301,6 +302,9 @@ func (e Engine) Finish(ctx context.Context, task *Task, token string) error {
 // Retry resumes an interrupted submission with its existing request identity.
 // A new revision is created only after a previous review has failed.
 func (e Engine) Retry(ctx context.Context, task *Task, token string) error {
+	if task.Stage == "complete" {
+		return fmt.Errorf("task is already complete")
+	}
 	if task.Stage == "submitting" || task.Review == nil {
 		return e.Submit(ctx, task, token)
 	}

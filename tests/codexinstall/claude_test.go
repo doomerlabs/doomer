@@ -91,3 +91,31 @@ func TestClaudeMeterRetainsReservationForIncompleteStream(t *testing.T) {
 		t.Fatal(m.usage)
 	}
 }
+
+func TestClaudeMeterDoesNotHoldBudgetLockDuringInference(t *testing.T) {
+	m := newMeter(config{Harness: "claude", Model: "claude-haiku-5-5", Budget: .20})
+	started, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		body := `{"input_tokens":1000}`
+		if r.URL.Path == "/v1/messages" {
+			close(started)
+			<-release
+			body = "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1000}}}\n\ndata: {\"type\":\"message_stop\"}\n\n"
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	go func() {
+		defer close(done)
+		m.serve(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-haiku-5-5"}`)))
+	}()
+	<-started
+	available := m.mu.TryLock()
+	if available {
+		m.mu.Unlock()
+	}
+	close(release)
+	<-done
+	if !available {
+		t.Fatal("inference blocked independent budget accounting")
+	}
+}

@@ -152,7 +152,7 @@ func runWorker(c config) (result report) {
 		}
 		prompt = "The installed build has been checked. Continue onboarding Doomer in this repository using its existing installed files and original scope. This test home persists for the scenario, so use ordinary setup without --portable. Ask for the required user approvals."
 	}
-	if c.Harness == "claude" {
+	if c.Harness == "claude" && c.CandidateFile != "" {
 		prompt = "In this Claude Code session, " + prompt
 	}
 	if c.Scenario == "portable-restart" {

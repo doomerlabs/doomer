@@ -256,20 +256,23 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 		if task.API != *api || task.Profile != *profile {
 			return fmt.Errorf("resume with the original service and profile")
 		}
-		if c.Flags().Changed("session") && session != task.Capabilities.SessionID {
+		if c.Flags().Changed("session") {
 			if len(session) == 0 || len(session) > 512 {
 				return fmt.Errorf("provide a session ID between 1 and 512 bytes")
 			}
-			oldSession := task.Capabilities.SessionID
-			task.Capabilities.SessionID = session
-			task.Capabilities.Hooks = true
+			if session != task.Capabilities.SessionID {
+				task.Capabilities.SessionID = session
+				task.Capabilities.Hooks = true
+				if err := s.Save(&task); err != nil {
+					return err
+				}
+			}
+			// Reconcile even after a previous call saved the task but failed while
+			// updating its derived session index.
 			if err := bindManagedSession(s, task); err != nil {
 				return err
 			}
-			if err := s.Save(&task); err != nil {
-				return err
-			}
-			if err := clearManagedSession(s, task, oldSession); err != nil {
+			if err := clearStaleManagedSessions(s, task); err != nil {
 				return err
 			}
 		}

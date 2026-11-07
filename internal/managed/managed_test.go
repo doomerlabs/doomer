@@ -157,6 +157,9 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	if err = engine.Retry(context.Background(), &resumed, "token"); err != nil {
 		t.Fatal(err)
 	}
+	if resumed.LastError != "" {
+		t.Fatal("successful retry retained failure", resumed.LastError)
+	}
 	if len(client.ids) != 2 || client.ids[0] != client.ids[1] {
 		t.Fatal("submission id changed on resume", client.ids)
 	}
