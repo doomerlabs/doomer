@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/doomerlabs/doomer/internal/managed"
 	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
@@ -22,6 +24,128 @@ import (
 type permissionFailingWriter struct {
 	bytes.Buffer
 	err error
+}
+
+func TestHasPermissionManagedRequiresVerifiedAccount(t *testing.T) {
+	for _, credential := range []string{"missing", "anonymous", "rejected"} {
+		t.Run(credential, func(t *testing.T) {
+			store := isolate(t)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusUnauthorized)
+			}))
+			defer server.Close()
+			if credential != "missing" {
+				token := "rejected-token"
+				if credential == "anonymous" {
+					token = adversarylabs.AnonymousTokenPrefix + "test"
+				}
+				if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: token}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			repo := newWatchTestRepo(t)
+			for _, format := range []string{"plain", "json"} {
+				args := []string{"--api-url", server.URL, "has-permission", "--managed", repo}
+				if format == "json" {
+					args = append(args, "--json")
+				}
+				output, err := execute(t, "", args...)
+				if !errors.Is(err, errManagedLoginRequired) || output != "" {
+					t.Fatalf("unverified account became a consent decision: %q %v", output, err)
+				}
+			}
+		})
+	}
+}
+
+func TestHasPermissionManagedUsesCurrentAccountAndPreservesState(t *testing.T) {
+	store := isolate(t)
+	account := "account"
+	unavailable := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/auth/whoami" || r.Header.Get("Authorization") != "Bearer managed-token" {
+			t.Errorf("unexpected request %s", r.URL.Path)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if unavailable {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"id": account, "type": "user"})
+	}))
+	defer server.Close()
+	if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: "managed-token"}); err != nil {
+		t.Fatal(err)
+	}
+	repo := newWatchTestRepo(t)
+	linked := filepath.Join(t.TempDir(), "linked")
+	reviewGit(t, repo, "worktree", "add", "--detach", linked, "HEAD")
+	id, err := watching.RepositoryIdentity(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	location, err := managedStoreLocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := execute(t, "", "--api-url", server.URL, "has-permission", "--managed", repo)
+	if err != nil || output != "false\n" {
+		t.Fatalf("missing managed store: %s %v", output, err)
+	}
+	if _, err := os.Stat(location.Root); !os.IsNotExist(err) {
+		t.Fatal("permission check created managed state", err)
+	}
+	s, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := managed.Task{AccountID: account, RepositoryID: id, API: server.URL, Profile: "default"}
+	if err := recordManagedConsent(s, task, "browser_repository_approval"); err != nil {
+		t.Fatal(err)
+	}
+	file := managedConsentPath(s, task)
+	before, _ := os.ReadFile(file)
+	// A read-only check must not normalize the directory's permissions.
+	if err := os.Chmod(s.Root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{repo, linked} {
+		output, err := execute(t, "", "--api-url", server.URL, "has-permission", "--managed", "--json", path)
+		var result struct {
+			Approved bool                    `json:"approved"`
+			Consent  *managedConsentEvidence `json:"consent"`
+		}
+		if err != nil || json.Unmarshal([]byte(output), &result) != nil || !result.Approved || result.Consent == nil || result.Consent.Account != account || !strings.Contains(output, "finding_responses") {
+			t.Fatalf("managed consent: %s %v", output, err)
+		}
+		if strings.Contains(output, "managed-token") {
+			t.Fatal("exposed credentials")
+		}
+	}
+	after, _ := os.ReadFile(file)
+	info, _ := os.Stat(s.Root)
+	if string(before) != string(after) || info.Mode().Perm() != 0755 {
+		t.Fatal("permission check changed saved state")
+	}
+	account = "other-account"
+	output, err = execute(t, "", "--api-url", server.URL, "has-permission", "--managed", repo)
+	if err != nil || output != "false\n" {
+		t.Fatalf("accepted another account's grant: %s %v", output, err)
+	}
+	account = task.AccountID
+	if err := watching.Write(file, repositoryConsent{Account: account}); err != nil {
+		t.Fatal(err)
+	}
+	output, err = execute(t, "", "--api-url", server.URL, "has-permission", "--managed", repo)
+	if err != nil || output != "false\n" {
+		t.Fatalf("accepted revoked grant: %s %v", output, err)
+	}
+	unavailable = true
+	output, err = execute(t, "", "--api-url", server.URL, "has-permission", "--managed", repo)
+	if err == nil || output != "" {
+		t.Fatalf("network failure became a consent decision: %s %v", output, err)
+	}
 }
 
 func (w *permissionFailingWriter) Write(p []byte) (int, error) {

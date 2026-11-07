@@ -19,6 +19,12 @@ agent prose never selects the version.
   a localhost callback. `doomer task login HANDLE` resumes the same flow.
 - `doomer task consent HANDLE --allow` records explicit repository upload
   permission for the authenticated account, profile, service, and Git identity.
+- `doomer has-permission --managed --json PATH` verifies the current account
+  and reads its saved managed upload grant without modifying setup. The default
+  mode checks legacy watcher grants only; a negative default-mode result says
+  nothing about managed approval. Authentication failures return an error,
+  rather than a negative consent decision. Preparation and task results also
+  return scoped consent evidence, including finding responses.
 - `doomer task rollback HANDLE` rejects a bad current selection and selects the
   previous verified release for future tasks. Active tasks keep their versions.
 - `doomer task pause HANDLE` and `resume` control uploads for an individual task.
@@ -67,6 +73,18 @@ server-side client metadata. Installing software, authenticating, granting
 uploads, activating hooks, and completing a review are separate outcomes.
 
 ## Harness capabilities and limits
+
+After verified approval, Codex preparation returns a `codex_review_policy`
+proposal. The coding agent offers to merge its `extra_policy` text into the
+user's existing `[auto_review].extra_policy` only after separate permission to
+change Codex settings. Existing policy and configuration are preserved. The
+proposal covers preparation/resumption, private task state, source snapshots,
+task context, and finding responses for the
+approved account, service, profile, and repository identity, including linked
+worktrees. Uploads still require current consent. Revocation, pause, host
+restrictions, and organization policy continue to apply. Local reviewer policy
+may be overridden by managed settings. See the official
+[Codex Auto-review documentation](https://learn.chatgpt.com/docs/sandboxing/auto-review).
 
 Per-call execution needs a shell plus durable private storage between calls.
 It needs no native skill catalog, session ID, background process, or callback.
