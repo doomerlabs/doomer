@@ -39,6 +39,7 @@ type Task struct {
 	Capabilities     Capabilities                       `json:"capabilities"`
 	Base             string                             `json:"base"`
 	Prompt           string                             `json:"prompt"`
+	Purpose          string                             `json:"purpose,omitempty"`
 	AccountID        string                             `json:"account_id,omitempty"`
 	Portable         bool                               `json:"portable,omitempty"`
 	PortableApproved bool                               `json:"portable_approved,omitempty"`
@@ -53,6 +54,7 @@ type Task struct {
 	Responses        map[string]Response                `json:"responses,omitempty"`
 	Paused           bool                               `json:"paused"`
 	LastError        string                             `json:"last_error,omitempty"`
+	NoChanges        bool                               `json:"no_changes,omitempty"`
 	HookActivated    bool                               `json:"hook_activated"`
 }
 

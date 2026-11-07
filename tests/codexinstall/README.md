@@ -1,0 +1,141 @@
+# Manual Codex lifecycle experiments
+
+Run real Codex CLI 0.167.0 with GPT-6.1 Terra at low reasoning in disposable
+Linux exe.dev VMs or isolated local macOS test homes. These tests are opt-in. They are never run by normal PR CI.
+The local fixture supplies Doomer account, approval and review responses.
+Installation still uses the public guide and published, verified Doomer runtime.
+
+## Run
+
+From the repository root, with Go and OpenSSH tools installed, provide
+`TEST_OPENAI_API_KEY` and `TEST_EXE_SSH_PRIVATE_KEY` through Doppler `doomer/test`.
+The SSH public key must be registered in exe.dev.
+
+```sh
+doppler run --project doomer --config test -- \
+  go run ./tests/codexinstall --scenario first-review --budget 0.20 \
+  --output /tmp/codex-first-review.json
+```
+
+List scenarios without credentials, network access or model calls.
+
+```sh
+go run ./tests/codexinstall --scenario list
+```
+
+| Scenario | Assertions |
+| --- | --- |
+| `install` | Both skill files, launcher, hooks configured, authenticated readiness, one grant, no content uploads |
+| `first-review` | New coding task completes an account-linked review and records a finding response |
+| `new-chat` | Two fresh coding chats produce separate completed reviews with the original approval |
+| `worktrees` | Concurrent branches/worktrees keep files, tasks and reviews separate while sharing approval |
+| `decline-updates` | Refusing updates does not grant repository access or upload content |
+| `decline-uploads` | Refusing repository access does not upload content |
+| `interrupted` | A new Codex process/chat resumes pending setup using its saved task and original grant request |
+| `upgrade` | Historical skill and signed runtime fixture upgrades with preserved policy/grant and one simulated PR |
+| `upgrade-defer` | Deferring the upgrade leaves files alone and suppresses a repeat offer on preparation |
+| `repeat-onboarding` | Repeated setup reuses approval, avoids repeated settings offers, and leaves no failed review |
+| `read-only` | A clean, read-only task uploads nothing and finishes without a review failure |
+| `personal` | Personal installation is discovered and completes a coding review |
+| `upgrade-untracked` | Updates untracked repository skill files without creating a PR |
+| `upgrade-personal` | Updates personal skill files without creating a PR |
+| `hooks-off` | Completes a review through per-call commands when hooks are absent |
+| `revoked-uploads` | Server-side revocation blocks subsequent content uploads |
+| `interrupted-review` | Terminated Codex resumes a pending review in a new process without duplicate submission |
+| `tui` | Real interactive terminal trusts native hooks and completes a review with activated hooks |
+| `tui-hooks-denied` | Real terminal declines native hook trust and completes through per-call commands |
+| `upgrade-custom` | Customized wrapper instructions remain intact |
+| `portable-invalid` | A failed portable request leaves ordinary setup resumable |
+| `portable-restart` | The CLI restores an approved reusable grant in a fresh home without copied credentials |
+| `deep-review` | Automatic selection permits Deep and waits for its completed result |
+| `service-failure` | Submission failure terminates with durable state and recovers the same task when the service returns |
+
+Each invocation performs real installation first in its own fresh home and VM.
+A failed assertion remains a failed test even when it exposes a product gap.
+The upgrade fixture uses a local bare Git remote and a fake `gh` command; it
+tests the agent's PR workflow without creating a real external pull request.
+The `interrupted` case replaces a process between calls. `interrupted-review`
+terminates Codex after the service accepts the review, before it completes.
+Most cases use headless exec/resume. The two `tui` cases use a real PTY and
+script the actual native hook-trust dialog. They require Python 3. Desktop UI
+and termination inside a blob upload are not covered.
+Command approval controls are bypassed inside the isolated test processes only; Doomer's
+own update and upload permissions are exercised.
+
+
+## Candidate and local runs
+
+To test this checkout's unpublished CLI changes, add
+`--candidate-release 2026.11.6.12` with the exact currently installed public release.
+The runner first exercises verified installation, then assembles the candidate
+runtime and matching wrappers only inside the disposable fixture. Its checksum
+record is local test state. It does this before
+continuing setup. `--install-guide URL` can select a pinned candidate installer
+guide to validate an unpublished installer change. The default is the public guide. This test-only injection is recorded in `candidate_version` and
+does not change release verification in the product.
+
+A local run requires a separate pinned Codex executable and a writable test
+parent outside `/tmp` because Codex does not create helpers there. Keep that parent outside the Codex package directory as well, so its daemon
+can verify the immutable package. The runner
+isolates HOME, CODEX_HOME, Doomer state, Git configuration and the executable path.
+It removes each temporary test home when done.
+
+```sh
+doppler run --project doomer --config test -- \
+  go run ./tests/codexinstall --scenario first-review \
+  --local-codex /path/to/dedicated/codex \
+  --local-root /path/to/disposable-test-homes --budget 0.35 \
+  --output /tmp/codex-local-review.json
+```
+
+Local runs do not use exe.dev or need its SSH key. Use the official 0.167.0 package
+for your platform and verify its published checksum before passing its executable.
+
+## Free tests
+
+```sh
+go test -race ./tests/codexinstall
+```
+
+These test the service fixture, response parser, budget enforcement, redaction,
+and HTML escaping without any paid requests or VMs.
+
+## Reports and recordings
+
+Each run writes a private JSON report plus an adjacent `.html` chat replay.
+The replay includes actual messages, completed commands/results, timestamps,
+and labeled scripted replies. It supports replay, scrubbing and expandable
+command groups. It starts with the entire conversation visible. No external
+scripts or replay hosting are required.
+
+Regenerate the HTML without a model call or VM.
+
+```sh
+go run ./tests/codexinstall --render-report /tmp/codex-first-review.json
+```
+
+## Spending and cleanup
+
+`--budget` caps one invocation. The real OpenAI key stays in the runner; Codex
+receives a dummy proxy credential. Before every inference request the proxy
+counts input tokens, reserves a conservative allowance, forces standard service
+tier and limits output to 4,096 tokens. Requests that cannot fit are rejected.
+Unknown usage retains its reservation, including a lost remote worker connection.
+The JSON distinguishes measured token-based cost estimates from charged budget.
+
+GPT-6.1 Terra rates used are $1/M input, $0.05/M cached input and $5/M output.
+Check the current pricing before running after a price change. Other models
+are rejected because their budgeting has not been verified. VM fees are separate.
+
+Every remote invocation attempts VM deletion on completion, failure or timeout. The
+name is printed immediately and included in the report. SIGKILL or lost access
+can prevent cleanup; use `ssh exe.dev rm VM_NAME` if that happens. Cleanup
+failure makes the test fail. Temporary private-key files and test homes are
+removed. Reports include test transcripts and should remain private.
+
+Sources
+
+- https://github.com/openai/codex/releases/tag/rust-v0.167.0
+- https://developers.openai.com/api/docs/guides/token-counting
+- https://developers.openai.com/api/docs/pricing
+- https://exe.dev/docs/api

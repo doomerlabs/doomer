@@ -30,6 +30,10 @@ home directories and mount paths. The CLI owns this transfer and its validation.
 Do not copy credentials, edit receipts, or infer approval in prose.
 Use `task revoke` to remove the saved portable approval. Keep using ordinary
 per-call commands when the harness cannot load hooks.
+During requested onboarding, configure the active agent with `doomer hooks --agent
+AGENT` even in a headless invocation. Configuration can prepare future sessions;
+activation still requires the harness trust controls. A headless call alone is
+not evidence that the agent cannot support hooks.
 An absent hook receipt means activation is unverified. Continue with the per-call
 procedure and describe it accurately. Consult documented capabilities or permitted
 read-only introspection to determine hook support. Hook installation or callback
@@ -49,6 +53,11 @@ finishing. Each call is
 resumable. If pending, continue useful work and check again with a bounded delay.
 Do not start another review while this revision is pending. If a call is rejected
 by network policy, show the returned required host and retain the same handle.
+
+For setup-only or read-only work, no code review is needed. If submission returns
+`no_changes: true`, run `doomer task finish HANDLE` to complete it without a review
+or an upload. Report
+that there were no changes to review, and do not describe it as a failed review.
 
 If submission fails, read the safe service error from task status. Automatic
 hooks stop resubmitting a failed call. Report the review as incomplete and end
@@ -100,12 +109,14 @@ repository approval flow. An authentication error requires account verification,
 not a new upload grant; recheck saved consent after authentication succeeds.
 
 When a Codex preparation result includes `codex_review_policy`, offer once per
-distinct proposal in the chat to add that scoped authorization to Codex's
+distinct proposal to add that scoped authorization to Codex's
 approval reviewer. Explain that this is a separate, optional Codex settings
 change. Reuse an explicit answer only for identical `extra_policy` text and
 the same repository, account, service, and profile. A changed proposal requires
 a new decision. Continue the task if declined. Do not treat the repository
 upload grant as permission to edit Codex settings.
+The CLI remembers that it offered a proposal across chats. Absence of a new
+proposal is not acceptance of the earlier offer and does not change Codex settings.
 Before offering or installing the policy, compare its scope and permitted
 operations with fresh verified consent evidence. Require the same repository,
 account, service, and profile, and only the documented review data and operations.

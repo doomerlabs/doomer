@@ -11,7 +11,7 @@ import (
 )
 
 func TestManagedHookFeedbackDoesNotExposeReviewPayload(t *testing.T) {
-	result := managedResult{State: "operation_failed", Task: "internal-task-handle", Error: "record every finding"}
+	result := managedResult{State: "operation_failed", NoChanges: true, Task: "internal-task-handle", Error: "record every finding"}
 	if err := json.Unmarshal([]byte(`{"id":"review-id","early_assessment":{"status":"ready","leads":[{"id":"lead-id","path":"private/path.css","concern":"private assessment","check":"private check"}]}}`), &result.Review); err != nil {
 		t.Fatal(err)
 	}
@@ -60,6 +60,23 @@ func TestManagedHookFeedbackCountsOnlyUnsentFindingResponses(t *testing.T) {
 	result := managedResult{State: "reviewed", Review: review, Responses: map[string]managed.Response{"review-id:lead-id": {Sent: true}}}
 	raw, _ := json.Marshal(result)
 	if got := managedHookFeedback("PostToolUse", raw, nil); len(got) != 0 {
+		t.Fatal(got)
+	}
+}
+
+func TestNoChangesFeedbackKeepsErrorsVisible(t *testing.T) {
+	for _, state := range []string{"authentication_required", "operation_failed", "review_failed"} {
+		raw, _ := json.Marshal(managedResult{State: state, NoChanges: true})
+		if got := managedHookFeedback("PostToolUse", raw, nil); len(got) == 0 {
+			t.Fatal("hidden state", state)
+		}
+	}
+	raw, _ := json.Marshal(managedResult{State: "no_changes", NoChanges: true})
+	if got := managedHookFeedback("PostToolUse", raw, nil); len(got) != 0 {
+		t.Fatal(got)
+	}
+	got := managedHookFeedback("Stop", raw, nil)
+	if got["decision"] != "block" || !strings.Contains(got["reason"].(string), "finish command") {
 		t.Fatal(got)
 	}
 }

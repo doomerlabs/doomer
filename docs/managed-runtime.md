@@ -38,8 +38,22 @@ agent prose never selects the version.
   before delivery, and records each server acknowledgment.
 - `doomer task finish HANDLE` verifies results, response delivery, and the current
   checkout tree before reporting completion.
+- `doomer bootstrap status` inspects wrapper compatibility. `upgrade --accept`
+  applies an explicitly accepted update in the selected scope.
+- `doomer bootstrap defer --repo PATH` suppresses the current optional wrapper
+  offer for 24 hours across linked worktrees. Use `--personal` for personal
+  wrappers. Manual inspection and upgrades remain available.
 - `doomer hooks --agent codex|claude` installs the optional thin adapter. The user
   still controls trust. Real callbacks alone establish live activation.
+
+New tasks without a coding prompt are setup-only. Their submit/finish operations
+complete with `review_not_required: setup_only` and never upload a review. Supplying
+explicit task context changes the task into a coding task. Existing task records
+without this purpose field preserve their original behavior.
+
+An unchanged checkout returns `no_changes: true` without uploading or starting
+an empty review. `task finish` verifies it is still unchanged and completes the
+task. New edits require submission before completion.
 
 Each task stores its selected release outside Git. The launcher dispatches task
 commands to that immutable executable. Instructions are embedded in the same
@@ -75,7 +89,8 @@ uploads, activating hooks, and completing a review are separate outcomes.
 ## Harness capabilities and limits
 
 After verified approval, Codex preparation returns a `codex_review_policy`
-proposal. The coding agent offers to merge its `extra_policy` text into the
+proposal once per identical scope and proposal in that local installation.
+The presentation marker records no permission or settings change. The coding agent offers to merge its `extra_policy` text into the
 user's existing `[auto_review].extra_policy` only after separate permission to
 change Codex settings. Existing policy and configuration are preserved. The
 proposal covers preparation/resumption, private task state, source snapshots,
@@ -118,7 +133,9 @@ an older launcher to parse its flag. Task history remains local to each environm
 release signatures and expiry, task isolation, lock contention, interrupted
 submission recovery, response recording, revocation, native-discovery absence,
 and account-authenticated per-call review completion against an isolated API.
-Actual Codex/Claude/Cowork client trust and UI behavior require client smoke tests.
+The opt-in `tests/codexinstall` suite exercises real Codex headless and terminal
+clients on macOS and Linux. Desktop GUI, Claude and Cowork still require separate
+client coverage.
 
 For isolated validation or an ephemeral harness, `DOOMER_RUNTIME_HOME` can name
 an absolute root for runtime binaries. Personal bootstraps remain in the actual

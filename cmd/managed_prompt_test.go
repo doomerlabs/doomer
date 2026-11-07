@@ -161,3 +161,26 @@ func TestManagedFailedHookWaitsForExplicitRetry(t *testing.T) {
 		t.Fatal(saved.LastError, err)
 	}
 }
+
+func TestPrepareResumesSetupAsCodingWithExplicitPrompt(t *testing.T) {
+	isolate(t)
+	store, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, Purpose: "setup", Stage: "complete", Paused: true, API: "https://doomer.ai/api", Profile: "default"}
+	if err := store.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := execute(t, "", "prepare", "--task", handle, "--prompt", "Fix the code"); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.Load(handle)
+	if err != nil || saved.Purpose != "coding" || saved.Prompt != "Fix the code" || saved.Stage != "ready" || !saved.Paused {
+		t.Fatal(saved, err)
+	}
+	if strings.Contains(managedTaskInstructions(saved), "This is a setup-only task") {
+		t.Fatal("coding resume retained setup-only instructions")
+	}
+}

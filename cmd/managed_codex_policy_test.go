@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/doomerlabs/doomer/internal/managed"
 )
 
 func TestCodexReviewPolicyKeepsScopeAsData(t *testing.T) {
@@ -21,5 +23,32 @@ func TestCodexReviewPolicyKeepsScopeAsData(t *testing.T) {
 		if !strings.Contains(policy, text) {
 			t.Fatalf("policy missing %q", text)
 		}
+	}
+}
+
+func TestCodexReviewPolicyOfferPersistsWithoutGrantingSettings(t *testing.T) {
+	s := managed.Store{Root: t.TempDir()}
+	consent := managedConsentEvidence{Account: "one", Repository: "/repo/.git", Service: "https://doomer.ai/api", Profile: "default"}
+	first, err := offerCodexReviewPolicy(s, consent)
+	if err != nil || first == nil {
+		t.Fatal(first, err)
+	}
+	// Preparing output does not mark an undelivered proposal as shown.
+	undelivered, err := offerCodexReviewPolicy(s, consent)
+	if err != nil || undelivered == nil {
+		t.Fatal("undelivered proposal was lost", undelivered, err)
+	}
+	if err := markCodexReviewPolicyOffered(s, first); err != nil {
+		t.Fatal(err)
+	}
+	// A new Store represents a later CLI process/chat.
+	later, err := offerCodexReviewPolicy(managed.Store{Root: s.Root}, consent)
+	if err != nil || later != nil {
+		t.Fatal("repeated optional settings prompt", later, err)
+	}
+	consent.Account = "two"
+	other, err := offerCodexReviewPolicy(s, consent)
+	if err != nil || other == nil {
+		t.Fatal("new account lost its scoped offer", other, err)
 	}
 }

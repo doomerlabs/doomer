@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/doomerlabs/doomer/internal/managed"
 	"github.com/doomerlabs/doomer/internal/version"
@@ -14,7 +16,7 @@ import (
 
 func newManagedBootstrapCommand() *cobra.Command {
 	root := &cobra.Command{Use: "bootstrap", Short: "Check and explicitly upgrade installed skill wrappers"}
-	for _, operation := range []string{"status", "upgrade"} {
+	for _, operation := range []string{"status", "upgrade", "defer"} {
 		operation := operation
 		var repo string
 		var personal, accept bool
@@ -70,6 +72,20 @@ func newManagedBootstrapCommand() *cobra.Command {
 				return fmt.Errorf("no installed bootstrap in selected scope")
 			}
 			state := "bootstrap_status"
+			if operation == "defer" {
+				identity, err := bootstrapDeferralIdentity(c.Context(), scope, base)
+				if err != nil {
+					return err
+				}
+				s, err := managedStore()
+				if err != nil {
+					return err
+				}
+				if err = s.DeferBootstrap(identity, managed.BootstrapVersion, time.Now()); err != nil {
+					return err
+				}
+				state = "bootstrap_deferred"
+			}
 			if operation == "upgrade" && accept {
 				content, err := managed.BootstrapText(*policy)
 				if err != nil {
@@ -105,6 +121,10 @@ func managedBootstrapUpdates(task managed.Task) []managed.BootstrapUpdate {
 		return nil
 	}
 	base := filepath.Clean(filepath.Join(filepath.Dir(task.Bootstrap.Path), "../../.."))
+	executable, executableErr := os.Executable()
+	identity, identityErr := bootstrapDeferralIdentity(context.Background(), task.Bootstrap.Scope, base)
+	store, storeErr := managedStoreLocation()
+	deferred := identityErr == nil && storeErr == nil && store.BootstrapDeferred(identity, managed.BootstrapVersion, time.Now())
 	var updates []managed.BootstrapUpdate
 	for _, agent := range []string{".agents", ".claude"} {
 		path := filepath.Join(base, agent, "skills/doomer-review/SKILL.md")
@@ -120,13 +140,31 @@ func managedBootstrapUpdates(task managed.Task) []managed.BootstrapUpdate {
 			continue
 		}
 		if update.State == "update_available" {
+			if deferred {
+				continue
+			}
+			if executableErr != nil {
+				update.State = "inspection_failed"
+				update.Action = "Could not locate the maintenance executable. Run bootstrap status through the current verified CLI. The task can continue."
+				updates = append(updates, update)
+				continue
+			}
 			target := "--repo " + watch.Quote(base)
 			if task.Bootstrap.Scope == "personal" {
 				target = "--personal"
 			}
-			update.Action = managed.BootstrapUpgradeOffer(task.Bootstrap.Scope) + " Only after acceptance run doomer bootstrap upgrade --accept " + target + ". The task keeps its release and update policy."
+			command := watch.Quote(executable)
+			update.Action = managed.BootstrapUpgradeOffer(task.Bootstrap.Scope) + " Only after acceptance run " + command + " bootstrap upgrade --accept " + target + ". If the user chooses Maybe later, run " + command + " bootstrap defer " + target + " to suppress this version's offer for 24 hours. Use this exact executable because the PATH launcher may be older. The task keeps its release and update policy."
 		}
 		updates = append(updates, update)
 	}
 	return updates
+}
+
+func bootstrapDeferralIdentity(ctx context.Context, scope, base string) (string, error) {
+	if scope == "personal" {
+		return "personal:" + base, nil
+	}
+	identity, err := watch.RepositoryIdentity(ctx, base)
+	return "project:" + identity, err
 }

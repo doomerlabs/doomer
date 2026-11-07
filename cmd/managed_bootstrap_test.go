@@ -45,6 +45,26 @@ func TestBootstrapUpgradeRequiresAcceptanceAndPreservesPolicy(t *testing.T) {
 			t.Fatal("changed without acceptance")
 		}
 	}
+	offered := managedBootstrapUpdates(managed.Task{Repo: repo, Bootstrap: managed.Bootstrap{Path: paths[0], Scope: "project"}})
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(offered) != 2 || !strings.Contains(offered[0].Action, executable) || strings.Contains(offered[0].Action, "run doomer bootstrap") {
+		t.Fatalf("maintenance was routed through an old PATH launcher: %+v", offered)
+	}
+	output, err = run("defer")
+	if err != nil || !strings.Contains(output, "bootstrap_deferred") {
+		t.Fatal(output, err)
+	}
+	updates := managedBootstrapUpdates(managed.Task{Repo: repo, Bootstrap: managed.Bootstrap{Path: paths[0], Scope: "project"}})
+	if len(updates) != 0 {
+		t.Fatalf("deferred offer repeated: %+v", updates)
+	}
+	output, err = run("status")
+	if err != nil || !strings.Contains(output, "update_available") {
+		t.Fatal("manual inspection lost the update", output, err)
+	}
 	output, err = run("upgrade", "--accept")
 	if err != nil || !strings.Contains(output, "bootstrap_upgraded") {
 		t.Fatal(output, err)
