@@ -1,0 +1,27 @@
+cmd/managed_portable.go
+  s_d6b126657ca74b::t_c08dc6f0ed0654 176-184
+cmd/managed_portable_test.go
+  s_d6b126657ca74b::t_0914a786e600e4 179-197
+internal/managed/bootstrap.md
+  s_d6b126657ca74b::t_f481457abd6c01 54-56,63-69
+internal/managed/instructions.md
+  s_d6b126657ca74b::t_f481457abd6c01 47-48
+cmd/permission_test.go
+  s_d6b126657ca74b::t_c08dc6f0ed0654 31-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea8dd6c5526fe71415d5aae5df2681852d49fc36",
+  "prompts": {},
+  "sessions": {
+    "s_d6b126657ca74b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b836-efba-7c81-a589-7f492085b86e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
