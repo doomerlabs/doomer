@@ -120,6 +120,12 @@ func (j *journey) upgrade() error {
 			}
 		}
 		j.result.Checks["deferred_upgrade_stays_quiet"] = true
+		j.f.mu.Lock()
+		j.result.Checks["grant_reused"] = j.f.Creates == 1
+		j.f.mu.Unlock()
+		if !j.result.Checks["grant_reused"] {
+			return fmt.Errorf("deferring the upgrade created another grant")
+		}
 		return nil
 	}
 	j.result.Turns++
