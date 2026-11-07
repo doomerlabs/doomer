@@ -1,0 +1,19 @@
+tests/codexinstall/remote.go
+  s_25ffc205483c47::t_cdc6c74ce57993 130-131,137-140,145-146,149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "53f28b737a736a7d49c448e4487bf0d40bb5508d",
+  "prompts": {},
+  "sessions": {
+    "s_25ffc205483c47": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b452-6720-7803-ac58-982707f36798",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
