@@ -106,6 +106,14 @@ func TestIntegrationConsentAcrossRepositoriesAndRevocation(t *testing.T) {
 	if err := recordIntegrationConsent(s, task, "integration_revoked", false); err != nil {
 		t.Fatal(err)
 	}
+	var legacy repositoryConsent
+	if err := watch.Read(managedConsentPath(s, task), &legacy); err != nil {
+		t.Fatal(err)
+	}
+	legacy.At = time.Now().Add(24 * time.Hour)
+	if err := watch.Write(managedConsentPath(s, task), legacy); err != nil {
+		t.Fatal(err)
+	}
 	for _, current := range []managed.Task{task, other} {
 		if evidence, err := savedManagedConsentEvidence(s, current); err != nil || evidence != nil {
 			t.Fatal("revocation revived a prior grant", evidence, err)
@@ -114,10 +122,23 @@ func TestIntegrationConsentAcrossRepositoriesAndRevocation(t *testing.T) {
 	if err := recordManagedConsent(s, task, "explicit_cli_approval"); err != nil {
 		t.Fatal(err)
 	}
+	if err := watch.Read(managedConsentPath(s, task), &legacy); err != nil {
+		t.Fatal(err)
+	}
+	legacy.At = time.Now().Add(-24 * time.Hour)
+	if err := watch.Write(managedConsentPath(s, task), legacy); err != nil {
+		t.Fatal(err)
+	}
 	if evidence, err := savedManagedConsentEvidence(s, task); err != nil || evidence == nil || evidence.AllRepositories {
 		t.Fatal("later repository approval unavailable", evidence, err)
 	}
 	if evidence, err := savedManagedConsentEvidence(s, other); err != nil || evidence != nil {
 		t.Fatal("repository approval restored integration", evidence, err)
+	}
+	if err := recordIntegrationConsent(s, task, "integration_revoked", false); err != nil {
+		t.Fatal(err)
+	}
+	if evidence, err := savedManagedConsentEvidence(s, task); err != nil || evidence != nil {
+		t.Fatal("later revocation retained a repository exception", evidence, err)
 	}
 }

@@ -179,7 +179,23 @@ func TestPortableSetupAcrossHomesAndMountPaths(t *testing.T) {
 			if err := savePortable(ctx, app, s, task, true); err != nil {
 				t.Fatal(err)
 			}
+			path, _, err = portableLocation(ctx, task)
+			if err != nil {
+				t.Fatal(err)
+			}
+			portable, err := readPortable(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			portable.Grant.At = time.Now().Add(24 * time.Hour)
+			if err := watch.Write(path, portable); err != nil {
+				t.Fatal(err)
+			}
 			if err := recordIntegrationConsent(s, task, "integration_revoked", false); err != nil {
+				t.Fatal(err)
+			}
+			revoked, err := os.ReadFile(integrationConsentPath(s, task))
+			if err != nil {
 				t.Fatal(err)
 			}
 			if !integration {
@@ -190,9 +206,25 @@ func TestPortableSetupAcrossHomesAndMountPaths(t *testing.T) {
 			if err := restorePortable(ctx, app, s, &task); err != nil || task.PortableApproved {
 				t.Fatal("restored portable approval after integration revocation", err)
 			}
+			after, err := os.ReadFile(integrationConsentPath(s, task))
+			if err != nil || !bytes.Equal(revoked, after) {
+				t.Fatal("portable restoration changed revocation evidence", err)
+			}
+			if evidence, err := savedManagedConsentEvidence(s, task); err != nil || evidence != nil {
+				t.Fatal("revoked integration became usable", evidence, err)
+			}
 			if !integration {
 				if _, err := os.Stat(managedConsentPath(s, task)); !os.IsNotExist(err) {
 					t.Fatal("restored an older repository grant after integration revocation", err)
+				}
+				if err := recordManagedConsent(s, task, "explicit_cli_approval"); err != nil {
+					t.Fatal(err)
+				}
+				if err := restorePortable(ctx, app, s, &task); err != nil || !task.PortableDeclined {
+					t.Fatal("stale portable record blocked a later local approval", err)
+				}
+				if evidence, err := savedManagedConsentEvidence(s, task); err != nil || evidence == nil {
+					t.Fatal("later local approval was lost", evidence, err)
 				}
 			}
 		})

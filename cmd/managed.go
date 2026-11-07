@@ -542,8 +542,10 @@ func managedIdentity(ctx context.Context, app *application.App, t managed.Task) 
 
 type repositoryConsent struct {
 	Account, Repository, API, Profile string
-	Agent                             string `json:"agent,omitempty"`
-	AllRepositories                   bool   `json:"all_repositories,omitempty"`
+	Agent                             string            `json:"agent,omitempty"`
+	AllRepositories                   bool              `json:"all_repositories,omitempty"`
+	RevocationID                      string            `json:"revocation_id,omitempty"`
+	IntegrationRevocations            map[string]string `json:"integration_revocations,omitempty"`
 	Approved                          bool
 	Source                            string `json:"source,omitempty"`
 	At                                time.Time

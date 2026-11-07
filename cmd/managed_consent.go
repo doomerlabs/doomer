@@ -48,6 +48,13 @@ func recordIntegrationConsent(s managed.Store, t managed.Task, source string, ap
 	}
 	grant := repositoryConsent{Account: t.AccountID, API: t.API, Profile: t.Profile,
 		Agent: t.Agent, AllRepositories: true, Approved: approved, At: time.Now().UTC(), Source: source}
+	if !approved {
+		id, err := managed.NewHandle()
+		if err != nil {
+			return err
+		}
+		grant.RevocationID = id
+	}
 	return watch.Write(integrationConsentPath(s, t), grant)
 }
 
@@ -68,7 +75,7 @@ func readManagedConsent(s managed.Store, t managed.Task) (repositoryConsent, str
 	if err := watch.Read(path, &grant); err != nil {
 		return grant, path, err
 	}
-	if !integration.At.IsZero() && !grant.At.After(integration.At) {
+	if err == nil && !integration.Approved && (integration.RevocationID == "" || grant.IntegrationRevocations[t.Agent] != integration.RevocationID) {
 		grant.Approved = false
 	}
 	return grant, path, nil
@@ -77,6 +84,21 @@ func readManagedConsent(s managed.Store, t managed.Task) (repositoryConsent, str
 func recordManagedConsent(s managed.Store, t managed.Task, source string) error {
 	grant := repositoryConsent{Account: t.AccountID, Repository: t.RepositoryID,
 		API: t.API, Profile: t.Profile, Approved: true, At: time.Now().UTC(), Source: source}
+	var previous repositoryConsent
+	if err := watch.Read(managedConsentPath(s, t), &previous); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	grant.IntegrationRevocations = previous.IntegrationRevocations
+	var integration repositoryConsent
+	if err := watch.Read(integrationConsentPath(s, t), &integration); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if !integration.Approved && integration.RevocationID != "" {
+		if grant.IntegrationRevocations == nil {
+			grant.IntegrationRevocations = map[string]string{}
+		}
+		grant.IntegrationRevocations[t.Agent] = integration.RevocationID
+	}
 	return watch.Write(managedConsentPath(s, t), grant)
 }
 

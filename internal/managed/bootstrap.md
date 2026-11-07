@@ -17,6 +17,7 @@ invented prefixes do not establish a hook binding.
 Reuse the saved integration approval across repositories, worktrees, and chats
 for the same coding agent, Doomer account, service, and profile. Existing
 repository-specific grants retain their original scope until explicitly upgraded.
+Present a returned `approval_required` action for missing or revoked approval.
 If Doomer is blocked, explain why and ask once whether to continue local edits
 without a completed Doomer review or wait. Honor that choice for the task.
 Continuing edits does not authorize a blocked upload. Keep the task handle and
@@ -60,7 +61,8 @@ In per-call mode, the agent runs these commands as part of each coding task.
 Describe that workflow accurately. A missing hook receipt means activation is
 unverified; it does not establish that the harness lacks hook support.
 
-For installation, onboarding, or a missing CLI, fetch the official INSTALL.md at
+For requested installation or onboarding, or when the CLI is missing for the
+authorized coding task, fetch the official INSTALL.md at
 https://raw.githubusercontent.com/doomerlabs/skills/01d8b830a81bf760504818dd2e42e4f5aff13f6b/INSTALL.md and require its SHA-256 to equal
 `59def6fc9a22d97a6bdef8c2e20094a24aa7689c03a04e20dd9e22d54d4bc8c8`
 before following the relevant verified steps with normal execution permissions.

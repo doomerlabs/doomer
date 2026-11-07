@@ -178,8 +178,13 @@ func restorePortable(ctx context.Context, app *application.App, s managed.Store,
 		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
-		if err == nil && !integration.Approved && !grant.At.After(integration.At) {
+		if err == nil && !integration.Approved {
+			evidence, err := savedManagedConsentEvidence(s, *t)
+			if err != nil {
+				return err
+			}
 			t.PortableApproved = false
+			t.PortableDeclined = evidence != nil
 			return nil
 		}
 	}
