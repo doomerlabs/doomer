@@ -1,0 +1,21 @@
+tests/codexinstall/tui.go
+  s_f23d7bc729b5d1::t_293111bd20e277 85
+tests/codexinstall/claude.go
+  s_f23d7bc729b5d1::t_293111bd20e277 47,65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3d784b597a16096cb53586a613b3da1e09a0ffc6",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
