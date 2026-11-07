@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -187,25 +188,30 @@ func TestReviewFixtureRequiresAccountAndRecordsFeedback(t *testing.T) {
 }
 
 func TestLocalProcessCleanupIsScopedToExecutablePath(t *testing.T) {
-	output := "100 /private/test run/home/bin/codex app-server\n" +
-		"101 /private/test run-other/bin/codex\n" +
-		"102 /bin/sh -c /private/test run/home/bin/codex\n" +
+	root := filepath.Join(os.TempDir(), "test run")
+	output := "100 " + filepath.Join(root, "home", "bin", "codex") + " app-server\n" +
+		"101 " + filepath.Join(root+"-other", "bin", "codex") + "\n" +
+		"102 /bin/sh -c " + filepath.Join(root, "home", "bin", "codex") + "\n" +
 		"103 /Users/person/.codex/bin/codex app-server\n"
-	pids := localProcessIDs(output, "/private/test run")
+	pids := localProcessIDs(output, root)
 	if len(pids) != 1 || pids[0] != 100 {
 		t.Fatal(pids)
 	}
 }
 
 func TestRelocateHomeEnvironmentPreservesSiblingPaths(t *testing.T) {
+	old := filepath.Join(os.TempDir(), "old-home")
+	fresh := filepath.Join(os.TempDir(), "new-home")
+	sep := string(os.PathListSeparator)
+	bin := filepath.Join(old, "bin")
 	for _, entry := range []struct{ input, want string }{
-		{"HOME=/old/home", "HOME=/new/home"},
-		{"CODEX_HOME=/old/home/.codex", "CODEX_HOME=/new/home/.codex"},
-		{"TMPDIR=/old/home-scratch", "TMPDIR=/old/home-scratch"},
-		{"CDPATH=/old/homeother", "CDPATH=/old/homeother"},
-		{"PATH=/old/home/bin:/old/home-other/bin:/usr/bin", "PATH=/new/home/bin:/old/home-other/bin:/usr/bin"},
+		{"HOME=" + old, "HOME=" + fresh},
+		{"CODEX_HOME=" + filepath.Join(old, ".codex"), "CODEX_HOME=" + filepath.Join(fresh, ".codex")},
+		{"TMPDIR=" + old + "-scratch", "TMPDIR=" + old + "-scratch"},
+		{"CDPATH=" + old + "other", "CDPATH=" + old + "other"},
+		{"PATH=" + bin + sep + old + "-other", "PATH=" + filepath.Join(fresh, "bin") + sep + old + "-other"},
 	} {
-		if got := relocateHomeEnvironment(entry.input, "/old/home", "/new/home"); got != entry.want {
+		if got := relocateHomeEnvironment(entry.input, old, fresh); got != entry.want {
 			t.Fatal(entry.input, got, entry.want)
 		}
 	}
