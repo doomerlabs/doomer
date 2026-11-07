@@ -237,7 +237,7 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 			if event.Event == "Stop" {
 				return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
 			}
-			message := "Doomer task is not prepared. Read the installed bootstrap and run doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " before editing. Include the actual user request with --prompt."
+			message := "Doomer task is not prepared for this session. If the user supplied an existing task handle, first resume it with doomer prepare --task HANDLE --session " + watch.Quote(event.Session) + ". Do not create a replacement task for recovery. For a new task, read the installed bootstrap and run doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " before editing. Include the actual user request with --prompt."
 			pending, lookupErr := pendingManagedSetup(s, *api, *profile, agent, repo)
 			if lookupErr != nil {
 				return lookupErr

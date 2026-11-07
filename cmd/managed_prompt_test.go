@@ -308,7 +308,7 @@ func TestUnpreparedStopDoesNotRestartSetup(t *testing.T) {
 	}
 	raw, _ = json.Marshal(watch.HookInput{Event: "PreToolUse", Session: "new-session", CWD: repo})
 	output, err = execute(t, string(raw), "agent-hook", "--agent", "claude", "--managed-task-adapter")
-	if err != nil || !strings.Contains(output, "prepare") {
+	if err != nil || !strings.Contains(output, "prepare --task HANDLE --session") || !strings.Contains(output, "Do not create a replacement task for recovery") {
 		t.Fatal(output, err)
 	}
 }
