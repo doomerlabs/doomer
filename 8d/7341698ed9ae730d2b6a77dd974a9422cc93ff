@@ -1,0 +1,14 @@
+tests/codexinstall/runner_test.go
+  h_aa44c3b5b60dec 14,191-194,196,203-206,208-212,214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d7341698ed9ae730d2b6a77dd974a9422cc93ff",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
