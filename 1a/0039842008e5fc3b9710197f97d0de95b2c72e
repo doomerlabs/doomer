@@ -1,0 +1,65 @@
+internal/managed/managed_test.go
+  s_a461824c0990a5::t_2374febcbe2680 152-157,160-162,189-190
+tests/codexinstall/recovery.go
+  s_a461824c0990a5::t_2374febcbe2680 104
+tests/codexinstall/replay.html
+  s_a461824c0990a5::t_2374febcbe2680 6,25,52-53,55
+cmd/managed_prompt_test.go
+  s_a461824c0990a5::t_2374febcbe2680 163-176,201-359
+tests/codexinstall/claude_proxy.go
+  s_a461824c0990a5::t_2374febcbe2680 1-162
+tests/codexinstall/suite.go
+  s_a461824c0990a5::t_2374febcbe2680 1-74
+cmd/managed_approval.go
+  s_a461824c0990a5::t_2374febcbe2680 142
+tests/codexinstall/claude_test.go
+  s_a461824c0990a5::t_2374febcbe2680 1-191
+tests/codexinstall/claude.go
+  s_a461824c0990a5::t_2374febcbe2680 1-180
+tests/codexinstall/scenarios.go
+  s_a461824c0990a5::t_2374febcbe2680 41-43,92,143,145,159,184,241-242,244,247,251-252
+internal/managed/no_changes_test.go
+  s_a461824c0990a5::t_2374febcbe2680 38-40
+tests/codexinstall/portable.go
+  s_a461824c0990a5::t_2374febcbe2680 21
+tests/codexinstall/README.md
+  s_a461824c0990a5::t_2374febcbe2680 128,142-183
+tests/codexinstall/tui.go
+  s_a461824c0990a5::t_2374febcbe2680 17,27-29,42-55,69,78,83-93,99-100,128,130,145-150,153,156,174-176,190-193
+tests/codexinstall/upgrade.go
+  s_a461824c0990a5::t_2374febcbe2680 82,127,172-182
+  s_a461824c0990a5::t_5665e0015c7908 183
+tests/codexinstall/proxy.go
+  s_a461824c0990a5::t_2374febcbe2680 16-23,28,38-41,142
+cmd/managed_install.go
+  s_a461824c0990a5::t_2374febcbe2680 125-152,229-240,380-406
+internal/managed/operations.go
+  s_a461824c0990a5::t_2374febcbe2680 126,132-134,305-306,308-313,318-321
+tests/codexinstall/main.go
+  s_a461824c0990a5::t_2374febcbe2680 15,35,57-58,66,68,76-82,115-129,134,144-150,157
+cmd/managed.go
+  s_a461824c0990a5::t_2374febcbe2680 83-85,119,186-200,272-291,359-363,763
+  s_a461824c0990a5::t_8c1a43fbaa016e 764-765
+tests/codexinstall/remote.go
+  s_a461824c0990a5::t_2374febcbe2680 67,129-131,157-159
+tests/codexinstall/worker.go
+  s_a461824c0990a5::t_2374febcbe2680 100-102,105-109,115-116,125-127,155-157,194,259,270-271,283,296,307,313
+internal/managed/instructions.md
+  s_a461824c0990a5::t_2374febcbe2680 65-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1a0039842008e5fc3b9710197f97d0de95b2c72e",
+  "prompts": {},
+  "sessions": {
+    "s_a461824c0990a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b607-f9d7-7453-9778-da2bb12f09b1",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
