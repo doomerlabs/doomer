@@ -1,0 +1,16 @@
+docs/managed-runtime.md
+  h_aa44c3b5b60dec 92-93,103-105,121-124
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 139,175,179-181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cace352250cc4f5f987b0731f209cfe7bdb9879c",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
