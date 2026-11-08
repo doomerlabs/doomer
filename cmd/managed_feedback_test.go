@@ -128,3 +128,15 @@ func TestManagedNoticeDeliveryAndNoStopLoop(t *testing.T) {
 		t.Fatal("deduplicated notice shown again", got)
 	}
 }
+
+func TestUpdateRequiredDoesNotBecomeNetworkHelp(t *testing.T) {
+	result := managedResult{State: "client_update_required", Action: "Use the verified updater"}
+	command := NewRootCommand()
+	for _, status := range []int{403, 409, 426} {
+		err := managed.NetworkError("review_submission", &adversarylabs.ResponseError{StatusCode: status, Code: "client_update_required", Host: "doomer.ai"})
+		addManagedNetworkHelp(command, &result, managed.Task{}, err)
+		if result.Action != "Use the verified updater" || result.NetworkAccess != nil {
+			t.Fatal("update action was overwritten", result)
+		}
+	}
+}

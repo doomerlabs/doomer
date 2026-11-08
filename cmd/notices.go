@@ -18,7 +18,9 @@ func newNoticesCommand(api *string) *cobra.Command {
 				return err
 			}
 		}
-		result.Notices = adversarylabs.NoticesFromContext(c.Context())
+		if collected := adversarylabs.NoticesFromContext(c.Context()); collected != nil {
+			result.Notices = collected
+		}
 		return writeJSON(c.OutOrStdout(), "notices", result)
 	}}
 	cmd.Flags().StringVar(&deferID, "defer", "", "defer an optional notice for seven days")

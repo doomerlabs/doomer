@@ -274,6 +274,9 @@ func (c Client) CheckNotices(ctx context.Context) (NoticeEnvelope, error) {
 	err = decodeLimited(response.Body, &out)
 	if err == nil {
 		out.Notices = ValidNotices(out, time.Now())
+		if collector, _ := ctx.Value(noticeContextKey{}).(*NoticeCollector); collector != nil {
+			collector.receive(out, "")
+		}
 	}
 	return out, err
 }
