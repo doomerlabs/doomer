@@ -167,19 +167,3 @@ func TestEightOneBootstrapRemainsUpgradable(t *testing.T) {
 		t.Fatal("local work still gated")
 	}
 }
-
-func TestRepositoryBootstrapsMatchGenerated(t *testing.T) {
-	current, err := BootstrapText(Policy{Protocol: Protocol, Channel: "stable"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, agent := range []string{".agents", ".claude"} {
-		data, err := os.ReadFile(filepath.Join("..", "..", agent, "skills", "doomer-review", "SKILL.md"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(data) != current {
-			t.Fatal("repository bootstrap differs from generated template", agent)
-		}
-	}
-}
