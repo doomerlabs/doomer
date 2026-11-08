@@ -126,7 +126,7 @@ func runWorker(c config) (result report) {
 		result.Checks["subscription_authentication"] = true
 	}
 	if c.SkillsGuide != "" {
-		guide, err := writeCandidateSkills(c, root)
+		guide, err := writeCandidateSkills(&c, root)
 		if err != nil {
 			return fail(err)
 		}

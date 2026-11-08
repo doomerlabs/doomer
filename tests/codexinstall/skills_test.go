@@ -12,8 +12,8 @@ import (
 
 func TestCandidateSkillsGuide(t *testing.T) {
 	root := t.TempDir()
-	c := config{SkillsInstaller: "# fixture installer\n", SkillsGuide: "Read https://raw.githubusercontent.com/doomerlabs/skills/pinned/scripts/install.py with SHA `" + strings.Repeat("a", 64) + "`."}
-	location, err := writeCandidateSkills(c, root)
+	c := config{SkillsBootstrap: "Read https://raw.githubusercontent.com/doomerlabs/skills/pinned/INSTALL.md with SHA `" + strings.Repeat("b", 64) + "`.", SkillsInstaller: "# fixture installer\n", SkillsGuide: "Read https://raw.githubusercontent.com/doomerlabs/skills/pinned/scripts/install.py with SHA `" + strings.Repeat("a", 64) + "`."}
+	location, err := writeCandidateSkills(&c, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,10 @@ func TestCandidateSkillsGuide(t *testing.T) {
 	if !strings.Contains(string(raw), "file:") || !strings.Contains(string(raw), fmt.Sprintf("%x", sha256.Sum256([]byte(c.SkillsInstaller)))) {
 		t.Fatalf("candidate guide does not bind its installer: %s", raw)
 	}
-	if _, err := writeCandidateSkills(config{SkillsGuide: "ambiguous guide"}, root); err == nil {
+	if !strings.Contains(c.SkillsBootstrap, location) || !strings.Contains(c.SkillsBootstrap, fmt.Sprintf("%x", sha256.Sum256(raw))) {
+		t.Fatalf("candidate bootstrap does not bind its guide: %s", c.SkillsBootstrap)
+	}
+	if _, err := writeCandidateSkills(&config{SkillsGuide: "ambiguous guide"}, root); err == nil {
 		t.Fatal("ambiguous installer accepted")
 	}
 }

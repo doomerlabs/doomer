@@ -26,7 +26,7 @@ func loadCandidateSkills(c *config, source string) error {
 	return nil
 }
 
-func writeCandidateSkills(c config, root string) (string, error) {
+func writeCandidateSkills(c *config, root string) (string, error) {
 	installer := filepath.Join(root, "candidate-install.py")
 	if err := os.WriteFile(installer, []byte(c.SkillsInstaller), 0600); err != nil {
 		return "", err
@@ -43,7 +43,15 @@ func writeCandidateSkills(c config, root string) (string, error) {
 	if err := os.WriteFile(path, []byte(guide), 0600); err != nil {
 		return "", err
 	}
-	return (&url.URL{Scheme: "file", Path: path}).String(), nil
+	guideURL := (&url.URL{Scheme: "file", Path: path}).String()
+	guidePattern := regexp.MustCompile(`https://raw\.githubusercontent\.com/doomerlabs/skills/[^/]+/INSTALL\.md`)
+	if len(guidePattern.FindAllString(c.SkillsBootstrap, -1)) != 1 || len(digestPattern.FindAllString(c.SkillsBootstrap, -1)) != 1 {
+		return "", fmt.Errorf("candidate bootstrap must identify one pinned guide URL and checksum")
+	}
+	// Keep the fixture's full trust chain consistent after substituting its installer.
+	bootstrap := guidePattern.ReplaceAllLiteralString(c.SkillsBootstrap, guideURL)
+	c.SkillsBootstrap = digestPattern.ReplaceAllLiteralString(bootstrap, fmt.Sprintf("`%x`", sha256.Sum256([]byte(guide))))
+	return guideURL, nil
 }
 
 func installCandidateSkills(c config, home, repo string) error {
