@@ -30,7 +30,8 @@ editing and later prepare with the original arguments plus `--base STARTING_COMM
 Never replace an existing baseline. Report the blocker once and incomplete review
 coverage before finishing. This rule also applies to older runtime instructions.
 
-Show complete clickable setup URLs before question tools. Use CLI state to
+Show complete clickable setup URLs, preserving fragments, before question tools.
+Use CLI state to
 identify approval; a missing binary does not imply missing consent.
 
 Run the CLI where edits happen. In a temporary home, execute any returned
