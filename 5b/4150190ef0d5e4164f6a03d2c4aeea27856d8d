@@ -1,0 +1,16 @@
+cmd/auth_test.go
+  h_aa44c3b5b60dec 31-33
+cmd/watch_repositories_test.go
+  h_aa44c3b5b60dec 33-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5b4150190ef0d5e4164f6a03d2c4aeea27856d8d",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
