@@ -1,0 +1,14 @@
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 89-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0897737989501b0877b8f4ef5318a9b42b4e894c",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
