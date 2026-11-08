@@ -1,0 +1,20 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 150-159
+cmd/managed_test.go
+  h_aa44c3b5b60dec 151
+docs/managed-runtime.md
+  h_aa44c3b5b60dec 109
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 150-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "431e180d50ce771ffd3d8e8ad3c27d72051c5949",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
