@@ -171,7 +171,9 @@ only checks configuration. With `--allow`, it verifies the account and current
 upload consent, merges the matching policy into the active `$CODEX_HOME/config.toml` (or
 `~/.codex/config.toml`), and replaces only recognized legacy repository policy
 blocks for that same account, service and profile when integration-wide consent
-exists. Other policy text, settings and comments are preserved; a backup is saved.
+exists. If consent has narrowed to one repository, it also removes recognized
+all-repositories policy for the same Codex account, service and profile. Other
+policy text, settings and comments are preserved; a backup is saved.
 Existing installations use this same migration, without reinstalling Doomer or
 creating another upload grant. Never automatically broaden a repository-only
 grant or treat an old settings proposal as permission to install it.

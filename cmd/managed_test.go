@@ -204,11 +204,17 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if r := run("", "task", "status", handle); r.State != "consent_required" {
 		t.Fatal(r)
 	}
-	beforePolicy, _ := os.ReadFile(config)
+	beforePolicy, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if r := run("", "task", "codex-policy", handle, "--allow"); r.State != "consent_required" || r.CodexPolicyStatus != nil {
 		t.Fatal("revoked consent allowed a policy migration", r)
 	}
-	afterPolicy, _ := os.ReadFile(config)
+	afterPolicy, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if string(beforePolicy) != string(afterPolicy) {
 		t.Fatal("revoked consent modified policy")
 	}

@@ -80,32 +80,32 @@ func inspectCodexReviewPolicy(consent managedConsentEvidence) (*codexReviewPolic
 // Only replace complete, recognized policies for this same integration. Unknown
 // edits, other accounts and other services remain byte-for-byte intact.
 func mergeCodexExtraPolicy(existing string, consent managedConsentEvidence) string {
-	if consent.AllRepositories {
-		const heading = "Doomer repository review authorization\n"
-		for offset := 0; offset < len(existing); {
-			i := strings.Index(existing[offset:], heading)
-			if i < 0 {
-				break
-			}
-			i += offset
-			lines := strings.SplitN(existing[i:], "\n", 4)
-			if len(lines) < 4 {
-				break
-			}
-			var old struct {
-				Account, Repository, Service, Profile, Agent string
-				AllRepositories                              bool `json:"all_repositories"`
-			}
-			if err := json.Unmarshal([]byte(lines[2]), &old); err == nil && old.Account == consent.Account && old.Service == consent.Service && old.Profile == consent.Profile && !old.AllRepositories && old.Repository != "" && (old.Agent == "" || old.Agent == consent.Agent) {
-				legacy := proposedCodexReviewPolicy(managedConsentEvidence{Account: old.Account, Repository: old.Repository, Service: old.Service, Profile: old.Profile, Agent: old.Agent}).ExtraPolicy
-				if strings.HasPrefix(existing[i:], legacy) {
-					existing = existing[:i] + existing[i+len(legacy):]
-					offset = i
-					continue
-				}
-			}
-			offset = i + len(heading)
+	const heading = "Doomer repository review authorization\n"
+	for offset := 0; offset < len(existing); {
+		i := strings.Index(existing[offset:], heading)
+		if i < 0 {
+			break
 		}
+		i += offset
+		lines := strings.SplitN(existing[i:], "\n", 4)
+		if len(lines) < 4 {
+			break
+		}
+		var old struct {
+			Account, Repository, Service, Profile, Agent string
+			AllRepositories                              bool `json:"all_repositories"`
+		}
+		if err := json.Unmarshal([]byte(lines[2]), &old); err == nil && old.Account == consent.Account && old.Service == consent.Service && old.Profile == consent.Profile &&
+			((consent.AllRepositories && !old.AllRepositories && old.Repository != "" && (old.Agent == "" || old.Agent == consent.Agent)) ||
+				(!consent.AllRepositories && old.AllRepositories && old.Agent == "codex")) {
+			legacy := proposedCodexReviewPolicy(managedConsentEvidence{Account: old.Account, Repository: old.Repository, Service: old.Service, Profile: old.Profile, Agent: old.Agent, AllRepositories: old.AllRepositories}).ExtraPolicy
+			if strings.HasPrefix(existing[i:], legacy) {
+				existing = existing[:i] + existing[i+len(legacy):]
+				offset = i
+				continue
+			}
+		}
+		offset = i + len(heading)
 	}
 	p := proposedCodexReviewPolicy(consent).ExtraPolicy
 	if strings.Contains(existing, p) {

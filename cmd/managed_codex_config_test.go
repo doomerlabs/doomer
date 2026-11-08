@@ -87,6 +87,43 @@ func TestCodexPolicyPatchLayouts(t *testing.T) {
 	}
 }
 
+func TestCodexPolicyMigrationNarrowsConsent(t *testing.T) {
+	broad := managedConsentEvidence{Account: "one", Agent: "codex", AllRepositories: true, Service: "https://doomer.ai/api", Profile: "default"}
+	narrow := broad
+	narrow.Agent, narrow.AllRepositories, narrow.Repository = "", false, "/repo/.git"
+	other := broad
+	other.Account = "other"
+	existing := proposedCodexReviewPolicy(broad).ExtraPolicy + proposedCodexReviewPolicy(other).ExtraPolicy
+	merged := mergeCodexExtraPolicy(existing, narrow)
+	if strings.Contains(merged, proposedCodexReviewPolicy(broad).ExtraPolicy) || !strings.Contains(merged, proposedCodexReviewPolicy(narrow).ExtraPolicy) || !strings.Contains(merged, proposedCodexReviewPolicy(other).ExtraPolicy) {
+		t.Fatal("scope narrowing retained broader policy or changed another account", merged)
+	}
+	if again := mergeCodexExtraPolicy(merged, narrow); again != merged {
+		t.Fatal("narrow policy duplicated")
+	}
+}
+
+func TestCodexConfigPathHonorsActiveHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("CODEX_HOME", "")
+	path, err := codexConfigPath()
+	if err != nil || path != filepath.Join(home, ".codex", "config.toml") {
+		t.Fatal(path, err)
+	}
+	active := t.TempDir()
+	t.Setenv("CODEX_HOME", active)
+	path, err = codexConfigPath()
+	if err != nil || path != filepath.Join(active, "config.toml") {
+		t.Fatal(path, err)
+	}
+	// A missing active config must never fall back to another profile.
+	if data, err := readCodexConfig(path); err != nil || len(data) != 0 {
+		t.Fatal(string(data), err)
+	}
+}
+
 func TestCodexPolicyMigrationRejectsInvalidConfig(t *testing.T) {
 	for _, input := range []string{"[broken", "[auto_review]\nextra_policy=123", "auto_review={extra_policy='old'}\n"} {
 		t.Run(input, func(t *testing.T) {

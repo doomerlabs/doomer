@@ -116,7 +116,9 @@ The migration verifies account and current consent. It preserves unrelated
 policy, settings and comments, backs up the old config, and atomically replaces
 only its `extra_policy` string. With integration-wide consent it removes exact
 recognized legacy repository policy blocks for the same account, service and
-profile, then adds the integration policy. It does not expand legacy upload
+profile, then adds the integration policy. A repository-only grant removes
+recognized broader Codex policy for the same account, service and profile.
+It does not expand legacy upload
 grants, infer settings permission from upload permission, or change sandbox,
 approval-mode or hook settings. Invalid or unsupported TOML is left untouched.
 
