@@ -138,6 +138,7 @@ func TestLauncherKeepsLocalCommands(t *testing.T) {
 	putPin(t, repo, "2026.11.5.5")
 	t.Chdir(repo)
 	for _, args := range [][]string{
+		{"onboard", "reset", "--dry-run"},
 		{"self-update", "--check"},
 		{"runtime-info"},
 		{"doctor", "--no-upload"},

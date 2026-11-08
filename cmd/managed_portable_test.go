@@ -149,7 +149,7 @@ func TestPortableSetupAcrossHomesAndMountPaths(t *testing.T) {
 			if err := watch.Read(filepath.Join(s.Root, "update-authorizations", updateAuthorizationKey(task)+".json"), &updates); err != nil || !updates.Authorized || !updates.ApprovedAt.Equal(original.UpdateApprovedAt) {
 				t.Fatal("update approval evidence was not preserved", err)
 			}
-			if err := checkPortable(ctx, task); err != nil {
+			if err := checkPortable(ctx, s, task); err != nil {
 				t.Fatal(err)
 			}
 			reviewGit(t, moved, "remote", "set-url", "origin", "https://github.com/example/different.git")
@@ -170,7 +170,7 @@ func TestPortableSetupAcrossHomesAndMountPaths(t *testing.T) {
 			if err := removePortable(ctx, task); err != nil {
 				t.Fatal(err)
 			}
-			if err := checkPortable(ctx, task); err == nil {
+			if err := checkPortable(ctx, s, task); err == nil {
 				t.Fatal("revoked portable approval remained usable")
 			}
 			if err := savePortable(ctx, app, s, task, false); err == nil {

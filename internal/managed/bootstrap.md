@@ -82,3 +82,14 @@ when required.
 After installation, resume any existing task with `prepare --task HANDLE`, or
 run the initial prepare command if no task exists. Present only the refreshed
 result's approval request; earlier pending requests may have been satisfied.
+
+When the user requests an onboarding reset, run `doomer onboard reset --dry-run`
+to report discovered agent installations, Doomer profiles, and grant revocations, then run
+`doomer onboard reset` when that cleanup is authorized. Reset covers discovered
+installations and Doomer profiles, keeps login credentials, and revokes upload,
+portable, and software-update grants. A persistent reset cutoff rejects old
+portable copies. Report any incomplete/manual cleanup and the need to restart
+running agents. Do not automatically onboard again or recreate grants after a
+reset. Do not run a live reset merely to test an implementation.
+Retain existing task handles and report incomplete review coverage for tasks
+paused by the reset. Resume them only after the user explicitly grants access again.

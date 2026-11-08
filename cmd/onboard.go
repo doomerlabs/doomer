@@ -14,6 +14,8 @@ import (
 
 // Onboarding uses the same consent and background-start path as watch start.
 // There is no separate grant, implicit resume, or hook-trust bypass.
+// The reset subcommand independently revokes integrations across discovered homes;
+// it does not install hooks or grant permission.
 func newOnboardCommand(app *application.App, api, profile *string) *cobra.Command {
 	var repo, agent, session string
 	var taskStdin, restartRequired, checkHooks, refresh bool
@@ -25,6 +27,7 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 	c.Flags().BoolVar(&refresh, "refresh", false, "gracefully refresh a running managed watcher after a CLI update")
 	c.Flags().BoolVar(&restartRequired, "restart", false, "Codex: the CLI was installed during this turn and needs fresh prompt capture")
 	c.Flags().BoolVar(&checkHooks, "check-hooks", false, "verify live Codex or Claude hooks without changing setup")
+	c.AddCommand(newOnboardResetCommand())
 	c.MarkFlagsMutuallyExclusive("check-hooks", "task-stdin")
 	c.MarkFlagsMutuallyExclusive("check-hooks", "restart")
 	c.MarkFlagsMutuallyExclusive("check-hooks", "refresh")

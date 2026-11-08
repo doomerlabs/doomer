@@ -104,6 +104,15 @@ func restorePortable(ctx context.Context, app *application.App, s managed.Store,
 	if err != nil {
 		return err
 	}
+	cutoff, err := resetCutoff(s)
+	if err != nil {
+		return err
+	}
+	if !record.Grant.Approved || !cutoff.IsZero() && !record.Grant.At.After(cutoff) {
+		t.Portable = false
+		t.PortableApproved = false
+		return s.Save(t)
+	}
 	if record.Schema != 1 || record.API != t.API || record.Profile != t.Profile || record.Origin != origin || !record.Grant.Approved || record.Grant.Account == "" || record.Grant.API != t.API || record.Grant.Profile != t.Profile {
 		return fmt.Errorf("portable setup does not match this repository, service, and profile")
 	}
@@ -285,7 +294,7 @@ func removePortable(ctx context.Context, t managed.Task) error {
 	})
 }
 
-func checkPortable(ctx context.Context, t managed.Task) error {
+func checkPortable(ctx context.Context, s managed.Store, t managed.Task) error {
 	path, origin, err := portableLocation(ctx, t)
 	if err != nil {
 		return err
@@ -293,6 +302,13 @@ func checkPortable(ctx context.Context, t managed.Task) error {
 	record, err := readPortable(path)
 	if err != nil {
 		return fmt.Errorf("portable repository approval is unavailable; resume prepare")
+	}
+	cutoff, err := resetCutoff(s)
+	if err != nil {
+		return err
+	}
+	if !cutoff.IsZero() && !record.Grant.At.After(cutoff) {
+		return fmt.Errorf("portable approval was reset; resume prepare")
 	}
 	if record.Origin != origin || record.API != t.API || record.Profile != t.Profile || record.Grant.Account != t.AccountID || !record.Grant.Approved {
 		return fmt.Errorf("portable repository approval changed; resume prepare")

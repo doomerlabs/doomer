@@ -636,3 +636,31 @@ An authenticated account is identified by the server. Anonymous uploads use a
 hashed anonymous identity, and optional name/email/tags are self-reported.
 Use `--no-upload` for local inspection. A local report remains available when an
 upload fails, and `--output` refuses to overwrite an existing file.
+
+### Reset onboarding
+
+Run `doomer onboard reset --dry-run` to discover installed integrations and preview
+cleanup. Run `doomer onboard reset` to apply it; `--json` provides the same report
+for scripts. No repository argument is required.
+
+Reset discovers Codex and Claude in their standard home directories, side-by-side
+`.codex-*` / `.claude-*` directories (and underscore variants), `CODEX_HOME` / `CLAUDE_CONFIG_DIR`, and Codex
+Accounts profile homes. It covers all profiles in discovered Doomer state roots
+(including `DOOMER_CONFIG_DIR`) and repositories recorded by those profiles.
+It stops discovered watchers, pauses managed tasks, removes Doomer hooks and
+associated Codex hook trust, removes recognized Doomer reviewer policy and
+instructions, and revokes upload, portable, and software-update approvals.
+Pending onboarding and hook activation state are cleared. Login credentials,
+review history, installed CLI binaries, and unrelated agent settings are kept.
+
+The report lists each discovered installation, path, planned cleanup, and result.
+Unknown custom skills/policy, symlinks, inaccessible files, and unsupported layouts
+are reported for manual cleanup with a nonzero exit status. Arbitrary custom
+homes that are neither in the known locations nor environment overrides cannot
+be discovered automatically. Reset does not change organization-managed policy
+or delete data already uploaded to Doomer. Restart running coding agents to unload
+cached hooks/policy, then onboard again to grant access.
+
+Approvals timestamped at or before a reset are invalidated. An unreadable or
+corrupt reset record blocks permission reuse until repaired; it never restores
+an old approval by ignoring the reset.

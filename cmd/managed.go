@@ -63,6 +63,11 @@ func managedStore() (managed.Store, error) {
 	if err != nil {
 		return s, err
 	}
+	if _, err := os.Stat(filepath.Join(s.Root, "reset-in-progress")); err == nil {
+		return s, fmt.Errorf("onboarding reset is in progress; retry after it completes")
+	} else if !os.IsNotExist(err) {
+		return s, err
+	}
 	return s, s.Init()
 }
 
@@ -714,7 +719,7 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				return outputManaged(c, s, t, result)
 			}
 			if t.Portable && !t.PortableDeclined {
-				if err := checkPortable(c.Context(), t); err != nil {
+				if err := checkPortable(c.Context(), s, t); err != nil {
 					return outputManaged(c, s, t, managedResult{State: "consent_required", Authenticated: true, Error: err.Error()})
 				}
 			}
