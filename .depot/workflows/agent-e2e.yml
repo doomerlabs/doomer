@@ -61,8 +61,8 @@ jobs:
     timeout-minutes: 20
     strategy:
       fail-fast: false
-      # Limit each manual run to four jobs when dispatching concurrent suites.
-      max-parallel: ${{ github.event_name == 'workflow_dispatch' && 4 || 48 }}
+      # Bound provider request bursts while keeping scenarios parallel.
+      max-parallel: 4
       matrix:
         harness: [codex, claude]
         scenario: ${{ fromJSON(needs.plan.outputs.scenarios) }}
