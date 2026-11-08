@@ -76,13 +76,15 @@ func BootstrapSupports(constraint, version string) (bool, error) {
 }
 
 type BootstrapUpdate struct {
-	Path       string `json:"path"`
-	State      string `json:"state"`
-	Installed  string `json:"installed,omitempty"`
-	Available  string `json:"available"`
-	CLIRange   string `json:"cli_range"`
-	Action     string `json:"action,omitempty"`
-	Compatible *bool  `json:"compatible,omitempty"`
+	Path             string `json:"path"`
+	Scope            string `json:"scope"`
+	UpgradeAvailable bool   `json:"upgrade_available"`
+	State            string `json:"state"`
+	Installed        string `json:"installed,omitempty"`
+	Available        string `json:"available"`
+	CLIRange         string `json:"cli_range"`
+	Action           string `json:"action,omitempty"`
+	Compatible       *bool  `json:"compatible,omitempty"`
 }
 
 func BootstrapUpgradeOffer(scope string) string {
@@ -90,7 +92,7 @@ func BootstrapUpgradeOffer(scope string) string {
 	if scope == "personal" {
 		location = "your personal"
 	}
-	offer := "Ask the user: ‘A new version of the Doomer skill is available. Update " + location + " skill files now? Your current version still works.’ Present choices in this order: ‘Update skill (recommended)’, ‘Maybe later’."
+	offer := strings.TrimSpace(UpgradePromptRules) + "\n\nIf the checks above permit an offer, ask the user: ‘A new version of the Doomer skill is available. Update " + location + " skill files now? Your current version still works.’ Present choices in this order: ‘Update skill (recommended)’, ‘Maybe later’."
 	if scope == "personal" {
 		return offer + " Apply an accepted personal update locally without creating a pull request."
 	}
@@ -124,7 +126,7 @@ func recognizedPreviousBootstrap(data []byte, policy Policy) bool {
 
 func InspectBootstrap(path, scope, version string) (BootstrapUpdate, error) {
 	b, err := ReadBootstrap(path, scope)
-	result := BootstrapUpdate{Path: path, Installed: b.Revision, Available: BootstrapVersion, CLIRange: BootstrapCLIRange}
+	result := BootstrapUpdate{Path: path, Scope: scope, Installed: b.Revision, Available: BootstrapVersion, CLIRange: BootstrapCLIRange}
 	if err != nil {
 		return result, err
 	}
@@ -158,9 +160,10 @@ func InspectBootstrap(path, scope, version string) (BootstrapUpdate, error) {
 		return result, nil
 	}
 	result.State = "modified"
-	result.Action = "The wrapper differs from the bundled templates. Review its local changes and reconcile manually."
-	if recognizedPreviousBootstrap(data, b.Policy) {
+	result.Action = "Local skill content differs. Preserve local edits and report the difference; modified content alone is not an upgrade offer."
+	if recognizedPreviousBootstrap(data, b.Policy) && (b.Revision == "" || VersionLess(b.Revision, BootstrapVersion)) {
 		result.State = "update_available"
+		result.UpgradeAvailable = true
 		result.Action = BootstrapUpgradeOffer(scope) + " After acceptance, run doomer bootstrap upgrade with the same scope. Preserve the update policy."
 	}
 	return result, nil

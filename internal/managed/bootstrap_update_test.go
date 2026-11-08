@@ -106,3 +106,20 @@ func TestSevenFiveBootstrapRemainsUpgradable(t *testing.T) {
 		t.Fatal("updated onboarding guidance missing")
 	}
 }
+
+func TestPromptRulesAreSharedByBootstrapAndRuntime(t *testing.T) {
+	bootstrap, err := BootstrapText(Policy{Protocol: Protocol, Channel: "stable"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rules := range []string{PermissionPromptRules, UpgradePromptRules} {
+		if !strings.Contains(bootstrap, strings.TrimSpace(rules)) || !strings.Contains(Instructions, strings.TrimSpace(rules)) {
+			t.Fatal("prompt decision rules diverged")
+		}
+	}
+	for _, text := range []string{bootstrap, Instructions} {
+		if strings.Contains(text, "{{permission_prompt_rules}}") || strings.Contains(text, "{{upgrade_prompt_rules}}") {
+			t.Fatal("unexpanded prompt rules")
+		}
+	}
+}

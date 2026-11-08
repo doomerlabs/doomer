@@ -45,6 +45,18 @@ func TestBootstrapUpgradeRequiresAcceptanceAndPreservesPolicy(t *testing.T) {
 			t.Fatal("changed without acceptance")
 		}
 	}
+	// A valid old copy must not turn a sibling's local modifications into
+	// an actionable upgrade that would overwrite those edits.
+	if err := os.WriteFile(paths[1], []byte(old+"\nCustom instructions.\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	mixed, err := run("upgrade")
+	if err != nil || !strings.Contains(mixed, `"acceptance_required":false`) {
+		t.Fatal("mixed modified scope requested acceptance", mixed, err)
+	}
+	if err := os.WriteFile(paths[1], []byte(old), 0600); err != nil {
+		t.Fatal(err)
+	}
 	offered := managedBootstrapUpdates(managed.Task{Repo: repo, Bootstrap: managed.Bootstrap{Path: paths[0], Scope: "project"}})
 	executable, err := os.Executable()
 	if err != nil {
@@ -78,6 +90,11 @@ func TestBootstrapUpgradeRequiresAcceptanceAndPreservesPolicy(t *testing.T) {
 	if _, err = run("upgrade", "--accept"); err != nil {
 		t.Fatal("retry failed", err)
 	}
+	output, err = run("upgrade")
+	if err != nil || !strings.Contains(output, `"acceptance_required":false`) {
+		t.Fatal("current skill requested acceptance", output, err)
+	}
+
 	data, _ := os.ReadFile(paths[1])
 	if err = os.WriteFile(paths[1], append(data, []byte("\nCustom instructions.\n")...), 0600); err != nil {
 		t.Fatal(err)
@@ -85,6 +102,11 @@ func TestBootstrapUpgradeRequiresAcceptanceAndPreservesPolicy(t *testing.T) {
 	if _, err = run("upgrade", "--accept"); err == nil {
 		t.Fatal("overwrote custom wrapper")
 	}
+	output, err = run("upgrade")
+	if err != nil || !strings.Contains(output, `"acceptance_required":false`) {
+		t.Fatal("modified skill requested an upgrade", output, err)
+	}
+
 }
 
 func TestBootstrapUpgradeDetectsRacesAndRollsBack(t *testing.T) {

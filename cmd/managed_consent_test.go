@@ -142,3 +142,44 @@ func TestIntegrationConsentAcrossRepositoriesAndRevocation(t *testing.T) {
 		t.Fatal("later revocation retained a repository exception", evidence, err)
 	}
 }
+
+// Session, checkout, release, and hook diagnostics must never renew an existing
+// integration grant or turn it into a fresh permission request.
+func TestGrantReuseAcrossSessionAndCheckoutChanges(t *testing.T) {
+	s := managed.Store{Root: t.TempDir()}
+	original := managed.Task{AccountID: "account", RepositoryID: "repo/.git", Repo: "repo", API: "https://doomer.ai/api", Profile: "default", Agent: "codex", HookActivated: true}
+	if err := recordIntegrationConsent(s, original, "explicit_integration_approval", true); err != nil {
+		t.Fatal(err)
+	}
+	path := integrationConsentPath(s, original)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, change := range []string{"session", "linked-worktree", "other-repository", "release", "hook-unverified"} {
+		t.Run(change, func(t *testing.T) {
+			next := original
+			switch change {
+			case "session":
+				next.Capabilities.SessionID = "new-session"
+			case "linked-worktree":
+				next.Repo = "linked-checkout"
+			case "other-repository":
+				next.Repo = "other"
+				next.RepositoryID = "other/.git"
+			case "release":
+				next.Release = "2026.11.8.1"
+			case "hook-unverified":
+				next.HookActivated = false
+			}
+			evidence, err := savedManagedConsentEvidence(s, next)
+			if err != nil || evidence == nil || !evidence.AllRepositories {
+				t.Fatal("matching grant was not reused", evidence, err)
+			}
+			after, err := os.ReadFile(path)
+			if err != nil || string(after) != string(before) {
+				t.Fatal("grant was renewed or changed", err)
+			}
+		})
+	}
+}
