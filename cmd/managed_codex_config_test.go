@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -47,7 +48,7 @@ func TestCodexPolicyMigrationPreservesConfiguration(t *testing.T) {
 		}
 	}
 	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0640 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0640 {
 		t.Fatal(info.Mode())
 	}
 	backups, _ := filepath.Glob(path + ".before-doomer-*")
