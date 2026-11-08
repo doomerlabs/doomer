@@ -1,0 +1,21 @@
+tests/codexinstall/skills.go
+  s_f23d7bc729b5d1::t_6bfa2caa46449e 47-67,69-74,77-78
+tests/codexinstall/skills_test.go
+  s_f23d7bc729b5d1::t_6bfa2caa46449e 117-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0003c4cc4536f57b141246ed1fa575b6fea2bc84",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
