@@ -1,0 +1,20 @@
+cmd/onboard.go
+  h_aa44c3b5b60dec 17-18
+cmd/onboard_reset.go
+  h_aa44c3b5b60dec 28,38,48,59,485-486,494,568-571,635
+cmd/onboard_reset_test.go
+  h_aa44c3b5b60dec 143-149,244-255,285,367-379
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 87,93-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bde259863b3ef2703154954ea87e06bfb8902b53",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
