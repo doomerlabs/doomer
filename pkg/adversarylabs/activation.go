@@ -6,6 +6,7 @@ import "context"
 type ActivationEvent struct {
 	Stage          string `json:"stage"`
 	ReviewID       string `json:"reviewId,omitempty"`
+	AttemptID      string `json:"attemptId,omitempty"`
 	InstallationID string `json:"installationId"`
 	Repository     string `json:"repository"`
 	Agent          string `json:"agent"`
