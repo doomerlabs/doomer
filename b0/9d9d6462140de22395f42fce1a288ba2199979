@@ -1,0 +1,26 @@
+tests/codexinstall/candidate_test.go
+  h_aa44c3b5b60dec 74-83,127-141
+tests/codexinstall/candidate.go
+  h_aa44c3b5b60dec 83-112
+internal/managed/bootstrap-2026.11.8.7.md
+  h_aa44c3b5b60dec 1-68
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 14,57-59,134
+internal/managed/discovery.go
+  h_aa44c3b5b60dec 1-60
+cmd/managed_discovery.go
+  h_aa44c3b5b60dec 3,9
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 63,73-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b09d9d6462140de22395f42fce1a288ba2199979",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
