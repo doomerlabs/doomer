@@ -56,11 +56,7 @@ finishing. Each call is
 resumable. If pending, continue useful work and check again with a bounded delay.
 Do not start another review while this revision is pending. If a call is rejected
 by network policy, show the returned required host and retain the same handle.
-When a result includes network_access in Codex, read local authorization with
-`doomer preflight --agent codex --repo .`, then retry the returned retry_command
-through normal tool network permissions using its non-secret scope summary as context. Reuse
-existing grants and honor explicit host denials. If the permitted retry fails,
-report its required_host and docs_url once and retain the task.
+Follow the returned network-recovery action for the active harness.
 For Claude, present required_host for copying, settings_url, and docs_url as
 clickable links. Explain the connection's purpose and guide the user to their
 active organization's network allowlist (Code or Capabilities, depending on the
