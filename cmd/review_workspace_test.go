@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
@@ -226,5 +230,75 @@ func TestReviewRejectsInvalidLookCloserThresholdBeforeWork(t *testing.T) {
 				t.Fatalf("invalid threshold accepted: %v", err)
 			}
 		})
+	}
+}
+
+func TestDirectReviewJSONKeepsNotices(t *testing.T) {
+	notice := adversarylabs.ClientNotice{ID: "critical-fix", Revision: 1, Component: "cli", Severity: "critical", Message: "Upgrade before the deadline", RecommendedVersion: "2026.11.9.1", ExpiresAt: time.Now().Add(time.Hour)}
+	review := adversarylabs.WorkspaceReview{ID: "review", Status: "completed", Notices: []adversarylabs.ClientNotice{notice}}
+	var output bytes.Buffer
+	if err := writeWorkspaceReview(&output, "json", review, "https://doomer.ai/review", nil); err != nil {
+		t.Fatal(err)
+	}
+	var envelope struct {
+		Data struct {
+			Notices []adversarylabs.ClientNotice `json:"notices"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := json.Marshal(envelope.Data.Notices)
+	want, _ := json.Marshal([]adversarylabs.ClientNotice{notice})
+	if !bytes.Equal(got, want) {
+		t.Fatalf("notice changed: got %s want %s", got, want)
+	}
+}
+
+func TestDirectReviewNoticeHTTPRoundTrip(t *testing.T) {
+	deadline := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
+	notice := adversarylabs.ClientNotice{ID: "wire-critical", Revision: 7, Component: "cli", Severity: "critical", Message: "Upgrade before the deadline", RecommendedVersion: "2026.11.9.1", ExpiresAt: deadline.Add(time.Hour), Deadline: &deadline, Blocking: false}
+	wire, _ := json.Marshal(adversarylabs.NoticeEnvelope{Schema: 1, Notices: []adversarylabs.ClientNotice{notice}})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Doomer-Notices", base64.StdEncoding.EncodeToString(wire))
+		json.NewEncoder(w).Encode(adversarylabs.WorkspaceReview{ID: "wire-review", Status: "completed", Notices: []adversarylabs.ClientNotice{notice}})
+	}))
+	defer server.Close()
+	root := t.TempDir()
+	var stderr bytes.Buffer
+	ctx := adversarylabs.WithNoticeCollector(context.Background(), root, server.URL, &stderr)
+	client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, server.URL)
+	review, err := client.StartWorkspace(ctx, "token", adversarylabs.WorkspaceSubmission{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	if err = writeWorkspaceReview(&stdout, "json", review, server.URL, nil); err != nil {
+		t.Fatal(err)
+	}
+	var output outputEnvelope[adversarylabs.WorkspaceReview]
+	if err = json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := json.Marshal(output.Data.Notices)
+	want, _ := json.Marshal([]adversarylabs.ClientNotice{notice})
+	if !bytes.Equal(got, want) {
+		t.Fatalf("wire notice changed: got %s want %s", got, want)
+	}
+	adversarylabs.FlushNotices(ctx)
+	if !strings.Contains(stderr.String(), notice.Message) {
+		t.Fatal("foreground notice missing", stderr.String())
+	}
+	resumed := adversarylabs.WithNoticeCollector(context.Background(), root, server.URL, nil)
+	cached := adversarylabs.NoticesFromContext(resumed)
+	if len(cached) != 1 || !cached[0].Cached {
+		t.Fatal("wire notice not persisted", cached)
+	}
+	notice.Cached = true
+	got, _ = json.Marshal(cached)
+	want, _ = json.Marshal([]adversarylabs.ClientNotice{notice})
+	if !bytes.Equal(got, want) {
+		t.Fatalf("cached notice changed: got %s want %s", got, want)
 	}
 }

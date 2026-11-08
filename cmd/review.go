@@ -32,7 +32,7 @@ No commits are created and no local changes are staged or modified.
 --show-diff prints the exact patch before upload (off by default).
 
 Without a login, invoking review authorizes source uploads and runs free
-anonymous Look Closer only. Sign in to also run Deep review.
+Look Closer only; no account needed. Sign in to also run Deep review.
 By default Look Closer results return synchronously while the deep review
 continues on the server. Look Closer defaults to a threshold of 80/100;
 --look-closer-threshold=55 returns more tentative leads. This does not change deep review.

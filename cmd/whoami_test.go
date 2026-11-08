@@ -71,7 +71,7 @@ func TestWhoamiAnonymousDoesNotContactServiceOrCreateCredentials(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := execute(t, "", "--api-url", server.URL, "--profile", "anonymous-local", "whoami")
-	if err != nil || !strings.Contains(out, "Profile: anonymous-local") || !strings.Contains(out, "anonymously") {
+	if err != nil || !strings.Contains(out, "Profile: anonymous-local") || !strings.Contains(out, "without an account") {
 		t.Fatalf("%s %v", out, err)
 	}
 	after, err := os.ReadFile(store.Path)
@@ -90,7 +90,7 @@ func TestWhoamiDoesNotDowngradeRejectedOrExpiredLogin(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := execute(t, "", "--api-url", server.URL, "--profile", "work", "whoami")
-	if err == nil || strings.Contains(out, "anonymously") || !strings.Contains(err.Error(), "work") {
+	if err == nil || strings.Contains(out, "without an account") || !strings.Contains(err.Error(), "work") {
 		t.Fatalf("%s %v", out, err)
 	}
 	if err = store.SetAuth(key, adversarylabs.Auth{Token: "expired", ExpiresAt: time.Now().Add(-time.Hour).Format(time.RFC3339)}); err != nil {

@@ -55,7 +55,7 @@ for policies, recovery, adapter behavior, and deployment visibility.
 ## Watch repositories while you code
 
 The CLI uses the same workspace review API as the Mac app. Without a login,
-it runs free anonymous Look Closer reviews and returns an unlisted review link.
+it runs free Look Closer reviews with no account needed and returns an unlisted review link.
 A signed-in profile can also run Deep review. The Mac app is not required.
 
 ```sh
@@ -66,7 +66,7 @@ go build -o bin/doomer .
 
 For a coding agent, use `watch start` to approve the current repository and
 start or reuse a detached watcher. The CLI opens a local consent page on macOS
-and Linux desktops. Anonymous users must approve uploads too; invoking a command,
+and Linux desktops. People using reviews without an account must approve uploads too; invoking a command,
 installing hooks, or having an anonymous identity is not upload permission.
 
 ```sh
@@ -165,7 +165,7 @@ Start with `watch start` (or keep foreground `watch` running), then edit the app
 in Codex. After files settle, Doomer uploads a bounded snapshot and starts the
 hosted workspace review. The synchronous hook waits at most 30 seconds for the
 initial assessment and otherwise releases the agent silently. For an entitled signed-in profile, any deep review continues on the service;
-it is never waited on by the hook. Anonymous watching runs only free Look Closer. New leads include a
+it is never waited on by the hook. Watching without an account runs only free Look Closer. New leads include a
 link to the web review and instructions to investigate within your task's scope.
 Outcome lines in the agent's final reply are captured locally and uploaded by the
 running watcher. Missing agent outcomes are never invented.
@@ -558,10 +558,10 @@ has no local model/provider or Node runtime configuration. `DOOMER_DATA_DIR`
 overrides the artifact data directory; credentials remain in the separate
 configuration directory.
 
-### Anonymous reviews
+### No account needed
 
 No login is required for `review` or `watch`. Direct `review` invocation authorizes sending
-source code and review context to the selected service. Anonymous runs always use
+source code and review context to the selected service. Runs without an account always use
 Look Closer only, even when Deep review is requested. By default the CLI waits for
 Look Closer; `--wait=none` still returns immediately. Existing signed-in profiles
 keep their normal review modes.
@@ -593,7 +593,7 @@ doomer whoami --profile work --format json
 
 `whoami` shows the profile and service, and verifies a saved login with that
 service before showing account, team and plan information. With no login it
-reports anonymous mode. It does not create credentials or change profiles.
+reports no-account mode. It does not create credentials or change profiles.
 An expired or rejected login is reported as an error, not as anonymous mode.
 
 ### Reuse content across profiles

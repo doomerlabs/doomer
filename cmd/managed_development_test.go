@@ -186,7 +186,7 @@ func TestDevelopmentHooksUseLocalBinary(t *testing.T) {
 
 func TestAnonymousSetupKeepsSetupOnlyInstructions(t *testing.T) {
 	instructions := managedTaskInstructions(managed.Task{AccountID: "anonymous:test", Purpose: "setup"})
-	if !strings.Contains(instructions, "anonymous capability") || !strings.Contains(instructions, "Do not submit repository content or run a code review") {
+	if !strings.Contains(instructions, "installation capability") || !strings.Contains(instructions, "Do not submit repository content or run a code review") {
 		t.Fatal(instructions)
 	}
 }

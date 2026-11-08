@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // ResponseError contains only allowlisted server diagnostics, never a raw body.
 type ResponseError struct {
+	Notices    []ClientNotice
 	StatusCode int
 	Host       string
 	Code       string
@@ -41,11 +43,18 @@ func responseError(resp *http.Response, token string) error {
 		Field     string `json:"field"`
 		Message   string `json:"message"`
 		RequestID string `json:"request_id"`
+		NoticeEnvelope
 	}
 	const maxErrorBytes = 8 * 1024
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxErrorBytes+1))
 	if err == nil && len(data) <= maxErrorBytes && json.Unmarshal(data, &body) == nil {
 		switch body.Error {
+		case "client_update_required":
+			safeCode = body.Error
+			message += ": this CLI version is no longer supported for this operation; update Doomer using your existing installation method (https://doomer.ai/updates)"
+		case "client_policy_unavailable":
+			safeCode = body.Error
+			message += ": update policy temporarily unavailable; retry this operation later"
 		case "missing_review_scope":
 			safeCode = body.Error
 			message += ": " + body.Error
@@ -101,6 +110,14 @@ func responseError(resp *http.Response, token string) error {
 	if cause != nil {
 		message = cause.Error() + ": " + message
 	}
+	if safeCode == "client_update_required" {
+		for _, n := range ValidNotices(body.NoticeEnvelope, time.Now()) {
+			if n.Blocking {
+				message += " (recommended version " + n.RecommendedVersion + ")"
+				break
+			}
+		}
+	}
 	if token != "" {
 		message = strings.ReplaceAll(message, token, "[redacted]")
 	}
@@ -108,5 +125,11 @@ func responseError(resp *http.Response, token string) error {
 	if resp.Request != nil && resp.Request.URL != nil {
 		host = resp.Request.URL.Hostname()
 	}
-	return &ResponseError{StatusCode: resp.StatusCode, Host: host, Code: safeCode, message: message, cause: cause}
+	notices := ValidNotices(body.NoticeEnvelope, time.Now())
+	if token != "" {
+		for i := range notices {
+			notices[i].Message = strings.ReplaceAll(notices[i].Message, token, "[redacted]")
+		}
+	}
+	return &ResponseError{Notices: notices, StatusCode: resp.StatusCode, Host: host, Code: safeCode, message: message, cause: cause}
 }

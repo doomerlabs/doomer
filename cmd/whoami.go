@@ -67,7 +67,7 @@ func newWhoamiCommand(app *application.App, api, profile *string) *cobra.Command
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "Profile: %s\nService: %s\n", info.Profile, info.Service)
 			if info.Account == nil {
-				_, err = fmt.Fprintln(out, "You're using Doomer anonymously.\nLook Closer is available; log in to use Deep review.")
+				_, err = fmt.Fprintln(out, "You're using Doomer without an account.\nLook Closer is available; log in to use Deep review.")
 				return err
 			}
 			account := info.Account

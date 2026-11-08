@@ -108,3 +108,35 @@ func TestBlockedAuthorizationDoesNotGateLocalCompletion(t *testing.T) {
 		}
 	}
 }
+
+func TestManagedNoticeDeliveryAndNoStopLoop(t *testing.T) {
+	result := managedResult{State: "complete", Notices: []adversarylabs.ClientNotice{{ID: "fix", Severity: "critical", Message: "Update needed", RecommendedVersion: "2026.11.9.1", NotifyUser: true}}}
+	raw, _ := json.Marshal(result)
+	feedback, _ := json.Marshal(managedHookFeedback("PostToolUse", raw, nil))
+	if !strings.Contains(string(feedback), "Update needed") {
+		t.Fatal(string(feedback))
+	}
+	result.State = "client_update_required"
+	raw, _ = json.Marshal(result)
+	if got := managedHookFeedback("Stop", raw, nil); len(got) != 0 {
+		t.Fatal("blocked update restarted stop hook", got)
+	}
+	result.State = "complete"
+	result.Notices[0].NotifyUser = false
+	raw, _ = json.Marshal(result)
+	if got := managedHookFeedback("PostToolUse", raw, nil); len(got) != 0 {
+		t.Fatal("deduplicated notice shown again", got)
+	}
+}
+
+func TestUpdateRequiredDoesNotBecomeNetworkHelp(t *testing.T) {
+	result := managedResult{State: "client_update_required", Action: "Use the verified updater"}
+	command := NewRootCommand()
+	for _, status := range []int{403, 409, 426} {
+		err := managed.NetworkError("review_submission", &adversarylabs.ResponseError{StatusCode: status, Code: "client_update_required", Host: "doomer.ai"})
+		addManagedNetworkHelp(command, &result, managed.Task{}, err)
+		if result.Action != "Use the verified updater" || result.NetworkAccess != nil {
+			t.Fatal("update action was overwritten", result)
+		}
+	}
+}
