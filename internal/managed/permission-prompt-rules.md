@@ -33,4 +33,4 @@ Do not retry explicit reviewer refusals. Keep any task handle. If none exists,
 record `git rev-parse HEAD` before
 editing and later prepare with the original arguments plus `--base STARTING_COMMIT`.
 Never replace an existing baseline. Report the blocker once. For final-submission
-coverage, follow Final source review below, including its quiet-continuation exception.
+coverage, follow Final source review below.

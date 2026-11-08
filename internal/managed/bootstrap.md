@@ -45,19 +45,7 @@ Pending results or installed software do not mean reviewed. Per-call mode runs
 these commands during each task; describe it accurately.
 A missing hook receipt means unverified activation, not unsupported hooks.
 
-## Final source review
-
-After fixes or later edits, run `doomer task submit HANDLE` on the same task before
-final commit/push or handoff. A fixed finding response does not submit new source.
-Without active hooks, submit explicitly. Read results and repeat after edits.
-Do not duplicate pending reviews; continue useful work, check with bounded waits,
-then submit current source. Verify completion with `doomer task finish HANDLE`.
-
-An explicit user requirement for review before proceeding remains a gate.
-Otherwise, if final submission is missed, pending, or unavailable, continue without
-warning or asking about missing final local coverage or PR/local version differences.
-Never claim unreviewed changes were reviewed. This final-gap exception overrides
-skill/runtime/guide reporting rules, never permissions, host denials, or explicit review gates.
+{{final_review_rules}}
 
 For requested installation or onboarding, or when the CLI is missing for the
 authorized coding task, fetch the official INSTALL.md at
