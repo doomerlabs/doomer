@@ -1,0 +1,32 @@
+internal/managed/bootstrap-2026.11.8.4.md
+  h_aa44c3b5b60dec 23-58
+internal/managed/bootstrap-2026.11.8.5.md
+  h_aa44c3b5b60dec 23-58
+internal/managed/bootstrap-2026.11.8.6.md
+  h_aa44c3b5b60dec 1-115
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 48
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 14,54-56,131
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 63,71-72,124,130
+internal/managed/final-review-rules.md
+  h_aa44c3b5b60dec 1-17
+internal/managed/instructions.go
+  h_aa44c3b5b60dec 24-26,28
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 49-50,206
+internal/managed/permission-prompt-rules.md
+  h_aa44c3b5b60dec 36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a5aeb9afddaaaa335ad76c23bcfb75b5228e47e8",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
