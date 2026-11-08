@@ -170,9 +170,10 @@ func clearStaleManagedSessions(s managed.Store, task managed.Task) error {
 }
 
 func newManagedHooksCommand(app *application.App, api, profile *string) *cobra.Command {
-	var agent string
+	var agent, taskHandle string
 	c := &cobra.Command{Use: "hooks", Short: "Install the thin managed task hook adapter", Args: cobra.NoArgs}
 	c.Flags().StringVar(&agent, "agent", "codex", "codex or claude")
+	c.Flags().StringVar(&taskHandle, "task", "", "approved Claude onboarding task; also configures its review-command permissions")
 	c.RunE = func(c *cobra.Command, _ []string) error {
 		if agent != "codex" && agent != "claude" {
 			return fmt.Errorf("agent must be codex or claude")
@@ -207,11 +208,47 @@ func newManagedHooksCommand(app *application.App, api, profile *string) *cobra.C
 		if err != nil {
 			return err
 		}
+		if taskHandle != "" {
+			if agent != "claude" {
+				return fmt.Errorf("--task for hook permissions requires agent claude")
+			}
+			task, err := state.Load(taskHandle)
+			if err != nil {
+				return err
+			}
+			if task.Agent != agent || task.API != *api || task.Profile != *profile || task.Paused {
+				return fmt.Errorf("Claude onboarding task scope mismatch or paused")
+			}
+			_, account, err := managedIdentity(c.Context(), app, task)
+			if err != nil {
+				return err
+			}
+			if task.AccountID != account {
+				return fmt.Errorf("Claude onboarding account changed")
+			}
+			evidence, err := savedManagedConsentEvidence(state, task)
+			if err != nil {
+				return err
+			}
+			if evidence == nil {
+				return fmt.Errorf("Claude onboarding needs current Doomer upload approval before installing review-command permissions")
+			}
+			if err := installClaudePermissions(state); err != nil {
+				return err
+			}
+		}
 		command += " --state " + watch.Quote(state.Root)
 		if err = watch.Install(watch.HookFile(userHome, agent), command, "--managed-task-adapter", false); err != nil {
 			return err
 		}
-		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"state": "hooks_configured", "hook_activated": false, "action": "Complete the agent's hook trust controls. Bind each task with prepare --session using that agent's actual session ID."})
+		result := map[string]any{"state": "hooks_configured", "hook_activated": false, "action": "Complete the agent's hook trust controls. Bind each task with prepare --session using that agent's actual session ID."}
+		if agent == "claude" {
+			result["claude_permissions"] = inspectClaudePermissions()
+			if taskHandle == "" && inspectClaudePermissions().State != "configured" {
+				result["action"] = "During approved Claude onboarding, rerun doomer hooks --agent claude --task HANDLE using the prepared task to configure its review-command permissions. This is part of the same onboarding, not a new upload approval. Complete native hook trust controls separately."
+			}
+		}
+		return json.NewEncoder(c.OutOrStdout()).Encode(result)
 	}
 	return c
 }
@@ -274,7 +311,8 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 			return err
 		}
 		if task.Stage == "complete" {
-			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
+			result, _ := json.Marshal(resultFor(task))
+			return json.NewEncoder(c.OutOrStdout()).Encode(managedHookFeedbackForAgent(agent, event.Event, result, nil))
 		}
 		// Invoke the task's exact release as a separate bounded call. No watcher
 		// process needs to survive this hook invocation.
@@ -294,7 +332,7 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 		command.Stdout = &output
 		command.Stderr = io.Discard
 		err = command.Run()
-		return json.NewEncoder(c.OutOrStdout()).Encode(managedHookFeedback(event.Event, output.Bytes(), err))
+		return json.NewEncoder(c.OutOrStdout()).Encode(managedHookFeedbackForAgent(agent, event.Event, output.Bytes(), err))
 	}
 	return c
 }

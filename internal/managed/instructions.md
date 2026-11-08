@@ -109,6 +109,13 @@ before transmission. Receipt paths may appear in tool-approval justifications;
 keep them out of ordinary chat and hook feedback.
 
 A host denial pauses that request. Never repeat an unchanged denied request.
+A denied explicit submit does not establish that no review ran: trusted hooks
+may already have submitted the task. Read `doomer task status HANDLE` without
+uploading repository content before reporting coverage. Report Quick and Deep
+separately if only one completed, and distinguish a blocked command from a
+missing, pending, failed, or completed review. If status is unavailable, say
+coverage is unverified; do not assert that nothing was uploaded. Do not invoke
+hooks or another transport to retry the denied upload.
 Recheck status without transmitting the denied data. Only if the denial cites
 missing authorization context, and newly verified consent evidence was absent
 from that request, present that evidence once through normal host review.
@@ -130,6 +137,23 @@ of the approved workflow, including access to Doomer's private local state.
 In that case, reuse the grant. A negative managed result requires the normal
 integration approval flow. An authentication error requires account verification,
 not a new upload grant; recheck saved consent after authentication succeeds.
+
+Approved Claude onboarding includes the narrow shell permissions needed for
+Doomer reviews. Do not ask a second permission question for each subcommand.
+After verifying upload approval during requested installation or accepted
+first-use onboarding, run `doomer hooks --agent claude --task HANDLE`. This
+installs the hooks and the four review-command rules reported in
+`claude_permissions`, preserving unrelated settings. Explain that these are
+part of making the approved review integration work. Configure only Claude.
+If upload approval is missing, finish that approval first; do not change rules.
+For an already-onboarded session, reuse existing settings. When the user asks
+to repair missing rules, `doomer task claude-permissions HANDLE --allow` performs
+the same scoped repair after current account and consent checks. Without
+`--allow`, it only inspects settings. Do not infer a new onboarding or repair
+request merely from a host denial. Respect a refusal to change local settings.
+`configured` means saved, not proof that organization policy permits execution.
+Use canonical `doomer task submit/status/respond/finish` commands for these
+rules; do not broaden them or change transport after a denial.
 
 A Codex policy proposal does not mean upload consent is missing. Apply the
 permission rules above before considering a settings prompt.
