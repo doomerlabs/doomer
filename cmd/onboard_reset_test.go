@@ -69,6 +69,12 @@ func TestOnboardResetDiscoversAndPreserves(t *testing.T) {
 	cfg = append(cfg, []byte("\n[hooks.state.\""+filepath.Join(codex, "hooks.json")+":session_start:0:0\"]\ntrusted_hash='remove'\n[hooks.state.\"unrelated\"]\ntrusted_hash='keep'\n")...)
 	resetFixture(t, filepath.Join(codex, "config.toml"), string(cfg))
 	resetFixture(t, filepath.Join(config, "auth.json"), "doomer login secret")
+	bootstrap, err := managed.BootstrapText(managed.Policy{Protocol: managed.Protocol, Channel: "stable"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	skillFile := filepath.Join(profile, "skills/doomer-review/SKILL.md")
+	resetFixture(t, skillFile, bootstrap)
 	state := filepath.Join(config, "managed")
 	resetFixture(t, filepath.Join(state, "integration-consents/a.json"), `{"approved":true,"agent":"codex"}`)
 	resetFixture(t, filepath.Join(state, "consents/a.json"), `{"approved":true}`)
@@ -140,6 +146,9 @@ func TestOnboardResetDiscoversAndPreserves(t *testing.T) {
 	json.Unmarshal([]byte(resetContents(t, filepath.Join(state, "consents/a.json"))), &grant)
 	if grant["approved"] != false {
 		t.Fatal("grant remains")
+	}
+	if _, err := os.Stat(skillFile); !os.IsNotExist(err) {
+		t.Fatal("Codex profile skill remains", err)
 	}
 	// A repeat reset is safe and preserves the same user-owned settings.
 	again := discoverReset(home, getenv)

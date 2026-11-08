@@ -231,6 +231,9 @@ func discoverReset(home string, getenv func(string) string) *resetPlan {
 
 func (p *resetPlan) discoverAgent(agent, home string) {
 	p.add(agent, home, "installation discovered; credentials preserved", nil)
+	if agent == "Codex" {
+		p.discoverSkill(filepath.Join(home, "skills/doomer-review/SKILL.md"))
+	}
 	hookFile := filepath.Join(home, "hooks.json")
 	if agent == "Claude" {
 		hookFile = filepath.Join(home, "settings.json")
@@ -545,21 +548,7 @@ func (p *resetPlan) discoverInstructions(repo string) {
 		p.edit("instructions", file, "remove marked Doomer instructions", data, []byte(text[:i]+text[j+len(end):]), mode)
 	}
 	for _, name := range []string{".agents/skills/doomer-review/SKILL.md", ".claude/skills/doomer-review/SKILL.md"} {
-		file := filepath.Join(repo, name)
-		data, _, err := resetReadFile(file)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			p.problem("skill", file, err)
-			continue
-		}
-		b, err := managed.ReadBootstrap(file, "personal")
-		if err != nil || !managed.RecognizedBootstrap(data, b.Policy) {
-			p.problem("skill", file, fmt.Errorf("custom Doomer skill preserved; remove manually if desired"))
-			continue
-		}
-		p.remove("skill", file)
+		p.discoverSkill(filepath.Join(repo, name))
 	}
 	// Repository-level agent hooks also belong to known installations.
 	if repo != os.Getenv("HOME") {
@@ -657,4 +646,21 @@ func resetCutoff(s managed.Store) (time.Time, error) {
 		return cutoff, nil
 	}
 	return cutoff, err
+}
+
+func (p *resetPlan) discoverSkill(file string) {
+	data, _, err := resetReadFile(file)
+	if os.IsNotExist(err) {
+		return
+	}
+	if err != nil {
+		p.problem("skill", file, err)
+		return
+	}
+	b, err := managed.ReadBootstrap(file, "personal")
+	if err != nil || !managed.RecognizedBootstrap(data, b.Policy) {
+		p.problem("skill", file, fmt.Errorf("custom Doomer skill preserved; remove manually if desired"))
+		return
+	}
+	p.remove("skill", file)
 }
