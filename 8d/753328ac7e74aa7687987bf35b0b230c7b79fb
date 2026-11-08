@@ -1,0 +1,30 @@
+README.md
+  h_aa44c3b5b60dec 663-666
+cmd/managed.go
+  h_aa44c3b5b60dec 722
+cmd/managed_portable.go
+  h_aa44c3b5b60dec 112-114,297,306-312
+cmd/managed_portable_test.go
+  h_aa44c3b5b60dec 152,173
+cmd/onboard_reset.go
+  h_aa44c3b5b60dec 648-651
+cmd/onboard_reset_test.go
+  h_aa44c3b5b60dec 8,132,135-138,297-347
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 15-19
+tests/codexinstall/local.go
+  h_aa44c3b5b60dec 41
+tests/codexinstall/remote.go
+  h_aa44c3b5b60dec 148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d753328ac7e74aa7687987bf35b0b230c7b79fb",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
