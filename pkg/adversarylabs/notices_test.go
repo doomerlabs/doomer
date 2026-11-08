@@ -137,3 +137,22 @@ func TestNoticeMetadataNeverLeaksToExternalUploadURL(t *testing.T) {
 		}
 	}
 }
+
+func TestBlockedPackInitiationDoesNotTransferBytes(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != "/api/v1/repositories/packs" || r.Header.Get("X-Doomer-CLI-Version") != version.Version {
+			t.Error("unexpected request", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"error":"client_update_required"}`)
+	}))
+	defer server.Close()
+	client := NewClientWithBaseURL(ConfigStore{}, server.URL+"/api")
+	_, err := client.uploadWorkspacePack(context.Background(), "token", workspacePack{Data: []byte("source bytes")}, nil)
+	failure, ok := err.(*ResponseError)
+	if !ok || failure.Code != "client_update_required" || calls != 1 {
+		t.Fatalf("expected initiation rejection only: calls=%d error=%v", calls, err)
+	}
+}

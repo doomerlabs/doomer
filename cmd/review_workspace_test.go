@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
@@ -226,5 +228,25 @@ func TestReviewRejectsInvalidLookCloserThresholdBeforeWork(t *testing.T) {
 				t.Fatalf("invalid threshold accepted: %v", err)
 			}
 		})
+	}
+}
+
+func TestDirectReviewJSONKeepsNotices(t *testing.T) {
+	notice := adversarylabs.ClientNotice{ID: "critical-fix", Revision: 1, Component: "cli", Severity: "critical", Message: "Upgrade before the deadline", RecommendedVersion: "2026.11.9.1", ExpiresAt: time.Now().Add(time.Hour)}
+	review := adversarylabs.WorkspaceReview{ID: "review", Status: "completed", Notices: []adversarylabs.ClientNotice{notice}}
+	var output bytes.Buffer
+	if err := writeWorkspaceReview(&output, "json", review, "https://doomer.ai/review", nil); err != nil {
+		t.Fatal(err)
+	}
+	var envelope struct {
+		Data struct {
+			Notices []adversarylabs.ClientNotice `json:"notices"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(envelope.Data.Notices) != 1 || envelope.Data.Notices[0].ID != notice.ID {
+		t.Fatal(output.String())
 	}
 }

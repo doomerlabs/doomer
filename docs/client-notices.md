@@ -10,7 +10,10 @@ repository policy, or change an active task's immutable runtime.
 Every first-party API request carries `X-Doomer-CLI-Version` (the executing binary,
 not the launcher), `X-Doomer-Protocol: 2`, `X-Doomer-Notice-Schema: 1`, platform,
 and `User-Agent: doomer/VERSION`. External object-storage uploads receive none of
-these extra headers. Existing review metadata continues to identify the agent,
+these extra headers. Development builds report the deterministic `dev` value;
+non-release values are evaluated as unknown by the server and require explicit
+`include_unknown` targeting. They are not relabeled as a supported release.
+Existing review metadata continues to identify the agent,
 task and selected runtime; the direct review path now includes its version too.
 
 A notice-capable server adds `notice_schema: 1` and `notices: []` to JSON
@@ -39,14 +42,23 @@ notice or change server enforcement.
 Notices are stored privately under the configuration directory, scoped to the
 API URL and executing version, with expiry and last-shown timestamps. Background
 processes save notices without consuming a foreground warning. A later command
-can surface the last known notice, marked cached. Cached policy never blocks a
+running the same CLI version can surface the last known notice, marked cached.
+A different version deliberately does not inherit the old version’s notices or
+deferrals: after an upgrade, a live response must establish which notices still
+apply. This avoids telling an updated client to install the release it already has. Cached policy never blocks a
 local command. Empty caches do not create state during read-only commands.
 Concurrent processes may display a duplicate warning; atomic replacement avoids
 partially written JSON. A subsequent live response reconciles the cache.
 
 The server returns HTTP 409 with `error: client_update_required`, `retryable:
-false` and the notices before accepting an affected upload or new review. The
-client does not automatically retry this response. Managed results use state
+false` and the notices before accepting an affected upload initiation or new
+review. Both repository manifest creation (`/v1/repositories`) and pack-session
+creation (`/v1/repositories/packs`) are first-party requests carrying the running
+version; rejection stops before any signed object-storage upload URL is used.
+Already-issued object-storage URLs cannot be revoked by this gate, so bytes may
+still finish transferring if a policy changes after initiation. Finalization and
+review admission are checked again. The client does not automatically retry this
+response. Managed results use state
 `client_update_required`, retain the task and expose the required action.
 Stop-hook feedback does not restart a failed task. Existing result and feedback
 operations remain readable even when a new submission is blocked.
