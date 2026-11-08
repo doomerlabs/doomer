@@ -11,7 +11,7 @@ import (
 
 // Bump the wrapper revision only when its generated content changes, using the
 // first Doomer release carrying that change. Ordinary CLI releases keep it.
-const BootstrapVersion = "2026.11.8.4"
+const BootstrapVersion = "2026.11.8.5"
 
 // A linker override lets the disposable real-agent candidate (which is labelled
 // with the installed public release) advertise its actual injected compatibility.
@@ -44,6 +44,9 @@ var versionEightTwoBootstrapTemplate string
 
 //go:embed bootstrap-2026.11.8.3.md
 var versionEightThreeBootstrapTemplate string
+
+//go:embed bootstrap-2026.11.8.4.md
+var versionEightFourBootstrapTemplate string
 
 // BootstrapSupports accepts whitespace-separated comparison clauses against
 // Doomer's four-part release versions, e.g. ">=2026.11.6.9 <2027.1.1.1".
@@ -120,6 +123,7 @@ func recognizedPreviousBootstrap(data []byte, policy Policy) bool {
 	for _, previous := range []struct{ template, revision, cliRange string }{
 		{legacyBootstrapTemplate, "", ""},
 		{versionEightTwoBootstrapTemplate, "2026.11.8.2", ">=2026.11.7.5"},
+		{versionEightFourBootstrapTemplate, "2026.11.8.4", ">=2026.11.7.5"},
 		{versionEightThreeBootstrapTemplate, "2026.11.8.3", ">=2026.11.7.5"},
 		{versionEightOneBootstrapTemplate, "2026.11.8.1", ">=2026.11.7.5"},
 		{versionSevenFiveBootstrapTemplate, "2026.11.7.5", ">=2026.11.7.5"},
