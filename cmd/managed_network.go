@@ -13,7 +13,7 @@ const networkAccessDocsURL = "https://github.com/doomerlabs/doomer/blob/main/doc
 
 type managedNetworkAccess struct {
 	RequiredHost string `json:"required_host"`
-	SettingsURL  string `json:"settings_url"`
+	SettingsURL  string `json:"settings_url,omitempty"`
 	DocsURL      string `json:"docs_url"`
 	RetryCommand string `json:"retry_command"`
 }
@@ -35,10 +35,22 @@ func addManagedNetworkHelp(c *cobra.Command, r *managedResult, t managed.Task, e
 	retry = "doomer --api-url " + watch.Quote(t.API) + " --profile " + watch.Quote(t.Profile) + " " + retry
 	r.NetworkAccess = &managedNetworkAccess{
 		RequiredHost: connection.Host,
-		SettingsURL:  "https://claude.ai/settings",
 		DocsURL:      networkAccessDocsURL,
 		RetryCommand: retry,
 	}
+	if t.Agent == "codex" {
+		r.Action = fmt.Sprintf("Cannot reach %s. This may be a sandbox restriction or a service/connectivity problem. "+
+			"Read local saved authorization with doomer --api-url %s --profile %s preflight --agent codex --repo %s. "+
+			"Then retry %s through Codex's normal tool network permissions, citing the saved scope when present. "+
+			"Reuse existing grants. A connection failure does not revoke them or require new upload consent. "+
+			"The host may require tool approval. Honor explicit denials and keep host and organization restrictions in force. "+
+			"Do not edit network or approval settings automatically. If the permitted retry still fails, "+
+			"report the exact hostname %s and guide %s once, then retain this task until connectivity changes.",
+			connection.Host, watch.Quote(t.API), watch.Quote(t.Profile), watch.Quote(t.Repo),
+			r.NetworkAccess.RetryCommand, connection.Host, networkAccessDocsURL)
+		return
+	}
+	r.NetworkAccess.SettingsURL = "https://claude.ai/settings"
 	r.Action = fmt.Sprintf("Cannot reach %s. This may be a network restriction or a service/connectivity problem. "+
 		"Show the user this exact hostname for copying and the setup guide %s. "+
 		"For Claude, offer to open %s, then guide an organization owner to Organization settings, "+

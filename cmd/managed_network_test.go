@@ -93,3 +93,18 @@ func TestPrepareNetworkFailureCanResumeSameTask(t *testing.T) {
 		t.Fatal(result)
 	}
 }
+
+func TestCodexNetworkRecoveryReusesSavedApproval(t *testing.T) {
+	task := managed.Task{Handle: strings.Repeat("b", 48), Agent: "codex", Repo: "/repo with spaces", API: "https://doomer.example/api", Profile: "default"}
+	err := managed.NetworkError("account check", &url.Error{URL: task.API, Err: errors.New("operation not permitted")})
+	var result managedResult
+	addManagedNetworkHelp(&cobra.Command{Use: "prepare"}, &result, task, err)
+	if result.NetworkAccess == nil || result.NetworkAccess.SettingsURL != "" || strings.Contains(result.Action, "claude.ai") {
+		t.Fatal("Codex received Claude network recovery", result)
+	}
+	for _, instruction := range []string{"preflight --agent codex --repo '/repo with spaces'", "normal tool network permissions", "Reuse existing grants", "Honor explicit denials", result.NetworkAccess.RetryCommand} {
+		if !strings.Contains(result.Action, instruction) {
+			t.Fatalf("missing recovery instruction %q: %s", instruction, result.Action)
+		}
+	}
+}

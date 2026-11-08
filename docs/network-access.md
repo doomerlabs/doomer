@@ -1,11 +1,21 @@
-# Allow Doomer through Claude's network settings
+# Restore Doomer network access
 
 Doomer needs an outbound HTTPS connection to its configured service to set up
 reviews and check results. Approved reviews also upload repository snapshots,
 task context, and finding responses. Network access and repository upload
 approval are separate decisions.
 
-## When onboarding cannot connect
+## Codex sandbox connections
+
+A sandbox connection failure preserves existing Doomer grants. Read the local
+saved scope with `doomer preflight --agent codex --repo .`, then retry the returned
+`retry_command` through Codex's normal tool network permissions. Codex can use the
+saved authorization as context for its approval reviewer. Honor an explicit host
+denial. If a permitted retry still fails, check the reported hostname and service
+connectivity before retrying again. Network recovery does not require another
+Doomer repository grant or changes to approval settings.
+
+## Claude onboarding connections
 
 The CLI reports `network_access` with a `required_host`, a settings link, this
 guide, and a `retry_command`. Ask your agent to show the hostname and links.
