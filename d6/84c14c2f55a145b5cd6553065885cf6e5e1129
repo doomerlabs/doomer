@@ -1,0 +1,34 @@
+tests/codexinstall/scenarios.go
+  s_f23d7bc729b5d1::t_babc31de5be9c1 17,46-48,154,188-190,197,214,346-349
+cmd/managed_network.go
+  s_f23d7bc729b5d1::t_c1ba1fc497c872 16,41-44,46-53
+  s_f23d7bc729b5d1::t_d448f25235d41a 45
+cmd/managed_network_test.go
+  s_f23d7bc729b5d1::t_c1ba1fc497c872 96-110
+tests/codexinstall/README.md
+  s_f23d7bc729b5d1::t_babc31de5be9c1 38
+  s_f23d7bc729b5d1::t_0ea5fc66c1500c 33-34
+internal/managed/instructions.md
+  s_f23d7bc729b5d1::t_c1ba1fc497c872 59-67
+tests/codexinstall/upgrade.go
+  s_f23d7bc729b5d1::t_d66caac967d48a 205,210-225
+  s_f23d7bc729b5d1::t_babc31de5be9c1 203-204,206-209,226
+docs/network-access.md
+  s_f23d7bc729b5d1::t_c1ba1fc497c872 1,8-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d684c14c2f55a145b5cd6553065885cf6e5e1129",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
