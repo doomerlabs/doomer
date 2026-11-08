@@ -436,8 +436,12 @@ func TestPrepareRechecksBoundSetupWithoutCreatingAnotherTask(t *testing.T) {
 	if err := bindManagedSession(store, task); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 2; i++ {
-		output, err := execute(t, "", "prepare", "--agent", "claude", "--repo", repo, "--session", "setup-session")
+	for _, stage := range []string{"preparing", "complete"} {
+		task.Stage = stage
+		if err := store.Save(&task); err != nil {
+			t.Fatal(err)
+		}
+		output, err := execute(t, "", "prepare", "--agent", "claude", "--repo", repo+"/.", "--session", "setup-session")
 		if err != nil {
 			t.Fatal(err)
 		}

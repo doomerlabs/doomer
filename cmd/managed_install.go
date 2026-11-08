@@ -405,11 +405,11 @@ func resumableManagedSetup(s managed.Store, api, profile, agent, repo, session s
 			if task.API != api || task.Profile != profile || task.Agent != agent || task.Repo != repo || task.Capabilities.SessionID != session {
 				return "", fmt.Errorf("session task does not match the requested setup scope")
 			}
-			if task.Stage != "complete" {
-				if task.Purpose != "setup" || task.Paused {
-					return "", fmt.Errorf("session already owns task %s; resume it before creating another task", handle)
-				}
+			if task.Purpose == "setup" && !task.Paused {
 				return handle, nil
+			}
+			if task.Stage != "complete" {
+				return "", fmt.Errorf("session already owns task %s; resume it before creating another task", handle)
 			}
 		}
 	}
