@@ -109,6 +109,13 @@ func savedManagedConsentEvidence(s managed.Store, t managed.Task) (*managedConse
 	} else if err != nil {
 		return nil, err
 	}
+	cutoff, err := resetCutoff(s)
+	if err != nil {
+		return nil, err
+	}
+	if !cutoff.IsZero() && !grant.At.After(cutoff) {
+		return nil, nil
+	}
 	if !grant.matches(t) || grant.At.IsZero() {
 		return nil, nil
 	}

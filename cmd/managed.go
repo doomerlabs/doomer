@@ -63,6 +63,11 @@ func managedStore() (managed.Store, error) {
 	if err != nil {
 		return s, err
 	}
+	if _, err := os.Stat(filepath.Join(s.Root, "reset-in-progress")); err == nil {
+		return s, fmt.Errorf("onboarding reset is in progress; retry after it completes")
+	} else if !os.IsNotExist(err) {
+		return s, err
+	}
 	return s, s.Init()
 }
 

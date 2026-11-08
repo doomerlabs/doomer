@@ -104,6 +104,13 @@ func restorePortable(ctx context.Context, app *application.App, s managed.Store,
 	if err != nil {
 		return err
 	}
+	cutoff, err := resetCutoff(s)
+	if err != nil {
+		return err
+	}
+	if !record.Grant.Approved || !cutoff.IsZero() && !record.Grant.At.After(cutoff) {
+		return nil
+	}
 	if record.Schema != 1 || record.API != t.API || record.Profile != t.Profile || record.Origin != origin || !record.Grant.Approved || record.Grant.Account == "" || record.Grant.API != t.API || record.Grant.Profile != t.Profile {
 		return fmt.Errorf("portable setup does not match this repository, service, and profile")
 	}
