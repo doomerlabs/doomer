@@ -1,0 +1,22 @@
+cmd/runtime.go
+  h_aa44c3b5b60dec 50
+cmd/runtime_test.go
+  h_aa44c3b5b60dec 141
+internal/managed/bootstrap-2026.11.7.3.md
+  h_aa44c3b5b60dec 1-84
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 85-92
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 14-15,29-31,104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1e780f69e8c6add81d42667fa46595753eb8524f",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
