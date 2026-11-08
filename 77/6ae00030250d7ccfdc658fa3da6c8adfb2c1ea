@@ -1,0 +1,16 @@
+cmd/managed_codex_config.go
+  h_aa44c3b5b60dec 74-76
+cmd/managed_codex_config_test.go
+  h_aa44c3b5b60dec 97-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "776ae00030250d7ccfdc658fa3da6c8adfb2c1ea",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
