@@ -22,8 +22,11 @@ func installCandidate(c config, home string) error {
 	path := runtimeversion.Binary(home, c.CandidateVersion)
 	recordPath := filepath.Join(filepath.Dir(path), "installation.json")
 	raw, err := os.ReadFile(recordPath)
+	if os.IsNotExist(err) {
+		return fmt.Errorf("public installation did not produce the expected verified runtime %s; inspect the installation turn before injecting the candidate: %w", c.CandidateVersion, err)
+	}
 	if err != nil {
-		return fmt.Errorf("candidate release must match the installed public release: %w", err)
+		return fmt.Errorf("read public installation record: %w", err)
 	}
 	var rec selfupdate.Record
 	if err = json.Unmarshal(raw, &rec); err != nil {

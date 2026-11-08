@@ -154,7 +154,7 @@ func runWorker(c config) (result report) {
 	approvalLinkRetries := 0
 	if c.CandidateFile != "" || c.SkillsGuide != "" {
 		result.Turns++
-		software, err := runAgent(ctx, c, repo, env, prompt+" Install the verified runtime and skill files only in this turn. Do not run doomer prepare or begin onboarding yet. Stop after the install command completes.", "", record)
+		software, err := runAgent(ctx, c, repo, env, prompt+" Install the verified runtime and skill files only in this turn. The team PR step belongs to later agent onboarding; this turn only authorizes local installation. Do not run doomer prepare or begin onboarding yet. Stop after the install command completes.", "", record)
 		if err != nil {
 			return fail(err)
 		}

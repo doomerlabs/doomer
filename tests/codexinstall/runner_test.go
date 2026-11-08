@@ -303,3 +303,15 @@ func TestProviderFailureIsDistinguishedFromBudgetRejection(t *testing.T) {
 		t.Fatal(m.usage)
 	}
 }
+
+func TestCandidateInjectionRequiresCompletedPublicInstallation(t *testing.T) {
+	home := t.TempDir()
+	candidate := filepath.Join(t.TempDir(), "candidate")
+	if err := os.WriteFile(candidate, []byte("test candidate"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	err := installCandidate(config{CandidateFile: candidate, CandidateVersion: "2026.11.7.5"}, home)
+	if err == nil || !strings.Contains(err.Error(), "public installation did not produce the expected verified runtime") || !strings.Contains(err.Error(), "inspect the installation turn") {
+		t.Fatal(err)
+	}
+}
