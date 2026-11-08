@@ -1,0 +1,29 @@
+internal/managed/bootstrap.md
+  s_f23d7bc729b5d1::t_02e83961dbd71a 64-65
+internal/managed/bootstrap_update_test.go
+  s_f23d7bc729b5d1::t_3f48fe224a842b 62,67
+.agents/skills/doomer-review/SKILL.md
+  s_f23d7bc729b5d1::t_02e83961dbd71a 5,120-121
+internal/managed/bootstrap_update.go
+  s_f23d7bc729b5d1::t_02e83961dbd71a 14,48-50,126
+.claude/skills/doomer-review/SKILL.md
+  s_f23d7bc729b5d1::t_02e83961dbd71a 5,120-121
+internal/managed/bootstrap-2026.11.8.4.md
+  s_f23d7bc729b5d1::t_02e83961dbd71a 1-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b15564341cbdc47da426739dbc9902ca0e9e86d7",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
