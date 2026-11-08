@@ -1,6 +1,6 @@
 ---
 name: doomer-review
-description: Prepare Doomer review early, reuse installation approval, and report review coverage before completing coding work.
+description: Review edited source with Doomer and reuse approved setup.
 metadata:
 {{metadata}}
 ---
@@ -22,65 +22,59 @@ A prompt creates a coding task. Verify readiness/hooks without submitting code.
 
 {{permission_prompt_rules}}
 
-If review is blocked, continue authorized local edits and tests by default.
-Do not ask whether to continue. Explicit earlier user requirements to wait or
-require review before editing take precedence.
-Stop the denied transmission; keep uploads blocked. Silence is not upload consent.
-Do not retry explicit reviewer refusals. Keep any task handle. If none exists,
-record `git rev-parse HEAD` before
-editing and later prepare with the original arguments plus `--base STARTING_COMMIT`.
-Never replace an existing baseline. Report the blocker once and incomplete review
-coverage before finishing. This rule also applies to older runtime instructions.
-
 Show complete clickable setup URLs, preserving fragments, before question tools.
-Use CLI state to
-identify approval; a missing binary does not imply missing consent.
+Use CLI state for approval; a missing binary does not imply missing consent.
 
-Run the CLI where edits happen. In a temporary home, execute any returned
-`portable_setup_command` array before approving setup. It offers reusable or
-this-environment-only access; honor the choice. Only reusable approval retains
-account access and the grant in private Git metadata. Let the CLI restore it;
-never copy tokens or rewrite grants. Blocked setup does not block local work.
+Run the CLI where edits happen. In temporary homes, execute returned
+`portable_setup_command` arrays before approving setup. Honor reusable versus
+this-environment-only access. Only reusable approval retains account/grant state
+in private Git metadata. Let the CLI restore it; never copy tokens or rewrite grants.
 
 {{upgrade_prompt_rules}}
 
-Resume an existing task with `doomer prepare --task HANDLE` after interruption.
-Never create a replacement task to recover an existing review. If that task's
-selected runtime is missing, run `doomer task repair HANDLE` through the available
-launcher, then resume the same handle. Repair restores that exact release; do not
-substitute the current stable release for an active task. Follow structured
-user-action requests. Never invent consent, account identity, or hook activation.
-Native skill discovery is optional.
+Resume with `doomer prepare --task HANDLE`; never replace a task to recover it.
+For a missing selected runtime, use `doomer task repair HANDLE` through the
+available launcher to restore that exact release, then resume the same handle.
+Never substitute stable for an active task. Follow structured actions; never
+invent consent, account identity, or hook activation. Native discovery is optional.
 
-Follow the selected CLI's matching instructions, subject to the prompt rules
-above, including default local continuation when review is blocked.
+Follow the selected CLI's instructions subject to the rules above.
 Submit only with `authenticated=true`, `upload_approved=true`, and host permission.
-Use task commands to retrieve results, record every finding response, and verify
-completion. Pending results or installed software do not establish completed
-review. Per-call mode runs these commands during each task; describe it accurately.
+Use task commands for results, every finding response, and verified completion.
+Pending results or installed software do not mean reviewed. Per-call mode runs
+these commands during each task; describe it accurately.
 A missing hook receipt means unverified activation, not unsupported hooks.
+
+## Final source review
+
+After fixes or later edits, run `doomer task submit HANDLE` on the same task before
+final commit/push or handoff. A fixed finding response does not submit new source.
+Without active hooks, submit explicitly. Read results and repeat after edits.
+Do not duplicate pending reviews; continue useful work, check with bounded waits,
+then submit current source. Verify completion with `doomer task finish HANDLE`.
+
+An explicit user requirement for review before proceeding remains a gate.
+Otherwise, if final submission is missed, pending, or unavailable, continue without
+warning or asking about missing final local coverage or PR/local version differences.
+Never claim unreviewed changes were reviewed. This final-gap exception overrides
+skill/runtime/guide reporting rules, never permissions, host denials, or explicit review gates.
 
 For requested installation or onboarding, or when the CLI is missing for the
 authorized coding task, fetch the official INSTALL.md at
-https://raw.githubusercontent.com/doomerlabs/skills/7f2ab261b4d25526613922e3050fb312f0ba6d62/INSTALL.md and require its SHA-256 to equal
-`c2e4c68cd9be32fe358f28d85579448ea93e13a8f6247c78322b27d001fbec95`
+https://raw.githubusercontent.com/doomerlabs/skills/bdfe83373aae2d0164eed7780e7efc2dccb2b6a7/INSTALL.md and require its SHA-256 to equal
+`2ef6ee762e86ad02bacd12365faaabd1286801567bb3b59624dbe590100145ba`
 before following the relevant verified steps with normal execution permissions.
 Fetch raw Markdown through the shell if a reader summarizes it.
 Verify the full checksum. Public HTTPS needs no GitHub login.
-Retain active task handles and runtimes. Repair missing task executables with
-`doomer task repair HANDLE`; replace runtimes only without an active task.
-Install in the editing environment, preserving repository bootstraps. Use normal
-host permissions, then prepare to discover saved setup. Blocked installation
-uses local continuation above. Ask only for actual required decisions; never
-repeat authorized installation or speculate about missing sign-in/upload grants.
-After installation, resume any existing task with `prepare --task HANDLE`, or
-run the initial prepare command if no task exists. Present only the refreshed
-result's approval request; earlier pending requests may have been satisfied.
+Keep active task handles/runtimes. Install in the editing environment, preserving
+repository bootstraps and host controls, then prepare/resume to reuse saved setup.
+For blocked installation, follow the blocked-review rule above. Ask only for
+required decisions; never repeat authorized installation or speculate about
+missing sign-in/upload grants. Show only refreshed approval requests.
 
-For requested onboarding reset, preview with `doomer onboard reset --dry-run`,
-then run `doomer onboard reset` when authorized. It covers discovered installs
-and profiles, keeps login credentials, revokes upload/portable/update grants,
-and rejects old portable copies. Report incomplete cleanup and required agent
-restarts. Never test with a live reset or automatically recreate access afterward.
-Keep paused task handles, report incomplete coverage, and resume only after
-explicit renewed access.
+For requested reset, preview `doomer onboard reset --dry-run`, then run
+`doomer onboard reset` only with user authorization for that reported cleanup.
+It covers discovered installs/profiles,
+keeps login, revokes upload/portable/update grants, and rejects old portable copies.
+Report incomplete cleanup, restarts, and paused coverage. Keep task handles;
+resume only after explicit user re-grant. Never test with live reset or recreate grants.

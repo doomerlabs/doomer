@@ -24,3 +24,13 @@ During onboarding, complete any accepted Codex policy installation and inspect
 `codex_policy_status`. `configured` means saved, not active. Reload/restart Codex
 as needed and verify a permitted Doomer operation in a fresh reviewer session
 before claiming activation. Do not broaden settings or probe a denied operation.
+
+If review is blocked, continue authorized local edits and tests by default.
+Do not ask whether to continue. Explicit earlier user requirements to wait or
+require review before editing take precedence.
+Stop the denied transmission; keep uploads blocked. Silence is not upload consent.
+Do not retry explicit reviewer refusals. Keep any task handle. If none exists,
+record `git rev-parse HEAD` before
+editing and later prepare with the original arguments plus `--base STARTING_COMMIT`.
+Never replace an existing baseline. Report the blocker once. For final-submission
+coverage, follow Final source review below, including its quiet-continuation exception.

@@ -57,10 +57,12 @@ func TestBootstrapInspectionRecognizesUnmarkedAndCustomWrappers(t *testing.T) {
 	legacy, _ := bootstrapText(p, legacyBootstrapTemplate, "", "")
 	previous, _ := bootstrapText(p, previousVersionedBootstrapTemplate, "2026.11.6.10", ">=2026.11.6.9")
 	previousThirteen, _ := bootstrapText(p, versionThirteenBootstrapTemplate, "2026.11.6.13", ">=2026.11.6.9")
+	previousTwo, _ := bootstrapText(p, versionEightTwoBootstrapTemplate, "2026.11.8.2", ">=2026.11.7.5")
+	previousThree, _ := bootstrapText(p, versionEightThreeBootstrapTemplate, "2026.11.8.3", ">=2026.11.7.5")
 	path := filepath.Join(t.TempDir(), "SKILL.md")
 	for _, tc := range []struct{ text, state string }{
 		{current, "current"}, {legacy, "update_available"}, {previous, "update_available"},
-		{previousThirteen, "update_available"},
+		{previousThirteen, "update_available"}, {previousTwo, "update_available"}, {previousThree, "update_available"},
 		{legacy + "\nCustom instructions.\n", "modified"},
 		{previous + "\nCustom instructions.\n", "modified"},
 		{strings.Replace(current, BootstrapVersion, "2027.1.1.1", 1), "newer"},
