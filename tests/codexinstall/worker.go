@@ -147,6 +147,7 @@ func runWorker(c config) (result report) {
 	}
 	session := ""
 	approvedUpdate := false
+	approvedPolicy := false
 	sawUpdateRequest := false
 	declined := false
 	candidateInstalled := false
@@ -218,6 +219,12 @@ func runWorker(c config) (result report) {
 			result.Checks["decline_respected"] = true
 			result.Passed = true
 			return result
+		}
+		if c.Harness == "codex" && observed.PolicyOffered && !approvedPolicy {
+			approvedPolicy = true
+			prompt = "I approve saving the displayed Doomer authorization in Codex's local approval-reviewer settings. Apply it, preserve unrelated settings, then verify setup."
+			record("Scripted user", prompt)
+			continue
 		}
 		ready, checks := inspectInstall(ctx, repo, home, env, personalScenario(c.Scenario), c.Harness)
 		if ready {
@@ -350,10 +357,13 @@ func inspectInstall(ctx context.Context, repo, home string, env []string, person
 	cmd.Env = env
 	raw, err := cmd.Output()
 	var state struct {
-		State    string `json:"state"`
-		Software bool   `json:"software_ready"`
-		Auth     bool   `json:"authenticated"`
-		Upload   bool   `json:"upload_approved"`
+		State       string `json:"state"`
+		Software    bool   `json:"software_ready"`
+		Auth        bool   `json:"authenticated"`
+		Upload      bool   `json:"upload_approved"`
+		CodexPolicy struct {
+			State string `json:"state"`
+		} `json:"codex_policy_status"`
 	}
 	if err != nil || json.Unmarshal(raw, &state) != nil {
 		return false, checks
@@ -362,6 +372,9 @@ func inspectInstall(ctx context.Context, repo, home string, env []string, person
 	checks["software_ready"] = state.Software
 	checks["authenticated"] = state.Auth
 	checks["upload_approved"] = state.Upload
+	if harness == "codex" {
+		checks["codex_policy_configured"] = state.CodexPolicy.State == "configured"
+	}
 	for _, ok := range checks {
 		if !ok {
 			return false, checks

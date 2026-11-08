@@ -236,3 +236,32 @@ func TestMeterCancellationReleasesAccountingLock(t *testing.T) {
 		t.Fatal("cancelled request lost its conservative budget reservation", m.usage)
 	}
 }
+
+func TestInstallRequiresConfiguredCodexPolicy(t *testing.T) {
+	for _, policyState := range []string{"missing", "configured"} {
+		t.Run(policyState, func(t *testing.T) {
+			root := t.TempDir()
+			home, repo := filepath.Join(root, "home"), filepath.Join(root, "repo")
+			files := map[string]string{
+				filepath.Join(repo, ".agents/skills/doomer-review/SKILL.md"):   "doomer-protocol",
+				filepath.Join(repo, ".claude/skills/doomer-review/SKILL.md"):   "doomer-protocol",
+				agentHooksPath(config{Harness: "codex"}, home):                 "--managed-task-adapter",
+				filepath.Join(home, ".config/doomer/managed/tasks/setup.json"): `{"handle":"setup","agent":"codex"}`,
+				filepath.Join(home, ".local/bin/doomer"):                       "#!/bin/sh\nprintf '%s\\n' '{\"state\":\"ready\",\"software_ready\":true,\"authenticated\":true,\"upload_approved\":true,\"codex_policy_status\":{\"state\":\"" + policyState + "\"}}'\n",
+			}
+			for path, content := range files {
+				if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(content), 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ready, checks := inspectInstall(context.Background(), repo, home, nil, false, "codex")
+			want := policyState == "configured"
+			if ready != want || checks["codex_policy_configured"] != want {
+				t.Fatalf("ready=%v checks=%v, expected configured=%v", ready, checks, want)
+			}
+		})
+	}
+}
