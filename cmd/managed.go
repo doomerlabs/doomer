@@ -174,7 +174,9 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 	r.HookActivated = taskResult.HookActivated
 	r.Capabilities = taskResult.Capabilities
 	r.PromptTruncated = taskResult.PromptTruncated
-	r.PortableSetupCommand = taskResult.PortableSetupCommand
+	if r.NetworkAccess == nil {
+		r.PortableSetupCommand = taskResult.PortableSetupCommand
+	}
 	r.SubmittedPromptRunes = taskResult.SubmittedPromptRunes
 	r.NoChanges = taskResult.NoChanges
 	r.Anonymous = taskResult.Anonymous

@@ -84,7 +84,7 @@ func TestPrepareNetworkFailureCanResumeSameTask(t *testing.T) {
 		return result
 	}
 	result := run()
-	if result.State != "network_unavailable" || result.Task != handle || result.NetworkAccess == nil || result.UploadApproved || strings.Contains(result.Error, "secret") {
+	if result.State != "network_unavailable" || result.Task != handle || result.NetworkAccess == nil || result.UploadApproved || len(result.PortableSetupCommand) != 0 || strings.Contains(result.Error, "secret") {
 		t.Fatal(result)
 	}
 	blocked = false
