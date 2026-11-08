@@ -18,10 +18,8 @@ For onboarding without a coding task, run `doomer prepare --agent AGENT --repo .
 without `--prompt`. Supplying a prompt creates a coding-review task even when
 its text says “setup only.” Verify readiness and hooks without submitting code.
 
-Reuse the saved integration approval across repositories, worktrees, and chats
-for the same coding agent, Doomer account, service, and profile. Existing
-repository-specific grants retain their original scope until explicitly upgraded.
-Present a returned `approval_required` action for missing or revoked approval.
+{{permission_prompt_rules}}
+
 If Doomer is blocked, explain why and ask once whether to continue local edits
 without a completed Doomer review or wait. Honor that choice for the task.
 Continuing edits does not authorize a blocked upload. Keep the task handle and
@@ -44,8 +42,7 @@ the repository grant in private Git metadata for later sessions. The CLI restore
 approved setup itself. Never copy tokens or rewrite grant files. The initial
 prepare command above remains usable with older launchers.
 
-If prepare reports a bootstrap upgrade, offer it to the user and apply it only
-after acceptance. Keep the repository's update policy and any local edits.
+{{upgrade_prompt_rules}}
 
 Resume an existing task with `doomer prepare --task HANDLE` after interruption.
 Never create a replacement task to recover an existing review. If that task's

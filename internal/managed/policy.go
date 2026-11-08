@@ -176,5 +176,5 @@ func bootstrapText(p Policy, template, revision, cliRange string) (string, error
 	for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
 		lines = append(lines, "  "+line)
 	}
-	return strings.Replace(template, "{{metadata}}", strings.Join(lines, "\n"), 1), nil
+	return expandPromptRules(strings.Replace(template, "{{metadata}}", strings.Join(lines, "\n"), 1)), nil
 }

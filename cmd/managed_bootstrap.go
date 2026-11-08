@@ -104,7 +104,14 @@ func newManagedBootstrapCommand() *cobra.Command {
 					updates = append(updates, update)
 				}
 			}
-			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"state": state, "bootstraps": updates, "acceptance_required": operation == "upgrade" && !accept})
+			hasUpgrade, safeUpgrade := false, true
+			for _, update := range updates {
+				hasUpgrade = hasUpgrade || update.UpgradeAvailable
+				if update.State != "current" && update.State != "update_available" {
+					safeUpgrade = false
+				}
+			}
+			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"state": state, "bootstraps": updates, "acceptance_required": operation == "upgrade" && !accept && hasUpgrade && safeUpgrade})
 		}}
 		c.Flags().StringVar(&repo, "repo", ".", "repository to inspect")
 		c.Flags().BoolVar(&personal, "personal", false, "inspect personal wrappers instead of repository wrappers")
@@ -133,7 +140,7 @@ func managedBootstrapUpdates(task managed.Task) []managed.BootstrapUpdate {
 			continue
 		}
 		if err != nil {
-			updates = append(updates, managed.BootstrapUpdate{Path: path, State: "inspection_failed", Available: managed.BootstrapVersion, CLIRange: managed.BootstrapCLIRange, Action: "Could not inspect this wrapper. Run doomer bootstrap status in its installation scope and reconcile it manually. The current task can continue."})
+			updates = append(updates, managed.BootstrapUpdate{Path: path, Scope: task.Bootstrap.Scope, State: "inspection_failed", Available: managed.BootstrapVersion, CLIRange: managed.BootstrapCLIRange, Action: "Could not inspect this wrapper. Run doomer bootstrap status in its installation scope and reconcile it manually. The current task can continue."})
 			continue
 		}
 		if update.State == "current" {

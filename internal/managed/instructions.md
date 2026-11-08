@@ -6,10 +6,11 @@ handle from prepare. If prompt_truncated is true, summarize the task to at most
 or compaction. If the pinned executable is missing, use `doomer task repair
 HANDLE` to restore that exact release. Never create a replacement task to recover an existing review.
 
-Attempt preparation at the start of the coding task to retain its starting
-revision. Reuse the saved integration-wide upload approval for the same coding
-agent, Doomer account, service, and profile across all repositories and chats.
-Existing repository grants retain their original scope until explicitly upgraded.
+Attempt preparation at the start of a coding task to retain its starting revision.
+
+{{permission_prompt_rules}}
+
+{{upgrade_prompt_rules}}
 
 If setup, authentication, network access, or host approval blocks Doomer,
 explain the blocker and ask once whether to continue local edits without a
@@ -134,6 +135,9 @@ of the approved workflow, including access to Doomer's private local state.
 In that case, reuse the grant. A negative managed result requires the normal
 integration approval flow. An authentication error requires account verification,
 not a new upload grant; recheck saved consent after authentication succeeds.
+
+A Codex policy proposal does not mean upload consent is missing. Apply the
+permission rules above before considering a settings prompt.
 
 When a Codex preparation result includes `codex_review_policy`, offer once per
 distinct proposal to add that scoped authorization to Codex's
