@@ -1,0 +1,35 @@
+tests/codexinstall/runner_test.go
+  s_f23d7bc729b5d1::t_63785345cb4472 15,271-273
+internal/managed/permission-prompt-rules.md
+  s_f23d7bc729b5d1::t_63785345cb4472 19-22
+.agents/skills/doomer-review/SKILL.md
+  s_f23d7bc729b5d1::t_63785345cb4472 44-47,53-57
+internal/managed/bootstrap.md
+  s_f23d7bc729b5d1::t_63785345cb4472 25-29
+internal/managed/bootstrap_update_test.go
+  s_f23d7bc729b5d1::t_62a6c47e262533 145-159
+  s_f23d7bc729b5d1::t_63785345cb4472 140
+tests/codexinstall/preflight.go
+  s_f23d7bc729b5d1::t_63785345cb4472 13-18
+tests/codexinstall/README.md
+  s_f23d7bc729b5d1::t_63785345cb4472 32
+  s_f23d7bc729b5d1::t_62a6c47e262533 72-74
+.claude/skills/doomer-review/SKILL.md
+  s_f23d7bc729b5d1::t_63785345cb4472 44-47,53-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "613d5ef63b449e9b0dad28027e129b38eab0f3e7",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
