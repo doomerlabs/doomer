@@ -374,8 +374,12 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 	defer cancel()
 
 	var rev revision
-	revPath := filepath.Join(r.Root, "revisions", Key(path+"\x00"+requestState.Owner.Session)+".json")
-	if err := Read(revPath, &rev); os.IsNotExist(err) {
+	revisionIdentity := path + "\x00" + requestState.Owner.Session
+	if r.Config.InstallationAttemptID != "" {
+		revisionIdentity += "\x00" + r.Config.InstallationAttemptID
+	}
+	revPath := filepath.Join(r.Root, "revisions", Key(revisionIdentity)+".json")
+	if err := Read(revPath, &rev); os.IsNotExist(err) && r.Config.InstallationAttemptID == "" {
 		// The old path is reusable only when its request identity proves the
 		// same edit, including the owning session. Other legacy groups reset.
 		_ = Read(filepath.Join(r.Root, "revisions", Key(path)+".json"), &rev)
@@ -389,6 +393,9 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 	input := adversarylabs.WorkspaceSubmission{Hypotheses: requestState.Hypotheses, AgentDiff: requestState.AgentDiff, RepositoryID: baseRepo, SnapshotID: headID, BaseSnapshotID: baseID, ReviewID: rev.ID, GroupID: rev.Group, Revision: rev.Number, Repository: repo, Branch: capture.Source.Branch, Diff: diff, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "hostname": hostname, "agent": requestState.Agent}}
 	if r.Config.ActivationReporting {
 		input.Client["installation_id"] = r.Config.InstallationID
+		if r.Config.InstallationAttemptID != "" {
+			input.Client["installation_attempt_id"] = r.Config.InstallationAttemptID
+		}
 	}
 	if prompt := strings.TrimSpace(requestState.Prompt); prompt != "" {
 		text := []rune(prompt)

@@ -266,7 +266,11 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 		if err != nil {
 			return err
 		}
-		cfg = watching.Config{ActivationReporting: reportActivation, InstallationID: installationID, ExplicitConsent: true, AllRepositories: allRepositories, Version: 1, API: *api, Profile: *profile, Directories: directories, ConsentedAt: time.Now(), AccountKey: watching.Key(auth.Token)}
+		attemptID, err := watching.NewInstallationAttemptID()
+		if err != nil {
+			return err
+		}
+		cfg = watching.Config{InstallationAttemptID: attemptID, ActivationReporting: reportActivation, InstallationID: installationID, ExplicitConsent: true, AllRepositories: allRepositories, Version: 1, API: *api, Profile: *profile, Directories: directories, ConsentedAt: time.Now(), AccountKey: watching.Key(auth.Token)}
 		for _, path := range directories {
 			id, e := watching.RepositoryIdentity(c.Context(), path)
 			if e != nil {

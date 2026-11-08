@@ -588,3 +588,45 @@ func TestWatchStatusCommandPreservesLocalState(t *testing.T) {
 		})
 	}
 }
+
+func TestRepeatedSetupCreatesNewAttemptOnSameInstallation(t *testing.T) {
+	store := isolate(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CODEX_HOME", t.TempDir())
+	repo := newWatchTestRepo(t)
+	api, profile := fakeSetupAPI(t), "dev"
+	app := &application.App{Deps: application.Dependencies{Auth: store}}
+	var first watching.Config
+	for i := 0; i < 2; i++ {
+		command := newSetupCommand(app, &api, &profile)
+		command.SetContext(context.Background())
+		command.SetOut(io.Discard)
+		if err := command.Flags().Set("yes", "true"); err != nil {
+			t.Fatal(err)
+		}
+		if err := command.RunE(command, []string{repo}); err != nil {
+			t.Fatal(err)
+		}
+		_, file, err := consentPaths(api, profile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cfg watching.Config
+		if err := watching.Read(file, &cfg); err != nil {
+			t.Fatal(err)
+		}
+		if len(cfg.InstallationAttemptID) != 64 {
+			t.Fatal("setup did not save an attempt ID")
+		}
+		if i == 0 {
+			first = cfg
+			continue
+		}
+		if cfg.InstallationID != first.InstallationID {
+			t.Fatal("setup replaced the stable installation identity")
+		}
+		if cfg.InstallationAttemptID == first.InstallationAttemptID {
+			t.Fatal("repeat setup reused the previous attempt")
+		}
+	}
+}

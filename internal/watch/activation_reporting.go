@@ -35,14 +35,23 @@ func EnsureInstallationID(root string) (string, error) {
 		} else if !os.IsNotExist(err) {
 			return err
 		}
-		var b [32]byte
-		if _, err := rand.Read(b[:]); err != nil {
+		var err error
+		id, err = NewInstallationAttemptID()
+		if err != nil {
 			return err
 		}
-		id = hex.EncodeToString(b[:])
 		return Write(file, id)
 	})
 	return id, err
+}
+
+// NewInstallationAttemptID identifies one newly approved setup, not a person or device.
+func NewInstallationAttemptID() (string, error) {
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
 }
 
 type activationRecord struct {
@@ -58,7 +67,10 @@ func activationFile(root, identity, agent string) string {
 	return lifecycleFile(root, identity, agent, "activated")
 }
 
-func lifecycleFile(root, identity, agent, stage string) string {
+func lifecycleFile(root, identity, agent, stage string, attemptID ...string) string {
+	if len(attemptID) > 0 && attemptID[0] != "" {
+		identity += "\x00" + attemptID[0]
+	}
 	return filepath.Join(activationRoot(root), "activations", Key(identity+"\x00"+agent+"\x00"+stage)+".json")
 }
 
@@ -80,10 +92,10 @@ func queueLifecycle(ctx context.Context, root, path, agent, stage, reviewID stri
 	if err != nil {
 		return
 	}
-	file := lifecycleFile(root, identity, agent, stage)
+	file := lifecycleFile(root, identity, agent, stage, cfg.InstallationAttemptID)
 	_ = Locked(activationRoot(root), "activation-"+Key(identity+agent+stage), func() error {
 		var previous activationRecord
-		if err := Read(file, &previous); err == nil && previous.Event.InstallationID == cfg.InstallationID {
+		if err := Read(file, &previous); err == nil && previous.Event.InstallationID == cfg.InstallationID && previous.Event.AttemptID == cfg.InstallationAttemptID {
 			return nil
 		} else if err != nil && !os.IsNotExist(err) {
 			return err
@@ -109,7 +121,7 @@ func queueLifecycle(ctx context.Context, root, path, agent, stage, reviewID stri
 			}
 		}
 		return Write(file, activationRecord{Event: adversarylabs.ActivationEvent{
-			Stage: stage, ReviewID: reviewID, InstallationID: cfg.InstallationID, Repository: repository, Agent: agent, Client: client,
+			AttemptID: cfg.InstallationAttemptID, Stage: stage, ReviewID: reviewID, InstallationID: cfg.InstallationID, Repository: repository, Agent: agent, Client: client,
 			OS: runtime.GOOS, Architecture: runtime.GOARCH, CLIVersion: cfg.RuntimeVersion,
 			SkillRevision: revision, OccurredAt: time.Now().UTC().Format(time.RFC3339),
 		}})
@@ -142,18 +154,18 @@ func (r Runner) reportActivations(ctx context.Context, path string) {
 	var current Config
 	if Read(filepath.Join(activationRoot(r.Root), "config.json"), &current) != nil ||
 		!current.ActivationReporting || current.InstallationID != r.Config.InstallationID ||
-		!current.ConsentedAt.Equal(r.Config.ConsentedAt) || !ConsentValid(current, r.Config.API, r.Config.Profile, r.Token) || !Allowed(current, path) {
+		current.InstallationAttemptID != r.Config.InstallationAttemptID || !current.ConsentedAt.Equal(r.Config.ConsentedAt) || !ConsentValid(current, r.Config.API, r.Config.Profile, r.Token) || !Allowed(current, path) {
 		return
 	}
 	for _, agent := range []string{"codex", "claude"} {
 		for _, stage := range []string{"approved", "activated", "first_review"} {
-			file := lifecycleFile(r.Root, identity, agent, stage)
+			file := lifecycleFile(r.Root, identity, agent, stage, r.Config.InstallationAttemptID)
 			var record activationRecord
 			send := false
 			// Never hold the hook's outbox lock over a network call.
 			_ = Locked(activationRoot(r.Root), "activation-"+Key(identity+agent+stage), func() error {
 				if Read(file, &record) != nil || record.Sent || record.Attempts >= 3 || time.Now().Before(record.RetryAt) ||
-					record.Event.InstallationID != r.Config.InstallationID || RepositoryRemoved(r.Root, path) {
+					record.Event.InstallationID != r.Config.InstallationID || record.Event.AttemptID != r.Config.InstallationAttemptID || RepositoryRemoved(r.Root, path) {
 					return nil
 				}
 				record.Attempts++

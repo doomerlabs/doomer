@@ -194,3 +194,81 @@ func TestActivationKeepsApprovedRemoteNameButDropsCredentialsAndPaths(t *testing
 		}
 	}
 }
+
+func TestInstallationAttemptsKeepSeparateMilestonesAndOnlyReportCurrentConsent(t *testing.T) {
+	root, repo := t.TempDir(), repository(t)
+	repo, _ = filepath.EvalSymlinks(repo)
+	id, _ := EnsureInstallationID(root)
+	first, _ := NewInstallationAttemptID()
+	second, _ := NewInstallationAttemptID()
+	if len(first) != 64 || len(second) != 64 || first == second {
+		t.Fatal("attempt IDs must be fresh")
+	}
+	cfg := Config{Version: 1, API: "https://example.test/api", Profile: "default", AccountKey: Key("token"), ConsentedAt: time.Now(), ActivationReporting: true, InstallationID: id, InstallationAttemptID: first, Directories: []string{repo}}
+	identity, _ := RepositoryIdentity(context.Background(), repo)
+	for _, attempt := range []string{first, second} {
+		cfg.InstallationAttemptID = attempt
+		QueueApproval(context.Background(), root, repo, "claude", cfg)
+		queueActivation(context.Background(), root, repo, "claude", cfg)
+		queueLifecycle(context.Background(), root, repo, "claude", "first_review", "review-"+attempt, cfg)
+		for _, stage := range []string{"approved", "activated", "first_review"} {
+			file := lifecycleFile(root, identity, "claude", stage, attempt)
+			before, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			queueLifecycle(context.Background(), root, repo, "claude", stage, "replacement", cfg)
+			after, _ := os.ReadFile(file)
+			if !bytes.Equal(before, after) {
+				t.Fatal("retry replaced a milestone")
+			}
+			var record activationRecord
+			if err := Read(file, &record); err != nil || record.Event.AttemptID != attempt || record.Event.InstallationID != id {
+				t.Fatalf("wrong attempt: %+v %v", record, err)
+			}
+		}
+	}
+	Write(filepath.Join(root, "config.json"), cfg)
+	client := &activationTestClient{}
+	runner := Runner{Root: root, Config: cfg, Token: "token", Client: client}
+	runner.reportActivations(context.Background(), repo)
+	runner.reportActivations(context.Background(), repo)
+	if client.calls != 3 {
+		t.Fatalf("reported %d milestones, want current attempt's three exactly once", client.calls)
+	}
+	runner.Config.InstallationAttemptID = first
+	runner.reportActivations(context.Background(), repo)
+	if client.calls != 3 {
+		t.Fatal("old consent was reported")
+	}
+}
+
+func TestReviewIdentityAndMetadataAreScopedToInstallationAttempt(t *testing.T) {
+	dir := repository(t)
+	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("changed\n"), 0600)
+	client := &fakeClient{}
+	first, _ := NewInstallationAttemptID()
+	runner := Runner{Root: t.TempDir(), Config: Config{API: "https://example.com/api", ActivationReporting: true, InstallationID: strings.Repeat("a", 64), InstallationAttemptID: first}, Client: client, Token: "token", Output: &bytes.Buffer{}, Interval: time.Second}
+	requestTestAgentReview(t, &runner, dir)
+	if err := runner.Run(context.Background(), dir, true); err != nil {
+		t.Fatal(err)
+	}
+	oldReview := client.input.ReviewID
+	if client.input.Client["installation_attempt_id"] != first {
+		t.Fatal("missing attempt metadata")
+	}
+	if err := runner.Run(context.Background(), dir, true); err != nil {
+		t.Fatal(err)
+	}
+	if client.input.ReviewID != oldReview {
+		t.Fatal("retry lost its identity")
+	}
+	second, _ := NewInstallationAttemptID()
+	runner.Config.InstallationAttemptID = second
+	if err := runner.Run(context.Background(), dir, true); err != nil {
+		t.Fatal(err)
+	}
+	if client.input.ReviewID == oldReview || client.input.Client["installation_attempt_id"] != second {
+		t.Fatal("new installation reused the old review")
+	}
+}
