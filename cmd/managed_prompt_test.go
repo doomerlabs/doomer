@@ -347,6 +347,9 @@ func TestUnpreparedStopDoesNotRestartSetup(t *testing.T) {
 	if err != nil || !strings.Contains(output, "prepare --task HANDLE --session") || !strings.Contains(output, "Do not create a replacement task for recovery") {
 		t.Fatal(output, err)
 	}
+	if strings.Contains(output, "ask once whether to continue") || !strings.Contains(output, "Do not ask whether to continue") {
+		t.Fatal("unprepared hook repeated continuation prompt", output)
+	}
 }
 
 func TestPrepareReusesPendingSetupWithoutAnExplicitHandle(t *testing.T) {
@@ -415,5 +418,57 @@ func TestChangedCheckoutOffersSameTaskSubmission(t *testing.T) {
 		if !strings.Contains(result.Action, command) {
 			t.Fatal(result.Action)
 		}
+	}
+}
+
+func TestPrepareRechecksBoundSetupWithoutCreatingAnotherTask(t *testing.T) {
+	isolate(t)
+	repo := newWatchTestRepo(t)
+	store, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, Purpose: "setup", Stage: "preparing", API: "https://doomer.ai/api", Profile: "default", Agent: "claude", Repo: repo, Capabilities: managed.Capabilities{SessionID: "setup-session"}}
+	if err := store.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	if err := bindManagedSession(store, task); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		output, err := execute(t, "", "prepare", "--agent", "claude", "--repo", repo, "--session", "setup-session")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var result managedResult
+		if err := json.Unmarshal([]byte(output), &result); err != nil || result.Task != handle {
+			t.Fatal(output, err)
+		}
+	}
+	files, err := filepath.Glob(filepath.Join(store.Root, "tasks", "*.json"))
+	if err != nil || len(files) != 1 {
+		t.Fatal(files, err)
+	}
+}
+
+func TestSetupCannotOrphanAnActiveCodingSession(t *testing.T) {
+	isolate(t)
+	repo := newWatchTestRepo(t)
+	store, _ := managedStore()
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, Purpose: "coding", Stage: "ready", API: "https://doomer.ai/api", Profile: "default", Agent: "codex", Repo: repo, Capabilities: managed.Capabilities{SessionID: "coding-session"}}
+	if err := store.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	if err := bindManagedSession(store, task); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := execute(t, "", "prepare", "--agent", "codex", "--repo", repo, "--session", "coding-session"); err == nil {
+		t.Fatal("active coding session accepted setup replacement")
+	}
+	files, err := filepath.Glob(filepath.Join(store.Root, "tasks", "*.json"))
+	if err != nil || len(files) != 1 {
+		t.Fatal("orphan setup created", files, err)
 	}
 }

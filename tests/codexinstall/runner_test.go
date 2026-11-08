@@ -276,3 +276,26 @@ func TestReviewPreflightUsesRealReviewerWithoutBypass(t *testing.T) {
 		t.Fatal("regression missing from CI discovery")
 	}
 }
+
+func TestProviderFailureIsDistinguishedFromBudgetRejection(t *testing.T) {
+	m := newMeter(config{APIKey: "private-key", Model: "gpt-6.1-terra", Budget: .1})
+	m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/v1/responses/input_tokens" {
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"input_tokens":1000}`))}, nil
+		}
+		return &http.Response{StatusCode: 429, Body: io.NopCloser(strings.NewReader("private upstream detail"))}, nil
+	})}
+	first := httptest.NewRecorder()
+	m.serve(first, httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{"model":"gpt-6.1-terra"}`)))
+	if m.usage.ProviderHTTPFailures[429] != 1 || m.usage.BudgetRejections != 0 || m.usage.Reserved <= 0 {
+		t.Fatal(m.usage)
+	}
+	if strings.Contains(first.Body.String(), "private") {
+		t.Fatal("provider error body leaked")
+	}
+	m.limit = m.usage.Reserved
+	m.serve(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{"model":"gpt-6.1-terra"}`)))
+	if m.usage.ProviderHTTPFailures[429] != 1 || m.usage.BudgetRejections != 1 {
+		t.Fatal(m.usage)
+	}
+}

@@ -245,7 +245,7 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 			if pending != "" {
 				message = "For an installation or approval reply, continue the existing setup with doomer prepare --task " + watch.Quote(pending) + " --session " + watch.Quote(event.Session) + ". For a new coding request, start its own task with doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " --prompt USER_REQUEST. Keep setup-only tasks separate from coding reviews."
 			}
-			message += " If Doomer is blocked, explain the blocker and ask once whether to continue local edits without a completed review or wait. Reuse that choice for this task. Continuing edits does not authorize a blocked upload. Report incomplete review before finishing."
+			message += " If Doomer is blocked, continue already-authorized local edits and tests unless the user explicitly required review first or asked to wait. Stop the denied operation, preserve host controls, and report incomplete review coverage. Do not ask whether to continue."
 			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event.Event, "additionalContext": message}})
 		} else if err != nil {
 			return err
@@ -385,6 +385,35 @@ func writeBootstrapFiles(base string, paths []string, content []byte, expected m
 	}
 	success = true
 	return nil
+}
+
+// Rechecks with a real session reuse its setup task instead of creating an
+// orphan before the session binding rejects a replacement.
+func resumableManagedSetup(s managed.Store, api, profile, agent, repo, session string) (string, error) {
+	if session != "" {
+		key := watch.Key(api + "\x00" + profile + "\x00" + agent + "\x00" + repo + "\x00" + session)
+		var handle string
+		err := watch.Read(filepath.Join(s.Root, "sessions", key+".json"), &handle)
+		if err != nil && !os.IsNotExist(err) {
+			return "", err
+		}
+		if err == nil {
+			task, err := s.Load(handle)
+			if err != nil {
+				return "", err
+			}
+			if task.API != api || task.Profile != profile || task.Agent != agent || task.Repo != repo || task.Capabilities.SessionID != session {
+				return "", fmt.Errorf("session task does not match the requested setup scope")
+			}
+			if task.Stage != "complete" {
+				if task.Purpose != "setup" || task.Paused {
+					return "", fmt.Errorf("session already owns task %s; resume it before creating another task", handle)
+				}
+				return handle, nil
+			}
+		}
+	}
+	return pendingManagedSetup(s, api, profile, agent, repo)
 }
 
 // Offer a saved handle only when one unbound setup unambiguously matches this

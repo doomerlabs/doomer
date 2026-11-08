@@ -211,7 +211,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 		if err != nil {
 			return err
 		}
-		if handle == "" && strings.TrimSpace(prompt) == "" && session == "" {
+		if handle == "" && strings.TrimSpace(prompt) == "" {
 			root, err := watch.Root(c.Context(), repo)
 			if err != nil {
 				return err
@@ -221,7 +221,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 				return err
 			}
 			defer setupLock.Close()
-			handle, err = pendingManagedSetup(s, *api, *profile, agent, root)
+			handle, err = resumableManagedSetup(s, *api, *profile, agent, root, session)
 			if err != nil {
 				return err
 			}
