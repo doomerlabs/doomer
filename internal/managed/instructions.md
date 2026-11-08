@@ -132,8 +132,9 @@ not a new upload grant; recheck saved consent after authentication succeeds.
 
 When a Codex preparation result includes `codex_review_policy`, offer once per
 distinct proposal to add that scoped authorization to Codex's
-approval reviewer. Explain that this is a separate, optional Codex settings
-change. If the installation decision explicitly included saving this matching
+approval reviewer. Present both its `extra_policy` and `changes`, including
+any replacement/removal of recognized superseded policy, before asking for
+acceptance. Explain that this is a separate, optional Codex settings change. If the installation decision explicitly included saving this matching
 policy, reuse that decision without another question. Reuse an explicit answer
 only for identical `extra_policy` text and the same scope, account, service,
 profile, and coding agent. A changed proposal requires

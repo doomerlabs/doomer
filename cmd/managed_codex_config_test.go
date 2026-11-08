@@ -91,6 +91,9 @@ func TestCodexPolicyMigrationNarrowsConsent(t *testing.T) {
 	broad := managedConsentEvidence{Account: "one", Agent: "codex", AllRepositories: true, Service: "https://doomer.ai/api", Profile: "default"}
 	narrow := broad
 	narrow.Agent, narrow.AllRepositories, narrow.Repository = "", false, "/repo/.git"
+	if !strings.Contains(strings.Join(proposedCodexReviewPolicy(narrow).Changes, " "), "Remove only exact recognized all-repositories Codex policy text") {
+		t.Fatal("scope narrowing was not disclosed")
+	}
 	other := broad
 	other.Account = "other"
 	existing := proposedCodexReviewPolicy(broad).ExtraPolicy + proposedCodexReviewPolicy(other).ExtraPolicy
