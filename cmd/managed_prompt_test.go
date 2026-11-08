@@ -64,8 +64,8 @@ func TestManagedFailedSubmissionDoesNotReopenStopLoop(t *testing.T) {
 			t.Fatal("operation failure must remain visible before Stop")
 		}
 	}
-	if feedback := managedHookFeedback("Stop", nil, errors.New("hook execution failed")); len(feedback) != 0 {
-		t.Fatal("failed hook execution reopened Stop", feedback)
+	if feedback := managedHookFeedback("Stop", nil, errors.New("hook execution failed")); feedback["decision"] != "block" {
+		t.Fatal("unverified hook output removed completion gate", feedback)
 	}
 }
 
