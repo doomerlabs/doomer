@@ -1,0 +1,54 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 368
+cmd/managed_install.go
+  h_aa44c3b5b60dec 156,158-159,192-203,248-265
+cmd/managed_opencode.go
+  h_aa44c3b5b60dec 1-48
+internal/managed/bootstrap-2026.11.6.13.md
+  h_aa44c3b5b60dec 1-70
+internal/managed/bootstrap-2026.11.7.3.md
+  h_aa44c3b5b60dec 1-84
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 3,10-11,16-20,22-31,59-63,70-79
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 14-15,26-31,104-105
+internal/managed/policy.go
+  h_aa44c3b5b60dec 115-116
+internal/watch/agent_instructions.go
+  h_aa44c3b5b60dec 35
+internal/watch/hook.go
+  h_aa44c3b5b60dec 826
+internal/watch/hook_paths.go
+  h_aa44c3b5b60dec 36,44
+internal/watch/opencode.go
+  h_aa44c3b5b60dec 1-64
+internal/watch/templates/opencode.mjs
+  h_aa44c3b5b60dec 1-92
+tests/codexinstall/auth.go
+  h_aa44c3b5b60dec 43-45,60-62
+tests/codexinstall/claude.go
+  h_aa44c3b5b60dec 27-29,36-38,45-47,54-56
+tests/codexinstall/fireworks_proxy.go
+  h_aa44c3b5b60dec 1-112
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 63,65,128,138-141,171-177
+tests/codexinstall/opencode.go
+  h_aa44c3b5b60dec 1-112
+tests/codexinstall/proxy.go
+  h_aa44c3b5b60dec 38-41
+tests/codexinstall/remote.go
+  h_aa44c3b5b60dec 135-137,166-168
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 41-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "894eb0f4762cbd12134cdf97bdc8ffd51879ef28",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
