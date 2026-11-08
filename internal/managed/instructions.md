@@ -136,7 +136,7 @@ approval reviewer. Present both its `extra_policy` and `changes`, including
 any replacement/removal of recognized superseded policy, before asking for
 acceptance. Explain that this is a separate, optional Codex settings change. If the installation decision explicitly included saving this matching
 policy, reuse that decision without another question. Reuse an explicit answer
-only for identical `extra_policy` text and the same scope, account, service,
+only for identical `extra_policy` text and `changes` and the same scope, account, service,
 profile, and coding agent. A changed proposal requires
 a new decision. Continue the task if declined. Do not treat the repository
 upload grant as permission to edit Codex settings.
@@ -172,11 +172,13 @@ only checks configuration. With `--allow`, it verifies the account and current
 upload consent, merges the matching policy into the active `$CODEX_HOME/config.toml` (or
 `~/.codex/config.toml`), and replaces only recognized legacy repository policy
 blocks for that same account, service and profile when integration-wide consent
-exists. If consent has narrowed to one repository, it also removes recognized
+exists. If the current grant is repository-only, it also removes recognized
 all-repositories policy for the same Codex account, service and profile. Other
 policy text, settings and comments are preserved; a backup is saved.
 Existing installations use this same migration, without reinstalling Doomer or
-creating another upload grant. Never automatically broaden a repository-only
+creating another upload grant. A missing or revoked grant returns
+`consent_required`; the CLI needs current consent to derive the policy scope,
+in addition to separate approval for the settings change. Never automatically broaden a repository-only
 grant or treat an old settings proposal as permission to install it.
 
 `codex_policy_status.state=configured` validates the file only. `activation` stays

@@ -89,7 +89,8 @@ uploads, activating hooks, and completing a review are separate outcomes.
 ## Harness capabilities and limits
 
 After verified approval, Codex results include `codex_policy_status` for the
-active `$CODEX_HOME/config.toml` (falling back to `~/.codex/config.toml`). The
+active `$CODEX_HOME/config.toml` (using `~/.codex/config.toml` only when
+`CODEX_HOME` is unset). Status, migration and offer identity use this same path. The
 states are `missing`, `migration_required`, `configured`, and `unreadable`.
 A shown proposal is not an installed policy. Older presentation-only markers are
 ignored; offers are now keyed by active config path, effective reviewer policy and proposal.
@@ -99,7 +100,9 @@ The proposal covers only the saved grant's account, service, profile and
 repository identity (including linked worktrees), or all repositories for the
 specified coding agent when the verified grant has `all_repositories: true`.
 Installing settings grants no upload permission: uploads still require current
-consent. Revocation, paused tasks/watchers, host restrictions and organization
+consent. The policy scope comes from browser integration approval or an explicit
+`doomer task consent HANDLE --allow --all-repositories` upgrade; both require
+the user to approve the integration-wide scope. Revocation, paused tasks/watchers, host restrictions and organization
 policy continue to apply.
 This lets existing installs discover stale repository-scoped policy after
 upgrading to integration-wide consent, or missing policy in a different profile.
@@ -115,10 +118,10 @@ doomer task codex-policy HANDLE --allow
 
 The migration verifies account and current consent. It preserves unrelated
 policy, settings and comments, backs up the old config, and atomically replaces
-only its `extra_policy` string. With integration-wide consent it removes exact
-recognized legacy repository policy blocks for the same account, service and
-profile, then adds the integration policy. A repository-only grant removes
-recognized broader Codex policy for the same account, service and profile.
+only its `extra_policy` string. Within that string, integration-wide consent
+allows removal of exact recognized legacy repository policy paragraphs for the same account, service and
+profile, then adds the integration policy. Within that same string, a
+repository-only grant removes recognized broader Codex policy for the same account, service and profile.
 It does not expand legacy upload
 grants, infer settings permission from upload permission, or change sandbox,
 approval-mode or hook settings. Invalid or unsupported TOML is left untouched.
