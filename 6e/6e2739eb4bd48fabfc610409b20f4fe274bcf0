@@ -1,0 +1,24 @@
+cmd/managed_discovery.go
+  h_aa44c3b5b60dec 3,9
+internal/managed/discovery.go
+  h_aa44c3b5b60dec 1-60
+tests/codexinstall/candidate.go
+  h_aa44c3b5b60dec 11,53-115
+tests/codexinstall/candidate_test.go
+  h_aa44c3b5b60dec 1-141
+tests/codexinstall/skills.go
+  h_aa44c3b5b60dec 102-104
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 162-163,165
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6e6e2739eb4bd48fabfc610409b20f4fe274bcf0",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
