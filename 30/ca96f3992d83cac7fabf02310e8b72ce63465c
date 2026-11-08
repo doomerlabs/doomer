@@ -1,0 +1,14 @@
+internal/watch/activation_reporting_test.go
+  h_aa44c3b5b60dec 238-255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "30ca96f3992d83cac7fabf02310e8b72ce63465c",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
