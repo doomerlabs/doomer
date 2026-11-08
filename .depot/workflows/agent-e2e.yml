@@ -61,7 +61,7 @@ jobs:
     strategy:
       fail-fast: false
       # Bound provider request bursts while keeping scenarios parallel.
-      max-parallel: 4
+      max-parallel: 8
       matrix:
         harness: [codex, claude]
         scenario: ${{ fromJSON(needs.plan.outputs.scenarios) }}

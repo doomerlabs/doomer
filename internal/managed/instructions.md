@@ -209,6 +209,7 @@ final commit/push or handoff. A fixed finding response does not submit new sourc
 Without active hooks, submit explicitly. Read results and repeat after edits.
 Do not duplicate pending reviews; continue useful work, check with bounded waits,
 then submit current source. Verify completion with `doomer task finish HANDLE`.
+Include the returned review URL once when reporting a completed review.
 
 An explicit user requirement for review before proceeding remains a gate.
 Otherwise, if final submission is missed, pending, or unavailable, continue without
