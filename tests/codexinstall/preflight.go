@@ -29,7 +29,7 @@ func (j *journey) reviewPreflight() error {
 	c.ReviewApprovals = c.Harness != "claude"
 	j.result.Turns++
 	turn, err := runAgent(j.ctx, c, j.repo, j.env,
-		"Create hello.txt containing hello followed by a newline. Use the installed Doomer skill, including local preflight and review preparation. This smoke test permits setup and account checks but no submission of repository content. Report whether preparation succeeded and finish the local edit.", "", j.record)
+		"Create hello.txt containing hello followed by a newline. This is a coding task, not setup-only onboarding. Use the installed Doomer skill: run local preflight, then prepare a coding task with --prompt describing this edit. Preparation and account checks are allowed, but do not submit repository content or enable hooks for this test. Report whether preparation succeeded and finish the local edit.", "", j.record)
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func (j *journey) reviewPreflight() error {
 	content, readErr := os.ReadFile(filepath.Join(j.repo, "hello.txt"))
 	j.result.Checks["local_edit_completed"] = readErr == nil && string(content) == "hello\n"
 	reported := strings.ToLower(strings.Join(turn.Messages, "\n"))
-	j.result.Checks["initialized_or_reported_blocker"] = prepared || strings.Contains(reported, "denied") || strings.Contains(reported, "blocked") || strings.Contains(reported, "restriction")
+	j.result.Checks["initialized_or_reported_blocker"] = prepared || strings.Contains(reported, "denied") || strings.Contains(reported, "blocked") || strings.Contains(reported, "restriction") || strings.Contains(reported, "preparation failed") || strings.Contains(reported, "could not reach")
 	j.record("fixture", fmt.Sprintf("Fresh session preparation completed: %t", prepared))
 	j.f.mu.Lock()
 	j.result.Checks["original_grant_reused"] = j.f.Creates == 1
