@@ -1,0 +1,38 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 32,152-154,605,743-753
+cmd/managed_claude_permissions.go
+  h_aa44c3b5b60dec 1-185
+cmd/managed_claude_permissions_test.go
+  h_aa44c3b5b60dec 1-172
+cmd/managed_feedback.go
+  h_aa44c3b5b60dec 80-111
+cmd/managed_feedback_test.go
+  h_aa44c3b5b60dec 6-7,145-194
+cmd/managed_install.go
+  h_aa44c3b5b60dec 154,157,192-220,225-232,295-296,316
+cmd/onboard_reset.go
+  h_aa44c3b5b60dec 31-36,261-281,284-286,289-297,304,387-410
+docs/managed-runtime.md
+  h_aa44c3b5b60dec 203-263
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 112-118,141-157
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 32,258-264
+tests/codexinstall/claude.go
+  h_aa44c3b5b60dec 65-69
+tests/codexinstall/command_permissions.go
+  h_aa44c3b5b60dec 1-57
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 17,173-174
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cff170da295464329a518ea38f63c662c4fdd700",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
