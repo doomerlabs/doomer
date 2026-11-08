@@ -4,8 +4,8 @@ description: Prepare Doomer review early, reuse installation approval, and repor
 metadata:
   doomer-protocol: "2"
   doomer-update-policy: stable
-  doomer-bootstrap-version: "2026.11.7.3"
-  doomer-cli-range: ">=2026.11.7.3"
+  doomer-bootstrap-version: "2026.11.7.5"
+  doomer-cli-range: ">=2026.11.7.5"
 ---
 
 # Doomer review
@@ -16,6 +16,10 @@ interpolation. Read the returned instructions and retain the task handle.
 If a real harness session ID is available, pass it with `--session`. For Claude,
 use the active harness's `CLAUDE_CODE_SESSION_ID` when exposed. Chat URL IDs and
 invented prefixes do not establish a hook binding.
+
+For onboarding without a coding task, run `doomer prepare --agent AGENT --repo .`
+without `--prompt`. Supplying a prompt creates a coding-review task even when
+its text says “setup only.” Verify readiness and hooks without submitting code.
 
 Reuse the saved integration approval across repositories, worktrees, and chats
 for the same coding agent, Doomer account, service, and profile. Existing
@@ -101,3 +105,14 @@ when required.
 After installation, resume any existing task with `prepare --task HANDLE`, or
 run the initial prepare command if no task exists. Present only the refreshed
 result's approval request; earlier pending requests may have been satisfied.
+
+When the user requests an onboarding reset, run `doomer onboard reset --dry-run`
+to report discovered agent installations, Doomer profiles, and grant revocations, then run
+`doomer onboard reset` when that cleanup is authorized. Reset covers discovered
+installations and Doomer profiles, keeps login credentials, and revokes upload,
+portable, and software-update grants. A persistent reset cutoff rejects old
+portable copies. Report any incomplete/manual cleanup and the need to restart
+running agents. Do not automatically onboard again or recreate grants after a
+reset. Do not run a live reset merely to test an implementation.
+Retain existing task handles and report incomplete review coverage for tasks
+paused by the reset. Resume them only after the user explicitly grants access again.
