@@ -12,6 +12,8 @@ import (
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 )
 
+var ErrCheckoutChanged = errors.New("checkout changed after review; submit this task again")
+
 type ReviewClient interface {
 	StartWorkspace(context.Context, string, adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error)
 	GetWorkspace(context.Context, string, string) (adversarylabs.WorkspaceReview, error)
@@ -300,7 +302,7 @@ func (e Engine) Finish(ctx context.Context, task *Task, token string) error {
 		return err
 	}
 	if capture.TargetTreeHash != task.ReviewedTree {
-		return fmt.Errorf("checkout changed after review; submit this task again")
+		return ErrCheckoutChanged
 	}
 	task.Stage = "complete"
 	task.Updated = time.Now().UTC()

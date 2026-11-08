@@ -38,6 +38,8 @@ fi
 candidate_args=(--candidate-release "$release")
 if [[ -n ${E2E_SKILLS_SOURCE:-} ]]; then
   candidate_args+=(--skills-source "$E2E_SKILLS_SOURCE")
+else
+  candidate_args+=(--bootstrap-source "$PWD")
 fi
 "$work/runner" "${agent_args[@]}" "${candidate_args[@]}" \
   --local-root "$work/homes" --scenario "$scenario" --budget 0.35 --suite-budget 8.4 \

@@ -3,7 +3,9 @@
 Run real Codex CLI 0.167.0 with GPT-6.1 Terra at low reasoning in disposable
 Linux exe.dev VMs or isolated local macOS test homes. Depot runs all scenarios for both harnesses on pull requests. Manual runs remain available.
 The local fixture supplies Doomer account, approval and review responses.
-Installation still uses the public guide and published, verified Doomer runtime.
+By default, installation uses the public guide and published, verified Doomer
+runtime. Candidate flags first exercise that installation, then replace the
+runtime or wrappers with the selected checkout for the remaining scenario.
 
 ## Run
 
@@ -227,6 +229,8 @@ repositories, the `agent-e2e` environment, and `agent-e2e.yml`. Fork pull reques
 receive no secrets and cannot run the authenticated suite.
 
 The CLI job builds the proposed checkout after exercising public installation.
+The CLI job uses `--bootstrap-source` to install each agent's wrapper from the PR
+checkout in the disposable fixture, so changes to either committed copy are tested.
 The skills job pairs its pinned CLI source with `--skills-source` to exercise that PR's `INSTALL.md`, installer
 (with a fixture-local URL and recomputed checksum), and wrapper. Runtime downloads
 retain their normal HTTPS and checksum verification. Skills' runner dependency is

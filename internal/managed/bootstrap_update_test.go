@@ -88,3 +88,21 @@ func TestBootstrapInspectionRecognizesUnmarkedAndCustomWrappers(t *testing.T) {
 		t.Fatal(result, err)
 	}
 }
+
+func TestSevenFiveBootstrapRemainsUpgradable(t *testing.T) {
+	policy := Policy{Protocol: Protocol, Channel: "stable"}
+	previous, err := bootstrapText(policy, versionSevenFiveBootstrapTemplate, "2026.11.7.5", ">=2026.11.7.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !RecognizedBootstrap([]byte(previous), policy) {
+		t.Fatal("released wrapper was treated as a custom edit")
+	}
+	current, err := BootstrapText(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if previous == current || !strings.Contains(current, "without `--prompt`") {
+		t.Fatal("updated onboarding guidance missing")
+	}
+}

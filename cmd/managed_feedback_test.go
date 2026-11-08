@@ -23,7 +23,7 @@ func TestManagedHookFeedbackDoesNotExposeReviewPayload(t *testing.T) {
 				t.Fatalf("exposed %s: %s", secret, feedback)
 			}
 		}
-		if !strings.Contains(string(feedback), "review findings (1 pending)") {
+		if event != "Stop" && !strings.Contains(string(feedback), "review findings (1 pending)") {
 			t.Fatal(string(feedback))
 		}
 	}
@@ -78,5 +78,21 @@ func TestNoChangesFeedbackKeepsErrorsVisible(t *testing.T) {
 	got := managedHookFeedback("Stop", raw, nil)
 	if got["decision"] != "block" || !strings.Contains(got["reason"].(string), "finish command") {
 		t.Fatal(got)
+	}
+}
+
+func TestPendingFindingsStillBlockStopWithoutExposingPayload(t *testing.T) {
+	result := managedResult{State: "reviewed"}
+	if err := json.Unmarshal([]byte(`{"id":"review","early_assessment":{"status":"ready","leads":[{"id":"lead","path":"private-path","concern":"private concern"}]}}`), &result.Review); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(result)
+	feedback := managedHookFeedback("Stop", raw, nil)
+	if feedback["decision"] != "block" {
+		t.Fatal(feedback)
+	}
+	body, _ := json.Marshal(feedback)
+	if !strings.Contains(string(body), "1 pending") || strings.Contains(string(body), "private") {
+		t.Fatal(string(body))
 	}
 }

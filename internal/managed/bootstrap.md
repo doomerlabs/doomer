@@ -14,6 +14,10 @@ If a real harness session ID is available, pass it with `--session`. For Claude,
 use the active harness's `CLAUDE_CODE_SESSION_ID` when exposed. Chat URL IDs and
 invented prefixes do not establish a hook binding.
 
+For onboarding without a coding task, run `doomer prepare --agent AGENT --repo .`
+without `--prompt`. Supplying a prompt creates a coding-review task even when
+its text says “setup only.” Verify readiness and hooks without submitting code.
+
 Reuse the saved integration approval across repositories, worktrees, and chats
 for the same coding agent, Doomer account, service, and profile. Existing
 repository-specific grants retain their original scope until explicitly upgraded.
@@ -51,6 +55,10 @@ substitute the current stable release for an active task. Follow structured
 user-action requests. Never invent consent, account identity, or hook activation.
 Reading this file directly is sufficient; native skill discovery is optional.
 
+After a failed submission recovers, run `doomer task status HANDLE`, record every
+finding response, and run `doomer task finish HANDLE` with the same task handle.
+A successful submit or retry response alone does not complete the task.
+
 The selected CLI supplies its matching full instructions. Continue local edits
 when the user chose to do so despite blocked review, including when an older
 runtime still describes preparation as an edit gate. Submit only when the CLI
@@ -67,6 +75,8 @@ authorized coding task, fetch the official INSTALL.md at
 https://raw.githubusercontent.com/doomerlabs/skills/22f02d667370ffc06ceddf5ba5e24e1896684e12/INSTALL.md and require its SHA-256 to equal
 `646b3cea1fcde88bfba31073b0b45e6b7f01092e5a7ac394b0627373f969f951`
 before following the relevant verified steps with normal execution permissions.
+Fetch raw Markdown through the shell if a reader summarizes it.
+Verify the full checksum. Public HTTPS needs no GitHub login.
 For an active review task, retain its handle and selected runtime. Use the guide's
 onboarding steps with that task. If its executable is missing, use
 `doomer task repair HANDLE`; runtime replacement is for setup without an active task.
@@ -79,8 +89,10 @@ installation with speculative requests to sign in again or approve uploads.
 A separate setup-choice question is unnecessary when this verified installation
 is already permitted. Let the host's tool permission controls request approval
 when required.
-After installation, resume any existing task with `prepare --task HANDLE`, or
-run the initial prepare command if no task exists. Present only the refreshed
+After installation, resume any existing task with `doomer prepare --task HANDLE`.
+With no existing task, use the initial prepare command for a coding request.
+For setup-only onboarding, run `doomer prepare --agent AGENT --repo .` without
+`--prompt`. Present only the refreshed
 result's approval request; earlier pending requests may have been satisfied.
 
 When the user requests an onboarding reset, run `doomer onboard reset --dry-run`

@@ -64,3 +64,50 @@ func TestCandidateSkillsPreservesInstallationScope(t *testing.T) {
 		})
 	}
 }
+
+func TestRepositoryBootstrapsAreTestedIndependently(t *testing.T) {
+	source, repo, home := t.TempDir(), t.TempDir(), t.TempDir()
+	for _, agent := range []string{".agents", ".claude"} {
+		path := filepath.Join(agent, "skills/doomer-review/SKILL.md")
+		for _, root := range []string{source, repo} {
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(root, path)), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, path), []byte(agent+" candidate"), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	c := config{}
+	if err := loadRepositoryBootstraps(&c, source); err != nil {
+		t.Fatal(err)
+	}
+	if err := installCandidateSkills(c, home, repo); err != nil {
+		t.Fatal(err)
+	}
+	for agent, want := range c.RepoBootstraps {
+		got, err := os.ReadFile(filepath.Join(repo, agent, "skills/doomer-review/SKILL.md"))
+		if err != nil || string(got) != want {
+			t.Fatalf("%s: %q, %v", agent, got, err)
+		}
+	}
+}
+
+func TestIncompleteRepositoryBootstrapsCannotOverwriteInstallation(t *testing.T) {
+	repo := t.TempDir()
+	path := filepath.Join(repo, ".agents/skills/doomer-review/SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("installed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c := config{RepoBootstraps: map[string]string{".agents": "candidate"}}
+	if err := installCandidateSkills(c, t.TempDir(), repo); err == nil {
+		t.Fatal("partial wrapper configuration accepted")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "installed" {
+		t.Fatal("partially changed installation", err)
+	}
+}

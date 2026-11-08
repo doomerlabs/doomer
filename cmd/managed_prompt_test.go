@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"net/http"
 	"net/http/httptest"
@@ -52,16 +53,19 @@ func TestManagedHookCapturesPromptAndPreservesSubmittedContext(t *testing.T) {
 }
 
 func TestManagedFailedSubmissionDoesNotReopenStopLoop(t *testing.T) {
-	raw, _ := json.Marshal(managedResult{State: "operation_failed", Error: "safe diagnostic"})
-	for i := 0; i < 3; i++ {
-		feedback := managedHookFeedback("Stop", raw, nil)
-		if feedback["decision"] == "block" {
-			t.Fatal("failed submission reopened chat", feedback)
+	for _, state := range []string{"operation_failed", "review_failed"} {
+		raw, _ := json.Marshal(managedResult{State: state, Error: "safe diagnostic", Review: &adversarylabs.WorkspaceReview{ID: "review"}})
+		for i := 0; i < 3; i++ {
+			if feedback := managedHookFeedback("Stop", raw, nil); len(feedback) != 0 {
+				t.Fatal("failed Stop must be silent to avoid reopening Claude", feedback)
+			}
 		}
-		body, _ := json.Marshal(feedback)
-		if !strings.Contains(string(body), "incomplete") {
-			t.Fatal("failure presented as success", feedback)
+		if feedback := managedHookFeedback("PostToolUse", raw, nil); len(feedback) == 0 {
+			t.Fatal("operation failure must remain visible before Stop")
 		}
+	}
+	if feedback := managedHookFeedback("Stop", nil, errors.New("hook execution failed")); feedback["decision"] != "block" {
+		t.Fatal("unverified hook output removed completion gate", feedback)
 	}
 }
 
@@ -387,5 +391,29 @@ func TestReviewedTaskIncludesFinishAction(t *testing.T) {
 	result = resultFor(task)
 	if result.Action != "" {
 		t.Fatal("missing review offered completion", result)
+	}
+}
+
+func TestSubmittedTaskIncludesRecoveryCompletionAction(t *testing.T) {
+	task := managed.Task{Handle: "existing-task", Stage: "review_pending", Review: &adversarylabs.WorkspaceReview{ID: "review", Status: "completed"}}
+	result := resultFor(task)
+	for _, command := range []string{"doomer task status existing-task", "doomer task finish existing-task"} {
+		if !strings.Contains(result.Action, command) {
+			t.Fatal(result.Action)
+		}
+	}
+	task.LastError = "submission failed"
+	if got := resultFor(task); got.Action != "" {
+		t.Fatal(got.Action)
+	}
+}
+
+func TestChangedCheckoutOffersSameTaskSubmission(t *testing.T) {
+	task := managed.Task{Handle: "existing-task", Stage: "reviewed", LastError: managed.ErrCheckoutChanged.Error()}
+	result := resultFor(task)
+	for _, command := range []string{"doomer task submit existing-task", "doomer task status existing-task", "doomer task finish existing-task"} {
+		if !strings.Contains(result.Action, command) {
+			t.Fatal(result.Action)
+		}
 	}
 }
