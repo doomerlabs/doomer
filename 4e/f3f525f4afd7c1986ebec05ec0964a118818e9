@@ -1,0 +1,16 @@
+.depot/workflows/agent-e2e.yml
+  h_aa44c3b5b60dec 12,43-44,48
+docs/network-access.md
+  h_aa44c3b5b60dec 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4ef3f525f4afd7c1986ebec05ec0964a118818e9",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
