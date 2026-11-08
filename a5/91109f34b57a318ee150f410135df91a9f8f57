@@ -1,0 +1,24 @@
+internal/managed/bootstrap-2026.11.8.5.md
+  h_aa44c3b5b60dec 1-133
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 42-43,58-63,67-68
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 14,51-53,128
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 62,68
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 214-219
+internal/managed/permission-prompt-rules.md
+  h_aa44c3b5b60dec 8-9,37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a591109f34b57a318ee150f410135df91a9f8f57",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
