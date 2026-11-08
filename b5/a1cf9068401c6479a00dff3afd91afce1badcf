@@ -1,0 +1,22 @@
+cmd/managed_codex_config.go
+  h_aa44c3b5b60dec 71
+cmd/managed_codex_config_test.go
+  h_aa44c3b5b60dec 178-184,188,199
+cmd/managed_codex_policy.go
+  h_aa44c3b5b60dec 27,35-36
+docs/managed-runtime.md
+  h_aa44c3b5b60dec 95,97
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b5a1cf9068401c6479a00dff3afd91afce1badcf",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
