@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/doomerlabs/doomer/internal/application"
+	"github.com/doomerlabs/doomer/internal/version"
 	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
@@ -59,7 +60,7 @@ func runWorkspaceReview(cmd *cobra.Command, clock application.Clock, api, profil
 	// A manual invocation requests fresh analysis. Generate once so HTTP retries
 	// still use the same idempotency key; uploaded content keeps its own cache.
 	reviewID := "cli-" + rand.Text()
-	input := adversarylabs.WorkspaceSubmission{ReviewScope: "diff", LookCloser: &look, FullReview: &full, RepositoryID: repo, SnapshotID: head, BaseSnapshotID: base, ReviewID: reviewID, Repository: repository, Branch: capture.Source.Branch, Diff: diff, Client: map[string]string{"name": "Doomer CLI"}}
+	input := adversarylabs.WorkspaceSubmission{ReviewScope: "diff", LookCloser: &look, FullReview: &full, RepositoryID: repo, SnapshotID: head, BaseSnapshotID: base, ReviewID: reviewID, Repository: repository, Branch: capture.Source.Branch, Diff: diff, Client: map[string]string{"name": "Doomer CLI", "cli_version": version.Version, "bootstrap_protocol": "2", "notice_schema": "1"}}
 	if look {
 		input.LookCloserThreshold = &threshold
 	}

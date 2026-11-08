@@ -222,7 +222,7 @@ func newSetupCommand(app *application.App, api, profile *string) *cobra.Command 
 			}
 			reportActivation = true
 		} else if anonymous && browserToken == nil {
-			fmt.Fprintln(c.OutOrStdout(), "Free anonymous Look Closer enabled. Source code and agent review responses are uploaded to "+*api+". Deep review requires signing in.")
+			fmt.Fprintln(c.OutOrStdout(), "Free Look Closer enabled. No account needed. Source code and agent review responses are uploaded to "+*api+". Deep review requires signing in.")
 		} else if yes {
 			consent.print(c.OutOrStdout())
 			fmt.Fprintln(c.OutOrStdout(), "\nApproved with --yes.")

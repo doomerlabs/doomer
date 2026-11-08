@@ -25,6 +25,7 @@ type WorkspaceAssessment struct {
 	Leads       []WorkspaceLead `json:"leads"`
 }
 type WorkspaceReview struct {
+	Notices             []ClientNotice       `json:"notices,omitempty"`
 	LookCloserThreshold *int                 `json:"look_closer_threshold,omitempty"`
 	URL                 string               `json:"url,omitempty"`
 	Anonymous           bool                 `json:"anonymous,omitempty"`

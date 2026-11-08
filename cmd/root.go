@@ -111,6 +111,7 @@ func newRootCommand(injected *application.App) *cobra.Command {
 		if err := adversarylabs.ValidateAPIURL(apiURL); err != nil {
 			return err
 		}
+		command.SetContext(adversarylabs.WithNoticeCollector(command.Context(), dir, apiURL, command.ErrOrStderr()))
 		if injected != nil {
 			app.Deps = injected.Deps
 			return nil
@@ -136,6 +137,8 @@ func newRootCommand(injected *application.App) *cobra.Command {
 		return nil
 	}
 	root.AddCommand(newLoginCommand(app, &apiURL, &profile, settings), newLogoutCommand(app, &apiURL, &profile), newProfileCommand(app, settings))
+	root.PersistentPostRun = func(command *cobra.Command, args []string) { adversarylabs.FlushNotices(command.Context()) }
+	root.AddCommand(newNoticesCommand(&apiURL))
 	root.AddCommand(newVersionCommand(), newSelfUpdateCommand(), newRuntimeInfoCommand())
 	root.AddCommand(newPrepareCommand(app, &apiURL, &profile), newManagedTaskCommand(app, &apiURL, &profile), newManagedInstallCommand(), newManagedBootstrapCommand(), newManagedHooksCommand(app, &apiURL, &profile), newManagedAgentHookCommand(app, &apiURL, &profile))
 	root.AddCommand(newPreflightCommand(&apiURL, &profile))
