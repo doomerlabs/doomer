@@ -13,17 +13,18 @@ import (
 )
 
 type usage struct {
-	CacheCreated         int64       `json:"cache_creation_input_tokens,omitempty"`
-	Input                int64       `json:"input_tokens"`
-	Cached               int64       `json:"cached_input_tokens"`
-	Output               int64       `json:"output_tokens"`
-	Cost                 float64     `json:"estimated_cost_usd"`
-	Reserved             float64     `json:"budget_charged_usd"`
-	Requests             int         `json:"requests"`
-	Unknown              int         `json:"requests_without_usage"`
-	ProviderHTTPFailures map[int]int `json:"provider_http_failures,omitempty"`
-	BudgetRejections     int         `json:"budget_rejections,omitempty"`
-	TokenCountFailures   int         `json:"token_count_failures,omitempty"`
+	CacheCreated           int64       `json:"cache_creation_input_tokens,omitempty"`
+	Input                  int64       `json:"input_tokens"`
+	Cached                 int64       `json:"cached_input_tokens"`
+	Output                 int64       `json:"output_tokens"`
+	Cost                   float64     `json:"estimated_cost_usd"`
+	Reserved               float64     `json:"budget_charged_usd"`
+	Requests               int         `json:"requests"`
+	Unknown                int         `json:"requests_without_usage"`
+	ProviderHTTPFailures   map[int]int `json:"provider_http_failures,omitempty"`
+	BudgetRejections       int         `json:"budget_rejections,omitempty"`
+	TokenCountFailures     int         `json:"token_count_failures,omitempty"`
+	ContextLimitRejections int         `json:"context_limit_rejections,omitempty"`
 }
 type meter struct {
 	mu         sync.Mutex
@@ -64,9 +65,14 @@ func (m *meter) serve(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	inputTokens, err := m.countInput(r.Context(), body)
-	if err != nil || inputTokens > 200000 {
+	if err != nil {
 		m.usage.TokenCountFailures++
-		http.Error(w, "input token counting failed or short-context limit exceeded", 502)
+		http.Error(w, "input token counting failed", 502)
+		return
+	}
+	if inputTokens > 200000 {
+		m.usage.ContextLimitRejections++
+		http.Error(w, "short-context limit exceeded", 413)
 		return
 	}
 	// Reserve uncached input at the highest documented cache-write rate, plus

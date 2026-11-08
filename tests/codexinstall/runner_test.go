@@ -290,11 +290,15 @@ func TestProviderFailureIsDistinguishedFromBudgetRejection(t *testing.T) {
 	if m.usage.ProviderHTTPFailures[429] != 1 || m.usage.BudgetRejections != 0 || m.usage.Reserved <= 0 {
 		t.Fatal(m.usage)
 	}
-	if strings.Contains(first.Body.String(), "private") {
+	if first.Code != 429 || first.Body.String() != "OpenAI returned HTTP 429\n" {
 		t.Fatal("provider error body leaked")
 	}
 	m.limit = m.usage.Reserved
-	m.serve(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{"model":"gpt-6.1-terra"}`)))
+	second := httptest.NewRecorder()
+	m.serve(second, httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{"model":"gpt-6.1-terra"}`)))
+	if second.Code != 429 || second.Body.String() != "test API budget exhausted\n" {
+		t.Fatal(second.Code, second.Body.String())
+	}
 	if m.usage.ProviderHTTPFailures[429] != 1 || m.usage.BudgetRejections != 1 {
 		t.Fatal(m.usage)
 	}

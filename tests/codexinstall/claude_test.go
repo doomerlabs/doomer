@@ -75,6 +75,12 @@ func TestClaudeMeterRefusesOverBudgetAndLongContext(t *testing.T) {
 			if out.Code == 200 || m.usage.Requests != 0 {
 				t.Fatal(out.Code, m.usage)
 			}
+			if tc.name == "budget" && m.usage.BudgetRejections != 1 {
+				t.Fatal(m.usage)
+			}
+			if tc.name == "context" && (m.usage.ContextLimitRejections != 1 || m.usage.TokenCountFailures != 0) {
+				t.Fatal(m.usage)
+			}
 		})
 	}
 }
