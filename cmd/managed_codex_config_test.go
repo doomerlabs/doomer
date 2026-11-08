@@ -175,10 +175,17 @@ func TestCodexPolicyOfferMigratesOldMarkersAndTracksActiveProfile(t *testing.T) 
 	if p, err := offerCodexReviewPolicy(s, consent); err != nil || p != nil {
 		t.Fatal(p, err)
 	}
+	pathUnrelated, _ := codexConfigPath()
+	if err := os.WriteFile(pathUnrelated, []byte("# changed theme\nmodel = 'another'\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if next, err := offerCodexReviewPolicy(s, consent); err != nil || next != nil {
+		t.Fatal("unrelated settings repeated the proposal", next, err)
+	}
 	// Marking a delivered offer uses its original snapshot, even when the
 	// config changes between inspection and output.
 	pathBeforeEdit, _ := codexConfigPath()
-	if err := os.WriteFile(pathBeforeEdit, []byte("# concurrent change\n"), 0600); err != nil {
+	if err := os.WriteFile(pathBeforeEdit, []byte("[auto_review]\nextra_policy = 'concurrent change'\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := markCodexReviewPolicyOffered(s, p); err != nil {
@@ -189,7 +196,7 @@ func TestCodexPolicyOfferMigratesOldMarkersAndTracksActiveProfile(t *testing.T) 
 	}
 	// Changes at the same path must not inherit the old delivery marker.
 	path, _ := codexConfigPath()
-	if err := os.WriteFile(path, []byte("# changed settings\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("[auto_review]\nextra_policy = 'changed policy'\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if p, err := offerCodexReviewPolicy(s, consent); err != nil || p == nil {

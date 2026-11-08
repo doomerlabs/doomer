@@ -144,7 +144,7 @@ Check `codex_policy_status` even when no proposal is returned. `missing` or
 `migration_required` means the active Codex profile does not contain the current
 policy; `unreadable` reports a configuration error without blocking local work.
 Delivery markers from older releases do not establish installation. Offers are
-scoped to the active config path and contents, so a changed or different profile
+scoped to the active config path and effective reviewer policy, so a changed or different profile
 can receive a migration offer. Do not repeat a declined settings question within
 the task. An unchanged previously offered configuration is reported in status
 without another offer; absence of a proposal never means acceptance.

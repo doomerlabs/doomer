@@ -92,8 +92,9 @@ After verified approval, Codex results include `codex_policy_status` for the
 active `$CODEX_HOME/config.toml` (falling back to `~/.codex/config.toml`). The
 states are `missing`, `migration_required`, `configured`, and `unreadable`.
 A shown proposal is not an installed policy. Older presentation-only markers are
-ignored; offers are now keyed by active config path, contents and proposal.
+ignored; offers are now keyed by active config path, effective reviewer policy and proposal.
 Unchanged offers remain deduplicated while status continues to report the gap.
+Edits to unrelated settings or comments do not trigger another offer.
 The proposal covers only the saved grant's account, service, profile and
 repository identity (including linked worktrees), or all repositories for the
 specified coding agent when the verified grant has `all_repositories: true`.

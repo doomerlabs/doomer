@@ -24,7 +24,7 @@ type codexReviewPolicy struct {
 // Remember presentation, never acceptance. A new scope or proposal can be
 // offered again, while ordinary chats keep using the existing review grant.
 func offerCodexReviewPolicy(s managed.Store, consent managedConsentEvidence) (*codexReviewPolicy, error) {
-	proposal, data, err := inspectCodexReviewPolicy(consent)
+	proposal, _, err := inspectCodexReviewPolicy(consent)
 	if err != nil {
 		return nil, err
 	}
@@ -32,8 +32,8 @@ func offerCodexReviewPolicy(s managed.Store, consent managedConsentEvidence) (*c
 		return nil, nil
 	}
 	// Old presentation-only markers do not establish installation. Include the
-	// active profile and its actual configuration in the new offer identity.
-	_, err = os.Stat(codexReviewPolicyOfferPath(s, proposal, data))
+	// active profile and its effective reviewer policy in the new offer identity.
+	_, err = os.Stat(codexReviewPolicyOfferPath(s, proposal, proposal.configData))
 	if err == nil {
 		return nil, nil
 	}

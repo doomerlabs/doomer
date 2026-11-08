@@ -68,7 +68,7 @@ func inspectCodexReviewPolicy(consent managedConsentEvidence) (*codexReviewPolic
 	if err != nil {
 		return nil, nil, fmt.Errorf("read Codex reviewer policy: %w", err)
 	}
-	p.configData = data
+	p.configData = []byte(policy)
 	p.State = "missing"
 	if strings.Contains(policy, p.ExtraPolicy) {
 		p.State = "configured"
