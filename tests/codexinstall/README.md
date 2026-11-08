@@ -246,7 +246,10 @@ The skills job pairs its pinned CLI source with `--skills-source` to exercise th
 retain their normal HTTPS and checksum verification. Skills' runner dependency is
 pinned to a reviewed CLI commit.
 
-Every scenario job retains JSON results and HTML conversations. A final job collects all recordings into one offline `index.html` gallery
+Each agent/scenario pair retries once on failure with a fresh isolated home. The
+scenario check fails only if both attempts fail. Every scenario job retains JSON
+results and HTML conversations from both attempts, and the gallery shows the final
+attempt. A final job collects all recordings into one offline `index.html` gallery
 for 14 days, including on test failure. The job summary links to the Depot job, identifies the recording artifact, and
 lists every scenario result, including missing or malformed reports as failures. Download the artifact and open `index.html` to browse
 recordings. Codex reserves at most $0.35 per scenario and $8.75 per suite. Claude
