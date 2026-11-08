@@ -71,6 +71,9 @@ func inspectCodexReviewPolicy(consent managedConsentEvidence) (*codexReviewPolic
 	p.State = "missing"
 	if strings.Contains(policy, p.ExtraPolicy) {
 		p.State = "configured"
+		if mergeCodexExtraPolicy(policy, consent) != policy {
+			p.State = "migration_required"
+		}
 	} else if strings.Contains(policy, "Doomer repository review authorization\n") {
 		p.State = "migration_required"
 	}

@@ -94,6 +94,19 @@ func TestCodexPolicyMigrationNarrowsConsent(t *testing.T) {
 	other := broad
 	other.Account = "other"
 	existing := proposedCodexReviewPolicy(broad).ExtraPolicy + proposedCodexReviewPolicy(other).ExtraPolicy
+	t.Setenv("CODEX_HOME", t.TempDir())
+	path, _ := codexConfigPath()
+	mixed, err := patchCodexExtraPolicy(nil, existing+proposedCodexReviewPolicy(narrow).ExtraPolicy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, mixed, 0600); err != nil {
+		t.Fatal(err)
+	}
+	status, _, err := inspectCodexReviewPolicy(narrow)
+	if err != nil || status.State != "migration_required" {
+		t.Fatal("mixed old and current scope reported configured", status, err)
+	}
 	merged := mergeCodexExtraPolicy(existing, narrow)
 	if strings.Contains(merged, proposedCodexReviewPolicy(broad).ExtraPolicy) || !strings.Contains(merged, proposedCodexReviewPolicy(narrow).ExtraPolicy) || !strings.Contains(merged, proposedCodexReviewPolicy(other).ExtraPolicy) {
 		t.Fatal("scope narrowing retained broader policy or changed another account", merged)
