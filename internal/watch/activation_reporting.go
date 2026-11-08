@@ -55,10 +55,11 @@ func NewInstallationAttemptID() (string, error) {
 }
 
 type activationRecord struct {
-	Event    adversarylabs.ActivationEvent
-	Sent     bool
-	Attempts int
-	RetryAt  time.Time
+	AccountKey string `json:",omitempty"`
+	Event      adversarylabs.ActivationEvent
+	Sent       bool
+	Attempts   int
+	RetryAt    time.Time
 }
 
 var revisionLine = regexp.MustCompile(`(?m)^revision: ([a-f0-9]{40})$`)
@@ -120,7 +121,7 @@ func queueLifecycle(ctx context.Context, root, path, agent, stage, reviewID stri
 				revision = string(match[1])
 			}
 		}
-		return Write(file, activationRecord{Event: adversarylabs.ActivationEvent{
+		return Write(file, activationRecord{AccountKey: cfg.AccountKey, Event: adversarylabs.ActivationEvent{
 			AttemptID: cfg.InstallationAttemptID, Stage: stage, ReviewID: reviewID, InstallationID: cfg.InstallationID, Repository: repository, Agent: agent, Client: client,
 			OS: runtime.GOOS, Architecture: runtime.GOARCH, CLIVersion: cfg.RuntimeVersion,
 			SkillRevision: revision, OccurredAt: time.Now().UTC().Format(time.RFC3339),
@@ -157,43 +158,75 @@ func (r Runner) reportActivations(ctx context.Context, path string) {
 		current.InstallationAttemptID != r.Config.InstallationAttemptID || !current.ConsentedAt.Equal(r.Config.ConsentedAt) || !ConsentValid(current, r.Config.API, r.Config.Profile, r.Token) || !Allowed(current, path) {
 		return
 	}
-	for _, agent := range []string{"codex", "claude"} {
-		for _, stage := range []string{"approved", "activated", "first_review"} {
-			file := lifecycleFile(r.Root, identity, agent, stage, r.Config.InstallationAttemptID)
-			var record activationRecord
-			send := false
-			// Never hold the hook's outbox lock over a network call.
-			_ = Locked(activationRoot(r.Root), "activation-"+Key(identity+agent+stage), func() error {
-				if Read(file, &record) != nil || record.Sent || record.Attempts >= 3 || time.Now().Before(record.RetryAt) ||
-					record.Event.InstallationID != r.Config.InstallationID || record.Event.AttemptID != r.Config.InstallationAttemptID || RepositoryRemoved(r.Root, path) {
-					return nil
-				}
-				record.Attempts++
-				record.RetryAt = time.Now().Add(5 * time.Minute)
-				if err := Write(file, record); err != nil {
-					return err
-				}
-				send = true
-				return nil
-			})
-			if !send {
-				continue
-			}
-			request, cancel := context.WithTimeout(ctx, 3*time.Second)
-			err := client.ReportActivation(request, r.Token, record.Event)
-			cancel()
-			if err != nil {
-				continue
-			}
-			_ = Locked(activationRoot(r.Root), "activation-"+Key(identity+agent+stage), func() error {
-				var latest activationRecord
-				if Read(file, &latest) != nil || latest.Event != record.Event {
-					return nil
-				}
-				latest.Sent = true
-				return Write(file, latest)
-			})
+	// A new setup must not strand reports from an earlier setup on the same
+	// account. Each queued event retains its own attempt ID, including first
+	// reviews already completed under that attempt. Never borrow that evidence
+	// for the current attempt or send another account's historical metadata.
+	sends := 0
+	for _, entry := range entries {
+		if sends >= 6 {
+			break
 		}
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		file := filepath.Join(activationRoot(r.Root), "activations", entry.Name())
+		var record activationRecord
+		if Read(file, &record) != nil {
+			continue
+		}
+		agent, stage := record.Event.Agent, record.Event.Stage
+		if agent != "codex" && agent != "claude" {
+			continue
+		}
+		if stage != "approved" && stage != "activated" && stage != "first_review" {
+			continue
+		}
+		if file != lifecycleFile(r.Root, identity, agent, stage, record.Event.AttemptID) {
+			continue
+		}
+		send := false
+		// Never hold the hook's outbox lock over a network call.
+		_ = Locked(activationRoot(r.Root), "activation-"+Key(identity+agent+stage), func() error {
+			if Read(file, &record) != nil || record.Sent || record.Attempts >= 3 || time.Now().Before(record.RetryAt) ||
+				record.Event.InstallationID != r.Config.InstallationID || RepositoryRemoved(r.Root, path) {
+				return nil
+			}
+			// Older outbox records lack an account binding. Only retain their
+			// existing current-attempt behavior; do not replay them across setups.
+			if record.AccountKey == "" {
+				if record.Event.AttemptID != r.Config.InstallationAttemptID {
+					return nil
+				}
+			} else if record.AccountKey != r.Config.AccountKey {
+				return nil
+			}
+			record.Attempts++
+			record.RetryAt = time.Now().Add(5 * time.Minute)
+			if err := Write(file, record); err != nil {
+				return err
+			}
+			send = true
+			return nil
+		})
+		if !send {
+			continue
+		}
+		sends++
+		request, cancel := context.WithTimeout(ctx, 3*time.Second)
+		err := client.ReportActivation(request, r.Token, record.Event)
+		cancel()
+		if err != nil {
+			continue
+		}
+		_ = Locked(activationRoot(r.Root), "activation-"+Key(identity+agent+stage), func() error {
+			var latest activationRecord
+			if Read(file, &latest) != nil || latest.Event != record.Event || latest.AccountKey != record.AccountKey {
+				return nil
+			}
+			latest.Sent = true
+			return Write(file, latest)
+		})
 	}
 }
 

@@ -86,12 +86,16 @@ func TestActivationRequiresRealHookAndNewConsent(t *testing.T) {
 
 type activationTestClient struct {
 	Client
-	calls int
-	fail  bool
+	calls  int
+	fail   bool
+	events []adversarylabs.ActivationEvent
 }
 
-func (c *activationTestClient) ReportActivation(_ context.Context, _ string, _ adversarylabs.ActivationEvent) error {
+func (c *activationTestClient) ReportActivation(_ context.Context, _ string, event adversarylabs.ActivationEvent) error {
 	c.calls++
+	if !c.fail {
+		c.events = append(c.events, event)
+	}
 	if c.fail {
 		return errors.New("offline")
 	}
@@ -195,7 +199,7 @@ func TestActivationKeepsApprovedRemoteNameButDropsCredentialsAndPaths(t *testing
 	}
 }
 
-func TestInstallationAttemptsKeepSeparateMilestonesAndOnlyReportCurrentConsent(t *testing.T) {
+func TestInstallationAttemptsKeepSeparateMilestonesAndDeliverPendingHistory(t *testing.T) {
 	root, repo := t.TempDir(), repository(t)
 	repo, _ = filepath.EvalSymlinks(repo)
 	id, _ := EnsureInstallationID(root)
@@ -233,13 +237,20 @@ func TestInstallationAttemptsKeepSeparateMilestonesAndOnlyReportCurrentConsent(t
 	runner := Runner{Root: root, Config: cfg, Token: "token", Client: client}
 	runner.reportActivations(context.Background(), repo)
 	runner.reportActivations(context.Background(), repo)
-	if client.calls != 3 {
-		t.Fatalf("reported %d milestones, want current attempt's three exactly once", client.calls)
+	if client.calls != 6 {
+		t.Fatalf("reported %d milestones, want both attempts' three exactly once", client.calls)
+	}
+	counts := map[string]int{}
+	for _, event := range client.events {
+		counts[event.AttemptID]++
+	}
+	if counts[first] != 3 || counts[second] != 3 {
+		t.Fatalf("events lost attempt attribution: %+v", counts)
 	}
 	runner.Config.InstallationAttemptID = first
 	runner.reportActivations(context.Background(), repo)
-	if client.calls != 3 {
-		t.Fatal("old consent was reported")
+	if client.calls != 6 {
+		t.Fatal("old runner bypassed current consent")
 	}
 }
 
@@ -270,5 +281,111 @@ func TestReviewIdentityAndMetadataAreScopedToInstallationAttempt(t *testing.T) {
 	}
 	if client.input.ReviewID == oldReview || client.input.Client["installation_attempt_id"] != second {
 		t.Fatal("new installation reused the old review")
+	}
+}
+
+func TestPendingAttemptReportsRecoverFromOfflineWithoutCrossingAccountOrRepository(t *testing.T) {
+	root, repo := t.TempDir(), repository(t)
+	repo, _ = filepath.EvalSymlinks(repo)
+	installation, _ := EnsureInstallationID(root)
+	first, _ := NewInstallationAttemptID()
+	cfg := Config{Version: 1, API: "https://example.test/api", Profile: "default", AccountKey: Key("token"), ConsentedAt: time.Now(), ActivationReporting: true, InstallationID: installation, InstallationAttemptID: first, Directories: []string{repo}}
+	Write(filepath.Join(root, "config.json"), cfg)
+	QueueApproval(context.Background(), root, repo, "claude", cfg)
+	queueActivation(context.Background(), root, repo, "claude", cfg)
+	client := &activationTestClient{fail: true}
+	runner := Runner{Root: root, Config: cfg, Token: "token", Client: client}
+	runner.reportActivations(context.Background(), repo)
+	if client.calls != 2 {
+		t.Fatalf("offline sends: %d", client.calls)
+	}
+	identity, _ := RepositoryIdentity(context.Background(), repo)
+	for _, stage := range []string{"approved", "activated"} {
+		file := lifecycleFile(root, identity, "claude", stage, first)
+		var record activationRecord
+		Read(file, &record)
+		record.RetryAt = time.Time{}
+		Write(file, record)
+	}
+	// Pending records from another credential or repository must not be replayed.
+	otherAccount := cfg
+	otherAccount.InstallationAttemptID, _ = NewInstallationAttemptID()
+	otherAccount.AccountKey = Key("other-token")
+	QueueApproval(context.Background(), root, repo, "claude", otherAccount)
+	otherRepo := repository(t)
+	QueueApproval(context.Background(), root, otherRepo, "claude", cfg)
+	cfg.InstallationAttemptID, _ = NewInstallationAttemptID()
+	cfg.ConsentedAt = time.Now()
+	Write(filepath.Join(root, "config.json"), cfg)
+	runner.Config = cfg
+	QueueApproval(context.Background(), root, repo, "claude", cfg)
+	client.fail = false
+	// Pause and revoked consent must still suppress every pending attempt.
+	Write(filepath.Join(root, "paused.json"), true)
+	runner.reportActivations(context.Background(), repo)
+	os.Remove(filepath.Join(root, "paused.json"))
+	os.Remove(filepath.Join(root, "config.json"))
+	runner.reportActivations(context.Background(), repo)
+	if client.calls != 2 {
+		t.Fatal("history bypassed pause or revocation")
+	}
+	Write(filepath.Join(root, "config.json"), cfg)
+	runner.reportActivations(context.Background(), repo)
+	runner.reportActivations(context.Background(), repo)
+	if client.calls != 5 {
+		t.Fatalf("got %d calls, want two failed sends and three delivered milestones", client.calls)
+	}
+	counts := map[string]int{}
+	for _, event := range client.events {
+		counts[event.AttemptID]++
+	}
+	if counts[first] != 2 || counts[cfg.InstallationAttemptID] != 1 || len(counts) != 2 {
+		t.Fatalf("unexpected deliveries: %+v", counts)
+	}
+}
+
+type activationRetryClient struct {
+	fakeClient
+	failSubmission bool
+}
+
+func (c *activationRetryClient) StartWorkspace(ctx context.Context, token string, input adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {
+	review, err := c.fakeClient.StartWorkspace(ctx, token, input)
+	if c.failSubmission {
+		return adversarylabs.WorkspaceReview{}, errors.New("submission interrupted")
+	}
+	return review, err
+}
+
+func TestRuntimeUpgradePreservesLegacyReviewIdentity(t *testing.T) {
+	dir := repository(t)
+	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("changed\n"), 0600)
+	client := &activationRetryClient{failSubmission: true}
+	runner := Runner{Root: t.TempDir(), Config: Config{API: "https://example.com/api", ActivationReporting: true, InstallationID: strings.Repeat("a", 64), RuntimeVersion: "2026.11.5.2"}, Client: client, Token: "token", Output: &bytes.Buffer{}, Interval: time.Second}
+	configPath := filepath.Join(runner.Root, "config.json")
+	if err := Write(configPath, runner.Config); err != nil {
+		t.Fatal(err)
+	}
+	requestTestAgentReview(t, &runner, dir)
+	if err := runner.Run(context.Background(), dir, true); err == nil {
+		t.Fatal("expected interrupted submission")
+	}
+	oldReview := client.input.ReviewID
+	// Model a restarted/upgraded binary reading the same saved configuration.
+	restarted := runner
+	restarted.Config = Config{}
+	if err := Read(configPath, &restarted.Config); err != nil {
+		t.Fatal(err)
+	}
+	restarted.Config.RuntimeVersion = "2026.11.8.1"
+	client.failSubmission = false
+	if err := restarted.Run(context.Background(), dir, true); err != nil {
+		t.Fatal(err)
+	}
+	if client.input.ReviewID != oldReview {
+		t.Fatal("runtime upgrade changed the legacy retry identity")
+	}
+	if client.input.Client["installation_attempt_id"] != "" {
+		t.Fatal("runtime upgrade invented a new setup attempt")
 	}
 }
