@@ -44,14 +44,38 @@ func writeCandidateSkills(c *config, root string) (string, error) {
 		return "", err
 	}
 	guideURL := (&url.URL{Scheme: "file", Path: path}).String()
+	guideDigest := fmt.Sprintf("%x", sha256.Sum256([]byte(guide)))
+	if len(c.RepoBootstraps) != 0 {
+		for agent, content := range c.RepoBootstraps {
+			updated, err := bindCandidateGuide(content, guideURL, guideDigest)
+			if err != nil {
+				return "", err
+			}
+			c.RepoBootstraps[agent] = updated
+		}
+	} else {
+		updated, err := bindCandidateGuide(c.SkillsBootstrap, guideURL, guideDigest)
+		if err != nil {
+			return "", err
+		}
+		c.SkillsBootstrap = updated
+	}
+	return guideURL, nil
+}
+
+// Preserve self-contained bootstraps and only rewrite an explicit guide pin.
+func bindCandidateGuide(content, guideURL, guideDigest string) (string, error) {
 	guidePattern := regexp.MustCompile(`https://raw\.githubusercontent\.com/doomerlabs/skills/[^/]+/INSTALL\.md`)
-	if len(guidePattern.FindAllString(c.SkillsBootstrap, -1)) != 1 || len(digestPattern.FindAllString(c.SkillsBootstrap, -1)) != 1 {
+	digestPattern := regexp.MustCompile("`[a-f0-9]{64}`")
+	matches := guidePattern.FindAllString(content, -1)
+	if len(matches) == 0 {
+		return content, nil
+	}
+	if len(matches) != 1 || len(digestPattern.FindAllString(content, -1)) != 1 {
 		return "", fmt.Errorf("candidate bootstrap must identify one pinned guide URL and checksum")
 	}
-	// Keep the fixture's full trust chain consistent after substituting its installer.
-	bootstrap := guidePattern.ReplaceAllLiteralString(c.SkillsBootstrap, guideURL)
-	c.SkillsBootstrap = digestPattern.ReplaceAllLiteralString(bootstrap, fmt.Sprintf("`%x`", sha256.Sum256([]byte(guide))))
-	return guideURL, nil
+	bootstrap := guidePattern.ReplaceAllLiteralString(content, guideURL)
+	return digestPattern.ReplaceAllLiteralString(bootstrap, "`"+guideDigest+"`"), nil
 }
 
 func installCandidateSkills(c config, home, repo string) error {

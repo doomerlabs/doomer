@@ -114,3 +114,35 @@ func TestIncompleteRepositoryBootstrapsCannotOverwriteInstallation(t *testing.T)
 		t.Fatal("partially changed installation", err)
 	}
 }
+
+func TestCandidateGuideBindingPreservesSelfContainedAndRejectsAmbiguousPins(t *testing.T) {
+	selfContained := "Run doomer prepare."
+	got, err := bindCandidateGuide(selfContained, "file:///fixture/INSTALL.md", strings.Repeat("a", 64))
+	if err != nil || got != selfContained {
+		t.Fatalf("self-contained bootstrap changed: %q, %v", got, err)
+	}
+	pinned := "https://raw.githubusercontent.com/doomerlabs/skills/pinned/INSTALL.md"
+	for _, content := range []string{pinned, pinned + " `" + strings.Repeat("a", 64) + "` `" + strings.Repeat("b", 64) + "`"} {
+		if _, err := bindCandidateGuide(content, "file:///fixture/INSTALL.md", strings.Repeat("c", 64)); err == nil {
+			t.Fatal("ambiguous or missing checksum accepted")
+		}
+	}
+}
+
+func TestCandidateGuideBindsSelectedRepositoryBootstraps(t *testing.T) {
+	c := config{
+		SkillsInstaller: "# fixture installer",
+		SkillsGuide:     "https://raw.githubusercontent.com/doomerlabs/skills/pinned/scripts/install.py `" + strings.Repeat("a", 64) + "`",
+		RepoBootstraps: map[string]string{
+			".agents": "https://raw.githubusercontent.com/doomerlabs/skills/pinned/INSTALL.md `" + strings.Repeat("b", 64) + "`",
+			".claude": "Self-contained bootstrap",
+		},
+	}
+	location, err := writeCandidateSkills(&c, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(c.RepoBootstraps[".agents"], location) || c.RepoBootstraps[".claude"] != "Self-contained bootstrap" {
+		t.Fatal(c.RepoBootstraps)
+	}
+}
