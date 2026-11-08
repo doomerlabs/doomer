@@ -147,7 +147,16 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 			}
 		}
 		if evidence != nil && t.Agent == "codex" && r.CodexPolicyStatus.Error == "" && (c.Name() == "prepare" || c.Name() == "login" || c.Name() == "consent" || c.Name() == "codex-policy") {
-			r.CodexReviewPolicy, err = offerCodexReviewPolicy(s, *evidence)
+			if c.Name() == "codex-policy" {
+				// An explicit inspection must remain able to recover a proposal that
+				// an older chat displayed but never installed.
+				r.CodexReviewPolicy, _, err = inspectCodexReviewPolicy(*evidence)
+				if err == nil && r.CodexReviewPolicy.State == "configured" {
+					r.CodexReviewPolicy = nil
+				}
+			} else {
+				r.CodexReviewPolicy, err = offerCodexReviewPolicy(s, *evidence)
+			}
 			if err != nil {
 				return err
 			}

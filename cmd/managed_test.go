@@ -148,7 +148,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if data, err := os.ReadFile(config); err != nil || string(data) != originalConfig {
 		t.Fatal("offering reviewer policy changed Codex settings", err)
 	}
-	if r := run("", "task", "codex-policy", handle); r.CodexPolicyStatus == nil || r.CodexPolicyStatus.State != "missing" || r.CodexPolicyStatus.Activation != "unverified" {
+	if r := run("", "task", "codex-policy", handle); r.CodexPolicyStatus == nil || r.CodexPolicyStatus.State != "missing" || r.CodexPolicyStatus.Activation != "unverified" || r.CodexReviewPolicy == nil {
 		t.Fatal(r)
 	}
 	if data, err := os.ReadFile(config); err != nil || string(data) != originalConfig {

@@ -106,6 +106,7 @@ upgrading to integration-wide consent, or missing policy in a different profile.
 Inspect or migrate an existing task:
 
 ```sh
+# Also retrieves the current proposal even if previously offered:
 doomer task codex-policy HANDLE
 # Only after explicitly approving the matching Codex settings change:
 doomer task codex-policy HANDLE --allow
