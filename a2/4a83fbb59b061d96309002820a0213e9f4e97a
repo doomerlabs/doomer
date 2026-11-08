@@ -1,0 +1,53 @@
+README.md
+  s_f23d7bc729b5d1::t_4b1dd8a93f3275 58,69,168,561,564,596
+cmd/managed.go
+  s_f23d7bc729b5d1::t_db03efe11c0a04 32,136,196-199,799-803
+cmd/managed_development_test.go
+  s_f23d7bc729b5d1::t_3dd622e1d348ae 189
+cmd/managed_feedback.go
+  s_f23d7bc729b5d1::t_912cf2010da879 6,14,16-31,36,40,51,62,68,72-74
+cmd/managed_feedback_test.go
+  s_f23d7bc729b5d1::t_4deaba09542d16 111-130
+cmd/notices.go
+  s_f23d7bc729b5d1::t_2daef43f433f9f 1-26
+cmd/review.go
+  s_f23d7bc729b5d1::t_f1ab2f94548c51 35
+cmd/review_workspace.go
+  s_f23d7bc729b5d1::t_2dcab25926f08d 11,63
+cmd/root.go
+  s_f23d7bc729b5d1::t_36ec9c47da3c82 114,140-141
+cmd/watch.go
+  s_f23d7bc729b5d1::t_ddb0f9298f8630 225
+cmd/whoami.go
+  s_f23d7bc729b5d1::t_f844ed40426da7 70
+cmd/whoami_test.go
+  s_f23d7bc729b5d1::t_40764640510fa2 74,93
+docs/client-notices.md
+  s_f23d7bc729b5d1::t_820a7de516ec0f 1-69
+pkg/adversarylabs/client.go
+  s_f23d7bc729b5d1::t_c1cbda5ef482db 202-204,206-212
+pkg/adversarylabs/notices.go
+  s_f23d7bc729b5d1::t_b47a879ba7c3d6 1-279
+pkg/adversarylabs/notices_test.go
+  s_f23d7bc729b5d1::t_f82713a55610b1 1-139
+pkg/adversarylabs/response_error.go
+  s_f23d7bc729b5d1::t_1127e64b1008b9 11,16,46,52-57,113-120,128-134
+pkg/adversarylabs/workspace.go
+  s_f23d7bc729b5d1::t_58de321b7a5506 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a24a83fbb59b061d96309002820a0213e9f4e97a",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
