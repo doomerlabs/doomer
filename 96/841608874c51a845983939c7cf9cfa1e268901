@@ -1,0 +1,34 @@
+cmd/managed.go
+  s_f23d7bc729b5d1::t_ecf31f9529a559 107
+cmd/managed_portable_test.go
+  s_f23d7bc729b5d1::t_ecf31f9529a559 255,309-321
+  s_f23d7bc729b5d1::t_53fa8502981c6b 322
+.depot/workflows/agent-e2e.yml
+  s_f23d7bc729b5d1::t_3ecb24e2544b8a 64
+cmd/managed_network.go
+  s_f23d7bc729b5d1::t_8fbd061579f89f 45
+cmd/managed_preflight_test.go
+  s_f23d7bc729b5d1::t_c779261575ad47 18,52,61-64,95
+docs/network-access.md
+  s_f23d7bc729b5d1::t_d0b58b3b16342e 11,13
+internal/managed/instructions.md
+  s_f23d7bc729b5d1::t_c1f6d33bfd2f6b 61
+tests/codexinstall/README.md
+  s_f23d7bc729b5d1::t_a862b4339b9b25 229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "96841608874c51a845983939c7cf9cfa1e268901",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
