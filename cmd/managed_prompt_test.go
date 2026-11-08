@@ -476,3 +476,35 @@ func TestSetupCannotOrphanAnActiveCodingSession(t *testing.T) {
 		t.Fatal("orphan setup created", files, err)
 	}
 }
+
+func TestSetupRecheckKeepsPausedSessionsPaused(t *testing.T) {
+	for _, stage := range []string{"preparing", "complete"} {
+		t.Run(stage, func(t *testing.T) {
+			isolate(t)
+			repo := newWatchTestRepo(t)
+			store, err := managedStore()
+			if err != nil {
+				t.Fatal(err)
+			}
+			handle, _ := managed.NewHandle()
+			task := managed.Task{Schema: managed.Protocol, Handle: handle, Purpose: "setup", Stage: stage, Paused: true, API: "https://doomer.ai/api", Profile: "default", Agent: "codex", Repo: repo, Capabilities: managed.Capabilities{SessionID: "paused-session"}}
+			if err := store.Save(&task); err != nil {
+				t.Fatal(err)
+			}
+			if err := bindManagedSession(store, task); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := execute(t, "", "prepare", "--agent", "codex", "--repo", repo, "--session", "paused-session"); err == nil {
+				t.Fatal("paused session accepted setup replacement")
+			}
+			files, err := filepath.Glob(filepath.Join(store.Root, "tasks", "*.json"))
+			if err != nil || len(files) != 1 {
+				t.Fatal("orphan setup created", files, err)
+			}
+			saved, err := store.Load(handle)
+			if err != nil || !saved.Paused || saved.Stage != stage {
+				t.Fatal(saved, err)
+			}
+		})
+	}
+}
