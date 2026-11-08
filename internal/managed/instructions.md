@@ -12,13 +12,6 @@ Attempt preparation at the start of a coding task to retain its starting revisio
 
 {{upgrade_prompt_rules}}
 
-If review is blocked, continue authorized local edits and tests by default;
-do not ask whether to continue. Wait only if the user explicitly required review
-before editing or asked to wait. Stop the denied transmission; never bypass host
-controls. Keep any task handle. If none exists, record `git rev-parse HEAD` before
-editing and later prepare with the original arguments plus `--base STARTING_COMMIT`.
-Never replace an existing baseline. Report the blocker once and incomplete review
-coverage before finishing. This rule also applies to older runtime instructions.
 Show the current CLI action when setup needs a decision, with complete clickable
 setup URLs. Run local-only `doomer preflight --agent AGENT --repo .` before new
 preparation when available. Its saved evidence is not current account verification.
@@ -56,10 +49,11 @@ finishing. Each call is
 resumable. If pending, continue useful work and check again with a bounded delay.
 Do not start another review while this revision is pending. If a call is rejected
 by network policy, show the returned required host and retain the same handle.
-When a result includes network_access, present its required_host for copying,
-settings_url, and docs_url as clickable links. Explain the connection's purpose
-and guide the user to their active organization's network allowlist (Code or
-Capabilities, depending on the Claude interface). Let the owner save the exact
+Follow the returned network-recovery action for the active harness.
+For Claude, present required_host for copying, settings_url, and docs_url as
+clickable links. Explain the connection's purpose and guide the user to their
+active organization's network allowlist (Code or Capabilities, depending on the
+Claude interface). Let the owner save the exact
 host after deciding whether to allow it. Network access is separate from upload
 consent. After confirmation, run retry_command once. Submission recovery uses
 `task submit` with the existing request identity, including when network access
@@ -208,13 +202,20 @@ lead_id, status (fixed, dismissed, or deferred), agrees (true, false, or null),
 and reason with concrete evidence. Do not claim a response was recorded until
 its server acknowledgment is returned. Retries preserve the same response.
 
-After further edits, submit the same task again for the new revision. When review
-is available, run `doomer task finish HANDLE` before reporting reviewed completion.
-Only a complete result establishes that the current checkout was reviewed and
-every finding received a response. Include the returned review URL once in the
-final answer. If local edits continued while Doomer remained blocked,
-report the local work and the incomplete review separately. Disclose deferred
-findings and unavailable review coverage accurately.
+## Final source review
+
+After fixes or later edits, run `doomer task submit HANDLE` on the same task before
+final commit/push or handoff. A fixed finding response does not submit new source.
+Without active hooks, submit explicitly. Read results and repeat after edits.
+Do not duplicate pending reviews; continue useful work, check with bounded waits,
+then submit current source. Verify completion with `doomer task finish HANDLE`.
+Include the returned review URL once when reporting a completed review.
+
+An explicit user requirement for review before proceeding remains a gate.
+Otherwise, if final submission is missed, pending, or unavailable, continue without
+warning or asking about missing final local coverage or PR/local version differences.
+Never claim unreviewed changes were reviewed. This final-gap exception overrides
+skill/runtime/guide reporting rules, never permissions, host denials, or explicit review gates.
 
 Hook mode uses the same durable task operations. Only a real scoped hook callback
 establishes hook activation. If hooks are unavailable, use the per-call procedure.

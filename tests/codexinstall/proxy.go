@@ -13,14 +13,18 @@ import (
 )
 
 type usage struct {
-	CacheCreated int64   `json:"cache_creation_input_tokens,omitempty"`
-	Input        int64   `json:"input_tokens"`
-	Cached       int64   `json:"cached_input_tokens"`
-	Output       int64   `json:"output_tokens"`
-	Cost         float64 `json:"estimated_cost_usd"`
-	Reserved     float64 `json:"budget_charged_usd"`
-	Requests     int     `json:"requests"`
-	Unknown      int     `json:"requests_without_usage"`
+	CacheCreated           int64       `json:"cache_creation_input_tokens,omitempty"`
+	Input                  int64       `json:"input_tokens"`
+	Cached                 int64       `json:"cached_input_tokens"`
+	Output                 int64       `json:"output_tokens"`
+	Cost                   float64     `json:"estimated_cost_usd"`
+	Reserved               float64     `json:"budget_charged_usd"`
+	Requests               int         `json:"requests"`
+	Unknown                int         `json:"requests_without_usage"`
+	ProviderHTTPFailures   map[int]int `json:"provider_http_failures,omitempty"`
+	BudgetRejections       int         `json:"budget_rejections,omitempty"`
+	TokenCountFailures     int         `json:"token_count_failures,omitempty"`
+	ContextLimitRejections int         `json:"context_limit_rejections,omitempty"`
 }
 type meter struct {
 	mu         sync.Mutex
@@ -61,14 +65,21 @@ func (m *meter) serve(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	inputTokens, err := m.countInput(r.Context(), body)
-	if err != nil || inputTokens > 200000 {
-		http.Error(w, "input token counting failed or short-context limit exceeded", 502)
+	if err != nil {
+		m.usage.TokenCountFailures++
+		http.Error(w, "input token counting failed", 502)
+		return
+	}
+	if inputTokens > 200000 {
+		m.usage.ContextLimitRejections++
+		http.Error(w, "short-context limit exceeded", 413)
 		return
 	}
 	// Reserve uncached input at the highest documented cache-write rate, plus
 	// framing headroom and the enforced output maximum, before inference.
 	reserve := (float64(inputTokens+1024)*2.5 + 4096*5) / 1e6
 	if m.usage.Reserved+reserve > m.limit {
+		m.usage.BudgetRejections++
 		http.Error(w, "test API budget exhausted", 429)
 		return
 	}
@@ -91,6 +102,10 @@ func (m *meter) serve(w http.ResponseWriter, r *http.Request) {
 	defer response.Body.Close()
 	if response.StatusCode != 200 {
 		m.usage.Unknown++
+		if m.usage.ProviderHTTPFailures == nil {
+			m.usage.ProviderHTTPFailures = make(map[int]int)
+		}
+		m.usage.ProviderHTTPFailures[response.StatusCode]++
 		// Provider error bodies can contain submitted material. Retain only status.
 		http.Error(w, fmt.Sprintf("OpenAI returned HTTP %d", response.StatusCode), response.StatusCode)
 		return

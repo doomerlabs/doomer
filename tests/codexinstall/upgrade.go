@@ -200,6 +200,30 @@ func (j *journey) upgrade() error {
 	if !j.result.Checks["new_runtime_selected"] {
 		return fmt.Errorf("older launcher did not select current runtime")
 	}
+	if j.c.Scenario == "upgrade-authorized-session" {
+		j.result.Turns++
+		verified, err := runAgent(j.ctx, j.c, j.repo, j.env, "Create after-upgrade.txt containing updated followed by a newline. Complete the installed Doomer review workflow in this existing chat using the updated installation and the existing task handle.", turn.Session, j.record)
+		if err != nil {
+			return err
+		}
+		j.result.Checks["updated_session_reuses_permissions"] = !verified.PolicyOffered && !verified.UpdateRequested
+		content, err := os.ReadFile(filepath.Join(j.repo, "after-upgrade.txt"))
+		if err != nil || string(content) != "updated\n" {
+			return fmt.Errorf("updated session did not complete its coding request")
+		}
+		completed, err := savedTasks(j.home)
+		if err != nil {
+			return err
+		}
+		for _, task := range completed {
+			if !initialHandles[task.Handle] && task.Stage == "complete" && task.Review != nil {
+				j.result.Checks["updated_session_review_completed"] = true
+			}
+		}
+		if !j.result.Checks["updated_session_review_completed"] {
+			return fmt.Errorf("updated session did not complete its review")
+		}
+	}
 	j.f.mu.Lock()
 	j.result.Checks["grant_reused"] = j.f.Creates == 1
 	j.f.mu.Unlock()

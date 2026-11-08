@@ -13,7 +13,7 @@ const networkAccessDocsURL = "https://github.com/doomerlabs/doomer/blob/main/doc
 
 type managedNetworkAccess struct {
 	RequiredHost string `json:"required_host"`
-	SettingsURL  string `json:"settings_url"`
+	SettingsURL  string `json:"settings_url,omitempty"`
 	DocsURL      string `json:"docs_url"`
 	RetryCommand string `json:"retry_command"`
 }
@@ -35,10 +35,22 @@ func addManagedNetworkHelp(c *cobra.Command, r *managedResult, t managed.Task, e
 	retry = "doomer --api-url " + watch.Quote(t.API) + " --profile " + watch.Quote(t.Profile) + " " + retry
 	r.NetworkAccess = &managedNetworkAccess{
 		RequiredHost: connection.Host,
-		SettingsURL:  "https://claude.ai/settings",
 		DocsURL:      networkAccessDocsURL,
 		RetryCommand: retry,
 	}
+	// Portable setup requests another grant and cannot repair network access.
+	r.PortableSetupCommand = nil
+	if t.Agent == "codex" {
+		r.Action = fmt.Sprintf("Cannot reach %s. "+
+			"Read the non-secret saved scope with doomer --api-url %s --profile %s preflight --agent codex --repo %s. "+
+			"Retry %s through Codex's normal tool network permissions. "+
+			"Reuse existing grants and preserve this task and setup mode. Honor explicit denials. "+
+			"If the permitted retry fails, report %s and %s once and retain the task.",
+			connection.Host, watch.Quote(t.API), watch.Quote(t.Profile), watch.Quote(t.Repo),
+			r.NetworkAccess.RetryCommand, connection.Host, networkAccessDocsURL)
+		return
+	}
+	r.NetworkAccess.SettingsURL = "https://claude.ai/settings"
 	r.Action = fmt.Sprintf("Cannot reach %s. This may be a network restriction or a service/connectivity problem. "+
 		"Show the user this exact hostname for copying and the setup guide %s. "+
 		"For Claude, offer to open %s, then guide an organization owner to Organization settings, "+

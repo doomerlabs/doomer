@@ -30,11 +30,12 @@ go run ./tests/codexinstall --scenario list
 | `install` | Both skill files, launcher, hooks configured, authenticated readiness, one grant, no content uploads |
 | `first-review` | New coding task completes an account-linked review and records a finding response |
 | `review-preflight` | Per-call preparation with automatic hooks removed; saved consent and local preflight in a fresh session; local coding continues if preparation is blocked; Codex uses workspace-write and auto-review |
-| `new-chat` | Two fresh coding chats produce separate completed reviews with the original approval |
-| `worktrees` | Concurrent branches/worktrees keep files, tasks and reviews separate while sharing approval |
+| `new-chat` | Two fresh coding chats complete reviews and finding responses with the original grant; Codex uses its real approval reviewer |
+| `worktrees` | Concurrent branches/worktrees keep files, tasks and reviews separate while sharing approval; Codex uses its real approval reviewer |
 | `decline-updates` | Refusing updates does not grant repository access or upload content |
 | `decline-uploads` | Refusing repository access does not upload content |
 | `interrupted` | A new Codex process/chat resumes pending setup using its saved task and original grant request |
+| `upgrade-authorized-session` | Upgrade and recheck in the same chat with existing grants; Codex uses its real approval reviewer |
 | `upgrade` | Historical skill and signed runtime fixture upgrades with preserved policy/grant and one simulated PR |
 | `upgrade-defer` | Deferring the upgrade leaves files alone and suppresses a repeat offer on preparation |
 | `repeat-onboarding` | Repeated setup reuses approval, avoids repeated settings offers, and leaves no failed review |
@@ -225,7 +226,7 @@ Codex subscription mode remains separate follow-up work.
 
 ## Depot pull request CI
 
-`.depot/workflows/agent-e2e.yml` runs the full 25-scenario suite for Codex and
+`.depot/workflows/agent-e2e.yml` runs the full 26-scenario suite for Codex and
 Claude in parallel Linux jobs, one per agent and scenario, including the real terminal cases. Each scenario
 uses a fresh isolated home on the disposable Depot runner. No developer agent
 installation or exe.dev machine is used. Desktop GUI clients are outside this suite.

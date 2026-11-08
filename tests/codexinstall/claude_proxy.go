@@ -61,6 +61,9 @@ func (m *meter) serveClaude(w http.ResponseWriter, r *http.Request) {
 	countResponse, err := m.claudeRequest(ctx, "/v1/messages/count_tokens", countBody, r)
 	if err != nil {
 		cancel()
+		m.mu.Lock()
+		m.usage.TokenCountFailures++
+		m.mu.Unlock()
 		http.Error(w, "input token counting failed", 502)
 		return
 	}
@@ -70,13 +73,24 @@ func (m *meter) serveClaude(w http.ResponseWriter, r *http.Request) {
 	countErr := json.NewDecoder(io.LimitReader(countResponse.Body, 65536)).Decode(&count)
 	countResponse.Body.Close()
 	cancel()
-	if countResponse.StatusCode != 200 || countErr != nil || count.Input <= 0 || count.Input > 98000 {
-		http.Error(w, "input token counting failed or short-context limit exceeded", 502)
+	if countResponse.StatusCode != 200 || countErr != nil || count.Input <= 0 {
+		m.mu.Lock()
+		m.usage.TokenCountFailures++
+		m.mu.Unlock()
+		http.Error(w, "input token counting failed", 502)
+		return
+	}
+	if count.Input > 98000 {
+		m.mu.Lock()
+		m.usage.ContextLimitRejections++
+		m.mu.Unlock()
+		http.Error(w, "short-context limit exceeded", 413)
 		return
 	}
 	reserve := (float64(count.Input+1024)*.20 + 4096*.5) / 1e6
 	m.mu.Lock()
 	if m.usage.Reserved+reserve > m.limit {
+		m.usage.BudgetRejections++
 		m.mu.Unlock()
 		http.Error(w, "test API budget exhausted", 429)
 		return
@@ -98,6 +112,10 @@ func (m *meter) serveClaude(w http.ResponseWriter, r *http.Request) {
 	if response.StatusCode != 200 {
 		m.mu.Lock()
 		m.usage.Unknown++
+		if m.usage.ProviderHTTPFailures == nil {
+			m.usage.ProviderHTTPFailures = make(map[int]int)
+		}
+		m.usage.ProviderHTTPFailures[response.StatusCode]++
 		m.mu.Unlock()
 		http.Error(w, fmt.Sprintf("Anthropic returned HTTP %d", response.StatusCode), response.StatusCode)
 		return

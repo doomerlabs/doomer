@@ -15,6 +15,7 @@ import (
 
 	"github.com/doomerlabs/doomer/internal/managed"
 	"github.com/doomerlabs/doomer/internal/watch"
+	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
 
 func preflightTree(t *testing.T, root string) map[string]string {
@@ -48,13 +49,17 @@ func preflightTree(t *testing.T, root string) map[string]string {
 }
 
 func TestPreflightIsLocalAndReadOnlyAcrossFreshInvocations(t *testing.T) {
-	isolate(t)
+	credentials := isolate(t)
 	repo := newWatchTestRepo(t)
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests++; w.WriteHeader(500) }))
 	defer server.Close()
 	s, err := managedStore()
 	if err != nil {
+		t.Fatal(err)
+	}
+	const privateToken = "preflight-test-private-credential"
+	if err := credentials.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: privateToken}); err != nil {
 		t.Fatal(err)
 	}
 	id, err := watch.RepositoryIdentity(context.Background(), repo)
@@ -87,7 +92,7 @@ func TestPreflightIsLocalAndReadOnlyAcrossFreshInvocations(t *testing.T) {
 		if status.State != "configured" || status.Activation != "unverified" || !strings.Contains(status.Action, "fresh session") {
 			t.Fatal(status)
 		}
-		if strings.Contains(out, `"upload_approved":true`) || strings.Contains(out, `"authenticated":true`) {
+		if strings.Contains(out, privateToken) || strings.Contains(out, `"upload_approved":true`) || strings.Contains(out, `"authenticated":true`) {
 			t.Fatal(out)
 		}
 	}

@@ -14,7 +14,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/managed"
 )
 
-var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight"}
+var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "upgrade-authorized-session"}
 
 func validScenario(name string) bool {
 	for _, candidate := range scenarioNames {
@@ -43,6 +43,9 @@ func runAgent(ctx context.Context, c config, repo string, env []string, prompt, 
 	}
 	record("Scripted user", prompt)
 	args := codexExecArgs(c)
+	if c.ReviewApprovals {
+		record("Reviewer configuration", strings.Join(args, " "))
+	}
 	if session != "" {
 		args = append(args, "resume", session)
 	} else {
@@ -148,7 +151,7 @@ func (j *journey) finish() error {
 	j.f.mu.Unlock()
 	j.result.Checks["grant_reused"] = creates == 1
 	j.result.Checks["review_delivered"] = reviews > 0
-	if j.c.Scenario == "first-review" || strings.HasPrefix(j.c.Scenario, "tui") {
+	if j.c.Scenario == "first-review" || j.c.Scenario == "new-chat" || strings.HasPrefix(j.c.Scenario, "tui") {
 		j.result.Checks["finding_response_recorded"] = responses > 0
 	}
 	if j.c.Scenario == "deep-review" {
@@ -182,16 +185,23 @@ func (j *journey) afterInstall() error {
 	case "tui", "tui-hooks-denied":
 		return j.tui()
 	case "first-review", "new-chat", "personal", "hooks-off", "deep-review":
+		if j.c.Scenario == "new-chat" {
+			j.c.ReviewApprovals = j.c.Harness != "claude"
+		}
 		if j.c.Scenario == "hooks-off" {
 			if err := os.Remove(agentHooksPath(j.c, j.home)); err != nil {
 				return err
 			}
 		}
 		j.f.mu.Lock()
-		j.f.Findings = j.c.Scenario == "first-review"
+		j.f.Findings = j.c.Scenario == "first-review" || j.c.Scenario == "new-chat"
 		j.f.Deep = j.c.Scenario == "deep-review"
 		j.f.mu.Unlock()
-		if err := j.coding(j.repo, "Create hello.txt containing hello followed by a newline. Follow the repository's installed instructions and complete the task."); err != nil {
+		prompt := "Create hello.txt containing hello followed by a newline. Follow the repository's installed instructions and complete the task."
+		if personalScenario(j.c.Scenario) {
+			prompt = "Create hello.txt containing hello followed by a newline. Use the installed Doomer skill and complete the task."
+		}
+		if err := j.coding(j.repo, prompt); err != nil {
 			return err
 		}
 		content, readErr := os.ReadFile(filepath.Join(j.repo, "hello.txt"))
@@ -205,6 +215,7 @@ func (j *journey) afterInstall() error {
 		}
 		return j.finish()
 	case "worktrees":
+		j.c.ReviewApprovals = j.c.Harness != "claude"
 		if err := j.git(j.repo, "add", "."); err != nil {
 			return err
 		}
@@ -336,7 +347,10 @@ func (j *journey) afterInstall() error {
 			return fmt.Errorf("failed task did not recover")
 		}
 		return j.finish()
-	case "upgrade", "upgrade-defer", "upgrade-untracked", "upgrade-personal", "upgrade-custom":
+	case "upgrade", "upgrade-defer", "upgrade-untracked", "upgrade-personal", "upgrade-custom", "upgrade-authorized-session":
+		if j.c.Scenario == "upgrade-authorized-session" {
+			j.c.ReviewApprovals = j.c.Harness != "claude"
+		}
 		return j.upgrade()
 	}
 	return fmt.Errorf("unsupported post-install scenario")

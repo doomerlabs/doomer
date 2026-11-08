@@ -105,7 +105,7 @@ func resultFor(task managed.Task) managedResult {
 	r.SubmittedPromptRunes = min(len([]rune(task.Prompt)), 4000)
 	r.Capabilities = task.Capabilities
 	r.UpdateAvailable = task.OfferedRelease
-	if task.Release != "" && !task.Portable {
+	if task.Release != "" && !task.Portable && !task.Paused && (task.Stage == "preparing" || task.Stage == "approval_required") {
 		if binary, err := managedTaskBinary(task); err == nil {
 			r.PortableSetupCommand = []string{binary, "--api-url", task.API, "--profile", task.Profile, "prepare", "--task", task.Handle, "--portable"}
 			if task.Release == "dev" {
@@ -175,7 +175,9 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 	r.HookActivated = taskResult.HookActivated
 	r.Capabilities = taskResult.Capabilities
 	r.PromptTruncated = taskResult.PromptTruncated
-	r.PortableSetupCommand = taskResult.PortableSetupCommand
+	if r.NetworkAccess == nil {
+		r.PortableSetupCommand = taskResult.PortableSetupCommand
+	}
 	r.SubmittedPromptRunes = taskResult.SubmittedPromptRunes
 	r.NoChanges = taskResult.NoChanges
 	r.Anonymous = taskResult.Anonymous
@@ -216,7 +218,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 		if err != nil {
 			return err
 		}
-		if handle == "" && strings.TrimSpace(prompt) == "" && session == "" {
+		if handle == "" && strings.TrimSpace(prompt) == "" {
 			root, err := watch.Root(c.Context(), repo)
 			if err != nil {
 				return err
@@ -226,7 +228,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 				return err
 			}
 			defer setupLock.Close()
-			handle, err = pendingManagedSetup(s, *api, *profile, agent, root)
+			handle, err = resumableManagedSetup(s, *api, *profile, agent, root, session)
 			if err != nil {
 				return err
 			}
