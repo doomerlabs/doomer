@@ -94,6 +94,12 @@ states are `missing`, `migration_required`, `configured`, and `unreadable`.
 A shown proposal is not an installed policy. Older presentation-only markers are
 ignored; offers are now keyed by active config path, contents and proposal.
 Unchanged offers remain deduplicated while status continues to report the gap.
+The proposal covers only the saved grant's account, service, profile and
+repository identity (including linked worktrees), or all repositories for the
+specified coding agent when the verified grant has `all_repositories: true`.
+Installing settings grants no upload permission: uploads still require current
+consent. Revocation, paused tasks/watchers, host restrictions and organization
+policy continue to apply.
 This lets existing installs discover stale repository-scoped policy after
 upgrading to integration-wide consent, or missing policy in a different profile.
 

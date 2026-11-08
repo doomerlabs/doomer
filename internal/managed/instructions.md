@@ -155,8 +155,8 @@ An all-repository proposal requires
 After the user accepts that verified proposal, run
 `doomer task codex-policy HANDLE --allow`. This explicitly authorizes the Codex
 settings change, separately from upload consent. Without `--allow`, the command
-only checks configuration. It verifies the account and current upload consent,
-merges the matching policy into the active `$CODEX_HOME/config.toml` (or
+only checks configuration. With `--allow`, it verifies the account and current
+upload consent, merges the matching policy into the active `$CODEX_HOME/config.toml` (or
 `~/.codex/config.toml`), and replaces only recognized legacy repository policy
 blocks for that same account, service and profile when integration-wide consent
 exists. Other policy text, settings and comments are preserved; a backup is saved.
@@ -168,7 +168,9 @@ grant or treat an old settings proposal as permission to install it.
 `unverified`: Doomer cannot establish that the running host loaded this policy.
 Let Codex reload or restart as required and verify the policy in a fresh reviewer
 context. Existing chats may retain old policy; managed organization settings may
-override local policy. Keep the current approval mode and sandbox settings. Do
+override local policy. If an override is present, report that limitation to the
+user after installation or verification. Keep the current approval mode and
+sandbox settings. Do
 not claim a successful config check fixes an active denial, and never use this
 migration to bypass an explicit host denial, revoked consent or organization
 policy.
