@@ -1,0 +1,28 @@
+cmd/managed_install.go
+  s_f23d7bc729b5d1::t_294ce1b02ee6b5 248,390-416
+  s_f23d7bc729b5d1::t_0b2938c74307c7 417-418
+cmd/managed_prompt_test.go
+  s_f23d7bc729b5d1::t_294ce1b02ee6b5 350-352,423-474
+tests/codexinstall/runner_test.go
+  s_f23d7bc729b5d1::t_46c76bb831c2de 279-301
+cmd/managed.go
+  s_f23d7bc729b5d1::t_294ce1b02ee6b5 214,224
+tests/codexinstall/proxy.go
+  s_f23d7bc729b5d1::t_46c76bb831c2de 16-26,68,76,99-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7778edf53889895072431f872d073511970e60b6",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
