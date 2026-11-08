@@ -1,0 +1,20 @@
+tests/codexinstall/candidate.go
+  h_aa44c3b5b60dec 11,53-86
+tests/codexinstall/candidate_test.go
+  h_aa44c3b5b60dec 1-116
+tests/codexinstall/skills.go
+  h_aa44c3b5b60dec 102-104
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 162-163,165
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9a7f476eb2a05e842d5b76f7740ddecc31556f33",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
