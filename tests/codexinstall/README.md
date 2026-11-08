@@ -29,6 +29,7 @@ go run ./tests/codexinstall --scenario list
 | --- | --- |
 | `install` | Both skill files, launcher, hooks configured, authenticated readiness, one grant, no content uploads |
 | `first-review` | An ordinary coding prompt with no Doomer reminder completes an account-linked review and records a finding response |
+| `review-command-permissions` | Fresh process with hooks disabled completes per-call review; Claude uses real auto mode with the onboarding command rules, Codex uses its approval reviewer |
 | `review-preflight` | Per-call preparation with automatic hooks removed; saved consent and local preflight in a fresh session; local coding continues if preparation is blocked; Codex uses workspace-write and auto-review |
 | `new-chat` | Two fresh coding chats with no Doomer reminders complete reviews and finding responses with the original grant; Codex uses its real approval reviewer |
 | `worktrees` | Concurrent branches/worktrees keep files, tasks and reviews separate while sharing approval; Codex uses its real approval reviewer |
@@ -254,3 +255,10 @@ for 14 days, including on test failure. The job summary links to the Depot job, 
 lists every scenario result, including missing or malformed reports as failures. Download the artifact and open `index.html` to browse
 recordings. Codex reserves at most $0.35 per scenario and $8.75 per suite. Claude
 uses subscription allowance, which is not reported as zero-dollar API usage.
+
+The `review-command-permissions` scenario verifies the fallback command path,
+not hook-driven submission. Its Claude coding turn uses `--permission-mode auto`
+without `bypassPermissions`; installation still uses the fixture's standard
+mode. This catches a configured integration whose explicit submit/respond calls
+are blocked in a new process. It is a real-agent test, not covered by the free
+Go unit tests.

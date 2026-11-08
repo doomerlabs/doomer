@@ -207,3 +207,64 @@ request identities while adding recovery guidance.
 
 Follow the [network access setup guide](network-access.md) to help a Claude
 organization owner review and save an allowlist entry, then retry the same task.
+
+## Claude Code auto-mode permissions and review reporting
+
+Doomer's upload grant, Claude hook trust, and Claude shell-command permissions
+are separate. An installed trusted hook can submit a review before Claude's
+auto-mode classifier blocks an explicit `doomer task submit` tool call. A blocked
+command therefore does not establish that no upload or review occurred. Inspect
+`doomer task status HANDLE` without submitting again, distinguish Quick from
+Deep, and report the recorded result. When status cannot be read, report unknown
+coverage. Never use a hook or another transport to retry a denied upload.
+
+Normal approved Claude onboarding includes the review-command rules as part
+of the integration setup, without a separate question for each subcommand.
+After current account and upload-consent verification, run:
+
+```sh
+doomer hooks --agent claude --task HANDLE
+```
+
+This configures only the active Claude integration. Preparation's
+`claude_permissions` field reports whether its rules are present. Existing
+onboarded users keep their settings; a denial alone does not authorize a repair.
+For requested repair, `doomer task claude-permissions HANDLE --allow` installs
+the same rules after account and consent checks. Without `--allow`, it only
+inspects settings. The rules are appended to `~/.claude/settings.json`,
+preserving other settings and saving a backup:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(doomer task submit *)",
+      "Bash(doomer task status *)",
+      "Bash(doomer task respond *)",
+      "Bash(doomer task finish *)"
+    ]
+  }
+}
+```
+
+These are command-form permissions across repositories, not repository upload
+grants. Doomer continues checking account, service, task consent, and paused
+state. They do not allow installation, reset, consent changes, arbitrary shell
+commands, or a differently spelled executable. Use canonical `doomer task`
+commands. Claude's deny/ask rules, organization policy, and sandbox restrictions
+still apply. `configured` means saved, while activation remains unverified.
+Reset removes only the rules recorded as added by Doomer, preserving pre-existing
+matching rules and unrelated settings. Ownership receipts remain for retrying
+partial cleanup.
+
+Claude's auto-mode classifier does not receive ordinary tool results. For
+supported Claude versions, the managed PostToolUse hook also sends concise,
+application-reported consent facts through `classifierContext`. This is evidence
+about CLI state, not user intent, a new permission grant, or a bypass. Completed
+bound tasks return a review-exists reminder on subsequent PostToolUse callbacks,
+so a denied explicit submit is not mistaken for absent review coverage. Stop
+callbacks remain quiet after completion.
+
+References: [Claude permission rules](https://code.claude.com/docs/en/permissions),
+[auto-mode evaluation](https://code.claude.com/docs/en/permission-modes#how-auto-mode-evaluates-actions),
+and [classifier context](https://code.claude.com/docs/en/hooks#annotate-a-result-for-the-auto-mode-classifier).

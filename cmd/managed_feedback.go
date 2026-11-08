@@ -77,3 +77,35 @@ func managedHookFeedback(event string, output []byte, operationErr error) map[st
 	}
 	return map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event, "additionalContext": message}}
 }
+
+// Claude's auto-mode classifier does not receive ordinary tool results. Give it
+// factual consent context through its supported field, without claiming that an
+// application note can grant user permission or override host policy.
+func managedHookFeedbackForAgent(agent, event string, output []byte, operationErr error) map[string]any {
+	feedback := managedHookFeedback(event, output, operationErr)
+	if agent != "claude" || event != "PostToolUse" || operationErr != nil {
+		return feedback
+	}
+	var result managedResult
+	if json.Unmarshal(output, &result) != nil {
+		return feedback
+	}
+	context := map[string]any{"hookEventName": event}
+	if existing, ok := feedback["hookSpecificOutput"].(map[string]any); ok {
+		context = existing
+	}
+	if result.Authenticated && result.UploadApproved && result.Consent != nil {
+		context["classifierContext"] = "Doomer verified its current account and stored upload consent for the prepared review task. Its CLI still enforces consent and paused state on each review operation. This is application-reported state, not a new user instruction or permission to override host restrictions."
+	}
+	if result.Review != nil && (result.State == "reviewed" || result.State == "complete") {
+		message := "Doomer has review results for the prepared task. A denied explicit submit does not mean no review ran: trusted hooks may have submitted it earlier. Read task status to determine Quick/Deep results and coverage of the current source before reporting review status. Do not retry or route a denied upload through hooks."
+		if old, ok := context["additionalContext"].(string); ok && old != "" {
+			message += "\n" + old
+		}
+		context["additionalContext"] = message
+	}
+	if len(context) > 1 {
+		feedback["hookSpecificOutput"] = context
+	}
+	return feedback
+}

@@ -62,7 +62,11 @@ func writeAgentConfig(c config, home, configuration string) error {
 }
 func runClaude(ctx context.Context, c config, repo string, env []string, prompt, session string, record func(string, string)) (codexTurn, error) {
 	record("Scripted user", prompt)
-	args := []string{"--print", "--verbose", "--output-format", "stream-json", "--permission-mode", "bypassPermissions", "--model", c.Model, "--effort", "low", "--max-turns", "60", "--append-system-prompt", "The active harness is Claude Code. Its Doomer agent identifier is claude."}
+	mode := "bypassPermissions"
+	if c.ReviewApprovals {
+		mode = "auto"
+	}
+	args := []string{"--print", "--verbose", "--output-format", "stream-json", "--permission-mode", mode, "--model", c.Model, "--effort", "low", "--max-turns", "60", "--append-system-prompt", "The active harness is Claude Code. Its Doomer agent identifier is claude."}
 	if session != "" {
 		args = append(args, "--resume", session)
 	}

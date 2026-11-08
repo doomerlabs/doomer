@@ -28,11 +28,12 @@ type resetEntry struct {
 	apply  func(context.Context) error
 }
 type resetPlan struct {
-	Entries  []*resetEntry `json:"entries"`
-	DryRun   bool          `json:"dry_run"`
-	Complete bool          `json:"complete"`
-	states   map[string]bool
-	repos    map[string]bool
+	Entries     []*resetEntry `json:"entries"`
+	DryRun      bool          `json:"dry_run"`
+	Complete    bool          `json:"complete"`
+	states      map[string]bool
+	repos       map[string]bool
+	claudeRules map[string][]string
 }
 
 func (p *resetPlan) add(kind, path, detail string, apply func(context.Context) error) {
@@ -257,26 +258,50 @@ func (p *resetPlan) discoverAgent(agent, home string) {
 			p.problem(agent, file, err)
 			continue
 		}
-		hooks, ok := obj["hooks"].(map[string]any)
-		if !ok {
-			if obj["hooks"] != nil {
-				p.problem(agent, file, fmt.Errorf("unsupported hooks layout"))
+		n := 0
+		if rules := p.claudeRules[file]; len(rules) > 0 {
+			if permissions, ok := obj["permissions"].(map[string]any); ok {
+				if allow, ok := permissions["allow"].([]any); ok {
+					kept := []any{}
+					for _, value := range allow {
+						rule, _ := value.(string)
+						owned := false
+						for _, candidate := range rules {
+							if rule == candidate {
+								owned = true
+							}
+						}
+						if owned {
+							n++
+						} else {
+							kept = append(kept, value)
+						}
+					}
+					permissions["allow"] = kept
+				}
 			}
+		}
+		hooks, ok := obj["hooks"].(map[string]any)
+		if !ok && obj["hooks"] != nil {
+			p.problem(agent, file, fmt.Errorf("unsupported hooks layout"))
 			continue
 		}
-		ids, n, err := resetHookGroups(hooks, file)
-		if err != nil {
-			p.problem(agent, file, err)
-			continue
+		if ok {
+			ids, count, err := resetHookGroups(hooks, file)
+			if err != nil {
+				p.problem(agent, file, err)
+				continue
+			}
+			identities = append(identities, ids...)
+			n += count
 		}
-		identities = append(identities, ids...)
 		if n > 0 {
 			out, err := json.MarshalIndent(obj, "", "  ")
 			if err != nil {
 				p.problem(agent, file, err)
 				continue
 			}
-			p.edit("hooks", file, fmt.Sprintf("remove %d Doomer hooks", n), data, append(out, '\n'), mode)
+			p.edit("hooks", file, fmt.Sprintf("remove %d Doomer hooks and owned command rules", n), data, append(out, '\n'), mode)
 		}
 	}
 	if agent != "Codex" {
@@ -357,6 +382,30 @@ func (p *resetPlan) discoverState(root string) {
 			p.problem("Doomer", state, err)
 			delete(p.states, root)
 			return
+		}
+	}
+	ruleFiles, _ := filepath.Glob(filepath.Join(state, "claude-permissions", "*.json"))
+	for _, file := range ruleFiles {
+		data, _, err := resetReadFile(file)
+		var receipt claudePermissionReceipt
+		if err != nil || json.Unmarshal(data, &receipt) != nil {
+			p.problem("Claude permissions", file, fmt.Errorf("invalid permission ownership receipt"))
+			continue
+		}
+		home, homeErr := os.UserHomeDir()
+		if homeErr != nil || receipt.ConfigPath != filepath.Join(home, ".claude", "settings.json") {
+			p.problem("Claude permissions", file, fmt.Errorf("unrecognized permission settings path"))
+			continue
+		}
+		if p.claudeRules == nil {
+			p.claudeRules = map[string][]string{}
+		}
+		for _, rule := range receipt.Added {
+			for _, known := range claudeReviewRules {
+				if rule == known {
+					p.claudeRules[receipt.ConfigPath] = append(p.claudeRules[receipt.ConfigPath], rule)
+				}
+			}
 		}
 	}
 	taskFiles, _ := filepath.Glob(filepath.Join(state, "tasks", "*.json"))

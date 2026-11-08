@@ -29,6 +29,7 @@ import (
 )
 
 type managedResult struct {
+	ClaudePermissions    *claudePermissions             `json:"claude_permissions,omitempty"`
 	Notices              []adversarylabs.ClientNotice   `json:"notices,omitempty"`
 	NetworkAccess        *managedNetworkAccess          `json:"network_access,omitempty"`
 	Anonymous            bool                           `json:"anonymous,omitempty"`
@@ -148,6 +149,9 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 			return err
 		}
 		r.Consent = evidence
+		if evidence != nil && t.Agent == "claude" && (c.Name() == "prepare" || c.Name() == "login" || c.Name() == "consent" || c.Name() == "claude-permissions") {
+			r.ClaudePermissions = inspectClaudePermissions()
+		}
 		if evidence != nil && t.Agent == "codex" {
 			r.CodexPolicyStatus = inspectCodexPolicyStatus(*evidence)
 		}
@@ -598,7 +602,7 @@ func managedConsent(s managed.Store, t managed.Task, token string, allow bool) (
 
 func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Command {
 	parent := &cobra.Command{Use: "task", Short: "Resume a durable managed review without a persistent process"}
-	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume", "rollback", "retry", "repair", "context", "codex-policy"} {
+	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume", "rollback", "retry", "repair", "context", "codex-policy", "claude-permissions"} {
 		operation := operation
 		var allow bool
 		var allRepositories bool
@@ -735,6 +739,17 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 			}
 			if !approved {
 				return outputManaged(c, s, t, managedResult{State: "consent_required", Task: t.Handle, Authenticated: true})
+			}
+			if operation == "claude-permissions" {
+				if t.Agent != "claude" {
+					return fmt.Errorf("Claude permission rules require a Claude task")
+				}
+				if allow {
+					if err := installClaudePermissions(s); err != nil {
+						return err
+					}
+				}
+				return outputManaged(c, s, t, managedResult{State: "claude_permissions_checked", Authenticated: true, UploadApproved: true, Action: "Saved rules are not proof of active host permission. Use canonical doomer task commands, preserve host denials, and inspect task status before claiming that no review ran."})
 			}
 			if operation == "codex-policy" {
 				if t.Agent != "codex" {

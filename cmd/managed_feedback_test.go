@@ -3,6 +3,8 @@ package cmd
 import (
 	"encoding/json"
 	"errors"
+	"github.com/doomerlabs/doomer/internal/watch"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -137,6 +139,56 @@ func TestUpdateRequiredDoesNotBecomeNetworkHelp(t *testing.T) {
 		addManagedNetworkHelp(command, &result, managed.Task{}, err)
 		if result.Action != "Use the verified updater" || result.NetworkAccess != nil {
 			t.Fatal("update action was overwritten", result)
+		}
+	}
+}
+
+func TestClaudeHookReportsExistingReviewAfterDeniedSubmit(t *testing.T) {
+	result := managedResult{State: "complete", Authenticated: true, UploadApproved: true, Consent: &managedConsentEvidence{Account: "account"}, Review: &adversarylabs.WorkspaceReview{ID: "private-id"}}
+	raw, _ := json.Marshal(result)
+	feedback := managedHookFeedbackForAgent("claude", "PostToolUse", raw, nil)
+	data, _ := json.Marshal(feedback)
+	if !strings.Contains(string(data), "classifierContext") || !strings.Contains(string(data), "denied explicit submit does not mean no review ran") || strings.Contains(string(data), "private-id") {
+		t.Fatal(string(data))
+	}
+	for _, event := range []string{"Stop", "PreToolUse"} {
+		data, _ := json.Marshal(managedHookFeedbackForAgent("claude", event, raw, nil))
+		if strings.Contains(string(data), "classifierContext") || strings.Contains(string(data), "denied explicit") {
+			t.Fatal(event, string(data))
+		}
+	}
+	result.UploadApproved = false
+	raw, _ = json.Marshal(result)
+	data, _ = json.Marshal(managedHookFeedbackForAgent("claude", "PostToolUse", raw, nil))
+	if strings.Contains(string(data), "classifierContext") {
+		t.Fatal("invented grant", string(data))
+	}
+}
+
+func TestCompletedClaudeTaskStillReportsExistingReview(t *testing.T) {
+	isolate(t)
+	repo := newWatchTestRepo(t)
+	s, _ := managedStore()
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: 2, Handle: handle, Agent: "claude", Repo: repo, API: "https://doomer.ai/api", Profile: "default", Stage: "complete", Capabilities: managed.Capabilities{SessionID: "claude-session"}, Review: &adversarylabs.WorkspaceReview{ID: "private-review-id"}}
+	if err := s.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	key := watch.Key(task.API + "\x00" + task.Profile + "\x00" + task.Agent + "\x00" + repo + "\x00" + task.Capabilities.SessionID)
+	if err := watch.Write(filepath.Join(s.Root, "sessions", key+".json"), handle); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []string{"PostToolUse", "Stop"} {
+		input, _ := json.Marshal(watch.HookInput{Session: "claude-session", CWD: repo, Event: event})
+		out, err := execute(t, string(input), "agent-hook", "--agent", "claude", "--managed-task-adapter")
+		if err != nil {
+			t.Fatal(out, err)
+		}
+		if event == "PostToolUse" && !strings.Contains(out, "Doomer has review results") {
+			t.Fatal("silently discarded completed review", out)
+		}
+		if event == "Stop" && strings.TrimSpace(out) != "{}" {
+			t.Fatal("completed review restarted Stop", out)
 		}
 	}
 }
