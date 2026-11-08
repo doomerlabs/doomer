@@ -38,11 +38,13 @@ func addManagedNetworkHelp(c *cobra.Command, r *managedResult, t managed.Task, e
 		DocsURL:      networkAccessDocsURL,
 		RetryCommand: retry,
 	}
+	// Portable setup requests another grant and cannot repair network access.
+	r.PortableSetupCommand = nil
 	if t.Agent == "codex" {
 		r.Action = fmt.Sprintf("Cannot reach %s. This may be a sandbox restriction or a service/connectivity problem. "+
 			"Read local saved authorization with doomer --api-url %s --profile %s preflight --agent codex --repo %s. "+
 			"Then retry %s through Codex's normal tool network permissions, citing the saved scope when present. "+
-			"Reuse existing grants. A connection failure does not revoke them or require new upload consent. "+
+			"Reuse existing grants and keep this task and setup mode. A connection failure does not revoke grants or require new upload consent. "+
 			"The host may require tool approval. Honor explicit denials and keep host and organization restrictions in force. "+
 			"Do not edit network or approval settings automatically. If the permitted retry still fails, "+
 			"report the exact hostname %s and guide %s once, then retain this task until connectivity changes.",
