@@ -1,0 +1,18 @@
+cmd/review_workspace_test.go
+  h_aa44c3b5b60dec 4,12,233-252
+docs/client-notices.md
+  h_aa44c3b5b60dec 13-16,45-48,54-61
+pkg/adversarylabs/notices_test.go
+  h_aa44c3b5b60dec 140-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "795c6211a422fe98a609cf558ecaf9afa6499758",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
