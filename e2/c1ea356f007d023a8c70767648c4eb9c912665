@@ -1,0 +1,14 @@
+cmd/onboard_reset_test.go
+  h_aa44c3b5b60dec 9,52-53,72,176,198-199,249,280
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e2c1ea356f007d023a8c70767648c4eb9c912665",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
