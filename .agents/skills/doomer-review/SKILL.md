@@ -74,9 +74,9 @@ substitute the current stable release for an active task. Follow structured
 user-action requests. Never invent consent, account identity, or hook activation.
 Reading this file directly is sufficient; native skill discovery is optional.
 
-After a failed submission recovers, continue the same task through `task status`,
-record every finding response, and run `task finish`. A successful submit or
-retry response alone does not complete the task.
+After a failed submission recovers, run `doomer task status HANDLE`, record every
+finding response, and run `doomer task finish HANDLE` with the same task handle.
+A successful submit or retry response alone does not complete the task.
 
 The selected CLI supplies its matching full instructions. Continue local edits
 when the user chose to do so despite blocked review, including when an older
@@ -106,8 +106,10 @@ installation with speculative requests to sign in again or approve uploads.
 A separate setup-choice question is unnecessary when this verified installation
 is already permitted. Let the host's tool permission controls request approval
 when required.
-After installation, resume any existing task with `prepare --task HANDLE`, or
-run the initial prepare command if no task exists. Present only the refreshed
+After installation, resume any existing task with `doomer prepare --task HANDLE`.
+With no existing task, use the initial prepare command for a coding request.
+For setup-only onboarding, run `doomer prepare --agent AGENT --repo .` without
+`--prompt`. Present only the refreshed
 result's approval request; earlier pending requests may have been satisfied.
 
 When the user requests an onboarding reset, run `doomer onboard reset --dry-run`

@@ -3,7 +3,9 @@
 Run real Codex CLI 0.167.0 with GPT-6.1 Terra at low reasoning in disposable
 Linux exe.dev VMs or isolated local macOS test homes. Depot runs all scenarios for both harnesses on pull requests. Manual runs remain available.
 The local fixture supplies Doomer account, approval and review responses.
-Installation still uses the public guide and published, verified Doomer runtime.
+By default, installation uses the public guide and published, verified Doomer
+runtime. Candidate flags first exercise that installation, then replace the
+runtime or wrappers with the selected checkout for the remaining scenario.
 
 ## Run
 
