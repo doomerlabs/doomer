@@ -1,0 +1,14 @@
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 152-155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cee9b094624f37e43da454caf4d01f67bb677d38",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
