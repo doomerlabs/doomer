@@ -1,0 +1,22 @@
+.agents/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 97-98
+.claude/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 97-98
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 78-79
+tests/codexinstall/skills.go
+  h_aa44c3b5b60dec 10,50-58
+tests/codexinstall/skills_test.go
+  h_aa44c3b5b60dec 95-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d6b94d2142c7ba9359aceddb323de2b3196813c",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
