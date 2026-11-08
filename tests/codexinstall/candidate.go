@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/doomerlabs/doomer/internal/managed"
 	"github.com/doomerlabs/doomer/internal/runtimeversion"
 	"github.com/doomerlabs/doomer/internal/selfupdate"
 )
@@ -48,4 +49,38 @@ func installCandidate(c config, home string) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(home, ".local/bin/doomer"), data, 0700)
+}
+
+// Assemble the candidate only inside the disposable fixture, after public
+// installation. Published wrappers may differ from this checkout, so production
+// bootstrap upgrade recognition must not gate fixture injection.
+func assembleCandidateInstallation(c config, home, repo string) error {
+	if c.CandidateFile != "" {
+		if err := installCandidate(c, home); err != nil {
+			return err
+		}
+		if c.SkillsBootstrap == "" && len(c.RepoBootstraps) == 0 {
+			root, scope := repo, "project"
+			if personalScenario(c.Scenario) {
+				root, scope = home, "personal"
+			}
+			c.RepoBootstraps = make(map[string]string)
+			for _, agent := range []string{".agents", ".claude"} {
+				path := filepath.Join(root, agent, "skills/doomer-review/SKILL.md")
+				installed, err := managed.ReadBootstrap(path, scope)
+				if err != nil {
+					return fmt.Errorf("read published bootstrap: %w", err)
+				}
+				content, err := managed.BootstrapText(installed.Policy)
+				if err != nil {
+					return err
+				}
+				c.RepoBootstraps[agent] = content
+			}
+		}
+	}
+	if c.SkillsBootstrap != "" || len(c.RepoBootstraps) != 0 {
+		return installCandidateSkills(c, home, repo)
+	}
+	return nil
 }
