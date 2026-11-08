@@ -26,6 +26,45 @@ type permissionFailingWriter struct {
 	err error
 }
 
+func TestHasPermissionReusesIntegrationAcrossRepositories(t *testing.T) {
+	store := isolate(t)
+	// An explicit integration identity takes precedence over inherited context.
+	t.Setenv("CLAUDECODE", "1")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/auth/whoami" || r.Header.Get("Authorization") != "Bearer integration-token" {
+			t.Errorf("unexpected request %s", r.URL.Path)
+		}
+		w.Write([]byte(`{"id":"account"}`))
+	}))
+	defer server.Close()
+	if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: "integration-token"}); err != nil {
+		t.Fatal(err)
+	}
+	s, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := managed.Task{AccountID: "account", Agent: "codex", API: server.URL, Profile: "default"}
+	if err := recordIntegrationConsent(s, task, "explicit_integration_approval", true); err != nil {
+		t.Fatal(err)
+	}
+	for _, repo := range []string{newWatchTestRepo(t), newWatchTestRepo(t)} {
+		for _, agent := range []string{"codex", "claude"} {
+			output, err := execute(t, "", "--api-url", server.URL, "has-permission", "--managed", "--agent", agent, "--json", repo)
+			var result struct {
+				Approved bool                    `json:"approved"`
+				Consent  *managedConsentEvidence `json:"consent"`
+			}
+			if err != nil || json.Unmarshal([]byte(output), &result) != nil || result.Approved != (agent == "codex") {
+				t.Fatal(agent, output, err)
+			}
+			if result.Approved && (result.Consent == nil || !result.Consent.AllRepositories) {
+				t.Fatal("missing integration evidence", output)
+			}
+		}
+	}
+}
+
 func TestHasPermissionManagedRequiresVerifiedAccount(t *testing.T) {
 	for _, credential := range []string{"missing", "anonymous", "rejected"} {
 		t.Run(credential, func(t *testing.T) {

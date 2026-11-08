@@ -237,7 +237,7 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 			if event.Event == "Stop" {
 				return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
 			}
-			message := "Doomer task is not prepared for this session. If the user supplied an existing task handle, first resume it with doomer prepare --task HANDLE --session " + watch.Quote(event.Session) + ". Do not create a replacement task for recovery. For a new task, read the installed bootstrap and run doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " before editing. Include the actual user request with --prompt."
+			message := "Doomer task is not prepared for this session. If the user supplied an existing task handle, first resume it with doomer prepare --task HANDLE --session " + watch.Quote(event.Session) + ". Do not create a replacement task for recovery. For a new task, read the installed bootstrap and attempt doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " early. Include the actual user request with --prompt."
 			pending, lookupErr := pendingManagedSetup(s, *api, *profile, agent, repo)
 			if lookupErr != nil {
 				return lookupErr
@@ -245,6 +245,7 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 			if pending != "" {
 				message = "For an installation or approval reply, continue the existing setup with doomer prepare --task " + watch.Quote(pending) + " --session " + watch.Quote(event.Session) + ". For a new coding request, start its own task with doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " --prompt USER_REQUEST. Keep setup-only tasks separate from coding reviews."
 			}
+			message += " If Doomer is blocked, explain the blocker and ask once whether to continue local edits without a completed review or wait. Reuse that choice for this task. Continuing edits does not authorize a blocked upload. Report incomplete review before finishing."
 			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event.Event, "additionalContext": message}})
 		} else if err != nil {
 			return err

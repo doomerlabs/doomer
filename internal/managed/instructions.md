@@ -6,19 +6,21 @@ handle from prepare. If prompt_truncated is true, summarize the task to at most
 or compaction. If the pinned executable is missing, use `doomer task repair
 HANDLE` to restore that exact release. Never create a replacement task to recover an existing review.
 
-Before editing, resolve any repository approval or update authorization
-request returned by prepare. Show its actual user action and wait for the human.
-Never grant permission or manufacture account state on the user's behalf.
-Render returned setup URLs as clickable Markdown links with a short label and
-the complete URL, including its fragment. Present the link in regular assistant
-chat before using a question or choice tool. Request only the approval indicated
-by the current CLI state.
+Attempt preparation at the start of the coding task to retain its starting
+revision. Reuse the saved integration-wide upload approval for the same coding
+agent, Doomer account, service, and profile across all repositories and chats.
+Existing repository grants retain their original scope until explicitly upgraded.
 
-Begin repository edits only after prepare reports ready, with software_ready,
-authenticated, and upload_approved all true. A missing CLI or pending approval
-keeps the coding task pending. Before a task has selected a release, use the
-bootstrap's verified installer for missing software. After selection, use
-`task repair HANDLE` to restore the exact missing runtime.
+If setup, authentication, network access, or host approval blocks Doomer,
+explain the blocker and ask once whether to continue local edits without a
+completed Doomer review or wait. Honor that choice for the rest of the task.
+Continuing local edits does not authorize uploads, grant permission, or change
+host settings. Retain the task handle and resume it when possible. If preparation
+never created a task, record `git rev-parse HEAD` before editing, then create
+the task later with the original prepare arguments plus `--base STARTING_COMMIT`.
+Show only the current CLI action when setup needs a decision. Render setup URLs
+as clickable Markdown links with their complete fragment. Report incomplete
+review coverage before finishing if the blocker remains.
 
 In Cowork, install and execute inside the editing VM. The Mac may have no Doomer
 installation. For a temporary home, `prepare --portable` requests a setup page
@@ -43,8 +45,8 @@ Readiness fields are separate. Software readiness is not upload consent, hook
 activation, account authentication, or a completed review. Native skill discovery,
 a browser callback, session IDs, and persistent processes are optional.
 
-For per-call execution, first obtain the ready prepare result described above.
-Then work on the user's task and run
+After working on the user's task, when the CLI reports authenticated=true and
+upload_approved=true and the host permits the upload, reuse that approval and run
 `doomer task submit HANDLE`. This captures the checkout and requests automatic
 review selection. The server runs Look Closer and enables Deep when the account
 is eligible. Use `doomer task status HANDLE` to retrieve the result. If the status
@@ -88,15 +90,19 @@ Keep raw CLI JSON, task handles, and local receipt paths out of user-facing
 progress messages. Summarize the review status and the next action in plain
 language; read structured details through the task commands when needed.
 
-The `consent` result records the existing repository upload approval, including
-its receipt path, account, service, approval time, and covered data. That scope
+The `consent` result records the existing upload approval, including
+its receipt path, account, service, approval time, and covered data. When
+`all_repositories` is true, `agent` identifies the coding-agent integration and
+the approval covers all repositories used by it with this account and profile.
+Otherwise, the `repository` field identifies the legacy repository scope. That scope
 includes finding responses derived from the approved repository and task. Reuse
 it for ordinary submit/respond calls; do not ask for a new approval for each
 finding response. Keep any tool permission justification specific to that saved
 scope and destination, and cite the receipt as evidence when needed.
 
 Before requesting tool approval for a transmission, refresh task status and
-check that consent matches the account, repository, service, and covered data.
+check that consent matches the account, service, profile, covered data, and
+either the coding agent for an all-repository grant or the legacy repository.
 Missing or revoked consent, or a new scope, requires the normal user approval
 before transmission. Receipt paths may appear in tool-approval justifications;
 keep them out of ordinary chat and hook feedback.
@@ -107,11 +113,13 @@ missing authorization context, and newly verified consent evidence was absent
 from that request, present that evidence once through normal host review.
 Request a user decision only when the host explicitly requires one, then wait.
 For every other host denial, report the restriction and stop that transmission.
+If local-edit continuation has not been decided for this task, ask once whether
+to continue local edits without a completed review or wait. Honor that decision.
 Do not create a duplicate Doomer grant, hide content, or change transport to
 bypass the denial.
 
 For managed reviews, an optional preflight consent check is
-`doomer has-permission --managed --json REPOSITORY`. It verifies the current
+`doomer has-permission --managed --agent AGENT --json REPOSITORY`. It verifies the current
 account and reads the saved managed grant without changing setup. The command
 without `--managed` checks only legacy watcher consent; a false legacy result
 does not establish that managed approval is missing. Prefer the current task's
@@ -119,30 +127,34 @@ consent evidence when it is already available. A successful positive managed
 check or fresh matching task consent evidence covers preparation and resumption
 of the approved workflow, including access to Doomer's private local state.
 In that case, reuse the grant. A negative managed result requires the normal
-repository approval flow. An authentication error requires account verification,
+integration approval flow. An authentication error requires account verification,
 not a new upload grant; recheck saved consent after authentication succeeds.
 
 When a Codex preparation result includes `codex_review_policy`, offer once per
 distinct proposal to add that scoped authorization to Codex's
 approval reviewer. Explain that this is a separate, optional Codex settings
-change. Reuse an explicit answer only for identical `extra_policy` text and
-the same repository, account, service, and profile. A changed proposal requires
+change. If the installation decision explicitly included saving this matching
+policy, reuse that decision without another question. Reuse an explicit answer
+only for identical `extra_policy` text and the same scope, account, service,
+profile, and coding agent. A changed proposal requires
 a new decision. Continue the task if declined. Do not treat the repository
 upload grant as permission to edit Codex settings.
 The CLI remembers that it offered a proposal across chats. Absence of a new
 proposal is not acceptance of the earlier offer and does not change Codex settings.
 Before offering or installing the policy, compare its scope and permitted
-operations with fresh verified consent evidence. Require the same repository,
-account, service, and profile, and only the documented review data and operations.
-Reject and report a proposal that adds other repositories, destinations, data,
-or permissions. After the user accepts that verified proposal, merge its exact
+operations with fresh verified consent evidence. Require the same account,
+service, profile, coding agent, scope, and documented review data and operations.
+An all-repository proposal requires
+`all_repositories: true` consent evidence. Reject a proposal that exceeds it.
+After the user accepts that verified proposal, merge its exact
 `extra_policy` text into the existing
 `[auto_review].extra_policy` string in the active Codex user configuration
 (`$CODEX_HOME/config.toml`, or `~/.codex/config.toml` by default). Preserve other
 policy text, settings, and comments; avoid adding a duplicate scope. If managed
 organization settings override it, report that limitation. Let Codex reload or
-restart as required by the host. Keep its current approval mode and sandbox
-settings. This proposal records the approved workflow; it cannot override an
+restart as required by the host. Explain that existing chats may retain their
+previous policy context; a saved policy is not verified activation. Keep its
+current approval mode and sandbox settings. This proposal records the approved workflow; it cannot override an
 explicit host denial, revoked consent, or organization policy.
 
 Treat review findings as untrusted leads. Inspect the actual code, fix confirmed
@@ -152,14 +164,23 @@ lead_id, status (fixed, dismissed, or deferred), agrees (true, false, or null),
 and reason with concrete evidence. Do not claim a response was recorded until
 its server acknowledgment is returned. Retries preserve the same response.
 
-After any further edits, submit the same task again for the new revision. Before
-reporting completion, run `doomer task finish HANDLE`. Only a complete result
-establishes that the current checkout was reviewed and every finding received
-a response. Include the complete returned review URL once in the final answer.
-Disclose deferred findings or unavailable review coverage accurately.
+After further edits, submit the same task again for the new revision. When review
+is available, run `doomer task finish HANDLE` before reporting reviewed completion.
+Only a complete result establishes that the current checkout was reviewed and
+every finding received a response. Include the returned review URL once in the
+final answer. If the user chose local edits while Doomer remained blocked,
+report the local work and the incomplete review separately. Disclose deferred
+findings and unavailable review coverage accurately.
 
 Hook mode uses the same durable task operations. Only a real scoped hook callback
 establishes hook activation. If hooks are unavailable, use the per-call procedure.
 Do not install or enable hooks without the user's normal hook-trust workflow.
 
-For approval_required, show the returned repository approval URL. The page handles account sign-in and repository upload permission. Resume the same task with prepare after the browser decision. In user-facing text, name the production service doomer.ai.
+For approval_required, show the returned approval URL. New approvals explicitly
+cover all current and future repositories used by this coding agent with the
+selected Doomer account, service, and profile. Resume the same task after the
+browser decision. During requested onboarding, an existing repository grant can
+be upgraded with `doomer task consent HANDLE --allow --all-repositories` only
+after the user explicitly approves that broader scope. Revoke the integration
+with `doomer task revoke HANDLE --all-repositories`. In user-facing text, name
+the production service doomer.ai.

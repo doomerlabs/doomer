@@ -175,11 +175,14 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 }
 
 func newPrepareCommand(app *application.App, api, profile *string) *cobra.Command {
-	var repo, agent, handle, prompt, session string
+	var repo, agent, handle, prompt, session, baseRef string
 	var allowUpdates bool
 	var portable bool
 	c := &cobra.Command{Use: "prepare", Short: "Prepare or resume a version-pinned managed review task", Args: cobra.NoArgs}
 	c.RunE = func(c *cobra.Command, _ []string) error {
+		if handle != "" && c.Flags().Changed("base") {
+			return fmt.Errorf("an existing task keeps its original baseline; --base is only for a new task")
+		}
 		s, err := managedStore()
 		if err != nil {
 			return err
@@ -243,7 +246,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 			}
 			// Capture the task baseline before any edits. The task retains this commit
 			// even if HEAD advances later or another process resumes the task.
-			base, e := exec.CommandContext(c.Context(), "git", "-C", root, "rev-parse", "HEAD").Output()
+			base, e := exec.CommandContext(c.Context(), "git", "-C", root, "rev-parse", "--verify", "--end-of-options", baseRef+"^{commit}").Output()
 			if e != nil {
 				return e
 			}
@@ -369,6 +372,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 	c.Flags().StringVar(&handle, "task", "", "resume an existing task handle")
 	c.Flags().StringVar(&session, "session", "", "actual harness session ID for optional hook binding")
 	c.Flags().StringVar(&prompt, "prompt", "", "original user task (stored locally until upload is approved)")
+	c.Flags().StringVar(&baseRef, "base", "HEAD", "starting commit for a new task when local edits began before preparation")
 	c.Flags().BoolVar(&allowUpdates, "allow-updates", false, "record the user's explicit authorization for this bootstrap's update policy")
 	c.Flags().BoolVar(&portable, "portable", false, "request browser approval to reuse setup across environments through private Git metadata")
 	return c
@@ -542,27 +546,23 @@ func managedIdentity(ctx context.Context, app *application.App, t managed.Task) 
 
 type repositoryConsent struct {
 	Account, Repository, API, Profile string
+	Agent                             string            `json:"agent,omitempty"`
+	AllRepositories                   bool              `json:"all_repositories,omitempty"`
+	RevocationID                      string            `json:"revocation_id,omitempty"`
+	IntegrationRevocations            map[string]string `json:"integration_revocations,omitempty"`
 	Approved                          bool
 	Source                            string `json:"source,omitempty"`
 	At                                time.Time
 }
 
 func managedConsent(s managed.Store, t managed.Task, token string, allow bool) (bool, error) {
-	// The grant follows the authenticated account, service, profile, and Git
-	// common directory. A refreshed credential for the same account can resume.
-	file := managedConsentPath(s, t)
-	var grant repositoryConsent
+	// Reuse integration-wide or legacy repository approval for the verified
+	// account. A refreshed credential for the same account can resume.
 	if allow {
 		return true, recordManagedConsent(s, t, "explicit_cli_approval")
 	}
-	err := watch.Read(file, &grant)
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return grant.matches(t), nil
+	evidence, err := savedManagedConsentEvidence(s, t)
+	return evidence != nil, err
 }
 
 func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Command {
@@ -570,8 +570,12 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume", "rollback", "retry", "repair", "context"} {
 		operation := operation
 		var allow bool
+		var allRepositories bool
 		c := &cobra.Command{Use: operation + " HANDLE", Args: cobra.ExactArgs(1)}
 		c.Flags().BoolVar(&allow, "allow", false, "record an explicit user approval; never supply on the user's behalf")
+		if operation == "consent" || operation == "revoke" {
+			c.Flags().BoolVar(&allRepositories, "all-repositories", false, "apply to all repositories for this agent, account, service, and profile")
+		}
 		c.RunE = func(c *cobra.Command, args []string) error {
 			s, err := managedStore()
 			if err != nil {
@@ -650,7 +654,12 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				if !allow {
 					return fmt.Errorf("--allow requires the user's explicit approval of repository snapshots, task context and finding response uploads to %s", t.API)
 				}
-				if _, err = managedConsent(s, t, auth.Token, true); err != nil {
+				if allRepositories {
+					err = recordIntegrationConsent(s, t, "explicit_integration_approval", true)
+				} else {
+					_, err = managedConsent(s, t, auth.Token, true)
+				}
+				if err != nil {
 					return err
 				}
 				if t.Portable && !t.PortableApproved {
@@ -663,8 +672,16 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				return outputManaged(c, s, t, managedResult{State: "consent_recorded", Task: t.Handle, Authenticated: true, UploadApproved: true})
 			}
 			if operation == "revoke" {
-				key := watch.Key(t.AccountID + "\x00" + t.RepositoryID + "\x00" + t.API + "\x00" + t.Profile)
-				if err := watch.Write(filepath.Join(s.Root, "consents", key+".json"), repositoryConsent{Account: t.AccountID}); err != nil {
+				evidence, err := savedManagedConsentEvidence(s, t)
+				if err != nil {
+					return err
+				}
+				if allRepositories || (evidence != nil && evidence.AllRepositories) {
+					err = recordIntegrationConsent(s, t, "integration_revoked", false)
+				} else {
+					err = watch.Write(managedConsentPath(s, t), repositoryConsent{Account: t.AccountID, At: time.Now().UTC()})
+				}
+				if err != nil {
 					return err
 				}
 				result := managedResult{State: "consent_revoked", Task: t.Handle, Authenticated: true}

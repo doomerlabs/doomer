@@ -16,6 +16,10 @@ import (
 func newHasPermissionCommand(app *application.App, api, profile *string) *cobra.Command {
 	var jsonOutput bool
 	var managedWorkflow bool
+	agent := "codex"
+	if os.Getenv("CLAUDECODE") != "" {
+		agent = "claude"
+	}
 	c := &cobra.Command{
 		Use:   "has-permission [directory]",
 		Short: "Read saved repository upload consent without changing setup",
@@ -35,7 +39,10 @@ func newHasPermissionCommand(app *application.App, api, profile *string) *cobra.
 				return err
 			}
 			if managedWorkflow {
-				return printManagedPermission(c, app, *api, *profile, path, id, jsonOutput)
+				if agent != "codex" && agent != "claude" {
+					return fmt.Errorf("agent must be codex or claude")
+				}
+				return printManagedPermission(c, app, *api, *profile, path, id, agent, jsonOutput)
 			}
 			root, file, err := consentPaths(*api, *profile)
 			if err != nil {
@@ -63,15 +70,16 @@ func newHasPermissionCommand(app *application.App, api, profile *string) *cobra.
 	}
 	c.Flags().BoolVar(&jsonOutput, "json", false, "print the permission decision and repository identity as JSON")
 	c.Flags().BoolVar(&managedWorkflow, "managed", false, "verify the current account and check managed review consent")
+	c.Flags().StringVar(&agent, "agent", agent, "coding agent for managed integration consent: codex or claude")
 	return c
 }
 
-func printManagedPermission(c *cobra.Command, app *application.App, api, profile, path, id string, jsonOutput bool) error {
+func printManagedPermission(c *cobra.Command, app *application.App, api, profile, path, id, agent string, jsonOutput bool) error {
 	s, err := managedStoreLocation()
 	if err != nil {
 		return err
 	}
-	task := managed.Task{Repo: path, RepositoryID: id, API: api, Profile: profile}
+	task := managed.Task{Repo: path, RepositoryID: id, API: api, Profile: profile, Agent: agent}
 	_, account, err := managedIdentity(c.Context(), app, task)
 	if err != nil {
 		return err

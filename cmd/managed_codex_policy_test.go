@@ -52,3 +52,18 @@ func TestCodexReviewPolicyOfferPersistsWithoutGrantingSettings(t *testing.T) {
 		t.Fatal("new account lost its scoped offer", other, err)
 	}
 }
+
+func TestIntegrationPolicyIsStableAcrossRepositories(t *testing.T) {
+	consent := managedConsentEvidence{Account: "account", Agent: "codex", AllRepositories: true, Service: "https://doomer.ai/api", Profile: "default"}
+	policy := proposedCodexReviewPolicy(consent).ExtraPolicy
+	var scope map[string]any
+	if err := json.Unmarshal([]byte(strings.Split(policy, "\n")[2]), &scope); err != nil {
+		t.Fatal(err)
+	}
+	if scope["all_repositories"] != true || scope["agent"] != "codex" || scope["repository"] != nil {
+		t.Fatal(scope)
+	}
+	if !strings.Contains(policy, "all current and future repositories") {
+		t.Fatal(policy)
+	}
+}

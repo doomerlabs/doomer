@@ -199,6 +199,38 @@ func TestPrepareResumesSetupAsCodingWithExplicitPrompt(t *testing.T) {
 	}
 }
 
+func TestPrepareRetainsExplicitBaselineAfterLocalWork(t *testing.T) {
+	isolate(t)
+	repo := newWatchTestRepo(t)
+	base := reviewGit(t, repo, "rev-parse", "HEAD")
+	reviewGit(t, repo, "commit", "--allow-empty", "-m", "local work before preparation")
+	if out, err := execute(t, "", "install", "--repo", repo); err != nil {
+		t.Fatal(out, err)
+	}
+	out, err := execute(t, "", "prepare", "--repo", repo, "--agent", "codex", "--prompt", "Review local work", "--base", base)
+	if err != nil {
+		t.Fatal(out, err)
+	}
+	var result managedResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatal(out, err)
+	}
+	store, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := store.Load(result.Task)
+	if err != nil || task.Base != base {
+		t.Fatal(task.Base, err)
+	}
+	if _, err := execute(t, "", "prepare", "--task", task.Handle, "--base", "HEAD"); err == nil {
+		t.Fatal("changed an existing task baseline")
+	}
+	if _, err := execute(t, "", "prepare", "--repo", repo, "--prompt", "Invalid base", "--base", "missing-commit"); err == nil {
+		t.Fatal("accepted an invalid baseline")
+	}
+}
+
 func TestPrepareBindsSessionWhenResumingSetup(t *testing.T) {
 	isolate(t)
 	store, err := managedStore()
