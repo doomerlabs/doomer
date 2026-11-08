@@ -175,11 +175,14 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 }
 
 func newPrepareCommand(app *application.App, api, profile *string) *cobra.Command {
-	var repo, agent, handle, prompt, session string
+	var repo, agent, handle, prompt, session, baseRef string
 	var allowUpdates bool
 	var portable bool
 	c := &cobra.Command{Use: "prepare", Short: "Prepare or resume a version-pinned managed review task", Args: cobra.NoArgs}
 	c.RunE = func(c *cobra.Command, _ []string) error {
+		if handle != "" && c.Flags().Changed("base") {
+			return fmt.Errorf("an existing task keeps its original baseline; --base is only for a new task")
+		}
 		s, err := managedStore()
 		if err != nil {
 			return err
@@ -243,7 +246,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 			}
 			// Capture the task baseline before any edits. The task retains this commit
 			// even if HEAD advances later or another process resumes the task.
-			base, e := exec.CommandContext(c.Context(), "git", "-C", root, "rev-parse", "HEAD").Output()
+			base, e := exec.CommandContext(c.Context(), "git", "-C", root, "rev-parse", "--verify", "--end-of-options", baseRef+"^{commit}").Output()
 			if e != nil {
 				return e
 			}
@@ -369,6 +372,7 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 	c.Flags().StringVar(&handle, "task", "", "resume an existing task handle")
 	c.Flags().StringVar(&session, "session", "", "actual harness session ID for optional hook binding")
 	c.Flags().StringVar(&prompt, "prompt", "", "original user task (stored locally until upload is approved)")
+	c.Flags().StringVar(&baseRef, "base", "HEAD", "starting commit for a new task when local edits began before preparation")
 	c.Flags().BoolVar(&allowUpdates, "allow-updates", false, "record the user's explicit authorization for this bootstrap's update policy")
 	c.Flags().BoolVar(&portable, "portable", false, "request browser approval to reuse setup across environments through private Git metadata")
 	return c

@@ -16,7 +16,8 @@ explain the blocker and ask once whether to continue local edits without a
 completed Doomer review or wait. Honor that choice for the rest of the task.
 Continuing local edits does not authorize uploads, grant permission, or change
 host settings. Retain the task handle and resume it when possible. If preparation
-never created a task, retain the starting commit for the eventual review.
+never created a task, record `git rev-parse HEAD` before editing, then create
+the task later with the original prepare arguments plus `--base STARTING_COMMIT`.
 Show only the current CLI action when setup needs a decision. Render setup URLs
 as clickable Markdown links with their complete fragment. Report incomplete
 review coverage before finishing if the blocker remains.

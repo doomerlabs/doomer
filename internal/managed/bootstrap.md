@@ -21,8 +21,9 @@ Present a returned `approval_required` action for missing or revoked approval.
 If Doomer is blocked, explain why and ask once whether to continue local edits
 without a completed Doomer review or wait. Honor that choice for the task.
 Continuing edits does not authorize a blocked upload. Keep the task handle and
-resume it when possible. If preparation never created a task, retain the starting
-commit for the eventual review. Report incomplete review coverage before finishing.
+resume it when possible. If preparation never created a task, record
+`git rev-parse HEAD` before editing. Later create the task with the original
+prepare arguments plus `--base STARTING_COMMIT`. Keep an existing task's baseline. Report incomplete review coverage before finishing.
 
 Show setup URLs as clickable Markdown links with a short label, preserving the
 complete URL including its fragment. Present the link in regular assistant chat
@@ -63,8 +64,8 @@ unverified; it does not establish that the harness lacks hook support.
 
 For requested installation or onboarding, or when the CLI is missing for the
 authorized coding task, fetch the official INSTALL.md at
-https://raw.githubusercontent.com/doomerlabs/skills/01d8b830a81bf760504818dd2e42e4f5aff13f6b/INSTALL.md and require its SHA-256 to equal
-`59def6fc9a22d97a6bdef8c2e20094a24aa7689c03a04e20dd9e22d54d4bc8c8`
+https://raw.githubusercontent.com/doomerlabs/skills/22f02d667370ffc06ceddf5ba5e24e1896684e12/INSTALL.md and require its SHA-256 to equal
+`646b3cea1fcde88bfba31073b0b45e6b7f01092e5a7ac394b0627373f969f951`
 before following the relevant verified steps with normal execution permissions.
 For an active review task, retain its handle and selected runtime. Use the guide's
 onboarding steps with that task. If its executable is missing, use
