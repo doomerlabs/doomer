@@ -1,0 +1,58 @@
+.agents/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 5-6,13-18,23-92,100-108,112-113,117-124,127-133
+.claude/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 5-6,13-18,23-92,100-108,112-113,117-124,127-133
+README.md
+  h_aa44c3b5b60dec 618-637
+cmd/managed.go
+  h_aa44c3b5b60dec 151
+cmd/managed_codex_config.go
+  h_aa44c3b5b60dec 18
+cmd/managed_feedback.go
+  h_aa44c3b5b60dec 14,17-18
+cmd/managed_feedback_test.go
+  h_aa44c3b5b60dec 99-110
+cmd/managed_preflight.go
+  h_aa44c3b5b60dec 1-111
+cmd/managed_preflight_test.go
+  h_aa44c3b5b60dec 1-181
+cmd/root.go
+  h_aa44c3b5b60dec 141
+cmd/runtime.go
+  h_aa44c3b5b60dec 50
+cmd/runtime_test.go
+  h_aa44c3b5b60dec 145
+internal/managed/bootstrap-2026.11.8.1.md
+  h_aa44c3b5b60dec 1-144
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 10-15,20-21,25-31,33-34,36-40,50,52-58,62-63,67-74,77-83
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 14,39-41,116
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 126-164
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 15-24,122-123,215
+internal/managed/permission-prompt-rules.md
+  h_aa44c3b5b60dec 19-26
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 32,67-74,226,249
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 15
+tests/codexinstall/preflight.go
+  h_aa44c3b5b60dec 1-68
+tests/codexinstall/runner_test.go
+  h_aa44c3b5b60dec 268-282
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 17,45,170-171,346-352
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e825f34836c42d23d65c57cfbdb4f1846aa9e6ec",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
