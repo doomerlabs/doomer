@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -48,6 +49,8 @@ func TestOnboardResetDiscoversAndPreserves(t *testing.T) {
 	home := t.TempDir()
 	config := filepath.Join(home, "state")
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
 	t.Setenv("DOOMER_CONFIG_DIR", config)
 	codex := filepath.Join(home, ".codex")
 	extra := filepath.Join(home, "custom-codex")
@@ -66,7 +69,7 @@ func TestOnboardResetDiscoversAndPreserves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg = append(cfg, []byte("\n[hooks.state.\""+filepath.Join(codex, "hooks.json")+":session_start:0:0\"]\ntrusted_hash='remove'\n[hooks.state.\"unrelated\"]\ntrusted_hash='keep'\n")...)
+	cfg = append(cfg, []byte("\n[hooks.state."+strconv.Quote(filepath.Join(codex, "hooks.json")+":session_start:0:0")+"]\ntrusted_hash='remove'\n[hooks.state.\"unrelated\"]\ntrusted_hash='keep'\n")...)
 	resetFixture(t, filepath.Join(codex, "config.toml"), string(cfg))
 	resetFixture(t, filepath.Join(config, "auth.json"), "doomer login secret")
 	bootstrap, err := managed.BootstrapText(managed.Policy{Protocol: managed.Protocol, Channel: "stable"})
@@ -170,7 +173,7 @@ func TestResetRejectsSymlinksAndMalformedSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(target, filepath.Join(home, ".codex/hooks.json")); err != nil {
-		t.Fatal(err)
+		t.Skipf("symlinks unavailable: %v", err)
 	}
 	resetFixture(t, filepath.Join(home, ".claude/settings.json"), "invalid json")
 	p := &resetPlan{}
@@ -192,6 +195,8 @@ func TestResetRejectsSymlinksAndMalformedSettings(t *testing.T) {
 func TestResetCLIWorksOutsideRepository(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
 	t.Setenv("DOOMER_CONFIG_DIR", filepath.Join(home, "state"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
@@ -241,7 +246,7 @@ type='command'
 [[hooks.Stop.hooks]]
 command='echo keep'
 type='command'
-[hooks.state."`+file+`:stop:0:0"]
+[hooks.state.`+strconv.Quote(file+":stop:0:0")+`]
 trusted_hash='remove'
 [unrelated]
 value = 'preserve'
@@ -272,7 +277,7 @@ func TestResetDoesNotFollowStateDirectorySymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(outside, filepath.Join(config, "managed")); err != nil {
-		t.Fatal(err)
+		t.Skipf("symlinks unavailable: %v", err)
 	}
 	p := &resetPlan{states: map[string]bool{config: true}, repos: map[string]bool{}}
 	p.discoverState(config)
