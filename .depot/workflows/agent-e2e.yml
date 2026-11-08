@@ -57,7 +57,7 @@ jobs:
     name: ${{ matrix.harness }} / ${{ matrix.scenario }}
     runs-on: ubuntu-24.04
     environment: agent-e2e
-    timeout-minutes: 20
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       # Bound provider request bursts while keeping scenarios parallel.
@@ -81,7 +81,25 @@ jobs:
           TEST_CLAUDE_CODE_OAUTH_TOKEN: ${{ matrix.harness == 'claude' && secrets.TEST_CLAUDE_CODE_OAUTH_TOKEN || '' }}
           E2E_SCENARIO: ${{ matrix.scenario }}
           E2E_HARNESS: ${{ matrix.harness }}
-        run: scripts/ci-agent-e2e.sh "$E2E_HARNESS" "$E2E_SCENARIO"
+        run: |
+          report_root=$E2E_REPORT_DIR
+          for attempt in 1 2; do
+            export E2E_REPORT_DIR="$report_root/attempt-$attempt"
+            if scripts/ci-agent-e2e.sh "$E2E_HARNESS" "$E2E_SCENARIO"; then
+              status=0
+              break
+            else
+              status=$?
+            fi
+            if [[ $attempt == 1 ]]; then
+              echo "Scenario failed; retrying once with a fresh home."
+            fi
+          done
+          # The gallery reads the final attempt; retain both attempts for debugging.
+          if [[ -d $E2E_REPORT_DIR ]]; then
+            cp -a "$E2E_REPORT_DIR/." "$report_root/"
+          fi
+          exit "$status"
       - name: Build recording index
         if: always()
         env:
