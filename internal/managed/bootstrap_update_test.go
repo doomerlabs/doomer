@@ -60,11 +60,16 @@ func TestBootstrapInspectionRecognizesUnmarkedAndCustomWrappers(t *testing.T) {
 	previousTwo, _ := bootstrapText(p, versionEightTwoBootstrapTemplate, "2026.11.8.2", ">=2026.11.7.5")
 	previousThree, _ := bootstrapText(p, versionEightThreeBootstrapTemplate, "2026.11.8.3", ">=2026.11.7.5")
 	previousFour, _ := bootstrapText(p, versionEightFourBootstrapTemplate, "2026.11.8.4", ">=2026.11.7.5")
+	previousSix, _ := bootstrapText(p, versionEightSixBootstrapTemplate, "2026.11.8.6", ">=2026.11.7.5")
+	previousFive, _ := bootstrapText(p, versionEightFiveBootstrapTemplate, "2026.11.8.5", ">=2026.11.7.5")
 	path := filepath.Join(t.TempDir(), "SKILL.md")
 	for _, tc := range []struct{ text, state string }{
 		{current, "current"}, {legacy, "update_available"}, {previous, "update_available"},
 		{previousThirteen, "update_available"}, {previousTwo, "update_available"}, {previousThree, "update_available"},
 		{previousFour, "update_available"},
+		{previousFive, "update_available"},
+		{previousSix, "update_available"},
+		{previousSix + "\nCustom instructions.\n", "modified"},
 		{legacy + "\nCustom instructions.\n", "modified"},
 		{previous + "\nCustom instructions.\n", "modified"},
 		{strings.Replace(current, BootstrapVersion, "2027.1.1.1", 1), "newer"},
@@ -116,13 +121,13 @@ func TestPromptRulesAreSharedByBootstrapAndRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, rules := range []string{PermissionPromptRules, UpgradePromptRules} {
+	for _, rules := range []string{PermissionPromptRules, UpgradePromptRules, FinalReviewRules} {
 		if !strings.Contains(bootstrap, strings.TrimSpace(rules)) || !strings.Contains(Instructions, strings.TrimSpace(rules)) {
 			t.Fatal("prompt decision rules diverged")
 		}
 	}
 	for _, text := range []string{bootstrap, Instructions} {
-		if strings.Contains(text, "{{permission_prompt_rules}}") || strings.Contains(text, "{{upgrade_prompt_rules}}") {
+		if strings.Contains(text, "{{permission_prompt_rules}}") || strings.Contains(text, "{{upgrade_prompt_rules}}") || strings.Contains(text, "{{final_review_rules}}") {
 			t.Fatal("unexpanded prompt rules")
 		}
 	}

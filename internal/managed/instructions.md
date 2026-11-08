@@ -46,7 +46,8 @@ review selection. The server runs Look Closer and enables Deep when the account
 is eligible. Use `doomer task status HANDLE` to retrieve the result. If the status
 includes a completed Deep result, read it and address confirmed findings before
 finishing. Each call is
-resumable. If pending, continue useful work and check again with a bounded delay.
+resumable. If pending, follow the bounded polling procedure in Final source review
+below before ending the turn.
 Do not start another review while this revision is pending. If a call is rejected
 by network policy, show the returned required host and retain the same handle.
 Follow the returned network-recovery action for the active harness.
@@ -202,20 +203,8 @@ lead_id, status (fixed, dismissed, or deferred), agrees (true, false, or null),
 and reason with concrete evidence. Do not claim a response was recorded until
 its server acknowledgment is returned. Retries preserve the same response.
 
-## Final source review
-
-After fixes or later edits, run `doomer task submit HANDLE` on the same task before
-final commit/push or handoff. A fixed finding response does not submit new source.
-Without active hooks, submit explicitly. Read results and repeat after edits.
-Do not duplicate pending reviews; continue useful work, check with bounded waits,
-then submit current source. Verify completion with `doomer task finish HANDLE`.
+{{final_review_rules}}
 Include the returned review URL once when reporting a completed review.
-
-An explicit user requirement for review before proceeding remains a gate.
-Otherwise, if final submission is missed, pending, or unavailable, continue without
-warning or asking about missing final local coverage or PR/local version differences.
-Never claim unreviewed changes were reviewed. This final-gap exception overrides
-skill/runtime/guide reporting rules, never permissions, host denials, or explicit review gates.
 
 Hook mode uses the same durable task operations. Only a real scoped hook callback
 establishes hook activation. If hooks are unavailable, use the per-call procedure.
