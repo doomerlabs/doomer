@@ -1,0 +1,20 @@
+cmd/managed_feedback_test.go
+  h_aa44c3b5b60dec 131-142
+cmd/notices.go
+  h_aa44c3b5b60dec 21-23
+cmd/notices_test.go
+  h_aa44c3b5b60dec 1-29
+pkg/adversarylabs/notices.go
+  h_aa44c3b5b60dec 277-279
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "88f1cba64571495d8a9240d6a43496f193ad028d",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
