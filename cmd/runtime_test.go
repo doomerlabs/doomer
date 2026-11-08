@@ -142,6 +142,7 @@ func TestLauncherKeepsLocalCommands(t *testing.T) {
 		{"self-update", "--check"},
 		{"runtime-info"},
 		{"doctor", "--no-upload"},
+		{"preflight", "--agent", "codex", "--repo", repo},
 		{"watch", "hook", "--dispatch"},
 		{"watch", "hook", "--dispatch=true"},
 	} {

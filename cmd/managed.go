@@ -148,14 +148,7 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 		}
 		r.Consent = evidence
 		if evidence != nil && t.Agent == "codex" {
-			policy, _, inspectErr := inspectCodexReviewPolicy(*evidence)
-			r.CodexPolicyStatus = &codexPolicyStatus{State: "unreadable", Activation: "unverified"}
-			if inspectErr != nil {
-				r.CodexPolicyStatus.Error = inspectErr.Error()
-			} else {
-				r.CodexPolicyStatus.ConfigPath = policy.ConfigPath
-				r.CodexPolicyStatus.State = policy.State
-			}
+			r.CodexPolicyStatus = inspectCodexPolicyStatus(*evidence)
 		}
 		if evidence != nil && t.Agent == "codex" && r.CodexPolicyStatus.Error == "" && (c.Name() == "prepare" || c.Name() == "login" || c.Name() == "consent" || c.Name() == "codex-policy") {
 			if c.Name() == "codex-policy" {

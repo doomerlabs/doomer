@@ -123,3 +123,42 @@ func TestPromptRulesAreSharedByBootstrapAndRuntime(t *testing.T) {
 		}
 	}
 }
+
+func TestEightOneBootstrapRemainsUpgradable(t *testing.T) {
+	policy := Policy{Protocol: Protocol, Channel: "stable"}
+	old, err := bootstrapText(policy, versionEightOneBootstrapTemplate, "2026.11.8.1", ">=2026.11.7.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !RecognizedBootstrap([]byte(old), policy) {
+		t.Fatal("prior wrapper treated as modified")
+	}
+	current, err := BootstrapText(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"doomer preflight", "continue authorized local edits and tests by default", "explicitly required review", "account or authorize uploads"} {
+		if !strings.Contains(current, want) {
+			t.Fatal("missing contract", want)
+		}
+	}
+	if strings.Contains(current, "ask once whether to continue local") {
+		t.Fatal("local work still gated")
+	}
+}
+
+func TestRepositoryBootstrapsMatchGenerated(t *testing.T) {
+	current, err := BootstrapText(Policy{Protocol: Protocol, Channel: "stable"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, agent := range []string{".agents", ".claude"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", agent, "skills", "doomer-review", "SKILL.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != current {
+			t.Fatal("repository bootstrap differs from generated template", agent)
+		}
+	}
+}

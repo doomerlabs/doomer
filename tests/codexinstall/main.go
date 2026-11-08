@@ -12,6 +12,7 @@ import (
 )
 
 type config struct {
+	ReviewApprovals  bool              `json:"review_approvals,omitempty"`
 	Harness          string            `json:"harness,omitempty"`
 	SkillsGuide      string            `json:"skills_guide,omitempty"`
 	SkillsInstaller  string            `json:"skills_installer,omitempty"`
