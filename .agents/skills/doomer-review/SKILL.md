@@ -41,17 +41,18 @@ helper/guide suggestions to ask do not override these rules:
   acceptance; perform and verify the accepted installation, not another offer.
 
 Authentication/network errors require recovery and rechecking, not new consent.
-Only an explicitly identified sandbox restriction permits requesting normal
-host approval once for private-state access/account checks. A reviewer refusal
-or ambiguous denial does not; honor the stated decision. Saved scope is context,
-not proof of current consent. Never bypass host controls or broaden grants.
+Do not retry a stated reviewer/user refusal. Diagnose ambiguous errors read-only.
+For a confirmed sandbox restriction, request normal host approval once for
+private-state access/account checks. Saved scope is context, not current
+consent. Never bypass host controls or broaden grants.
 During onboarding, complete any accepted Codex policy installation and inspect
 `codex_policy_status`. `configured` means saved, not active. Reload/restart Codex
 as needed and verify a permitted Doomer operation in a fresh reviewer session
 before claiming activation. Do not broaden settings or probe a denied operation.
 
 If review is blocked, continue authorized local edits and tests by default.
-Earlier user requirements to wait or require review before editing take precedence.
+Do not ask whether to continue. Explicit earlier user requirements to wait or
+require review before editing take precedence.
 Stop the denied transmission; keep uploads blocked. Silence is not upload consent.
 Do not retry explicit reviewer refusals. Keep any task handle. If none exists,
 record `git rev-parse HEAD` before

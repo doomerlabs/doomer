@@ -23,7 +23,8 @@ A prompt creates a coding task. Verify readiness/hooks without submitting code.
 {{permission_prompt_rules}}
 
 If review is blocked, continue authorized local edits and tests by default.
-Earlier user requirements to wait or require review before editing take precedence.
+Do not ask whether to continue. Explicit earlier user requirements to wait or
+require review before editing take precedence.
 Stop the denied transmission; keep uploads blocked. Silence is not upload consent.
 Do not retry explicit reviewer refusals. Keep any task handle. If none exists,
 record `git rev-parse HEAD` before
