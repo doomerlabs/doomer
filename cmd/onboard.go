@@ -14,6 +14,8 @@ import (
 
 // Onboarding uses the same consent and background-start path as watch start.
 // There is no separate grant, implicit resume, or hook-trust bypass.
+// The reset subcommand independently revokes integrations across discovered homes;
+// it does not install hooks or grant permission.
 func newOnboardCommand(app *application.App, api, profile *string) *cobra.Command {
 	var repo, agent, session string
 	var taskStdin, restartRequired, checkHooks, refresh bool

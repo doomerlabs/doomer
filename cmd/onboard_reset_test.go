@@ -140,6 +140,13 @@ func TestOnboardResetDiscoversAndPreserves(t *testing.T) {
 	if err := toml.Unmarshal([]byte(result), &obj); err != nil {
 		t.Fatal(err)
 	}
+	hooksState := obj["hooks"].(map[string]any)["state"].(map[string]any)
+	if _, exists := hooksState[filepath.Join(codex, "hooks.json")+":session_start:0:0"]; exists {
+		t.Fatal("removed Doomer hook trust remains")
+	}
+	if _, exists := hooksState["unrelated"]; !exists {
+		t.Fatal("unrelated hook trust removed")
+	}
 	if strings.Contains(resetContents(t, filepath.Join(repo, "AGENTS.md")), "doomer-review") {
 		t.Fatal("instructions remain")
 	}
@@ -234,6 +241,18 @@ func TestResetInvalidatesOldGrantsButAllowsFreshOnboarding(t *testing.T) {
 	if err := recordIntegrationConsent(state, task, "fresh", true); err != nil {
 		t.Fatal(err)
 	}
+	var fresh repositoryConsent
+	if err := watch.Read(integrationConsentPath(state, task), &fresh); err != nil {
+		t.Fatal(err)
+	}
+	cutoff, err := resetCutoff(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh.At = cutoff.Add(time.Second)
+	if err := watch.Write(integrationConsentPath(state, task), fresh); err != nil {
+		t.Fatal(err)
+	}
 	evidence, err = savedManagedConsentEvidence(state, task)
 	if err != nil || evidence == nil {
 		t.Fatal("fresh grant rejected", err)
@@ -263,7 +282,7 @@ value = 'preserve'
 			t.Fatal(e.Error)
 		}
 		if e.apply != nil {
-			if err := e.apply(); err != nil {
+			if err := e.apply(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -343,5 +362,18 @@ func TestResetCorruptCutoffFailsClosed(t *testing.T) {
 	resetFixture(t, filepath.Join(state.Root, "reset.json"), "corrupt")
 	if evidence, err := savedManagedConsentEvidence(state, task); err == nil || evidence != nil {
 		t.Fatal("ignored corrupt reset cutoff", err)
+	}
+}
+
+func TestResetCancellationDoesNotMutate(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "config.json")
+	resetFixture(t, file, "before")
+	p := &resetPlan{states: map[string]bool{}}
+	p.edit("test", file, "edit", []byte("before"), []byte("after"), 0600)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	p.run(ctx)
+	if resetContents(t, file) != "before" {
+		t.Fatal("cancelled reset changed state")
 	}
 }

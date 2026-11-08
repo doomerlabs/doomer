@@ -25,7 +25,7 @@ type resetEntry struct {
 	Detail string `json:"detail"`
 	Status string `json:"status"`
 	Error  string `json:"error,omitempty"`
-	apply  func() error
+	apply  func(context.Context) error
 }
 type resetPlan struct {
 	Entries  []*resetEntry `json:"entries"`
@@ -35,7 +35,7 @@ type resetPlan struct {
 	repos    map[string]bool
 }
 
-func (p *resetPlan) add(kind, path, detail string, apply func() error) {
+func (p *resetPlan) add(kind, path, detail string, apply func(context.Context) error) {
 	p.Entries = append(p.Entries, &resetEntry{Kind: kind, Path: path, Detail: detail, Status: "found", apply: apply})
 }
 func (p *resetPlan) problem(kind, path string, err error) {
@@ -45,7 +45,7 @@ func (p *resetPlan) edit(kind, path, detail string, before, after []byte, mode o
 	if bytes.Equal(before, after) {
 		return
 	}
-	p.add(kind, path, detail, func() error { return resetWriteFile(path, before, after, mode) })
+	p.add(kind, path, detail, func(_ context.Context) error { return resetWriteFile(path, before, after, mode) })
 }
 func (p *resetPlan) remove(kind, path string) {
 	before, mode, err := resetReadFile(path)
@@ -56,7 +56,7 @@ func (p *resetPlan) remove(kind, path string) {
 		p.problem(kind, path, err)
 		return
 	}
-	p.add(kind, path, "remove Doomer file", func() error {
+	p.add(kind, path, "remove Doomer file", func(_ context.Context) error {
 		current, _, err := resetReadFile(path)
 		if err != nil {
 			return err
@@ -482,8 +482,8 @@ func (p *resetPlan) discoverState(root string) {
 				}
 			}
 			r := r
-			p.add("watcher", r, "stop background watcher", func() error {
-				lock, err := lifecycleLock(context.Background(), r)
+			p.add("watcher", r, "stop background watcher", func(ctx context.Context) error {
+				lock, err := lifecycleLock(ctx, r)
 				if err != nil {
 					return err
 				}
@@ -491,7 +491,7 @@ func (p *resetPlan) discoverState(root string) {
 				if err = watch.Write(filepath.Join(r, "paused.json"), time.Now()); err != nil {
 					return err
 				}
-				return waitWatch(context.Background(), func() (bool, error) { held, err := publock.Held(r, "watcher"); return !held, err })
+				return waitWatch(ctx, func() (bool, error) { held, err := publock.Held(r, "watcher"); return !held, err })
 			})
 		}
 	}
@@ -565,6 +565,10 @@ func (p *resetPlan) discoverInstructions(repo string) {
 }
 
 func (p *resetPlan) run(ctx context.Context) {
+	if err := ctx.Err(); err != nil {
+		p.problem("reset", "", err)
+		return
+	}
 	var locks []*publock.Lock
 	defer func() {
 		for _, l := range locks {
@@ -628,7 +632,7 @@ func (p *resetPlan) run(ctx context.Context) {
 				e.Error = err.Error()
 				continue
 			}
-			if err := e.apply(); err != nil {
+			if err := e.apply(ctx); err != nil {
 				e.Status = "failed"
 				e.Error = err.Error()
 			} else {
