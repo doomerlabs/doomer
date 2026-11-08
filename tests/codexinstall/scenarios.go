@@ -197,7 +197,11 @@ func (j *journey) afterInstall() error {
 		j.f.Findings = j.c.Scenario == "first-review" || j.c.Scenario == "new-chat"
 		j.f.Deep = j.c.Scenario == "deep-review"
 		j.f.mu.Unlock()
-		if err := j.coding(j.repo, "Create hello.txt containing hello followed by a newline. Follow the repository's installed instructions and complete the task."); err != nil {
+		prompt := "Create hello.txt containing hello followed by a newline. Follow the repository's installed instructions and complete the task."
+		if personalScenario(j.c.Scenario) {
+			prompt = "Create hello.txt containing hello followed by a newline. Use the installed Doomer skill and complete the task."
+		}
+		if err := j.coding(j.repo, prompt); err != nil {
 			return err
 		}
 		content, readErr := os.ReadFile(filepath.Join(j.repo, "hello.txt"))
