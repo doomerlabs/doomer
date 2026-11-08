@@ -77,7 +77,12 @@ hooks stop resubmitting a failed call. Report the review as incomplete and end
 the turn if recovery is unavailable; do not enter a stop-hook retry loop.
 Allow at most one immediate retry of the same failed operation. If it fails again,
 stop until the cause is addressed. Use `doomer task submit HANDLE` to resume a
-failed submission with its existing request identity. Reserve `doomer task retry
+failed submission with its existing request identity. After recovery, run
+`task status`, record every finding response, then run `task finish`. A successful
+submit or retry response does not complete the task. If finish reports that the
+checkout changed, run `task submit` on the same handle to review the current
+changes, then status and finish again. Never use `task retry` for a completed
+review whose checkout has changed. Reserve `doomer task retry
 HANDLE` for a review that status explicitly marks `review_failed`. Never describe
 a failed submission as a completed review.
 

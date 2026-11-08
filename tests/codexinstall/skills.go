@@ -50,15 +50,33 @@ func installCandidateSkills(c config, home, repo string) error {
 	if personalScenario(c.Scenario) {
 		root = home
 	}
-	for _, path := range []string{".agents/skills/doomer-review/SKILL.md", ".claude/skills/doomer-review/SKILL.md"} {
+	for _, agent := range []string{".agents", ".claude"} {
+		path := filepath.Join(agent, "skills/doomer-review/SKILL.md")
 		destination := filepath.Join(root, path)
 		// Require real installation to have created the bootstrap before replacing it.
 		if _, err := os.Stat(destination); err != nil {
 			return fmt.Errorf("candidate bootstrap was not installed: %w", err)
 		}
-		if err := os.WriteFile(destination, []byte(c.SkillsBootstrap), 0600); err != nil {
+		content := c.SkillsBootstrap
+		if len(c.RepoBootstraps) != 0 {
+			content = c.RepoBootstraps[agent]
+		}
+		if err := os.WriteFile(destination, []byte(content), 0600); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// Keep the two agent copies separate so a change to either is exercised.
+func loadRepositoryBootstraps(c *config, source string) error {
+	c.RepoBootstraps = make(map[string]string)
+	for _, agent := range []string{".agents", ".claude"} {
+		raw, err := os.ReadFile(filepath.Join(source, agent, "skills/doomer-review/SKILL.md"))
+		if err != nil {
+			return fmt.Errorf("read repository bootstrap %s: %w", agent, err)
+		}
+		c.RepoBootstraps[agent] = string(raw)
 	}
 	return nil
 }

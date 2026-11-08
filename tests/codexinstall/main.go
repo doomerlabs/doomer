@@ -12,22 +12,23 @@ import (
 )
 
 type config struct {
-	Harness          string  `json:"harness,omitempty"`
-	SkillsGuide      string  `json:"skills_guide,omitempty"`
-	SkillsInstaller  string  `json:"skills_installer,omitempty"`
-	SkillsBootstrap  string  `json:"skills_bootstrap,omitempty"`
-	AuthMode         string  `json:"auth_mode,omitempty"`
-	OAuthToken       string  `json:"oauth_token,omitempty"`
-	InstallGuide     string  `json:"install_guide"`
-	WorkRoot         string  `json:"work_root,omitempty"`
-	CandidateFile    string  `json:"candidate_file,omitempty"`
-	CandidateVersion string  `json:"candidate_version,omitempty"`
-	APIKey           string  `json:"api_key"`
-	Model            string  `json:"model"`
-	Budget           float64 `json:"budget_usd"`
-	Codex            string  `json:"codex"`
-	Scenario         string  `json:"scenario"`
-	LegacyBootstrap  string  `json:"legacy_bootstrap,omitempty"`
+	Harness          string            `json:"harness,omitempty"`
+	SkillsGuide      string            `json:"skills_guide,omitempty"`
+	SkillsInstaller  string            `json:"skills_installer,omitempty"`
+	RepoBootstraps   map[string]string `json:"repo_bootstraps,omitempty"`
+	SkillsBootstrap  string            `json:"skills_bootstrap,omitempty"`
+	AuthMode         string            `json:"auth_mode,omitempty"`
+	OAuthToken       string            `json:"oauth_token,omitempty"`
+	InstallGuide     string            `json:"install_guide"`
+	WorkRoot         string            `json:"work_root,omitempty"`
+	CandidateFile    string            `json:"candidate_file,omitempty"`
+	CandidateVersion string            `json:"candidate_version,omitempty"`
+	APIKey           string            `json:"api_key"`
+	Model            string            `json:"model"`
+	Budget           float64           `json:"budget_usd"`
+	Codex            string            `json:"codex"`
+	Scenario         string            `json:"scenario"`
+	LegacyBootstrap  string            `json:"legacy_bootstrap,omitempty"`
 }
 
 type recordedEvent struct {
@@ -64,6 +65,7 @@ func main() {
 	auth := flag.String("auth", "api", "authentication mode: api or subscription (Claude only)")
 	localClaude := flag.String("local-claude", "", "dedicated pinned Claude executable for an isolated local run")
 	skillsSource := flag.String("skills-source", "", "candidate skills repository to exercise in the isolated fixture")
+	bootstrapSource := flag.String("bootstrap-source", "", "repository whose committed agent wrappers are exercised")
 	guide := flag.String("install-guide", "https://doomer.ai/install.md", "verified installation guide to exercise")
 	localCodex := flag.String("local-codex", "", "dedicated pinned Codex executable for an isolated local run")
 	localRoot := flag.String("local-root", "", "writable parent directory for disposable local test homes")
@@ -147,6 +149,12 @@ func main() {
 	if *auth == "subscription" {
 		c.APIKey = ""
 		c.OAuthToken = os.Getenv("TEST_CLAUDE_CODE_OAUTH_TOKEN")
+	}
+	if *bootstrapSource != "" {
+		if err := loadRepositoryBootstraps(&c, *bootstrapSource); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 	if *skillsSource != "" {
 		if err := loadCandidateSkills(&c, *skillsSource); err != nil {

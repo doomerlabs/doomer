@@ -14,6 +14,10 @@ If a real harness session ID is available, pass it with `--session`. For Claude,
 use the active harness's `CLAUDE_CODE_SESSION_ID` when exposed. Chat URL IDs and
 invented prefixes do not establish a hook binding.
 
+For onboarding without a coding task, run `doomer prepare --agent AGENT --repo .`
+without `--prompt`. Supplying a prompt creates a coding-review task even when
+its text says “setup only.” Verify readiness and hooks without submitting code.
+
 Reuse the saved integration approval across repositories, worktrees, and chats
 for the same coding agent, Doomer account, service, and profile. Existing
 repository-specific grants retain their original scope until explicitly upgraded.
@@ -50,6 +54,10 @@ launcher, then resume the same handle. Repair restores that exact release; do no
 substitute the current stable release for an active task. Follow structured
 user-action requests. Never invent consent, account identity, or hook activation.
 Reading this file directly is sufficient; native skill discovery is optional.
+
+After a failed submission recovers, continue the same task through `task status`,
+record every finding response, and run `task finish`. A successful submit or
+retry response alone does not complete the task.
 
 The selected CLI supplies its matching full instructions. Continue local edits
 when the user chose to do so despite blocked review, including when an older

@@ -173,7 +173,7 @@ func runWorker(c config) (result report) {
 				return fail(fmt.Errorf("candidate bootstrap assembly: %w: %s", err, output))
 			}
 		}
-		if c.SkillsBootstrap != "" {
+		if c.SkillsBootstrap != "" || len(c.RepoBootstraps) != 0 {
 			if err := installCandidateSkills(c, home, repo); err != nil {
 				return fail(err)
 			}

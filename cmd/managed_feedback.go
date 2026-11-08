@@ -11,6 +11,11 @@ func managedHookFeedback(event string, output []byte, operationErr error) map[st
 	var result managedResult
 	message := "Doomer could not check the review. Resume the prepared task and inspect its status."
 	valid := operationErr == nil && json.Unmarshal(output, &result) == nil && result.State != ""
+	if event == "Stop" && (!valid || result.State == "operation_failed" || result.State == "review_failed") {
+		// Even additionalContext on Stop can restart Claude. The failed operation
+		// already returned its diagnostic; let the turn end without more feedback.
+		return map[string]any{}
+	}
 	if valid {
 		if result.State == "complete" || result.State == "paused" {
 			return map[string]any{}
@@ -44,9 +49,7 @@ func managedHookFeedback(event string, output []byte, operationErr error) map[st
 			return map[string]any{}
 		}
 	}
-	if event == "Stop" && valid && (result.State == "review_failed" || result.State == "operation_failed" && result.Review == nil) {
-		return map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event, "additionalContext": "Doomer review remains incomplete after a failure. Report the failure and end this turn. Resume the same task explicitly after the cause is addressed."}}
-	}
+
 	if event == "Stop" {
 		return map[string]any{"decision": "block", "reason": message}
 	}

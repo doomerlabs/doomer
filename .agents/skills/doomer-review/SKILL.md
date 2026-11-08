@@ -4,7 +4,7 @@ description: Prepare Doomer review early, reuse installation approval, and repor
 metadata:
   doomer-protocol: "2"
   doomer-update-policy: stable
-  doomer-bootstrap-version: "2026.11.7.5"
+  doomer-bootstrap-version: "2026.11.8.1"
   doomer-cli-range: ">=2026.11.7.5"
 ---
 
@@ -73,6 +73,10 @@ launcher, then resume the same handle. Repair restores that exact release; do no
 substitute the current stable release for an active task. Follow structured
 user-action requests. Never invent consent, account identity, or hook activation.
 Reading this file directly is sufficient; native skill discovery is optional.
+
+After a failed submission recovers, continue the same task through `task status`,
+record every finding response, and run `task finish`. A successful submit or
+retry response alone does not complete the task.
 
 The selected CLI supplies its matching full instructions. Continue local edits
 when the user chose to do so despite blocked review, including when an older
