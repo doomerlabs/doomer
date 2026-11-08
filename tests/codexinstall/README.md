@@ -29,7 +29,7 @@ go run ./tests/codexinstall --scenario list
 | --- | --- |
 | `install` | Both skill files, launcher, hooks configured, authenticated readiness, one grant, no content uploads |
 | `first-review` | New coding task completes an account-linked review and records a finding response |
-| `review-preflight` | Saved consent and local preflight in a fresh session; local coding continues if preparation is blocked; Codex uses workspace-write and auto-review |
+| `review-preflight` | Per-call preparation with automatic hooks removed; saved consent and local preflight in a fresh session; local coding continues if preparation is blocked; Codex uses workspace-write and auto-review |
 | `new-chat` | Two fresh coding chats produce separate completed reviews with the original approval |
 | `worktrees` | Concurrent branches/worktrees keep files, tasks and reviews separate while sharing approval |
 | `decline-updates` | Refusing updates does not grant repository access or upload content |
@@ -69,7 +69,9 @@ post-onboarding `review-preflight` Codex session uses workspace-write, on-reques
 approvals and `approvals_reviewer=auto_review`, with no bypass flag. It must
 observe local-only preflight, complete a local edit, reuse the original grant and
 upload no content. It requires either prepared state or an explicit blocker
-report; a reviewer refusal must not stall the edit. Claude exercises the same local-preflight flow with its usual
+report; a refusal of Doomer preparation stops that operation while independently
+authorized local edits remain permitted. Automatic hooks are removed for this
+preparation-only scenario. Claude exercises the same local-preflight flow with its usual
 fixture permissions. This covers a fresh CLI session, not desktop policy reload
 or organization overrides. Doomer's own permissions apply in every scenario.
 

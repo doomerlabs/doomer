@@ -22,10 +22,11 @@ A prompt creates a coding task. Verify readiness/hooks without submitting code.
 
 {{permission_prompt_rules}}
 
-If review is blocked, continue authorized local edits and tests by default;
-do not ask whether to continue. Wait only if the user explicitly required review
-before editing or asked to wait. Stop the denied transmission; never bypass host
-controls. Keep any task handle. If none exists, record `git rev-parse HEAD` before
+If review is blocked, continue authorized local edits and tests by default.
+Earlier user requirements to wait or require review before editing take precedence.
+Stop the denied transmission; keep uploads blocked. Silence is not upload consent.
+Do not retry explicit reviewer refusals. Keep any task handle. If none exists,
+record `git rev-parse HEAD` before
 editing and later prepare with the original arguments plus `--base STARTING_COMMIT`.
 Never replace an existing baseline. Report the blocker once and incomplete review
 coverage before finishing. This rule also applies to older runtime instructions.

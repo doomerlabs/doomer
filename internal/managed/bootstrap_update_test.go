@@ -137,9 +137,24 @@ func TestEightOneBootstrapRemainsUpgradable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"doomer preflight", "continue authorized local edits and tests by default", "explicitly required review", "account or authorize uploads"} {
+	for _, want := range []string{"doomer preflight", "continue authorized local edits and tests by default", "Earlier user requirements to wait", "account or authorize uploads"} {
 		if !strings.Contains(current, want) {
 			t.Fatal("missing contract", want)
+		}
+	}
+	_, continuation, ok := strings.Cut(current, "If review is blocked,")
+	if !ok {
+		t.Fatal("missing continuation policy")
+	}
+	continuation, _, _ = strings.Cut(continuation, "Show complete clickable")
+	for _, want := range []string{
+		"Earlier user requirements to wait or require review before editing take precedence.",
+		"Stop the denied transmission; keep uploads blocked.",
+		"Silence is not upload consent.",
+		"Do not retry explicit reviewer refusals.",
+	} {
+		if !strings.Contains(continuation, want) {
+			t.Fatal("missing local continuation boundary", want)
 		}
 	}
 	if strings.Contains(current, "ask once whether to continue local") {

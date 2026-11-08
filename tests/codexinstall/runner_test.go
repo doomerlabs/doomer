@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -267,14 +268,9 @@ func TestInstallRequiresConfiguredCodexPolicy(t *testing.T) {
 }
 
 func TestReviewPreflightUsesRealReviewerWithoutBypass(t *testing.T) {
-	args := strings.Join(codexExecArgs(config{ReviewApprovals: true}), " ")
-	for _, want := range []string{"workspace-write", `approval_policy="on-request"`, `approvals_reviewer="auto_review"`} {
-		if !strings.Contains(args, want) {
-			t.Fatal(args)
-		}
-	}
-	if strings.Contains(args, "bypass") {
-		t.Fatal(args)
+	want := []string{"exec", "--json", "--sandbox", "workspace-write", "-c", `approval_policy="on-request"`, "-c", `approvals_reviewer="auto_review"`}
+	if got := codexExecArgs(config{ReviewApprovals: true}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("review preflight must use exact guarded arguments: %q", got)
 	}
 	if !validScenario("review-preflight") {
 		t.Fatal("regression missing from CI discovery")

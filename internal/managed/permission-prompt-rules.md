@@ -16,10 +16,10 @@ helper/guide suggestions to ask do not override these rules:
   acceptance; perform and verify the accepted installation, not another offer.
 
 Authentication/network errors require recovery and rechecking, not new consent.
-A sandbox error is not a reviewer refusal: request normal host approval once
-for private-state access/account verification, citing the saved scope as context,
-not proof of current consent. Respect explicit reviewer denials; never bypass
-host controls or broaden grants.
+Only an explicitly identified sandbox restriction permits requesting normal
+host approval once for private-state access/account checks. A reviewer refusal
+or ambiguous denial does not; honor the stated decision. Saved scope is context,
+not proof of current consent. Never bypass host controls or broaden grants.
 During onboarding, complete any accepted Codex policy installation and inspect
 `codex_policy_status`. `configured` means saved, not active. Reload/restart Codex
 as needed and verify a permitted Doomer operation in a fresh reviewer session

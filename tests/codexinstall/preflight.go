@@ -10,6 +10,12 @@ import (
 // Onboarding keeps its existing fixture permissions. This regression starts a
 // fresh coding session with the actual Codex reviewer and workspace sandbox.
 func (j *journey) reviewPreflight() error {
+	// This scenario isolates per-call preparation. Automatic hooks can submit
+	// after a tool call before the agent has processed the no-upload instruction.
+	// Hook-driven delivery is exercised by the other lifecycle scenarios.
+	if err := os.Remove(agentHooksPath(j.c, j.home)); err != nil {
+		return err
+	}
 	prior, err := savedTasks(j.home)
 	if err != nil {
 		return err
