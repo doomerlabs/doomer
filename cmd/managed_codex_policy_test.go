@@ -27,6 +27,7 @@ func TestCodexReviewPolicyKeepsScopeAsData(t *testing.T) {
 }
 
 func TestCodexReviewPolicyOfferPersistsWithoutGrantingSettings(t *testing.T) {
+	t.Setenv("CODEX_HOME", t.TempDir())
 	s := managed.Store{Root: t.TempDir()}
 	consent := managedConsentEvidence{Account: "one", Repository: "/repo/.git", Service: "https://doomer.ai/api", Profile: "default"}
 	first, err := offerCodexReviewPolicy(s, consent)

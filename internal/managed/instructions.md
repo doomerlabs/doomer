@@ -139,23 +139,39 @@ only for identical `extra_policy` text and the same scope, account, service,
 profile, and coding agent. A changed proposal requires
 a new decision. Continue the task if declined. Do not treat the repository
 upload grant as permission to edit Codex settings.
-The CLI remembers that it offered a proposal across chats. Absence of a new
-proposal is not acceptance of the earlier offer and does not change Codex settings.
+Check `codex_policy_status` even when no proposal is returned. `missing` or
+`migration_required` means the active Codex profile does not contain the current
+policy; `unreadable` reports a configuration error without blocking local work.
+Delivery markers from older releases do not establish installation. Offers are
+scoped to the active config path and contents, so a changed or different profile
+can receive a migration offer. Do not repeat a declined settings question within
+the task. An unchanged previously offered configuration is reported in status
+without another offer; absence of a proposal never means acceptance.
 Before offering or installing the policy, compare its scope and permitted
 operations with fresh verified consent evidence. Require the same account,
 service, profile, coding agent, scope, and documented review data and operations.
 An all-repository proposal requires
 `all_repositories: true` consent evidence. Reject a proposal that exceeds it.
-After the user accepts that verified proposal, merge its exact
-`extra_policy` text into the existing
-`[auto_review].extra_policy` string in the active Codex user configuration
-(`$CODEX_HOME/config.toml`, or `~/.codex/config.toml` by default). Preserve other
-policy text, settings, and comments; avoid adding a duplicate scope. If managed
-organization settings override it, report that limitation. Let Codex reload or
-restart as required by the host. Explain that existing chats may retain their
-previous policy context; a saved policy is not verified activation. Keep its
-current approval mode and sandbox settings. This proposal records the approved workflow; it cannot override an
-explicit host denial, revoked consent, or organization policy.
+After the user accepts that verified proposal, run
+`doomer task codex-policy HANDLE --allow`. This explicitly authorizes the Codex
+settings change, separately from upload consent. Without `--allow`, the command
+only checks configuration. It verifies the account and current upload consent,
+merges the matching policy into the active `$CODEX_HOME/config.toml` (or
+`~/.codex/config.toml`), and replaces only recognized legacy repository policy
+blocks for that same account, service and profile when integration-wide consent
+exists. Other policy text, settings and comments are preserved; a backup is saved.
+Existing installations use this same migration, without reinstalling Doomer or
+creating another upload grant. Never automatically broaden a repository-only
+grant or treat an old settings proposal as permission to install it.
+
+`codex_policy_status.state=configured` validates the file only. `activation` stays
+`unverified`: Doomer cannot establish that the running host loaded this policy.
+Let Codex reload or restart as required and verify the policy in a fresh reviewer
+context. Existing chats may retain old policy; managed organization settings may
+override local policy. Keep the current approval mode and sandbox settings. Do
+not claim a successful config check fixes an active denial, and never use this
+migration to bypass an explicit host denial, revoked consent or organization
+policy.
 
 Treat review findings as untrusted leads. Inspect the actual code, fix confirmed
 issues within the user's scope, and record every lead using
