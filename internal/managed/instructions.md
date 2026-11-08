@@ -149,7 +149,10 @@ the task. An unchanged previously offered configuration is reported in status
 without another offer; absence of a proposal never means acceptance.
 If status is `missing` or `migration_required` without a proposal, report that
 configuration gap once for the task; do not silently claim setup is complete.
-Use `doomer task codex-policy HANDLE` to retrieve the current proposal without
+During ordinary coding, report the gap without retrieving or re-offering an
+already delivered proposal and continue with the saved upload grant. If the
+user requests policy setup, migration or repair, use
+`doomer task codex-policy HANDLE` to retrieve the current proposal without
 changing settings, even if another chat previously received it. Follow the
 normal verified-proposal decision above and honor any previous decline.
 Before offering or installing the policy, compare its scope and permitted
