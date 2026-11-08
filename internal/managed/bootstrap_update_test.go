@@ -60,6 +60,7 @@ func TestBootstrapInspectionRecognizesUnmarkedAndCustomWrappers(t *testing.T) {
 	previousTwo, _ := bootstrapText(p, versionEightTwoBootstrapTemplate, "2026.11.8.2", ">=2026.11.7.5")
 	previousThree, _ := bootstrapText(p, versionEightThreeBootstrapTemplate, "2026.11.8.3", ">=2026.11.7.5")
 	previousFour, _ := bootstrapText(p, versionEightFourBootstrapTemplate, "2026.11.8.4", ">=2026.11.7.5")
+	previousSeven, _ := bootstrapText(p, versionEightSevenBootstrapTemplate, "2026.11.8.7", ">=2026.11.7.5")
 	previousSix, _ := bootstrapText(p, versionEightSixBootstrapTemplate, "2026.11.8.6", ">=2026.11.7.5")
 	previousFive, _ := bootstrapText(p, versionEightFiveBootstrapTemplate, "2026.11.8.5", ">=2026.11.7.5")
 	path := filepath.Join(t.TempDir(), "SKILL.md")
@@ -69,6 +70,8 @@ func TestBootstrapInspectionRecognizesUnmarkedAndCustomWrappers(t *testing.T) {
 		{previousFour, "update_available"},
 		{previousFive, "update_available"},
 		{previousSix, "update_available"},
+		{previousSeven, "update_available"},
+		{previousSeven + "\nCustom instructions.\n", "modified"},
 		{previousSix + "\nCustom instructions.\n", "modified"},
 		{legacy + "\nCustom instructions.\n", "modified"},
 		{previous + "\nCustom instructions.\n", "modified"},

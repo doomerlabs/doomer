@@ -71,6 +71,16 @@ func TestCandidateAssemblyAcceptsUnrecognizedPublishedBootstrap(t *testing.T) {
 						t.Fatalf("%s wrapper mismatch: %q, %v", agent, got, err)
 					}
 				}
+				for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
+					data, err := os.ReadFile(filepath.Join(repo, name))
+					if scenario == "personal" {
+						if !os.IsNotExist(err) {
+							t.Fatalf("personal assembly wrote %s", name)
+						}
+					} else if err != nil || !strings.Contains(string(data), "Before editing repository files") {
+						t.Fatalf("candidate discovery missing from %s: %v", name, err)
+					}
+				}
 				for _, path := range []string{runtime, filepath.Join(home, ".local/bin/doomer")} {
 					got, err := os.ReadFile(path)
 					if err != nil || string(got) != "candidate runtime" {
@@ -112,5 +122,20 @@ func writeCandidateTestFile(t *testing.T, path string, data []byte) {
 	}
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCandidateDiscoveryPreservesExistingInstructions(t *testing.T) {
+	repo := t.TempDir()
+	path := filepath.Join(repo, "AGENTS.md")
+	writeCandidateTestFile(t, path, []byte("Keep the team's rules.\n"))
+	for i := 0; i < 2; i++ {
+		if err := installCandidateDiscovery(repo); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || !strings.HasPrefix(string(data), "Keep the team's rules.\n") || strings.Count(string(data), "<!-- doomer-review:start -->") != 1 {
+		t.Fatalf("lost or duplicated instructions: %q, %v", data, err)
 	}
 }

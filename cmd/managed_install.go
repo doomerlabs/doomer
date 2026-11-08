@@ -88,10 +88,29 @@ func newManagedInstallCommand() *cobra.Command {
 				return err
 			}
 		}
-		if err := installBootstrapFiles(base, destinations, []byte(content)); err != nil {
+		contents := map[string][]byte{}
+		for _, path := range destinations {
+			contents[path] = []byte(content)
+		}
+		expected := map[string][]byte{}
+		if !personal {
+			for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
+				path := filepath.Join(base, name)
+				before, after, err := managedDiscoveryInstructions(base, name)
+				if err != nil {
+					return err
+				}
+				destinations = append(destinations, path)
+				contents[path] = after
+				if before != nil {
+					expected[path] = before
+				}
+			}
+		}
+		if err := writeManagedFiles(base, destinations, contents, expected); err != nil {
 			return err
 		}
-		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"state": "bootstrap_installed", "paths": destinations, "next": "Run doomer prepare in the target checkout. After repository approval, configure the active agent hooks through its normal trust controls. For team installation, open the initial bootstrap PR."})
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"state": "bootstrap_installed", "paths": destinations, "next": "Run doomer prepare in the target checkout. After repository approval, configure the active agent hooks through its normal trust controls. For team installation, include every returned path in the initial setup PR. Repository instructions distribute onboarding; each developer configures only their active agent."})
 	}
 	return c
 }
@@ -281,12 +300,20 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 }
 
 // Stage complete files and publish only absent destinations. The installation
-// lock coordinates both agent copies; rollback removes only our new files.
+// lock coordinates the installation; rollback restores only our own writes.
 func installBootstrapFiles(base string, paths []string, content []byte) error {
 	return writeBootstrapFiles(base, paths, content, nil)
 }
 
 func writeBootstrapFiles(base string, paths []string, content []byte, expected map[string][]byte) error {
+	contents := map[string][]byte{}
+	for _, path := range paths {
+		contents[path] = content
+	}
+	return writeManagedFiles(base, paths, contents, expected)
+}
+
+func writeManagedFiles(base string, paths []string, contents map[string][]byte, expected map[string][]byte) error {
 	state, err := managedStore()
 	if err != nil {
 		return err
@@ -303,24 +330,27 @@ func writeBootstrapFiles(base string, paths []string, content []byte, expected m
 	defer root.Close()
 	var created []string
 	replaced := map[string][]byte{}
+	modes := map[string]os.FileMode{}
 	success := false
 	defer func() {
 		if !success {
 			for path, previous := range replaced {
 				current, err := root.ReadFile(path)
-				if err == nil && bytes.Equal(current, content) {
-					_ = root.WriteFile(path, previous, 0644)
+				if err == nil && bytes.Equal(current, contents[filepath.Join(base, path)]) {
+					_ = root.WriteFile(path, previous, modes[path])
 				}
 			}
 			for _, path := range created {
 				current, err := root.ReadFile(path)
-				if err == nil && bytes.Equal(current, content) {
+				if err == nil && bytes.Equal(current, contents[filepath.Join(base, path)]) {
 					_ = root.Remove(path)
 				}
 			}
 		}
 	}()
 	for _, path := range paths {
+		content := contents[path]
+		mode := os.FileMode(0644)
 		relative, err := filepath.Rel(base, path)
 		if err != nil {
 			return err
@@ -347,6 +377,8 @@ func writeBootstrapFiles(base string, paths []string, content []byte, expected m
 			if !info.Mode().IsRegular() {
 				return fmt.Errorf("bootstrap destination changed")
 			}
+			mode = info.Mode().Perm()
+			modes[relative] = mode
 			existing, err := root.ReadFile(relative)
 			if err != nil {
 				return err
@@ -365,11 +397,14 @@ func writeBootstrapFiles(base string, paths []string, content []byte, expected m
 			return fmt.Errorf("bootstrap disappeared during upgrade")
 		}
 		temporary := filepath.Join(filepath.Dir(relative), ".doomer-"+rand.Text())
-		file, err := root.OpenFile(temporary, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+		file, err := root.OpenFile(temporary, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 		if err != nil {
 			return err
 		}
-		_, writeErr := file.Write(content)
+		writeErr := file.Chmod(mode)
+		if writeErr == nil {
+			_, writeErr = file.Write(content)
+		}
 		closeErr := file.Close()
 		if writeErr != nil || closeErr != nil {
 			_ = root.Remove(temporary)

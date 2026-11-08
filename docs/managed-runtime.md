@@ -8,8 +8,15 @@ agent prose never selects the version.
 
 ## Commands
 
-- `doomer install --runtime --repo PATH` installs a signed runtime and matching
-  Codex/Claude bootstraps. `--personal` selects user-level bootstraps.
+- `doomer install --repo PATH` writes the four repository files:
+  `AGENTS.md`, `CLAUDE.md`, `.agents/skills/doomer-review/SKILL.md`, and
+  `.claude/skills/doomer-review/SKILL.md`. The instruction files receive a managed
+  discovery block that preserves other content. Include all four files in the
+  team setup PR. This happens with or without `--runtime`; that flag additionally
+  installs the signed runtime and shared launcher. `--personal` selects
+  user-level bootstraps and does not write repository instructions. Installation
+  does not configure either agent's hooks or grant uploads; each developer
+  onboards their active agent locally.
 - `doomer prepare --repo PATH --agent codex --prompt TEXT` creates an explicit
   durable task. `--session ID` binds real hook events when supported.
 - `doomer prepare --task HANDLE --allow-updates` records explicit software-update

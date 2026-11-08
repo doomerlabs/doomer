@@ -80,7 +80,36 @@ func assembleCandidateInstallation(c config, home, repo string) error {
 		}
 	}
 	if c.SkillsBootstrap != "" || len(c.RepoBootstraps) != 0 {
-		return installCandidateSkills(c, home, repo)
+		if err := installCandidateSkills(c, home, repo); err != nil {
+			return err
+		}
+	}
+	if c.CandidateFile != "" && !personalScenario(c.Scenario) {
+		// Share the installer's discovery generation, but do not run production
+		// install/upgrade against intentionally injected fixture skill contents.
+		return installCandidateDiscovery(repo)
+	}
+	return nil
+}
+
+func installCandidateDiscovery(repo string) error {
+	contents := map[string][]byte{}
+	for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
+		_, content, err := managed.RepositoryDiscoveryInstructions(repo, name)
+		if err != nil {
+			return err
+		}
+		contents[name] = content
+	}
+	for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
+		path := filepath.Join(repo, name)
+		mode := os.FileMode(0644)
+		if info, err := os.Stat(path); err == nil {
+			mode = info.Mode().Perm()
+		}
+		if err := os.WriteFile(path, contents[name], mode); err != nil {
+			return err
+		}
 	}
 	return nil
 }
