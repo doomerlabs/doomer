@@ -199,10 +199,17 @@ func (c Client) postJSON(ctx context.Context, path string, payload any, token st
 }
 
 func (c Client) httpClient() *http.Client {
-	if c.HTTP != nil {
-		return c.HTTP
+	client := c.HTTP
+	if client == nil {
+		client = NewHTTPClient()
 	}
-	return NewHTTPClient()
+	copy := *client
+	transport := copy.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	copy.Transport = noticeTransport{base: transport, origin: c.BaseURL}
+	return &copy
 }
 
 func validateBaseURL(value string) (*url.URL, error) {

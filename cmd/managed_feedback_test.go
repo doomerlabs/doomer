@@ -108,3 +108,23 @@ func TestBlockedAuthorizationDoesNotGateLocalCompletion(t *testing.T) {
 		}
 	}
 }
+
+func TestManagedNoticeDeliveryAndNoStopLoop(t *testing.T) {
+	result := managedResult{State: "complete", Notices: []adversarylabs.ClientNotice{{ID: "fix", Severity: "critical", Message: "Update needed", RecommendedVersion: "2026.11.9.1", NotifyUser: true}}}
+	raw, _ := json.Marshal(result)
+	feedback, _ := json.Marshal(managedHookFeedback("PostToolUse", raw, nil))
+	if !strings.Contains(string(feedback), "Update needed") {
+		t.Fatal(string(feedback))
+	}
+	result.State = "client_update_required"
+	raw, _ = json.Marshal(result)
+	if got := managedHookFeedback("Stop", raw, nil); len(got) != 0 {
+		t.Fatal("blocked update restarted stop hook", got)
+	}
+	result.State = "complete"
+	result.Notices[0].NotifyUser = false
+	raw, _ = json.Marshal(result)
+	if got := managedHookFeedback("PostToolUse", raw, nil); len(got) != 0 {
+		t.Fatal("deduplicated notice shown again", got)
+	}
+}
