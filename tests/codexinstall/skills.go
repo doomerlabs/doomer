@@ -26,7 +26,7 @@ func loadCandidateSkills(c *config, source string) error {
 	return nil
 }
 
-func writeCandidateSkills(c config, root string) (string, error) {
+func writeCandidateSkills(c *config, root string) (string, error) {
 	installer := filepath.Join(root, "candidate-install.py")
 	if err := os.WriteFile(installer, []byte(c.SkillsInstaller), 0600); err != nil {
 		return "", err
@@ -43,7 +43,39 @@ func writeCandidateSkills(c config, root string) (string, error) {
 	if err := os.WriteFile(path, []byte(guide), 0600); err != nil {
 		return "", err
 	}
-	return (&url.URL{Scheme: "file", Path: path}).String(), nil
+	guideURL := (&url.URL{Scheme: "file", Path: path}).String()
+	guideDigest := fmt.Sprintf("%x", sha256.Sum256([]byte(guide)))
+	if len(c.RepoBootstraps) != 0 {
+		for agent, content := range c.RepoBootstraps {
+			updated, err := bindCandidateGuide(content, guideURL, guideDigest)
+			if err != nil {
+				return "", err
+			}
+			c.RepoBootstraps[agent] = updated
+		}
+	} else {
+		updated, err := bindCandidateGuide(c.SkillsBootstrap, guideURL, guideDigest)
+		if err != nil {
+			return "", err
+		}
+		c.SkillsBootstrap = updated
+	}
+	return guideURL, nil
+}
+
+// Preserve self-contained bootstraps and only rewrite an explicit guide pin.
+func bindCandidateGuide(content, guideURL, guideDigest string) (string, error) {
+	guidePattern := regexp.MustCompile(`https://raw\.githubusercontent\.com/doomerlabs/skills/[^/]+/INSTALL\.md`)
+	digestPattern := regexp.MustCompile("`[a-f0-9]{64}`")
+	matches := guidePattern.FindAllString(content, -1)
+	if len(matches) == 0 {
+		return content, nil
+	}
+	if len(matches) != 1 || len(digestPattern.FindAllString(content, -1)) != 1 {
+		return "", fmt.Errorf("candidate bootstrap must identify one pinned guide URL and checksum")
+	}
+	bootstrap := guidePattern.ReplaceAllLiteralString(content, guideURL)
+	return digestPattern.ReplaceAllLiteralString(bootstrap, "`"+guideDigest+"`"), nil
 }
 
 func installCandidateSkills(c config, home, repo string) error {

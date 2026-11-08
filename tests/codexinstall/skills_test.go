@@ -12,8 +12,8 @@ import (
 
 func TestCandidateSkillsGuide(t *testing.T) {
 	root := t.TempDir()
-	c := config{SkillsInstaller: "# fixture installer\n", SkillsGuide: "Read https://raw.githubusercontent.com/doomerlabs/skills/pinned/scripts/install.py with SHA `" + strings.Repeat("a", 64) + "`."}
-	location, err := writeCandidateSkills(c, root)
+	c := config{SkillsBootstrap: "Read https://raw.githubusercontent.com/doomerlabs/skills/pinned/INSTALL.md with SHA `" + strings.Repeat("b", 64) + "`.", SkillsInstaller: "# fixture installer\n", SkillsGuide: "Read https://raw.githubusercontent.com/doomerlabs/skills/pinned/scripts/install.py with SHA `" + strings.Repeat("a", 64) + "`."}
+	location, err := writeCandidateSkills(&c, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,10 @@ func TestCandidateSkillsGuide(t *testing.T) {
 	if !strings.Contains(string(raw), "file:") || !strings.Contains(string(raw), fmt.Sprintf("%x", sha256.Sum256([]byte(c.SkillsInstaller)))) {
 		t.Fatalf("candidate guide does not bind its installer: %s", raw)
 	}
-	if _, err := writeCandidateSkills(config{SkillsGuide: "ambiguous guide"}, root); err == nil {
+	if !strings.Contains(c.SkillsBootstrap, location) || !strings.Contains(c.SkillsBootstrap, fmt.Sprintf("%x", sha256.Sum256(raw))) {
+		t.Fatalf("candidate bootstrap does not bind its guide: %s", c.SkillsBootstrap)
+	}
+	if _, err := writeCandidateSkills(&config{SkillsGuide: "ambiguous guide"}, root); err == nil {
 		t.Fatal("ambiguous installer accepted")
 	}
 }
@@ -109,5 +112,37 @@ func TestIncompleteRepositoryBootstrapsCannotOverwriteInstallation(t *testing.T)
 	data, err := os.ReadFile(path)
 	if err != nil || string(data) != "installed" {
 		t.Fatal("partially changed installation", err)
+	}
+}
+
+func TestCandidateGuideBindingPreservesSelfContainedAndRejectsAmbiguousPins(t *testing.T) {
+	selfContained := "Run doomer prepare."
+	got, err := bindCandidateGuide(selfContained, "file:///fixture/INSTALL.md", strings.Repeat("a", 64))
+	if err != nil || got != selfContained {
+		t.Fatalf("self-contained bootstrap changed: %q, %v", got, err)
+	}
+	pinned := "https://raw.githubusercontent.com/doomerlabs/skills/pinned/INSTALL.md"
+	for _, content := range []string{pinned, pinned + " `" + strings.Repeat("a", 64) + "` `" + strings.Repeat("b", 64) + "`"} {
+		if _, err := bindCandidateGuide(content, "file:///fixture/INSTALL.md", strings.Repeat("c", 64)); err == nil {
+			t.Fatal("ambiguous or missing checksum accepted")
+		}
+	}
+}
+
+func TestCandidateGuideBindsSelectedRepositoryBootstraps(t *testing.T) {
+	c := config{
+		SkillsInstaller: "# fixture installer",
+		SkillsGuide:     "https://raw.githubusercontent.com/doomerlabs/skills/pinned/scripts/install.py `" + strings.Repeat("a", 64) + "`",
+		RepoBootstraps: map[string]string{
+			".agents": "https://raw.githubusercontent.com/doomerlabs/skills/pinned/INSTALL.md `" + strings.Repeat("b", 64) + "`",
+			".claude": "Self-contained bootstrap",
+		},
+	}
+	location, err := writeCandidateSkills(&c, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(c.RepoBootstraps[".agents"], location) || c.RepoBootstraps[".claude"] != "Self-contained bootstrap" {
+		t.Fatal(c.RepoBootstraps)
 	}
 }
