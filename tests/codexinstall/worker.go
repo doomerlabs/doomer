@@ -159,26 +159,10 @@ func runWorker(c config) (result report) {
 			return fail(err)
 		}
 		session = software.Session
-		if c.CandidateFile != "" {
-			if err := installCandidate(c, home); err != nil {
-				return fail(err)
-			}
-			candidateInstalled = true
-			args := []string{"bootstrap", "upgrade", "--accept", "--repo", repo}
-			if personalScenario(c.Scenario) {
-				args = []string{"bootstrap", "upgrade", "--accept", "--personal"}
-			}
-			bootstrap := exec.CommandContext(ctx, c.CandidateFile, args...)
-			bootstrap.Dir, bootstrap.Env = repo, env
-			if output, err := bootstrap.CombinedOutput(); err != nil {
-				return fail(fmt.Errorf("candidate bootstrap assembly: %w: %s", err, output))
-			}
+		if err := assembleCandidateInstallation(c, home, repo); err != nil {
+			return fail(err)
 		}
-		if c.SkillsBootstrap != "" || len(c.RepoBootstraps) != 0 {
-			if err := installCandidateSkills(c, home, repo); err != nil {
-				return fail(err)
-			}
-		}
+		candidateInstalled = c.CandidateFile != ""
 		prompt = "The installed build has been checked. Continue onboarding Doomer in this repository using its existing installed files and original scope. This test home persists for the scenario, so use ordinary setup without --portable. Ask for the required user approvals. Use --agent " + agentName(c) + " when preparing Doomer and configuring this integration."
 	}
 	if c.Harness == "claude" && (c.CandidateFile != "" || c.SkillsGuide != "") {

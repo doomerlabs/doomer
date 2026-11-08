@@ -99,6 +99,9 @@ func installCandidateSkills(c config, home, repo string) error {
 		if _, err := os.Stat(destination); err != nil {
 			return fmt.Errorf("candidate bootstrap was not installed: %w", err)
 		}
+	}
+	for _, agent := range []string{".agents", ".claude"} {
+		destination := filepath.Join(root, agent, "skills/doomer-review/SKILL.md")
 		content := c.SkillsBootstrap
 		if len(c.RepoBootstraps) != 0 {
 			content = c.RepoBootstraps[agent]
