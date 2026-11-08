@@ -172,6 +172,18 @@ func TestCodexPolicyOfferMigratesOldMarkersAndTracksActiveProfile(t *testing.T) 
 	if p, err := offerCodexReviewPolicy(s, consent); err != nil || p != nil {
 		t.Fatal(p, err)
 	}
+	// Marking a delivered offer uses its original snapshot, even when the
+	// config changes between inspection and output.
+	pathBeforeEdit, _ := codexConfigPath()
+	if err := os.WriteFile(pathBeforeEdit, []byte("# concurrent change\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := markCodexReviewPolicyOffered(s, p); err != nil {
+		t.Fatal(err)
+	}
+	if next, err := offerCodexReviewPolicy(s, consent); err != nil || next == nil {
+		t.Fatal("concurrent edit was marked as already offered", next, err)
+	}
 	// Changes at the same path must not inherit the old delivery marker.
 	path, _ := codexConfigPath()
 	if err := os.WriteFile(path, []byte("# changed settings\n"), 0600); err != nil {

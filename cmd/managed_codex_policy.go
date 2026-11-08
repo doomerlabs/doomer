@@ -13,6 +13,7 @@ import (
 // A proposal is returned only after verifying the account and its saved grant.
 // Installing it remains a separate user choice, handled by the coding agent.
 type codexReviewPolicy struct {
+	configData  []byte
 	ExtraPolicy string `json:"extra_policy"`
 	ConfigPath  string `json:"config_path,omitempty"`
 	State       string `json:"state,omitempty"`
@@ -49,11 +50,9 @@ func markCodexReviewPolicyOffered(s managed.Store, proposal *codexReviewPolicy) 
 	if proposal == nil {
 		return nil
 	}
-	data, err := readCodexConfig(proposal.ConfigPath)
-	if err != nil {
-		return err
-	}
-	path := codexReviewPolicyOfferPath(s, proposal, data)
+	// Mark the exact configuration observed when the proposal was created.
+	// Re-reading here could suppress a new offer after a concurrent edit.
+	path := codexReviewPolicyOfferPath(s, proposal, proposal.configData)
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
