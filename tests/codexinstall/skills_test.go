@@ -92,3 +92,22 @@ func TestRepositoryBootstrapsAreTestedIndependently(t *testing.T) {
 		}
 	}
 }
+
+func TestIncompleteRepositoryBootstrapsCannotOverwriteInstallation(t *testing.T) {
+	repo := t.TempDir()
+	path := filepath.Join(repo, ".agents/skills/doomer-review/SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("installed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c := config{RepoBootstraps: map[string]string{".agents": "candidate"}}
+	if err := installCandidateSkills(c, t.TempDir(), repo); err == nil {
+		t.Fatal("partial wrapper configuration accepted")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "installed" {
+		t.Fatal("partially changed installation", err)
+	}
+}

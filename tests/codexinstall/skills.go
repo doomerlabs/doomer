@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 // Only the fixture receives these files. Production download verification is unchanged.
@@ -46,6 +47,15 @@ func writeCandidateSkills(c config, root string) (string, error) {
 }
 
 func installCandidateSkills(c config, home, repo string) error {
+	for _, agent := range []string{".agents", ".claude"} {
+		content := c.SkillsBootstrap
+		if len(c.RepoBootstraps) != 0 {
+			content = c.RepoBootstraps[agent]
+		}
+		if strings.TrimSpace(content) == "" {
+			return fmt.Errorf("missing candidate bootstrap for %s", agent)
+		}
+	}
 	root := repo
 	if personalScenario(c.Scenario) {
 		root = home
