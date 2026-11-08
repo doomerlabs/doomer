@@ -1,0 +1,21 @@
+cmd/managed_network.go
+  s_f23d7bc729b5d1::t_d0c582ead57911 44-48
+internal/managed/instructions.md
+  s_f23d7bc729b5d1::t_d0c582ead57911 59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8e9863b1fd1abcdb5b342ee3689db4636646d77c",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
