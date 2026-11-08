@@ -28,9 +28,9 @@ go run ./tests/codexinstall --scenario list
 | Scenario | Assertions |
 | --- | --- |
 | `install` | Both skill files, launcher, hooks configured, authenticated readiness, one grant, no content uploads |
-| `first-review` | New coding task completes an account-linked review and records a finding response |
+| `first-review` | An ordinary coding prompt with no Doomer reminder completes an account-linked review and records a finding response |
 | `review-preflight` | Per-call preparation with automatic hooks removed; saved consent and local preflight in a fresh session; local coding continues if preparation is blocked; Codex uses workspace-write and auto-review |
-| `new-chat` | Two fresh coding chats complete reviews and finding responses with the original grant; Codex uses its real approval reviewer |
+| `new-chat` | Two fresh coding chats with no Doomer reminders complete reviews and finding responses with the original grant; Codex uses its real approval reviewer |
 | `worktrees` | Concurrent branches/worktrees keep files, tasks and reviews separate while sharing approval; Codex uses its real approval reviewer |
 | `decline-updates` | Refusing updates does not grant repository access or upload content |
 | `decline-uploads` | Refusing repository access does not upload content |

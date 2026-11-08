@@ -197,7 +197,7 @@ func (j *journey) afterInstall() error {
 		j.f.Findings = j.c.Scenario == "first-review" || j.c.Scenario == "new-chat"
 		j.f.Deep = j.c.Scenario == "deep-review"
 		j.f.mu.Unlock()
-		prompt := "Create hello.txt containing hello followed by a newline. Follow the repository's installed instructions and complete the task."
+		prompt := "Create hello.txt containing hello followed by a newline."
 		if personalScenario(j.c.Scenario) {
 			prompt = "Create hello.txt containing hello followed by a newline. Use the installed Doomer skill and complete the task."
 		}
@@ -209,7 +209,7 @@ func (j *journey) afterInstall() error {
 			return fmt.Errorf("greeting content mismatch")
 		}
 		if j.c.Scenario == "new-chat" {
-			if err := j.coding(j.repo, "Create second.txt containing second followed by a newline. Follow the repository's installed instructions and complete the task."); err != nil {
+			if err := j.coding(j.repo, "Create second.txt containing second followed by a newline."); err != nil {
 				return err
 			}
 		}
@@ -308,7 +308,7 @@ func (j *journey) afterInstall() error {
 		j.f.FailSubmit = true
 		j.f.mu.Unlock()
 		j.result.Turns++
-		_, err := runAgent(j.ctx, j.c, j.repo, j.env, "Create hello.txt containing hello followed by a newline. Follow the repository's installed instructions and complete the task.", "", j.record)
+		_, err := runAgent(j.ctx, j.c, j.repo, j.env, "Create hello.txt containing hello followed by a newline.", "", j.record)
 		if err != nil {
 			return err
 		}
