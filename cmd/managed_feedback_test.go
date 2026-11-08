@@ -96,3 +96,15 @@ func TestPendingFindingsStillBlockStopWithoutExposingPayload(t *testing.T) {
 		t.Fatal(string(body))
 	}
 }
+
+func TestBlockedAuthorizationDoesNotGateLocalCompletion(t *testing.T) {
+	for _, state := range []string{"authentication_required", "consent_required", "approval_required"} {
+		raw, _ := json.Marshal(managedResult{State: state})
+		if got := managedHookFeedback("Stop", raw, nil); len(got) != 0 {
+			t.Fatal(state, got)
+		}
+		if got := managedHookFeedback("PostToolUse", raw, nil); len(got) == 0 {
+			t.Fatal("missing blocker diagnostic", state)
+		}
+	}
+}

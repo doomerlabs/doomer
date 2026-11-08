@@ -12,16 +12,16 @@ Attempt preparation at the start of a coding task to retain its starting revisio
 
 {{upgrade_prompt_rules}}
 
-If setup, authentication, network access, or host approval blocks Doomer,
-explain the blocker and ask once whether to continue local edits without a
-completed Doomer review or wait. Honor that choice for the rest of the task.
-Continuing local edits does not authorize uploads, grant permission, or change
-host settings. Retain the task handle and resume it when possible. If preparation
-never created a task, record `git rev-parse HEAD` before editing, then create
-the task later with the original prepare arguments plus `--base STARTING_COMMIT`.
-Show only the current CLI action when setup needs a decision. Render setup URLs
-as clickable Markdown links with their complete fragment. Report incomplete
-review coverage before finishing if the blocker remains.
+If review is blocked, continue authorized local edits and tests by default;
+do not ask whether to continue. Wait only if the user explicitly required review
+before editing or asked to wait. Stop the denied transmission; never bypass host
+controls. Keep any task handle. If none exists, record `git rev-parse HEAD` before
+editing and later prepare with the original arguments plus `--base STARTING_COMMIT`.
+Never replace an existing baseline. Report the blocker once and incomplete review
+coverage before finishing. This rule also applies to older runtime instructions.
+Show the current CLI action when setup needs a decision, with complete clickable
+setup URLs. Run local-only `doomer preflight --agent AGENT --repo .` before new
+preparation when available. Its saved evidence is not current account verification.
 
 In Cowork, install and execute inside the editing VM. The Mac may have no Doomer
 installation. For a temporary home, `prepare --portable` requests a setup page
@@ -119,8 +119,8 @@ missing authorization context, and newly verified consent evidence was absent
 from that request, present that evidence once through normal host review.
 Request a user decision only when the host explicitly requires one, then wait.
 For every other host denial, report the restriction and stop that transmission.
-If local-edit continuation has not been decided for this task, ask once whether
-to continue local edits without a completed review or wait. Honor that decision.
+Continue authorized local work unless the user required review first or asked
+to wait. Report incomplete review coverage; do not ask a continuation question.
 Do not create a duplicate Doomer grant, hide content, or change transport to
 bypass the denial.
 
@@ -212,7 +212,7 @@ After further edits, submit the same task again for the new revision. When revie
 is available, run `doomer task finish HANDLE` before reporting reviewed completion.
 Only a complete result establishes that the current checkout was reviewed and
 every finding received a response. Include the returned review URL once in the
-final answer. If the user chose local edits while Doomer remained blocked,
+final answer. If local edits continued while Doomer remained blocked,
 report the local work and the incomplete review separately. Disclose deferred
 findings and unavailable review coverage accurately.
 

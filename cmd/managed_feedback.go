@@ -11,9 +11,11 @@ func managedHookFeedback(event string, output []byte, operationErr error) map[st
 	var result managedResult
 	message := "Doomer could not check the review. Resume the prepared task and inspect its status."
 	valid := operationErr == nil && json.Unmarshal(output, &result) == nil && result.State != ""
-	if event == "Stop" && valid && (result.State == "operation_failed" || result.State == "review_failed") {
+	if event == "Stop" && valid && (result.State == "operation_failed" || result.State == "review_failed" || result.State == "authentication_required" || result.State == "consent_required" || result.State == "approval_required") {
 		// Even additionalContext on Stop can restart Claude. The failed operation
 		// already returned its diagnostic; let the turn end without more feedback.
+		// Missing authorization also leaves local work available; the skill honors
+		// any explicit user requirement to wait for review.
 		return map[string]any{}
 	}
 	if valid {

@@ -14,7 +14,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/managed"
 )
 
-var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart"}
+var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight"}
 
 func validScenario(name string) bool {
 	for _, candidate := range scenarioNames {
@@ -42,7 +42,7 @@ func runAgent(ctx context.Context, c config, repo string, env []string, prompt, 
 		return runClaude(ctx, c, repo, env, prompt, session, record)
 	}
 	record("Scripted user", prompt)
-	args := []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox"}
+	args := codexExecArgs(c)
 	if session != "" {
 		args = append(args, "resume", session)
 	} else {
@@ -167,6 +167,8 @@ func (j *journey) finish() error {
 }
 func (j *journey) afterInstall() error {
 	switch j.c.Scenario {
+	case "review-preflight":
+		return j.reviewPreflight()
 	case "install", "interrupted":
 		return nil
 	case "portable-restart":
@@ -341,3 +343,10 @@ func (j *journey) afterInstall() error {
 }
 
 func personalScenario(name string) bool { return name == "personal" || name == "upgrade-personal" }
+
+func codexExecArgs(c config) []string {
+	if c.ReviewApprovals {
+		return []string{"exec", "--json", "--sandbox", "workspace-write", "-c", `approval_policy="on-request"`, "-c", `approvals_reviewer="auto_review"`}
+	}
+	return []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox"}
+}

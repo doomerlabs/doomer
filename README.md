@@ -615,6 +615,26 @@ separately; upload estimates do not include the review itself. Human progress
 messages go to stderr for `review`, so `--format json` keeps stdout readable by
 other programs.
 
+### Local review permission check
+
+Run `doomer preflight --agent codex --repo .` (or `--agent claude`) before
+preparing a review. It prints JSON describing saved consent receipts for the
+selected repository, service, profile, and agent, plus Codex policy status when
+applicable. It does not contact a service, create a task, change permissions,
+restore portable state, or update software.
+
+`account_verified: false` is intentional: local receipts do not establish the
+currently signed-in account. Normal `prepare` still verifies current account and
+consent before any upload. A missing receipt is not a request to sign in again.
+Likewise, Codex policy `configured` means the text exists in the selected config;
+`activation: unverified` means the running reviewer has not been verified. After
+an accepted settings change, reload/restart Codex and verify an ordinary allowed
+Doomer operation in a fresh session. Host and organization restrictions remain.
+
+If review is blocked, the skill continues authorized local edits and tests,
+retains the task/baseline for later review, and reports incomplete coverage.
+An explicit user requirement to wait for review still takes precedence.
+
 ### Support diagnostics
 
 Run `doomer doctor` from the affected checkout to save a private JSON diagnostic

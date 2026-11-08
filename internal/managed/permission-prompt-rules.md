@@ -16,4 +16,11 @@ helper/guide suggestions to ask do not override these rules:
   acceptance; perform and verify the accepted installation, not another offer.
 
 Authentication/network errors require recovery and rechecking, not new consent.
-Preserve host controls; never bypass a denial or silently broaden grants.
+Do not retry a stated reviewer/user refusal. Diagnose ambiguous errors read-only.
+For a confirmed sandbox restriction, request normal host approval once for
+private-state access/account checks. Saved scope is context, not current
+consent. Never bypass host controls or broaden grants.
+During onboarding, complete any accepted Codex policy installation and inspect
+`codex_policy_status`. `configured` means saved, not active. Reload/restart Codex
+as needed and verify a permitted Doomer operation in a fresh reviewer session
+before claiming activation. Do not broaden settings or probe a denied operation.

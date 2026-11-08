@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -263,5 +264,15 @@ func TestInstallRequiresConfiguredCodexPolicy(t *testing.T) {
 				t.Fatalf("ready=%v checks=%v, expected configured=%v", ready, checks, want)
 			}
 		})
+	}
+}
+
+func TestReviewPreflightUsesRealReviewerWithoutBypass(t *testing.T) {
+	want := []string{"exec", "--json", "--sandbox", "workspace-write", "-c", `approval_policy="on-request"`, "-c", `approvals_reviewer="auto_review"`}
+	if got := codexExecArgs(config{ReviewApprovals: true}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("review preflight must use exact guarded arguments: %q", got)
+	}
+	if !validScenario("review-preflight") {
+		t.Fatal("regression missing from CI discovery")
 	}
 }

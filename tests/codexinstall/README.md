@@ -29,6 +29,7 @@ go run ./tests/codexinstall --scenario list
 | --- | --- |
 | `install` | Both skill files, launcher, hooks configured, authenticated readiness, one grant, no content uploads |
 | `first-review` | New coding task completes an account-linked review and records a finding response |
+| `review-preflight` | Per-call preparation with automatic hooks removed; saved consent and local preflight in a fresh session; local coding continues if preparation is blocked; Codex uses workspace-write and auto-review |
 | `new-chat` | Two fresh coding chats produce separate completed reviews with the original approval |
 | `worktrees` | Concurrent branches/worktrees keep files, tasks and reviews separate while sharing approval |
 | `decline-updates` | Refusing updates does not grant repository access or upload content |
@@ -63,8 +64,16 @@ terminates Codex after the service accepts the review, before it completes.
 Most cases use headless exec/resume. The two `tui` cases use a real PTY and
 script the actual native hook-trust dialog. They require Python 3. Desktop UI
 and termination inside a blob upload are not covered.
-Command approval controls are bypassed inside the isolated test processes only; Doomer's
-own update and upload permissions are exercised.
+Most scenarios bypass command approvals inside isolated test processes. The
+post-onboarding `review-preflight` Codex session uses workspace-write, on-request
+approvals and `approvals_reviewer=auto_review`, with no bypass flag. It must
+observe local-only preflight, complete a local edit, reuse the original grant and
+upload no content. It requires either prepared state or an explicit blocker
+report; a refusal of Doomer preparation stops that operation while independently
+authorized local edits remain permitted. Automatic hooks are removed for this
+preparation-only scenario. Claude exercises the same local-preflight flow with its usual
+fixture permissions. This covers a fresh CLI session, not desktop policy reload
+or organization overrides. Doomer's own permissions apply in every scenario.
 
 
 ## Candidate and local runs
@@ -216,7 +225,7 @@ Codex subscription mode remains separate follow-up work.
 
 ## Depot pull request CI
 
-`.depot/workflows/agent-e2e.yml` runs the full 24-scenario suite for Codex and
+`.depot/workflows/agent-e2e.yml` runs the full 25-scenario suite for Codex and
 Claude in parallel Linux jobs, one per agent and scenario, including the real terminal cases. Each scenario
 uses a fresh isolated home on the disposable Depot runner. No developer agent
 installation or exe.dev machine is used. Desktop GUI clients are outside this suite.
@@ -239,5 +248,5 @@ pinned to a reviewed CLI commit.
 Every scenario job retains JSON results and HTML conversations. A final job collects all recordings into one offline `index.html` gallery
 for 14 days, including on test failure. The job summary links to the Depot job, identifies the recording artifact, and
 lists every scenario result, including missing or malformed reports as failures. Download the artifact and open `index.html` to browse
-recordings. Codex reserves at most $0.35 per scenario and $8.40 per suite. Claude
+recordings. Codex reserves at most $0.35 per scenario and $8.75 per suite. Claude
 uses subscription allowance, which is not reported as zero-dollar API usage.

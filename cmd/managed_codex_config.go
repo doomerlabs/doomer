@@ -15,6 +15,7 @@ import (
 )
 
 type codexPolicyStatus struct {
+	Action     string `json:"action"`
 	ConfigPath string `json:"config_path"`
 	State      string `json:"state"`
 	Activation string `json:"activation"`
