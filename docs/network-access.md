@@ -8,9 +8,9 @@ approval are separate decisions.
 ## Codex sandbox connections
 
 A sandbox connection failure preserves existing Doomer grants. Read the local
-saved scope with `doomer preflight --agent codex --repo .`, then retry the returned
+non-secret saved scope summary with `doomer preflight --agent codex --repo .`, then retry the returned
 `retry_command` through Codex's normal tool network permissions. Codex can use the
-saved authorization as context for its approval reviewer. Honor an explicit host
+scope summary as context for its approval reviewer. Keep credential files private. Honor an explicit host
 denial. If a permitted retry still fails, check the reported hostname and service
 connectivity before retrying again. Network recovery does not require another
 Doomer repository grant or changes to approval settings.

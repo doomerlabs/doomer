@@ -42,7 +42,7 @@ func addManagedNetworkHelp(c *cobra.Command, r *managedResult, t managed.Task, e
 	r.PortableSetupCommand = nil
 	if t.Agent == "codex" {
 		r.Action = fmt.Sprintf("Cannot reach %s. This may be a sandbox restriction or a service/connectivity problem. "+
-			"Read local saved authorization with doomer --api-url %s --profile %s preflight --agent codex --repo %s. "+
+			"Read the non-secret saved scope summary with doomer --api-url %s --profile %s preflight --agent codex --repo %s. "+
 			"Then retry %s through Codex's normal tool network permissions, citing the saved scope when present. "+
 			"Reuse existing grants and keep this task and setup mode. A connection failure does not revoke grants or require new upload consent. "+
 			"The host may require tool approval. Honor explicit denials and keep host and organization restrictions in force. "+

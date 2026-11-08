@@ -252,7 +252,7 @@ func TestPortableSetupRejectsPublicOrSymlinkedFiles(t *testing.T) {
 }
 
 func TestPortableSetupCommandUsesTheSelectedRuntime(t *testing.T) {
-	task := managed.Task{Handle: "task", API: "https://doomer.ai/api", Profile: "work", Release: "2026.11.6.9", RuntimeHome: t.TempDir()}
+	task := managed.Task{Handle: "task", Stage: "preparing", API: "https://doomer.ai/api", Profile: "work", Release: "2026.11.6.9", RuntimeHome: t.TempDir()}
 	command := resultFor(task).PortableSetupCommand
 	if len(command) != 9 || command[0] == "doomer" || command[7] != task.Handle || command[8] != "--portable" {
 		t.Fatalf("incorrect portable setup command: %v", command)
@@ -304,5 +304,19 @@ func TestManagedRevokeSurvivesPortableRemovalFailure(t *testing.T) {
 	approved, err := managedConsent(s, task, "token", false)
 	if err != nil || approved {
 		t.Fatal("portable cleanup failure preserved local upload permission", approved, err)
+	}
+}
+
+func TestReadyTasksDoNotOfferAnotherPortableApproval(t *testing.T) {
+	task := managed.Task{Handle: "task", Release: "2026.11.6.9", RuntimeHome: t.TempDir()}
+	for _, stage := range []string{"ready", "review_pending", "responses_required", "reviewed", "complete", "consent_required", "approval_declined"} {
+		task.Stage = stage
+		if len(resultFor(task).PortableSetupCommand) != 0 {
+			t.Fatalf("%s offered another setup approval", stage)
+		}
+	}
+	task.Stage, task.Paused = "preparing", true
+	if len(resultFor(task).PortableSetupCommand) != 0 {
+		t.Fatal("paused task offered another setup approval")
 	}
 }

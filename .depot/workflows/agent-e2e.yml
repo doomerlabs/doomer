@@ -61,7 +61,7 @@ jobs:
     timeout-minutes: 20
     strategy:
       fail-fast: false
-      # Five manual suites can run together without a provider request burst.
+      # Limit each manual run to four jobs when dispatching concurrent suites.
       max-parallel: ${{ github.event_name == 'workflow_dispatch' && 4 || 48 }}
       matrix:
         harness: [codex, claude]

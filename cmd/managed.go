@@ -104,7 +104,7 @@ func resultFor(task managed.Task) managedResult {
 	r.SubmittedPromptRunes = min(len([]rune(task.Prompt)), 4000)
 	r.Capabilities = task.Capabilities
 	r.UpdateAvailable = task.OfferedRelease
-	if task.Release != "" && !task.Portable {
+	if task.Release != "" && !task.Portable && !task.Paused && (task.Stage == "preparing" || task.Stage == "approval_required") {
 		if binary, err := managedTaskBinary(task); err == nil {
 			r.PortableSetupCommand = []string{binary, "--api-url", task.API, "--profile", task.Profile, "prepare", "--task", task.Handle, "--portable"}
 			if task.Release == "dev" {

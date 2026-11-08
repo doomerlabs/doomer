@@ -58,7 +58,7 @@ Do not start another review while this revision is pending. If a call is rejecte
 by network policy, show the returned required host and retain the same handle.
 When a result includes network_access in Codex, read local authorization with
 `doomer preflight --agent codex --repo .`, then retry the returned retry_command
-through normal tool network permissions using saved scope as context. Reuse
+through normal tool network permissions using its non-secret scope summary as context. Reuse
 existing grants and honor explicit host denials. If the permitted retry fails,
 report its required_host and docs_url once and retain the task.
 For Claude, present required_host for copying, settings_url, and docs_url as
