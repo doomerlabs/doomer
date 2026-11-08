@@ -145,7 +145,7 @@ tar -xzf codex.tar.gz -C codex
 			return fail(fmt.Errorf("invalid candidate release"))
 		}
 		candidate := filepath.Join(dir, "candidate")
-		build := exec.CommandContext(ctx, "go", "build", "-ldflags", "-X github.com/doomerlabs/doomer/internal/version.Version="+c.CandidateVersion, "-o", candidate, ".")
+		build := exec.CommandContext(ctx, "go", "build", "-ldflags", "-X github.com/doomerlabs/doomer/internal/version.Version="+c.CandidateVersion+" -X github.com/doomerlabs/doomer/internal/managed.BootstrapCLIRange=>="+c.CandidateVersion, "-o", candidate, ".")
 		build.Env = append(os.Environ(), "GOOS=linux", "GOARCH=amd64", "CGO_ENABLED=0")
 		if out, err := build.CombinedOutput(); err != nil {
 			return fail(fmt.Errorf("build candidate: %w: %s", err, out))

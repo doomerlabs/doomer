@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -128,8 +129,12 @@ func TestOnboardResetDiscoversAndPreserves(t *testing.T) {
 		}
 	}
 	result := resetContents(t, filepath.Join(codex, "config.toml"))
-	if !strings.Contains(result, "# preserved comment") || !strings.Contains(result, "keep policy") || strings.Contains(result, "trusted_hash = 'remove'") || strings.Contains(result, "Doomer repository") {
+	if !strings.Contains(result, "# preserved comment") || !strings.Contains(result, "keep policy") || strings.Contains(result, "trusted_hash = 'remove'") {
 		t.Fatalf("bad config %s", result)
+	}
+	remainingPolicy, err := codexExtraPolicy([]byte(result))
+	if err != nil || remainingPolicy != "keep policy\n" {
+		t.Fatalf("unexpected remaining policy %q: %v", remainingPolicy, err)
 	}
 	var obj map[string]any
 	if err := toml.Unmarshal([]byte(result), &obj); err != nil {
@@ -287,5 +292,56 @@ func TestResetDoesNotFollowStateDirectorySymlink(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(outside, "reset.json")); !os.IsNotExist(err) {
 		t.Fatal("wrote outside state")
+	}
+}
+
+func TestResetPortableCutoffClearsPersistedFlags(t *testing.T) {
+	repo := newWatchTestRepo(t)
+	if out, err := exec.Command("git", "-C", repo, "remote", "add", "origin", "https://example.test/repo.git").CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	ctx := context.Background()
+	id, err := watch.RepositoryIdentity(ctx, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := managed.Store{Root: t.TempDir()}
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, Repo: repo, RepositoryID: id, API: "https://example.test", Profile: "default", AccountID: "a", Portable: true, PortableApproved: true}
+	if err := state.Save(&task); err != nil {
+		t.Fatal(err)
+	}
+	path, origin, err := portableLocation(ctx, task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stamp := time.Now().UTC()
+	record := portableSetup{Schema: 1, API: task.API, Profile: task.Profile, Origin: origin, Grant: repositoryConsent{Approved: true, At: stamp, Account: "a"}}
+	if err := watch.Write(path, record); err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.Write(filepath.Join(state.Root, "reset.json"), stamp); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkPortable(ctx, state, task); err == nil {
+		t.Fatal("exact-cutoff portable grant accepted")
+	}
+	if err := restorePortable(ctx, nil, state, &task); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := state.Load(handle)
+	if err != nil || saved.Portable || saved.PortableApproved {
+		t.Fatal("stale portable flags remain", saved, err)
+	}
+}
+func TestResetCorruptCutoffFailsClosed(t *testing.T) {
+	state := managed.Store{Root: t.TempDir()}
+	task := managed.Task{AccountID: "a", API: "https://example.test", Profile: "default", Agent: "codex", RepositoryID: "repo"}
+	if err := recordIntegrationConsent(state, task, "test", true); err != nil {
+		t.Fatal(err)
+	}
+	resetFixture(t, filepath.Join(state.Root, "reset.json"), "corrupt")
+	if evidence, err := savedManagedConsentEvidence(state, task); err == nil || evidence != nil {
+		t.Fatal("ignored corrupt reset cutoff", err)
 	}
 }

@@ -645,7 +645,10 @@ func resetCutoff(s managed.Store) (time.Time, error) {
 	if os.IsNotExist(err) {
 		return cutoff, nil
 	}
-	return cutoff, err
+	if err != nil {
+		return cutoff, fmt.Errorf("read onboarding reset record: %w", err)
+	}
+	return cutoff, nil
 }
 
 func (p *resetPlan) discoverSkill(file string) {

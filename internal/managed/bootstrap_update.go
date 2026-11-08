@@ -12,7 +12,11 @@ import (
 // Bump the wrapper revision only when its generated content changes, using the
 // first Doomer release carrying that change. Ordinary CLI releases keep it.
 const BootstrapVersion = "2026.11.7.5"
-const BootstrapCLIRange = ">=2026.11.7.5"
+
+// A linker override lets the disposable real-agent candidate (which is labelled
+// with the installed public release) advertise its actual injected compatibility.
+// Published release builds always use this source-defined default.
+var BootstrapCLIRange = ">=2026.11.7.5"
 
 //go:embed bootstrap-legacy.md
 var legacyBootstrapTemplate string

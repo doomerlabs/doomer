@@ -660,3 +660,7 @@ homes that are neither in the known locations nor environment overrides cannot
 be discovered automatically. Reset does not change organization-managed policy
 or delete data already uploaded to Doomer. Restart running coding agents to unload
 cached hooks/policy, then onboard again to grant access.
+
+Approvals timestamped at or before a reset are invalidated. An unreadable or
+corrupt reset record blocks permission reuse until repaired; it never restores
+an old approval by ignoring the reset.

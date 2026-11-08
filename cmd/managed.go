@@ -719,7 +719,7 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				return outputManaged(c, s, t, result)
 			}
 			if t.Portable && !t.PortableDeclined {
-				if err := checkPortable(c.Context(), t); err != nil {
+				if err := checkPortable(c.Context(), s, t); err != nil {
 					return outputManaged(c, s, t, managedResult{State: "consent_required", Authenticated: true, Error: err.Error()})
 				}
 			}
