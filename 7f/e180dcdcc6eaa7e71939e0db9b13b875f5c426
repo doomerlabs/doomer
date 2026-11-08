@@ -1,0 +1,41 @@
+cmd/managed_bootstrap.go
+  s_f23d7bc729b5d1::t_03c41730faff15 107-114,143
+cmd/managed_bootstrap_test.go
+  s_f23d7bc729b5d1::t_43e6ce96eb6c9b 48-59,93-97,105-109
+cmd/managed_consent_test.go
+  s_f23d7bc729b5d1::t_2c0e47e2e3f015 145-185
+internal/managed/bootstrap-2026.11.7.5.md
+  s_f23d7bc729b5d1::t_974b0102bab939 1-95
+internal/managed/bootstrap.md
+  s_f23d7bc729b5d1::t_f421b1dcc2e581 17-21,44
+internal/managed/bootstrap_update.go
+  s_f23d7bc729b5d1::t_465179fc0fa240 14,36-38,79-87,95,113,129,163-164,166
+internal/managed/bootstrap_update_test.go
+  s_f23d7bc729b5d1::t_da5fd41703156d 59,64-65,77-82,99-115
+internal/managed/instructions.go
+  s_f23d7bc729b5d1::t_edb9269dcee42a 3-6,11-13,17-27
+internal/managed/instructions.md
+  s_f23d7bc729b5d1::t_e0ba1de3a9b0b2 9-13,134-136
+internal/managed/permission-prompt-rules.md
+  s_f23d7bc729b5d1::t_f06a04f1275de8 1-19
+internal/managed/policy.go
+  s_f23d7bc729b5d1::t_dc80272fbaf9d0 179
+internal/managed/upgrade-prompt-rules.md
+  s_f23d7bc729b5d1::t_bcd6b4604ce513 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7fe180dcdcc6eaa7e71939e0db9b13b875f5c426",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
