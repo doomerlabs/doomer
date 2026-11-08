@@ -148,6 +148,18 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if data, err := os.ReadFile(config); err != nil || string(data) != originalConfig {
 		t.Fatal("offering reviewer policy changed Codex settings", err)
 	}
+	if r := run("", "task", "codex-policy", handle); r.CodexPolicyStatus == nil || r.CodexPolicyStatus.State != "missing" || r.CodexPolicyStatus.Activation != "unverified" || r.CodexReviewPolicy == nil {
+		t.Fatal(r)
+	}
+	if data, err := os.ReadFile(config); err != nil || string(data) != originalConfig {
+		t.Fatal("policy inspection changed Codex settings", err)
+	}
+	if r := run("", "task", "codex-policy", handle, "--allow"); r.CodexPolicyStatus == nil || r.CodexPolicyStatus.State != "configured" || r.CodexPolicyStatus.Activation != "unverified" || r.CodexReviewPolicy != nil {
+		t.Fatal(r)
+	}
+	if data, err := os.ReadFile(config); err != nil || !strings.Contains(string(data), "Keep my policy") {
+		t.Fatal("policy install lost user settings", err)
+	}
 	portablePath, _, err := portableLocation(context.Background(), task)
 	if err != nil {
 		t.Fatal(err)
@@ -191,6 +203,20 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	}
 	if r := run("", "task", "status", handle); r.State != "consent_required" {
 		t.Fatal(r)
+	}
+	beforePolicy, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := run("", "task", "codex-policy", handle, "--allow"); r.State != "consent_required" || r.CodexPolicyStatus != nil {
+		t.Fatal("revoked consent allowed a policy migration", r)
+	}
+	afterPolicy, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(beforePolicy) != string(afterPolicy) {
+		t.Fatal("revoked consent modified policy")
 	}
 	// A user can approve this environment without persisting portable access.
 	portableChoice = false

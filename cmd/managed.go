@@ -33,6 +33,7 @@ type managedResult struct {
 	Anonymous            bool                           `json:"anonymous,omitempty"`
 	ReviewNotRequired    string                         `json:"review_not_required,omitempty"`
 	NoChanges            bool                           `json:"no_changes,omitempty"`
+	CodexPolicyStatus    *codexPolicyStatus             `json:"codex_policy_status,omitempty"`
 	CodexReviewPolicy    *codexReviewPolicy             `json:"codex_review_policy,omitempty"`
 	BootstrapUpdates     []managed.BootstrapUpdate      `json:"bootstrap_updates,omitempty"`
 	Consent              *managedConsentEvidence        `json:"consent,omitempty"`
@@ -135,8 +136,27 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 			return err
 		}
 		r.Consent = evidence
-		if evidence != nil && t.Agent == "codex" && (c.Name() == "prepare" || c.Name() == "login" || c.Name() == "consent") {
-			r.CodexReviewPolicy, err = offerCodexReviewPolicy(s, *evidence)
+		if evidence != nil && t.Agent == "codex" {
+			policy, _, inspectErr := inspectCodexReviewPolicy(*evidence)
+			r.CodexPolicyStatus = &codexPolicyStatus{State: "unreadable", Activation: "unverified"}
+			if inspectErr != nil {
+				r.CodexPolicyStatus.Error = inspectErr.Error()
+			} else {
+				r.CodexPolicyStatus.ConfigPath = policy.ConfigPath
+				r.CodexPolicyStatus.State = policy.State
+			}
+		}
+		if evidence != nil && t.Agent == "codex" && r.CodexPolicyStatus.Error == "" && (c.Name() == "prepare" || c.Name() == "login" || c.Name() == "consent" || c.Name() == "codex-policy") {
+			if c.Name() == "codex-policy" {
+				// An explicit inspection must remain able to recover a proposal that
+				// an older chat displayed but never installed.
+				r.CodexReviewPolicy, _, err = inspectCodexReviewPolicy(*evidence)
+				if err == nil && r.CodexReviewPolicy.State == "configured" {
+					r.CodexReviewPolicy = nil
+				}
+			} else {
+				r.CodexReviewPolicy, err = offerCodexReviewPolicy(s, *evidence)
+			}
 			if err != nil {
 				return err
 			}
@@ -567,7 +587,7 @@ func managedConsent(s managed.Store, t managed.Task, token string, allow bool) (
 
 func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Command {
 	parent := &cobra.Command{Use: "task", Short: "Resume a durable managed review without a persistent process"}
-	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume", "rollback", "retry", "repair", "context"} {
+	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume", "rollback", "retry", "repair", "context", "codex-policy"} {
 		operation := operation
 		var allow bool
 		var allRepositories bool
@@ -704,6 +724,24 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 			}
 			if !approved {
 				return outputManaged(c, s, t, managedResult{State: "consent_required", Task: t.Handle, Authenticated: true})
+			}
+			if operation == "codex-policy" {
+				if t.Agent != "codex" {
+					return fmt.Errorf("reviewer policy requires a Codex task")
+				}
+				if allow {
+					evidence, err := savedManagedConsentEvidence(s, t)
+					if err != nil {
+						return err
+					}
+					if evidence == nil {
+						return fmt.Errorf("current upload consent required")
+					}
+					if err := installCodexReviewPolicy(*evidence); err != nil {
+						return err
+					}
+				}
+				return outputManaged(c, s, t, managedResult{State: "codex_policy_checked", Authenticated: true, UploadApproved: true, Action: "Policy file validation does not verify activation. Reload Codex or start a fresh chat, then verify the reviewer receives the policy; managed organization policy may override it."})
 			}
 			actual, err := watch.RepositoryIdentity(c.Context(), t.Repo)
 			if err != nil || actual != t.RepositoryID {

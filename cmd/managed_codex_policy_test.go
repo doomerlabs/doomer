@@ -10,7 +10,11 @@ import (
 
 func TestCodexReviewPolicyKeepsScopeAsData(t *testing.T) {
 	consent := managedConsentEvidence{Account: "account", Repository: "/repo/\"quoted\"\npath/.git", Service: "https://doomer.ai/api", Profile: "work"}
-	policy := proposedCodexReviewPolicy(consent).ExtraPolicy
+	proposal := proposedCodexReviewPolicy(consent)
+	if len(proposal.Changes) != 2 {
+		t.Fatal("settings changes were not disclosed", proposal)
+	}
+	policy := proposal.ExtraPolicy
 	lines := strings.Split(policy, "\n")
 	var scope map[string]string
 	if err := json.Unmarshal([]byte(lines[2]), &scope); err != nil {
@@ -27,6 +31,7 @@ func TestCodexReviewPolicyKeepsScopeAsData(t *testing.T) {
 }
 
 func TestCodexReviewPolicyOfferPersistsWithoutGrantingSettings(t *testing.T) {
+	t.Setenv("CODEX_HOME", t.TempDir())
 	s := managed.Store{Root: t.TempDir()}
 	consent := managedConsentEvidence{Account: "one", Repository: "/repo/.git", Service: "https://doomer.ai/api", Profile: "default"}
 	first, err := offerCodexReviewPolicy(s, consent)
@@ -62,6 +67,9 @@ func TestIntegrationPolicyIsStableAcrossRepositories(t *testing.T) {
 	}
 	if scope["all_repositories"] != true || scope["agent"] != "codex" || scope["repository"] != nil {
 		t.Fatal(scope)
+	}
+	if !strings.Contains(strings.Join(proposedCodexReviewPolicy(consent).Changes, " "), "repository-scoped Doomer policy text") {
+		t.Fatal("replacement not disclosed")
 	}
 	if !strings.Contains(policy, "all current and future repositories") {
 		t.Fatal(policy)

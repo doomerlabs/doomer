@@ -88,17 +88,49 @@ uploads, activating hooks, and completing a review are separate outcomes.
 
 ## Harness capabilities and limits
 
-After verified approval, Codex preparation returns a `codex_review_policy`
-proposal once per identical scope and proposal in that local installation.
-The presentation marker records no permission or settings change. The coding agent offers to merge its `extra_policy` text into the
-user's existing `[auto_review].extra_policy` only after separate permission to
-change Codex settings. Existing policy and configuration are preserved. The
-proposal covers preparation/resumption, private task state, source snapshots,
-task context, and finding responses for the
-approved account, service, profile, and repository identity, including linked
-worktrees. Uploads still require current consent. Revocation, pause, host
-restrictions, and organization policy continue to apply. Local reviewer policy
-may be overridden by managed settings. See the official
+After verified approval, Codex results include `codex_policy_status` for the
+active `$CODEX_HOME/config.toml` (using `~/.codex/config.toml` only when
+`CODEX_HOME` is unset). Status, migration and offer identity use this same path. The
+states are `missing`, `migration_required`, `configured`, and `unreadable`.
+A shown proposal is not an installed policy. Older presentation-only markers are
+ignored; offers are now keyed by active config path, effective reviewer policy and proposal.
+Unchanged offers remain deduplicated while status continues to report the gap.
+Edits to unrelated settings or comments do not trigger another offer.
+The proposal covers only the saved grant's account, service, profile and
+repository identity (including linked worktrees), or all repositories for the
+specified coding agent when the verified grant has `all_repositories: true`.
+Installing settings grants no upload permission: uploads still require current
+consent. The policy scope comes from browser integration approval or an explicit
+`doomer task consent HANDLE --allow --all-repositories` upgrade; both require
+the user to approve the integration-wide scope. Revocation, paused tasks/watchers, host restrictions and organization
+policy continue to apply.
+This lets existing installs discover stale repository-scoped policy after
+upgrading to integration-wide consent, or missing policy in a different profile.
+
+Inspect or migrate an existing task:
+
+```sh
+# Also retrieves the current proposal even if previously offered:
+doomer task codex-policy HANDLE
+# Only after explicitly approving the matching Codex settings change:
+doomer task codex-policy HANDLE --allow
+```
+
+The migration verifies account and current consent. It preserves unrelated
+policy, settings and comments, backs up the old config, and atomically replaces
+only its `extra_policy` string. Within that string, integration-wide consent
+allows removal of exact recognized legacy repository policy paragraphs for the same account, service and
+profile, then adds the integration policy. Within that same string, a
+repository-only grant removes recognized broader Codex policy for the same account, service and profile.
+It does not expand legacy upload
+grants, infer settings permission from upload permission, or change sandbox,
+approval-mode or hook settings. Invalid or unsupported TOML is left untouched.
+
+File validation and runtime activation are distinct. Even when the state is
+`configured`, `activation` is `unverified`. Reload/restart Codex as needed and
+verify a fresh reviewer's policy; existing chats can retain old context and
+managed organization settings can override local rules. No CLI file check proves
+that a running reviewer received the policy. See the official
 [Codex Auto-review documentation](https://learn.chatgpt.com/docs/sandboxing/auto-review).
 
 Per-call execution needs a shell plus durable private storage between calls.
