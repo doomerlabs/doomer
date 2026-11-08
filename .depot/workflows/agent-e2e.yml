@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: agent-e2e-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}
+  group: agent-e2e-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -40,13 +40,12 @@ jobs:
               raise SystemExit("Scenario discovery returned an invalid name")
           print("scenarios=" + json.dumps(scenarios))
           PY
-          release_url=$(curl -fsSL --retry 3 --output /dev/null --write-out '%{url_effective}' https://github.com/doomerlabs/doomer/releases/latest) || {
-            echo "Could not resolve the published Doomer release from GitHub" >&2
+          release=$(curl -fsSL --connect-timeout 15 --max-time 60 --retry 3 https://downloads.doomer.ai/cli/stable.json | python3 -c 'import json, sys; print(json.load(sys.stdin)["version"])') || {
+            echo "Could not resolve the published stable Doomer release" >&2
             exit 1
           }
-          release=${release_url##*/}
           if [[ ! $release =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}\.[1-9][0-9]*$ ]]; then
-            echo "GitHub returned an unexpected Doomer release tag" >&2
+            echo "Stable channel returned an unexpected Doomer release version" >&2
             exit 1
           fi
           printf 'release=%s\n' "$release" >> "$GITHUB_OUTPUT"
