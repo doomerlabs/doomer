@@ -28,6 +28,9 @@ func isolate(t *testing.T) adversarylabs.ConfigStore {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("DOOMER_CONFIG_DIR", dir)
+	// Codex prefers CODEX_HOME over HOME, including when tests replace HOME.
+	// Never let integration tests write hooks into the invoking agent's profile.
+	t.Setenv("CODEX_HOME", filepath.Join(dir, "codex"))
 	for _, key := range []string{"DOOMER_PROFILE", "DOOMER_API_URL", "DOOMER_REGISTRY_HOST", "ADVERSARY_API_URL", "ADVERSARY_REGISTRY_HOST"} {
 		t.Setenv(key, "")
 	}

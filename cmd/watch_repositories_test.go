@@ -30,6 +30,25 @@ func TestWatchOwnsIntegrationCommandsWithoutTopLevelSetup(t *testing.T) {
 	}
 }
 
+func TestWatchTestIsolationPreservesInheritedCodexHooks(t *testing.T) {
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	file := filepath.Join(codexHome, "hooks.json")
+	original := []byte(`{"hooks":{},"sentinel":"user configuration"}`)
+	if err := os.WriteFile(file, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Run("watch lifecycle", TestWatchAddListRemovePreservesApprovalAndProfileIsolation)
+	after, err := os.ReadFile(file)
+	if err != nil || !bytes.Equal(after, original) {
+		t.Fatalf("watch test modified inherited Codex hooks: %s (%v)", after, err)
+	}
+	entries, err := os.ReadDir(codexHome)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("watch test created files in inherited Codex home: %v (%v)", entries, err)
+	}
+}
+
 func TestWatchFirstUseRequiresUploadApproval(t *testing.T) {
 	store := isolate(t)
 	t.Setenv("HOME", t.TempDir())
