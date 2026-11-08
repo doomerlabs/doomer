@@ -1,0 +1,26 @@
+cmd/watch.go
+  h_aa44c3b5b60dec 269-273
+cmd/watch_lifecycle_test.go
+  h_aa44c3b5b60dec 591-632
+internal/watch/activation_reporting.go
+  h_aa44c3b5b60dec 38-40,48-56,70-73,95,98,124,157,162,168
+internal/watch/activation_reporting_test.go
+  h_aa44c3b5b60dec 197-274
+internal/watch/runner.go
+  h_aa44c3b5b60dec 377-382,396-398
+internal/watch/store.go
+  h_aa44c3b5b60dec 18-30
+pkg/adversarylabs/activation.go
+  h_aa44c3b5b60dec 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fa8fa9374507ba438ebe368568394d38fc7f0a2f",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
