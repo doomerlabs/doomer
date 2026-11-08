@@ -122,6 +122,22 @@ func TestCodexPolicyOfferMigratesOldMarkersAndTracksActiveProfile(t *testing.T) 
 	if p, err := offerCodexReviewPolicy(s, consent); err != nil || p != nil {
 		t.Fatal(p, err)
 	}
+	// Changes at the same path must not inherit the old delivery marker.
+	path, _ := codexConfigPath()
+	if err := os.WriteFile(path, []byte("# changed settings\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := offerCodexReviewPolicy(s, consent); err != nil || p == nil {
+		t.Fatal("changed configuration lost its offer", p, err)
+	}
+	markers, _ := filepath.Glob(filepath.Join(s.Root, "codex-policy-offers", "*"))
+	if len(markers) < 2 {
+		t.Fatal("delivery marker missing from managed store", markers)
+	}
+	configFiles, _ := os.ReadDir(os.Getenv("CODEX_HOME"))
+	if len(configFiles) != 1 || configFiles[0].Name() != "config.toml" {
+		t.Fatal("offering policy wrote into Codex home", configFiles)
+	}
 	// The same process history must not suppress migration in a different profile.
 	t.Setenv("CODEX_HOME", t.TempDir())
 	if p, err := offerCodexReviewPolicy(s, consent); err != nil || p == nil {
@@ -133,7 +149,7 @@ func TestCodexPolicyOfferMigratesOldMarkersAndTracksActiveProfile(t *testing.T) 
 	if p, err := offerCodexReviewPolicy(s, consent); err != nil || p != nil {
 		t.Fatal("installed policy offered again", p, err)
 	}
-	path, _ := codexConfigPath()
+	path, _ = codexConfigPath()
 	os.WriteFile(path, []byte("# removed by user\n"), 0600)
 	if p, err := offerCodexReviewPolicy(s, consent); err != nil || p == nil {
 		t.Fatal("removed policy was treated as installed", p, err)
