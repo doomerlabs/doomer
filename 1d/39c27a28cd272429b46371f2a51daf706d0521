@@ -1,0 +1,62 @@
+scripts/ci-agent-e2e.sh
+  s_f23d7bc729b5d1::t_7a2b51a07522d9 41-42
+cmd/managed_feedback_test.go
+  s_f23d7bc729b5d1::t_1d9100c13cb9ea 83-84
+  s_f23d7bc729b5d1::t_9831545a876d40 85-87
+tests/codexinstall/main.go
+  s_f23d7bc729b5d1::t_7a2b51a07522d9 15-31,68,153-157
+  s_f23d7bc729b5d1::t_9ffca7ea91bad8 158
+internal/managed/bootstrap.md
+  s_f23d7bc729b5d1::t_7a2b51a07522d9 17-20,58-60
+  s_f23d7bc729b5d1::t_c9041471051b44 61
+internal/managed/bootstrap_update.go
+  s_f23d7bc729b5d1::t_7a2b51a07522d9 14,36-38,111
+cmd/managed_prompt_test.go
+  s_f23d7bc729b5d1::t_eb1eb111c4eb85 69,399,401-404,408-419
+  s_f23d7bc729b5d1::t_0f8d66c5b24a21 7,56-61,63-64,67-68,396-398,400,405-407
+internal/managed/operations.go
+  s_f23d7bc729b5d1::t_eb1eb111c4eb85 15-16,305
+cmd/managed.go
+  s_f23d7bc729b5d1::t_eb1eb111c4eb85 96-98
+  s_f23d7bc729b5d1::t_7a2b51a07522d9 90-92
+.agents/skills/doomer-review/SKILL.md
+  s_f23d7bc729b5d1::t_7a2b51a07522d9 7,77-79
+  s_f23d7bc729b5d1::t_28c4b458861588 80
+internal/managed/instructions.md
+  s_f23d7bc729b5d1::t_eb1eb111c4eb85 82-85
+  s_f23d7bc729b5d1::t_7a2b51a07522d9 80-81
+tests/codexinstall/skills.go
+  s_f23d7bc729b5d1::t_7a2b51a07522d9 53,60-61,63-64,70-79
+  s_f23d7bc729b5d1::t_8744489aea63b4 54,62,80-82
+.claude/skills/doomer-review/SKILL.md
+  s_f23d7bc729b5d1::t_7a2b51a07522d9 7,77-79
+  s_f23d7bc729b5d1::t_db2f181d0500a8 80
+cmd/managed_feedback.go
+  s_f23d7bc729b5d1::t_7a2b51a07522d9 14-18,52
+tests/codexinstall/worker.go
+  s_f23d7bc729b5d1::t_7a2b51a07522d9 176
+internal/managed/bootstrap-2026.11.7.5.md
+  s_f23d7bc729b5d1::t_7a2b51a07522d9 1-95
+tests/codexinstall/README.md
+  s_f23d7bc729b5d1::t_559a5fbd1f904e 230-231
+internal/managed/bootstrap_update_test.go
+  s_f23d7bc729b5d1::t_74b2e30e6ed14f 91-108
+tests/codexinstall/skills_test.go
+  s_f23d7bc729b5d1::t_e93af62d674bf5 67-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1d39c27a28cd272429b46371f2a51daf706d0521",
+  "prompts": {},
+  "sessions": {
+    "s_f23d7bc729b5d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b193-6f54-7900-bb5a-86cc6a95a69a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
