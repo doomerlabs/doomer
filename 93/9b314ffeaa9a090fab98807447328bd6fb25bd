@@ -1,0 +1,28 @@
+README.md
+  h_aa44c3b5b60dec 639-662
+cmd/managed.go
+  h_aa44c3b5b60dec 66-70
+cmd/managed_consent.go
+  h_aa44c3b5b60dec 112-118
+cmd/managed_portable.go
+  h_aa44c3b5b60dec 107-113
+cmd/onboard.go
+  h_aa44c3b5b60dec 28
+cmd/onboard_reset.go
+  h_aa44c3b5b60dec 1-660
+cmd/onboard_reset_files.go
+  h_aa44c3b5b60dec 1-305
+cmd/onboard_reset_test.go
+  h_aa44c3b5b60dec 1-277
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "939b314ffeaa9a090fab98807447328bd6fb25bd",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
