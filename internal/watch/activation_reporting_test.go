@@ -235,6 +235,24 @@ func TestInstallationAttemptsKeepSeparateMilestonesAndDeliverPendingHistory(t *t
 	Write(filepath.Join(root, "config.json"), cfg)
 	client := &activationTestClient{}
 	runner := Runner{Root: root, Config: cfg, Token: "token", Client: client}
+	// Exercise stale consent while all six reports are still eligible to send.
+	runner.Config.InstallationAttemptID = first
+	runner.reportActivations(context.Background(), repo)
+	if client.calls != 0 {
+		t.Fatal("old runner bypassed current consent")
+	}
+	for _, attempt := range []string{first, second} {
+		for _, stage := range []string{"approved", "activated", "first_review"} {
+			var record activationRecord
+			if err := Read(lifecycleFile(root, identity, "claude", stage, attempt), &record); err != nil {
+				t.Fatal(err)
+			}
+			if record.Sent || record.Attempts != 0 || !record.RetryAt.IsZero() {
+				t.Fatal("stale runner changed a pending report")
+			}
+		}
+	}
+	runner.Config = cfg
 	runner.reportActivations(context.Background(), repo)
 	runner.reportActivations(context.Background(), repo)
 	if client.calls != 6 {
@@ -246,11 +264,6 @@ func TestInstallationAttemptsKeepSeparateMilestonesAndDeliverPendingHistory(t *t
 	}
 	if counts[first] != 3 || counts[second] != 3 {
 		t.Fatalf("events lost attempt attribution: %+v", counts)
-	}
-	runner.Config.InstallationAttemptID = first
-	runner.reportActivations(context.Background(), repo)
-	if client.calls != 6 {
-		t.Fatal("old runner bypassed current consent")
 	}
 }
 
