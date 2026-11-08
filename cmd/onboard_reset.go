@@ -394,7 +394,7 @@ func (p *resetPlan) discoverState(root string) {
 		}
 		home, homeErr := os.UserHomeDir()
 		if homeErr != nil || receipt.ConfigPath != filepath.Join(home, ".claude", "settings.json") {
-			p.problem("Claude permissions", file, fmt.Errorf("unrecognized permission settings path"))
+			p.problem("Claude permissions", receipt.ConfigPath, fmt.Errorf("settings path does not match the current home; manually review and remove the recorded Doomer rules %q (ownership receipt: %s)", receipt.Added, file))
 			continue
 		}
 		if p.claudeRules == nil {

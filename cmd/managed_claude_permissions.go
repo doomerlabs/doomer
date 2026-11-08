@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -114,6 +116,13 @@ func inspectClaudePermissions() *claudePermissions {
 }
 
 func installClaudePermissions(s managed.Store) error {
+	return installClaudePermissionsWithWriters(s, resetWriteFile, watch.Write)
+}
+
+func installClaudePermissionsWithWriters(s managed.Store,
+	writeSettings func(string, []byte, []byte, os.FileMode) error,
+	writeReceipt func(string, any) error,
+) (resultErr error) {
 	path, err := claudePermissionPath()
 	if err != nil {
 		return err
@@ -154,11 +163,27 @@ func installClaudePermissions(s managed.Store) error {
 	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
+	var backupPath string
 	if before != nil {
-		if err = os.WriteFile(path+".before-doomer-permissions-"+time.Now().UTC().Format("20060102T150405.000000000"), before, 0600); err != nil {
+		backupPath = path + ".before-doomer-permissions-" + time.Now().UTC().Format("20060102T150405.000000000")
+		if err = os.WriteFile(backupPath, before, 0600); err != nil {
 			return err
 		}
 	}
+	defer func() {
+		if resultErr == nil || backupPath == "" {
+			return
+		}
+		// Remove this attempt's backup only when the settings are demonstrably
+		// unchanged or restored. Keep recovery evidence after a failed rollback
+		// or a concurrent edit; never delete an earlier attempt's backup.
+		current, readErr := os.ReadFile(path)
+		if readErr == nil && bytes.Equal(current, before) {
+			if removeErr := os.Remove(backupPath); removeErr != nil && !os.IsNotExist(removeErr) {
+				resultErr = errors.Join(resultErr, fmt.Errorf("remove unused Claude settings backup: %w", removeErr))
+			}
+		}
+	}()
 	if before == nil {
 		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if err != nil {
@@ -174,11 +199,11 @@ func installClaudePermissions(s managed.Store) error {
 		mode = info.Mode().Perm()
 	}
 	written := append(after, '\n')
-	if err = resetWriteFile(path, before, written, mode); err != nil {
+	if err = writeSettings(path, before, written, mode); err != nil {
 		return err
 	}
-	if err = watch.Write(receiptPath, receipt); err != nil {
-		rollbackErr := resetWriteFile(path, written, before, mode)
+	if err = writeReceipt(receiptPath, receipt); err != nil {
+		rollbackErr := writeSettings(path, written, before, mode)
 		return fmt.Errorf("save Claude permission ownership: %w (rollback: %v)", err, rollbackErr)
 	}
 	return nil

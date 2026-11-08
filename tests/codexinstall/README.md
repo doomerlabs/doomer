@@ -227,7 +227,7 @@ Codex subscription mode remains separate follow-up work.
 
 ## Depot pull request CI
 
-`.depot/workflows/agent-e2e.yml` runs the full 26-scenario suite for Codex and
+`.depot/workflows/agent-e2e.yml` runs the full scenario suite for Codex and
 Claude in parallel Linux jobs, one per agent and scenario, including the real terminal cases. Each scenario
 uses a fresh isolated home on the disposable Depot runner. No developer agent
 installation or exe.dev machine is used. Desktop GUI clients are outside this suite.

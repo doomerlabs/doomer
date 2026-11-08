@@ -50,8 +50,11 @@ agent prose never selects the version.
 - `doomer bootstrap defer --repo PATH` suppresses the current optional wrapper
   offer for 24 hours across linked worktrees. Use `--personal` for personal
   wrappers. Manual inspection and upgrades remain available.
-- `doomer hooks --agent codex|claude` installs the optional thin adapter. The user
-  still controls trust. Real callbacks alone establish live activation.
+- `doomer hooks --agent codex|claude` installs the optional thin adapter. During
+  approved Claude onboarding, add `--task HANDLE` to verify the current account
+  and upload consent and install the review-command permission rules. Without
+  `--task`, this command only configures hooks. The user still controls native
+  hook trust. Real callbacks alone establish live activation.
 
 New tasks without a coding prompt are setup-only. Their submit/finish operations
 complete with `review_not_required: setup_only` and never upload a review. Supplying

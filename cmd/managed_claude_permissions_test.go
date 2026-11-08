@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/doomerlabs/doomer/internal/managed"
+	"github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
 
@@ -168,5 +170,114 @@ func TestClaudeOnboardingIncludesPermissionsAfterLiveConsent(t *testing.T) {
 	recordIntegrationConsent(s, task, "revoked", false)
 	if r := run("--allow"); r.State != "consent_required" {
 		t.Fatal("revoked grant permitted settings change", r)
+	}
+}
+
+func TestClaudePermissionFailureRemovesOnlyRedundantBackup(t *testing.T) {
+	for _, failure := range []string{"settings", "receipt", "rollback"} {
+		t.Run(failure, func(t *testing.T) {
+			isolate(t)
+			t.Setenv("HOME", t.TempDir())
+			path, _ := claudePermissionPath()
+			original := []byte(`{"theme":"dark"}`)
+			if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, original, 0600); err != nil {
+				t.Fatal(err)
+			}
+			s, err := managedStore()
+			if err != nil {
+				t.Fatal(err)
+			}
+			failed := errors.New("injected write failure")
+			writes := 0
+			writeSettings := func(path string, before, after []byte, mode os.FileMode) error {
+				writes++
+				if failure == "settings" || (failure == "rollback" && writes == 2) {
+					return failed
+				}
+				return resetWriteFile(path, before, after, mode)
+			}
+			writeReceipt := func(path string, value any) error {
+				if failure != "settings" {
+					return failed
+				}
+				t.Fatal("receipt write must not follow failed settings write")
+				return nil
+			}
+			err = installClaudePermissionsWithWriters(s, writeSettings, writeReceipt)
+			if !errors.Is(err, failed) {
+				t.Fatalf("lost write failure: %v", err)
+			}
+			current, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			backups, err := filepath.Glob(path + ".before-doomer-permissions-*")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if failure == "rollback" {
+				if string(current) == string(original) || len(backups) != 1 {
+					t.Fatal("lost recovery backup after failed rollback", backups)
+				}
+				backup, err := os.ReadFile(backups[0])
+				if err != nil || string(backup) != string(original) {
+					t.Fatal("recovery backup is not the original", err)
+				}
+				return
+			}
+			if string(current) != string(original) || len(backups) != 0 {
+				t.Fatalf("failed install left residue: %q, %v", current, backups)
+			}
+			if err := installClaudePermissions(s); err != nil {
+				t.Fatal(err)
+			}
+			backups, _ = filepath.Glob(path + ".before-doomer-permissions-*")
+			if len(backups) != 1 {
+				t.Fatalf("retry must retain exactly one original backup: %v", backups)
+			}
+		})
+	}
+}
+
+func TestClaudePermissionResetExplainsForeignHomeCleanup(t *testing.T) {
+	isolate(t)
+	t.Setenv("HOME", t.TempDir())
+	otherPath := filepath.Join(t.TempDir(), ".claude", "settings.json")
+	original := []byte(`{"permissions":{"allow":["Bash(doomer task submit *)"]}}`)
+	if err := os.MkdirAll(filepath.Dir(otherPath), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(otherPath, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptPath := filepath.Join(s.Root, "claude-permissions", watch.Key(otherPath)+".json")
+	if err := watch.Write(receiptPath, claudePermissionReceipt{ConfigPath: otherPath, Added: []string{claudeReviewRules[0]}}); err != nil {
+		t.Fatal(err)
+	}
+	plan := &resetPlan{states: map[string]bool{}, repos: map[string]bool{}}
+	plan.discoverState(filepath.Dir(s.Root))
+	found := false
+	for _, entry := range plan.Entries {
+		if entry.Kind != "Claude permissions" {
+			continue
+		}
+		found = true
+		if entry.Path != otherPath || entry.Status != "manual_cleanup_required" || entry.apply != nil || !strings.Contains(entry.Error, claudeReviewRules[0]) || !strings.Contains(entry.Error, receiptPath) {
+			t.Fatalf("unhelpful or unsafe cleanup entry: %+v", entry)
+		}
+	}
+	if !found {
+		t.Fatal("foreign-home cleanup was not reported")
+	}
+	current, err := os.ReadFile(otherPath)
+	if err != nil || string(current) != string(original) {
+		t.Fatal("modified foreign settings", err)
 	}
 }
