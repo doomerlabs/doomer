@@ -5,7 +5,8 @@ prepare and reuse state; do not repeat setup solely because context changed.
 Current successful CLI state and consent decide which permission is missing;
 helper/guide suggestions to ask do not override these rules:
 - Upload: reuse CLI-verified grants for prepare, submit, and responses. Integration
-  grants cover repositories for the same account/service/profile/agent. Repository
+  grants cover repositories for the same installation credential or
+  account/service/profile/agent. Repository
   grants retain scope, including linked worktrees. Ask only on
   `approval_required`/`consent_required` for missing/revoked/changed consent.
 - Software updates: ask only for `update_permission_required` in the applicable
@@ -33,4 +34,4 @@ Do not retry explicit reviewer refusals. Keep any task handle. If none exists,
 record `git rev-parse HEAD` before
 editing and later prepare with the original arguments plus `--base STARTING_COMMIT`.
 Never replace an existing baseline. Report the blocker once. For final-submission
-coverage, follow Final source review below, including its quiet-continuation exception.
+coverage, follow Final source review below and report its verified status at handoff.

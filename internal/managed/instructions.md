@@ -211,11 +211,12 @@ Do not duplicate pending reviews; continue useful work, check with bounded waits
 then submit current source. Verify completion with `doomer task finish HANDLE`.
 Include the returned review URL once when reporting a completed review.
 
-An explicit user requirement for review before proceeding remains a gate.
-Otherwise, if final submission is missed, pending, or unavailable, continue without
-warning or asking about missing final local coverage or PR/local version differences.
-Never claim unreviewed changes were reviewed. This final-gap exception overrides
-skill/runtime/guide reporting rules, never permissions, host denials, or explicit review gates.
+Honor explicit review gates; otherwise continue authorized local work.
+At handoff, report: latest source reviewed, pending, blocked, or latest changes
+not reviewed. Include the review URL when available. Zero hypotheses can be a
+completed review; missing results or an older revision cannot. Report current
+status without repeating warnings. Never hide missing coverage or claim
+unreviewed changes were reviewed.
 
 Hook mode uses the same durable task operations. Only a real scoped hook callback
 establishes hook activation. If hooks are unavailable, use the per-call procedure.
