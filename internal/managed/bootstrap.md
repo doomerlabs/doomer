@@ -41,7 +41,7 @@ invent consent, account identity, or hook activation. Native discovery is option
 Follow the selected CLI's instructions subject to the rules above.
 Submit only with `authenticated=true`, `upload_approved=true`, and host permission.
 Use task commands for results, every finding response, and verified completion.
-Pending results or installed software do not mean reviewed. Per-call mode runs
+Pending Quick results or installed software do not mean reviewed. Per-call mode runs
 these commands during each task; describe it accurately.
 A missing hook receipt means unverified activation, not unsupported hooks.
 

@@ -60,6 +60,7 @@ func TestBootstrapInspectionRecognizesUnmarkedAndCustomWrappers(t *testing.T) {
 	previousTwo, _ := bootstrapText(p, versionEightTwoBootstrapTemplate, "2026.11.8.2", ">=2026.11.7.5")
 	previousThree, _ := bootstrapText(p, versionEightThreeBootstrapTemplate, "2026.11.8.3", ">=2026.11.7.5")
 	previousFour, _ := bootstrapText(p, versionEightFourBootstrapTemplate, "2026.11.8.4", ">=2026.11.7.5")
+	previousNine, _ := bootstrapText(p, versionEightNineBootstrapTemplate, "2026.11.8.9", ">=2026.11.7.5")
 	previousEight, _ := bootstrapText(p, versionEightEightBootstrapTemplate, "2026.11.8.8", ">=2026.11.7.5")
 	previousSeven, _ := bootstrapText(p, versionEightSevenBootstrapTemplate, "2026.11.8.7", ">=2026.11.7.5")
 	previousSix, _ := bootstrapText(p, versionEightSixBootstrapTemplate, "2026.11.8.6", ">=2026.11.7.5")
@@ -73,6 +74,7 @@ func TestBootstrapInspectionRecognizesUnmarkedAndCustomWrappers(t *testing.T) {
 		{previousSix, "update_available"},
 		{previousSeven, "update_available"},
 		{previousEight, "update_available"},
+		{previousNine, "update_available"},
 		{previousSeven + "\nCustom instructions.\n", "modified"},
 		{previousSix + "\nCustom instructions.\n", "modified"},
 		{legacy + "\nCustom instructions.\n", "modified"},
@@ -177,5 +179,29 @@ func TestEightOneBootstrapRemainsUpgradable(t *testing.T) {
 	}
 	if strings.Contains(current, "ask once whether to continue local") {
 		t.Fatal("local work still gated")
+	}
+}
+
+func TestQuickCompletionGuidanceAndHistoricalBootstrap(t *testing.T) {
+	policy := Policy{Protocol: Protocol, Channel: "stable"}
+	current, err := BootstrapText(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{current, Instructions} {
+		for _, want := range []string{"Quick review of the latest submitted changes gates", "full_review.status", "record every response", "Deep only when explicitly requested", "current source"} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("missing Quick completion guidance %q", want)
+			}
+		}
+		if strings.Contains(text, "wait for Deep when enabled") {
+			t.Fatal("retained mandatory Deep wait")
+		}
+	}
+	for _, old := range []struct{ template, revision string }{{versionEightEightBootstrapTemplate, "2026.11.8.8"}, {versionEightNineBootstrapTemplate, "2026.11.8.9"}} {
+		text, err := bootstrapText(policy, old.template, old.revision, ">=2026.11.7.5")
+		if err != nil || !strings.Contains(text, "wait for Deep when enabled") || !RecognizedBootstrap([]byte(text), policy) {
+			t.Fatal("historical bootstrap changed", old.revision, err)
+		}
 	}
 }

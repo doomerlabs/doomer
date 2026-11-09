@@ -381,7 +381,7 @@ func TestPrepareReusesPendingSetupWithoutAnExplicitHandle(t *testing.T) {
 func TestReviewedTaskIncludesFinishAction(t *testing.T) {
 	task := managed.Task{Handle: "task-handle", Stage: "reviewed", Review: &adversarylabs.WorkspaceReview{ID: "review"}}
 	result := resultFor(task)
-	if !strings.Contains(result.Action, "doomer task finish task-handle") || !strings.Contains(result.Action, "review field") {
+	if !strings.Contains(result.Action, "doomer task finish task-handle") || !strings.Contains(result.Action, "Quick review is ready") {
 		t.Fatal(result.Action)
 	}
 	task.LastError = "recorded failure"

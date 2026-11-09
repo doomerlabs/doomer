@@ -95,11 +95,12 @@ func TestSignedCatalogAndDelayedSelection(t *testing.T) {
 }
 
 type fakeReview struct {
-	submissions []adversarylabs.WorkspaceSubmission
-	lost        bool
-	ids         []string
-	feedback    int
-	result      adversarylabs.WorkspaceReview
+	submissions   []adversarylabs.WorkspaceSubmission
+	lost          bool
+	ids           []string
+	resultFetches int
+	feedback      int
+	result        adversarylabs.WorkspaceReview
 }
 
 func (f *fakeReview) StartWorkspace(_ context.Context, _ string, s adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {
@@ -116,7 +117,8 @@ func (f *fakeReview) GetWorkspace(context.Context, string, string) (adversarylab
 }
 
 func (f *fakeReview) GetWorkspaceResults(ctx context.Context, token, id string) (adversarylabs.WorkspaceReview, error) {
-	return f.GetWorkspace(ctx, token, id)
+	f.resultFetches++
+	return adversarylabs.WorkspaceReview{}, errors.New("Deep results must not be fetched")
 }
 func (f *fakeReview) ReportWorkspaceLead(context.Context, string, string, string, string, string, *bool) error {
 	f.feedback++
@@ -284,51 +286,82 @@ func TestFailedAssessmentAcceptsResponsesWithoutCompleting(t *testing.T) {
 	}
 }
 
-func TestManagedAutomaticDeepReviewWaitsForFullResult(t *testing.T) {
-	store := Store{Root: t.TempDir()}
-	handle, _ := NewHandle()
-	yes := true
-	client := &fakeReview{result: adversarylabs.WorkspaceReview{ID: "review", Status: "running", LookCloserEnabled: &yes,
-		Early: &adversarylabs.WorkspaceAssessment{Status: "ready"}, Full: &adversarylabs.WorkspaceFullReview{Enabled: true, Status: "running"}}}
-	task := Task{Schema: Protocol, Handle: handle, Review: &client.result, ReviewedTree: "tree"}
-	engine := Engine{Store: store, Client: client, Capture: func(context.Context, Task) (sourcesnapshot.Capture, error) {
-		return sourcesnapshot.Capture{TargetTreeHash: "tree"}, nil
-	}}
-	if err := engine.Finish(context.Background(), &task, "token"); err != nil || task.Stage != "review_pending" {
-		t.Fatal(task.Stage, err)
-	}
-	leadID := strings.Repeat("d", 64)
-	client.result.Early.Leads = []adversarylabs.WorkspaceLead{{ID: leadID}}
-	agrees := false
-	if err := engine.Respond(context.Background(), &task, "token", []Response{{LeadID: leadID, Status: "dismissed", Agrees: &agrees, Reason: "Verified expected behavior"}}); err != nil || task.Stage != "review_pending" {
-		t.Fatal("responding to Quick bypassed pending Deep", task.Stage, err)
-	}
-	if err := engine.Finish(context.Background(), &task, "token"); err != nil || task.Stage != "review_pending" {
-		t.Fatal(task.Stage, err)
-	}
-	client.result.Status = "completed"
-	client.result.Full.Status = "completed"
-	client.result.Full.Result = &adversarylabs.ReviewResult{Summary: "Deep reviewed"}
-	if err := engine.Finish(context.Background(), &task, "token"); err != nil || task.Stage != "complete" || task.Review.Full.Result == nil {
-		t.Fatal(task.Stage, err)
-	}
-	client.result.Status = "failed"
-	client.result.Full.Status = "failed"
-	task.Stage = "review_pending"
-	if err := engine.Finish(context.Background(), &task, "token"); err == nil {
-		t.Fatal("completed failed deep review")
-	}
-	if task.Stage != "review_failed" {
-		t.Fatal("failed Deep review was not retained", task.Stage)
-	}
-	// Server-side Deep availability can change after admission. A successful
-	// Quick phase still completes when the server explicitly disables Deep.
-	client.result.Status = "cancelled"
-	client.result.Error = "full_review_temporarily_disabled"
-	client.result.Full = &adversarylabs.WorkspaceFullReview{Enabled: false, Status: "disabled"}
-	task.Stage = "review_pending"
-	if err := engine.Finish(context.Background(), &task, "token"); err != nil || task.Stage != "complete" {
-		t.Fatal(task.Stage, err)
+func TestManagedCompletionGatesOnQuickOnly(t *testing.T) {
+	for _, deep := range []struct{ status, aggregate string }{
+		{"queued", "queued"}, {"running", "running"}, {"completed", "completed"},
+		{"failed", "failed"}, {"disabled", "cancelled"},
+	} {
+		for _, scenario := range []string{"ready", "outstanding", "responded", "pending", "failed", "unavailable", "failure_code", "changed"} {
+			t.Run(deep.status+"/"+scenario, func(t *testing.T) {
+				handle, _ := NewHandle()
+				lead := strings.Repeat("d", 64)
+				result := adversarylabs.WorkspaceReview{ID: "review", Status: deep.aggregate,
+					Early: &adversarylabs.WorkspaceAssessment{Status: "ready"},
+					Full:  &adversarylabs.WorkspaceFullReview{Enabled: deep.status != "disabled", Status: deep.status}}
+				if scenario == "outstanding" || scenario == "responded" {
+					result.Early.Leads = []adversarylabs.WorkspaceLead{{ID: lead}}
+				}
+				switch scenario {
+				case "pending":
+					result.Early.Status = "running"
+				case "failed":
+					result.Early.Status = "failed"
+				case "unavailable":
+					result.Early.Status = "unavailable"
+				case "failure_code":
+					result.Early.FailureCode = "model_request_failed"
+				}
+				client := &fakeReview{result: result}
+				task := Task{Schema: Protocol, Handle: handle, Stage: "review_pending", Review: &result, ReviewedTree: "tree"}
+				captures := 0
+				engine := Engine{Store: Store{Root: t.TempDir()}, Client: client, Capture: func(context.Context, Task) (sourcesnapshot.Capture, error) {
+					captures++
+					tree := "tree"
+					if scenario == "changed" {
+						tree = "new-tree"
+					}
+					return sourcesnapshot.Capture{TargetTreeHash: tree}, nil
+				}}
+				if err := engine.Status(context.Background(), &task, "token"); err != nil {
+					t.Fatal(err)
+				}
+				if scenario == "responded" {
+					no := false
+					if err := engine.Respond(context.Background(), &task, "token", []Response{{LeadID: lead, Status: "dismissed", Agrees: &no, Reason: "Verified expected behavior"}}); err != nil {
+						t.Fatal(err)
+					}
+					if task.Stage != "reviewed" || client.feedback != 1 {
+						t.Fatal(task.Stage, client.feedback)
+					}
+				}
+				err := engine.Finish(context.Background(), &task, "token")
+				switch scenario {
+				case "ready", "responded":
+					if err != nil || task.Stage != "complete" || captures != 1 {
+						t.Fatal(task.Stage, captures, err)
+					}
+				case "outstanding":
+					if err == nil || task.Stage != "responses_required" || captures != 0 {
+						t.Fatal(task.Stage, captures, err)
+					}
+				case "changed":
+					if !errors.Is(err, ErrCheckoutChanged) || task.Stage == "complete" {
+						t.Fatal(task.Stage, err)
+					}
+				case "pending":
+					if task.Stage == "complete" || captures != 0 {
+						t.Fatal(task.Stage, captures, err)
+					}
+				default:
+					if err == nil || task.Stage != "review_failed" || captures != 0 {
+						t.Fatal(task.Stage, captures, err)
+					}
+				}
+				if client.resultFetches != 0 {
+					t.Fatal("fetched Deep results")
+				}
+			})
+		}
 	}
 }
 func TestTaskIsolationAndNetworkRedaction(t *testing.T) {

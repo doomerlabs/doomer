@@ -90,10 +90,10 @@ func resultFor(task managed.Task) managedResult {
 	r := managedResult{Error: task.LastError, State: task.Stage, Task: task.Handle, Release: task.Release, SoftwareReady: task.Release != "", HookActivated: task.HookActivated, Review: task.Review}
 	r.Anonymous = strings.HasPrefix(task.AccountID, "anonymous:")
 	if task.Stage == "review_pending" && task.LastError == "" && task.Review != nil {
-		r.Action = "Submission accepted. Run doomer task status " + task.Handle + " to retrieve and reconcile the review. When ready, record every finding response and run doomer task finish " + task.Handle + ". A completed review payload alone does not finish this task."
+		r.Action = "Submission accepted. Run doomer task status " + task.Handle + " to check Quick readiness and task state, not aggregate review status or full_review.status. Deep continues in the background; wait for it only when explicitly requested. When Quick is ready, record every finding response and run doomer task finish " + task.Handle + ". A completed review payload alone does not finish this task."
 	}
 	if task.Stage == "reviewed" && task.LastError == "" && task.Review != nil {
-		r.Action = "The review field contains this task's completed results. Record any outstanding finding responses, then run doomer task finish " + task.Handle + "."
+		r.Action = "Quick review is ready. Record every Quick finding response, then run doomer task finish " + task.Handle + " to verify the current source. Deep does not gate completion; do not fetch its results or wait unless explicitly requested."
 	}
 	if task.LastError == managed.ErrCheckoutChanged.Error() {
 		r.Action = "The recovered review covers an earlier checkout. Run doomer task submit " + task.Handle + " to review the current changes using the same task, then run doomer task status " + task.Handle + " and doomer task finish " + task.Handle + ". Do not use task retry for a completed review."

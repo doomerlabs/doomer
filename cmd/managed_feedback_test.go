@@ -192,3 +192,25 @@ func TestCompletedClaudeTaskStillReportsExistingReview(t *testing.T) {
 		}
 	}
 }
+
+func TestQuickCompletionFeedbackIgnoresDeepStatus(t *testing.T) {
+	for _, deep := range []string{"running", "completed", "failed"} {
+		review := &adversarylabs.WorkspaceReview{ID: "review", Status: deep,
+			Early: &adversarylabs.WorkspaceAssessment{Status: "ready"},
+			Full:  &adversarylabs.WorkspaceFullReview{Enabled: true, Status: deep}}
+		result := resultFor(managed.Task{Handle: "task", Stage: "reviewed", Review: review})
+		if !strings.Contains(result.Action, "Quick review is ready") || !strings.Contains(result.Action, "verify the current source") || !strings.Contains(result.Action, "explicitly requested") {
+			t.Fatal(result.Action)
+		}
+		raw, _ := json.Marshal(result)
+		feedback := managedHookFeedback("Stop", raw, nil)
+		if feedback["decision"] != "block" || !strings.Contains(feedback["reason"].(string), "finish command") || !strings.Contains(feedback["reason"].(string), "Do not fetch Deep") {
+			t.Fatal(feedback)
+		}
+		result.State = "complete"
+		raw, _ = json.Marshal(result)
+		if got := managedHookFeedback("Stop", raw, nil); len(got) != 0 {
+			t.Fatal("Deep blocked completed task", got)
+		}
+	}
+}

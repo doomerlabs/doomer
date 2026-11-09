@@ -38,23 +38,34 @@ agent prose never selects the version.
 - `doomer task revoke HANDLE` revokes that local repository grant.
 - `doomer task submit HANDLE` uploads snapshots and journals a stable review ID
   before submission. HTTP retries and process restarts reuse the same request.
-- `doomer task status HANDLE` performs one result fetch.
+- `doomer task status HANDLE` fetches Quick readiness and task state without
+  fetching Deep results.
 - `doomer task retry HANDLE` starts a new revision only after a terminal review
   failure. Network retries continue using submit/status with the original ID.
 - `doomer task respond HANDLE` reads JSON responses from stdin, persists them
   before delivery, and records each server acknowledgment.
-- `doomer task finish HANDLE` verifies results, response delivery, and the current
-  checkout tree before reporting completion.
+- `doomer task finish HANDLE` verifies successful Quick review, response delivery,
+  and the current checkout tree before reporting completion.
 - `doomer bootstrap status` inspects wrapper compatibility. `upgrade --accept`
   applies an explicitly accepted update in the selected scope.
 - `doomer bootstrap defer --repo PATH` suppresses the current optional wrapper
   offer for 24 hours across linked worktrees. Use `--personal` for personal
   wrappers. Manual inspection and upgrades remain available.
+
 - `doomer hooks --agent codex|claude` installs the optional thin adapter. During
   approved Claude onboarding, add `--task HANDLE` to verify the current account
   and upload consent and install the review-command permission rules. Without
   `--task`, this command only configures hooks. The user still controls native
   hook trust. Real callbacks alone establish live activation.
+
+Automatic completion is gated by Quick review of the latest submitted changes,
+every Quick finding response, and verification that the current source matches
+the reviewed source. After edits, submit a new revision on the same task.
+Use task state and Quick readiness rather than aggregate review status or
+`full_review.status`. Deep continues in the background: pending, completed, or
+failed Deep status does not block successful Quick review. Do not fetch Deep
+results as a prerequisite for completion. Wait for Deep only when explicitly
+requested. Quick failures still block completion and require recovery.
 
 New tasks without a coding prompt are setup-only. Their submit/finish operations
 complete with `review_not_required: setup_only` and never upload a review. Supplying
