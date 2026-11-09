@@ -9,7 +9,7 @@ import (
 
 var policyProposal = regexp.MustCompile(`"codex_review_policy"\s*:\s*\{`)
 
-var policyQuestion = regexp.MustCompile(`(?is)(?:would you like|do you want|may I|can I|shall I).{0,120}(?:policy|reviewer settings|permissions)|(?:policy|reviewer settings|permissions).{0,120}\?`)
+var policyQuestion = regexp.MustCompile(`(?is)\b(?:would you like|do you want|may I|can I|shall I|approve)\b.{0,120}(?:policy|reviewer settings|permissions?)|(?:policy|reviewer settings|permissions?).{0,120}\?`)
 
 var claudePermissionProposal = regexp.MustCompile(`"claude_permissions"\s*:\s*\{[^}]*"install_command"`)
 
