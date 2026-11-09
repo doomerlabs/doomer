@@ -225,6 +225,9 @@ func (j *journey) afterInstall() error {
 		j.f.Deep = j.c.Scenario == "deep-review"
 		j.f.mu.Unlock()
 		prompt := "Create hello.txt containing hello followed by a newline."
+		if j.c.Scenario == "hooks-off" {
+			prompt += " Do not install hooks for this task; complete the review through explicit Doomer commands."
+		}
 		if personalScenario(j.c.Scenario) {
 			prompt = "Create hello.txt containing hello followed by a newline. Use the installed Doomer skill and complete the task."
 		}

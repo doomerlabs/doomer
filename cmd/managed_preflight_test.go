@@ -411,3 +411,50 @@ func TestPreflightReportsDisabledClaudeHooksWithoutWritesOrNetwork(t *testing.T)
 		t.Fatal("local hook inspection wrote state or contacted the service")
 	}
 }
+
+func TestPreflightChecksActiveProfileDespiteSharedGrant(t *testing.T) {
+	isolate(t)
+	repo := newWatchTestRepo(t)
+	s, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := watch.RepositoryIdentity(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := managed.Task{AccountID: "account", RepositoryID: id, Repo: repo, API: "https://doomer.ai/api", Profile: "default", Agent: "codex"}
+	if err := recordIntegrationConsent(s, task, "explicit_integration_approval", true); err != nil {
+		t.Fatal(err)
+	}
+	first, second := t.TempDir(), t.TempDir()
+	t.Setenv("CODEX_HOME", first)
+	if err := installCodexReviewPolicy(managedConsentEvidence{Account: task.AccountID, Service: task.API, Profile: task.Profile, Agent: task.Agent, AllRepositories: true}); err != nil {
+		t.Fatal(err)
+	}
+	before := preflightTree(t, first)
+	for _, tc := range []struct{ home, state, policy string }{{first, "saved_consent_found", "configured"}, {second, "setup_decision_required", "missing"}, {first, "saved_consent_found", "configured"}} {
+		t.Setenv("CODEX_HOME", tc.home)
+		out, err := execute(t, "", "preflight", "--repo", repo, "--agent", "codex")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var result preflightResult
+		if err := json.Unmarshal([]byte(out), &result); err != nil {
+			t.Fatal(err)
+		}
+		if result.State != tc.state || len(result.SavedConsents) != 1 {
+			t.Fatal(out)
+		}
+		status := result.SavedConsents[0].CodexPolicyStatus
+		if status.State != tc.policy || status.ConfigPath != filepath.Join(tc.home, "config.toml") {
+			t.Fatal(out)
+		}
+	}
+	if !reflect.DeepEqual(before, preflightTree(t, first)) {
+		t.Fatal("checking second profile changed first profile")
+	}
+	if files, err := os.ReadDir(second); err != nil || len(files) != 0 {
+		t.Fatal("local inspection modified missing profile", err)
+	}
+}
