@@ -90,7 +90,7 @@ func TestPrepareNetworkFailureCanResumeSameTask(t *testing.T) {
 	}
 	blocked = false
 	result = run()
-	if result.State != "ready" || result.Task != handle || !result.UploadApproved || result.NetworkAccess != nil {
+	if (result.State != "ready" && result.State != "setup_decision_required") || result.Task != handle || !result.UploadApproved || result.NetworkAccess != nil {
 		t.Fatal(result)
 	}
 }

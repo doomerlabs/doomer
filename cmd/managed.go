@@ -48,6 +48,7 @@ type managedResult struct {
 	Task                 string                         `json:"task,omitempty"`
 	Release              string                         `json:"release,omitempty"`
 	Instructions         string                         `json:"instructions,omitempty"`
+	ReviewInstructions   string                         `json:"review_instructions,omitempty"`
 	Review               *adversarylabs.WorkspaceReview `json:"review,omitempty"`
 	URL                  string                         `json:"url,omitempty"`
 	Error                string                         `json:"error,omitempty"`
@@ -135,7 +136,7 @@ func resultFor(task managed.Task) managedResult {
 func managedTaskInstructions(task managed.Task) string {
 	instructions := managed.Instructions
 	if task.Purpose == "setup" {
-		instructions = "This is a setup-only task. Configure hooks for the active agent with `doomer hooks --agent " + task.Agent + "` and verify readiness. If a hook asks for a session binding, resume this same setup using `doomer prepare --task " + task.Handle + " --session ACTUAL_SESSION_ID` from the hook. Preserve native hook trust controls. Do not submit repository content or run a code review for this task. The coding review procedure below applies only to coding tasks.\n\n" + instructions
+		instructions = "This is a setup-only task. Follow the returned readiness decisions for the active agent and verify readiness. Install optional hooks only after acceptance. If a hook asks for a session binding, resume this same setup using `doomer prepare --task " + task.Handle + " --session ACTUAL_SESSION_ID` from the hook. Preserve native hook trust controls. Do not submit repository content or run a code review for this task. The coding review procedure below applies only to coding tasks.\n\n" + instructions
 	}
 	if strings.HasPrefix(task.AccountID, "anonymous:") {
 		instructions = "This task uses an installation capability token; no account is needed. authenticated=true confirms that credential, not an account sign-in. The saved repository upload consent applies to this installation. Continue through the same task commands without requiring sign-in. Reviews without an account are quick looks only.\n\n" + instructions
@@ -277,23 +278,32 @@ func prepareAttention(r *managedResult) {
 	if r.State != "ready" {
 		return
 	}
-	var decisions []string
-	if r.CodexReviewPolicy != nil {
-		decisions = append(decisions, "Offer to install the missing Codex reviewer policy now: show codex_review_policy.extra_policy and changes, then ask for acceptance. Use its install_command only after acceptance; preserve the existing upload grant. This is a settings decision, not a request to approve uploads again.")
+	decision := ""
+	switch {
+	case r.CodexReviewPolicy != nil:
+		decision = "Offer to install the missing Codex reviewer policy now: explain its scope and configuration changes, then ask Allow, Not now, or Never ask again. Use codex_review_policy.install_command only after acceptance; use decline_command only for Never ask again. Not now leaves the decision pending. Preserve the existing upload grant; do not request upload approval again."
+	case r.ClaudePermissions != nil && r.ClaudePermissions.Decision == "pending" && len(r.ClaudePermissions.InstallCommand) > 0:
+		decision = "Offer to install the missing Claude review permissions described in claude_permissions. Ask Allow, Not now, or Never ask again. Use install_command only after acceptance and decline_command only for Never ask again. Preserve explicit deny rules and the existing upload grant."
+	case r.HookSetup != nil && r.HookSetup.State == "missing" && r.HookSetup.Decision == "pending" && len(r.HookSetup.InstallCommand) > 0:
+		decision = "Offer optional Doomer hook installation for this agent profile. Ask Install hooks, Not now, or Never ask again. Use hook_setup.install_command only after acceptance; use decline_command only for Never ask again. Not now leaves the decision pending. Native hook trust remains a separate user decision; continue explicit reviews if hooks are declined."
 	}
-	for _, update := range r.BootstrapUpdates {
-		if update.State == "update_available" {
-			decisions = append(decisions, "Offer the Doomer skill upgrade from "+update.Installed+" to "+update.Available+" now. Check any existing skill PR's actual file revision; an older PR does not cover this update. Ask whether to create or update a separate skill-only PR (or apply a personal skill locally). Follow bootstrap_updates for the exact commands and preserve local edits. Do not apply without acceptance.")
-			break
+	if decision == "" {
+		for _, update := range r.BootstrapUpdates {
+			if update.State == "update_available" {
+				decision = "Offer the Doomer skill upgrade from " + update.Installed + " to " + update.Available + " now. Check any existing skill PR's actual file revision; an older PR does not cover this update. Ask whether to create or update a separate skill-only PR (or apply a personal skill locally). Follow bootstrap_updates for the exact commands and preserve local edits. Do not apply without acceptance."
+				break
+			}
 		}
 	}
-	if len(decisions) == 0 {
+	if decision == "" {
 		return
 	}
+	r.ReviewInstructions = r.Instructions
 	r.AttentionRequired = true
 	r.State = "setup_decision_required"
-	r.Action = "Present the following pending decisions to the user in your next response, before submitting a review or completing the task. " + strings.Join(decisions, " ") + " Ask for both decisions together. Local coding may continue while awaiting the answer."
-	r.Instructions = "Setup decisions are pending. Follow action and the proposal fields; do not infer acceptance or decline. After the user answers, execute only the accepted setup commands (or the explicit decline/defer commands), then rerun doomer prepare --task " + r.Task + " to obtain the review procedure. Preserve the current task, existing upload grant, unrelated settings, and local work."
+	r.Action = "Present this next readiness decision to the user before submitting a review or completing the task. " + decision
+	r.Instructions = "Readiness is checked on every prepare call, including existing installations and new agent profiles. Present only the next decision in action; do not skip it because upload consent already exists. After acceptance or Never ask again, execute the corresponding command and rerun doomer prepare --task " + r.Task + " to check the remaining readiness steps. For Not now, do not record a permanent decline or repeat the question in this chat; continue permitted explicit review using review_instructions. Preserve the current task, upload grant, unrelated settings, and local work."
+
 }
 
 func newPrepareCommand(app *application.App, api, profile *string) *cobra.Command {

@@ -35,7 +35,7 @@ go run ./tests/codexinstall --scenario list
 | `hooks-declined` | A hook-installation refusal persists across fresh sessions without reinstalling or re-offering |
 | `hooks-trust` | Codex native trust reminders recur until trusted; Claude native callbacks prove activation separately from installation |
 | `policy-installed` | Fresh real approval reviewer reuses the installed policy and upload grant without another prompt |
-| `policy-recovery` | Old delivery marker with a missing policy must offer setup, install after acceptance, and complete a review in a fresh process |
+| `policy-recovery` | Ordinary task with a saved grant but missing profile policy stops before prepare, offers policy then hooks, installs only after separate answers, and completes a fresh-session review |
 | `policy-declined` | Explicit policy decline persists across fresh chats without changing settings, revoking consent, or uploading source |
 | `new-chat` | Two fresh coding chats with no Doomer reminders complete reviews and finding responses with the original grant; Codex uses its real approval reviewer |
 | `worktrees` | Concurrent branches/worktrees keep files, tasks and reviews separate while sharing approval; Codex uses its real approval reviewer |

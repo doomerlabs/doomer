@@ -11,13 +11,18 @@ metadata:
 # Doomer review
 
 At task start, run `doomer preflight --agent AGENT --repo .` for local-only
-consent and Codex policy inspection. Saved receipts do not verify the current
-account or authorize uploads. Then run
-`doomer prepare --agent AGENT --repo . --prompt "USER TASK"`.
-If preflight reports pending missing reviewer settings, first offer account
-verification and scoped policy repair. After acceptance run prepare, verify live
-consent, and install the proposal. Respect saved declines and explicit denies.
-For older Claude CLIs, offer the same verification and repair.
+readiness evidence. Saved receipts do not verify the current
+account or authorize uploads. If it returns `setup_decision_required`, present
+its next decision and wait for the answer BEFORE running prepare. Do not treat
+a saved upload grant as proof that this agent profile has its policy installed.
+After acceptance, run `doomer prepare --agent AGENT --repo . --prompt "USER TASK"`.
+If no decision is pending, run prepare immediately. Prepare checks onboarding
+on every task, not just installation. Follow its next readiness action before
+submitting a review or ending the task. For `setup_decision_required`, present
+the one decision in `action`, execute the accepted command (or explicit Never
+ask again command), then rerun prepare with the same task handle. Not now is
+not a permanent refusal. If host approval blocks prepare, use the local preflight
+evidence to offer missing scoped setup; respect the denial until authorized.
 Use codex or claude and the actual task without shell interpolation. Keep the
 returned task handle. An older CLI may lack preflight; continue with prepare.
 If a real harness session ID is available, pass it with `--session`. For Claude,

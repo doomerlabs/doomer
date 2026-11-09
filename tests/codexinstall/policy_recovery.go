@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/doomerlabs/doomer/internal/watch"
 )
@@ -61,16 +62,29 @@ func (j *journey) policyRecovery() error {
 	c := j.c
 	c.ReviewApprovals = true
 	j.result.Turns++
-	turn, err := runAgent(j.ctx, c, j.repo, j.env, "Use the installed Doomer skill to prepare a code-review task for creating recovered.txt. You may run local preflight and verify the existing account and consent. Ask for any missing policy setup choice before uploading source; do not create the file yet. Leave hooks disabled for this test.", "", j.record)
+	attemptedPrepare := false
+	record := func(kind, text string) {
+		j.record(kind, text)
+		if kind == "Command started" && strings.Contains(text, "doomer") && strings.Contains(text, "prepare") {
+			attemptedPrepare = true
+		}
+	}
+	turn, err := runAgent(j.ctx, c, j.repo, j.env, "Create recovered.txt containing recovered followed by a newline.", "", record)
 	if err != nil {
 		return err
 	}
-	j.result.Checks["missing_policy_offered_after_old_delivery"] = turn.PolicyOffered
-	if !turn.PolicyOffered {
+	message := strings.ToLower(strings.Join(turn.Messages, " "))
+	offered := strings.Contains(message, "allow") && strings.Contains(message, "never ask again") && (strings.Contains(message, "policy") || strings.Contains(message, "authorization"))
+	j.result.Checks["missing_policy_offered_from_ordinary_task"] = offered
+	j.result.Checks["policy_prompt_before_prepare"] = !attemptedPrepare
+	j.f.mu.Lock()
+	j.result.Checks["no_upload_before_policy_answer"] = j.f.Uploads == 0
+	j.f.mu.Unlock()
+	if !offered || attemptedPrepare {
 		return fmt.Errorf("missing policy was not offered after old delivery")
 	}
 	j.result.Turns++
-	_, err = runAgent(j.ctx, c, j.repo, j.env, "I approve the displayed Doomer policy for all current and future repositories, linked worktrees and chats used by Codex with this same account, service and profile, covering repository snapshots, task context and finding responses. Verify live consent, save that exact policy in Codex approval-reviewer settings, and verify the configuration. Do not upload or edit source yet.", turn.Session, j.record)
+	accepted, err := runAgent(j.ctx, c, j.repo, j.env, "Allow the proposed scoped reviewer policy and account verification.", turn.Session, j.record)
 	if err != nil {
 		return err
 	}
@@ -82,10 +96,23 @@ func (j *journey) policyRecovery() error {
 		return fmt.Errorf("accepted Codex policy repair did not install the policy")
 	}
 	j.result.Checks["accepted_policy_repair_installed"] = true
+	j.result.Checks["missing_hooks_offered_separately"] = accepted.HooksOffered && strings.Contains(strings.ToLower(strings.Join(accepted.Messages, " ")), "hook")
+	if !j.result.Checks["missing_hooks_offered_separately"] {
+		return fmt.Errorf("missing hooks were not offered after policy installation")
+	}
+	j.result.Turns++
+	if _, err := runAgent(j.ctx, c, j.repo, j.env, "Allow installation of the proposed Doomer hooks. Leave native hook trust for me to approve in the host.", turn.Session, j.record); err != nil {
+		return err
+	}
+	installed, err := watch.Installed(agentHooksPath(j.c, j.home), "--managed-task-adapter")
+	if err != nil || !installed {
+		return fmt.Errorf("accepted hook installation missing: %v", err)
+	}
+	j.result.Checks["accepted_hooks_installed"] = true
 	// A separate reviewer process must load the repaired policy and complete a
 	// real submission without another upload grant or settings prompt.
 	j.c.ReviewApprovals = true
-	if err := j.coding(j.repo, "Create recovered.txt containing recovered followed by a newline. Use the installed Doomer skill to review the change; leave hooks disabled."); err != nil {
+	if err := j.coding(j.repo, "Create finished.txt containing finished followed by a newline."); err != nil {
 		return err
 	}
 	j.result.Checks["fresh_reviewer_completed_after_policy_repair"] = true

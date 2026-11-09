@@ -151,7 +151,7 @@ func TestDevelopmentPrepareAndResumeUseCurrentBinary(t *testing.T) {
 	}
 	anonymousApproved = true
 	result = run("prepare", "--task", task.Handle)
-	if result.State != "ready" || !result.Anonymous || !result.UploadApproved {
+	if (result.State != "ready" && result.State != "setup_decision_required") || !result.Anonymous || !result.UploadApproved {
 		t.Fatal(result)
 	}
 	config := adversarylabs.ConfigStore{Path: filepath.Join(filepath.Dir(s.Root), "config.json")}

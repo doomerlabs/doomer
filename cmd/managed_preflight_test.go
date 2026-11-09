@@ -174,7 +174,7 @@ func TestPreflightRetainsConsentBoundariesAndRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, `"state":"saved_consent_found"`) {
+	if !strings.Contains(out, `"state":"setup_decision_required"`) {
 		t.Fatal(out)
 	}
 	if err := watch.Write(filepath.Join(s.Root, "reset.json"), time.Now().Add(time.Hour)); err != nil {
@@ -227,7 +227,7 @@ func TestPreflightMissingCodexPolicyRespectsDecline(t *testing.T) {
 			}
 		} else {
 			preview := r.SavedConsents[0].CodexPolicyPreview
-			if status.Decision != "pending" || !strings.Contains(r.Action, "Before prepare, show") || preview == nil || !strings.Contains(preview.ExtraPolicy, `"all_repositories":true`) || len(preview.InstallCommand) != 0 {
+			if r.State != "setup_decision_required" || !strings.HasPrefix(r.Action, "STOP before running prepare") || status.Decision != "pending" || !strings.Contains(r.Action, "Before prepare, show") || preview == nil || !strings.Contains(preview.ExtraPolicy, `"all_repositories":true`) || len(preview.InstallCommand) != 0 {
 				t.Fatal(out)
 			}
 		}
