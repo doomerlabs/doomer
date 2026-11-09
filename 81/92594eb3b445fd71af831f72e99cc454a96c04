@@ -1,0 +1,26 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 372-377
+cmd/managed_hook_scope_test.go
+  h_aa44c3b5b60dec 1-95
+cmd/managed_install.go
+  h_aa44c3b5b60dec 290-301
+cmd/managed_prompt_test.go
+  h_aa44c3b5b60dec 365,367-377
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 53
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 18,186-187
+tests/codexinstall/unconfigured_repo.go
+  h_aa44c3b5b60dec 1-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8192594eb3b445fd71af831f72e99cc454a96c04",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
