@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -62,7 +64,7 @@ func TestBootstrapUpgradeRequiresAcceptanceAndPreservesPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(offered) != 2 || !strings.Contains(offered[0].Action, executable) || strings.Contains(offered[0].Action, "run doomer bootstrap") {
+	if len(offered) != 2 || offered[0].DeferCommand[0] != executable || offered[0].UpgradeCommand[0] != executable {
 		t.Fatalf("maintenance was routed through an old PATH launcher: %+v", offered)
 	}
 	output, err = run("defer")
@@ -142,5 +144,75 @@ func TestBootstrapInspectionFailureIsAdvisory(t *testing.T) {
 	updates := managedBootstrapUpdates(managed.Task{Bootstrap: managed.Bootstrap{Path: path, Scope: "project"}})
 	if len(updates) != 1 || updates[0].State != "inspection_failed" {
 		t.Fatal(updates)
+	}
+}
+
+func TestBootstrapDecisionCommandsRemainVisibleAndScoped(t *testing.T) {
+	for _, scope := range []string{"project", "personal"} {
+		t.Run(scope, func(t *testing.T) {
+			isolate(t)
+			base := filepath.Join(t.TempDir(), "scope with spaces")
+			path := filepath.Join(base, ".agents/skills/doomer-review/SKILL.md")
+			if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if scope == "project" {
+				reviewGit(t, base, "init")
+			}
+			legacy, err := os.ReadFile("../internal/managed/bootstrap-legacy.md")
+			if err != nil {
+				t.Fatal(err)
+			}
+			old := strings.Replace(string(legacy), "{{metadata}}", "  doomer-protocol: \"2\"\n  doomer-update-policy: stable", 1)
+			if err := os.WriteFile(path, []byte(old), 0600); err != nil {
+				t.Fatal(err)
+			}
+			task := managed.Task{Repo: base, Bootstrap: managed.Bootstrap{Path: path, Scope: scope}}
+			updates := managedBootstrapUpdates(task)
+			if len(updates) != 1 {
+				t.Fatalf("expected one actionable update: %+v", updates)
+			}
+			update := updates[0]
+			executable, err := os.Executable()
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := []string{"--repo", base}
+			if scope == "personal" {
+				target = []string{"--personal"}
+			}
+			if !reflect.DeepEqual(update.DeferCommand, append([]string{executable, "bootstrap", "defer"}, target...)) ||
+				!reflect.DeepEqual(update.UpgradeCommand, append([]string{executable, "bootstrap", "upgrade", "--accept"}, target...)) {
+				t.Fatalf("commands lost runtime or scope: %+v", update)
+			}
+			encoded, err := json.Marshal(update)
+			if err != nil {
+				t.Fatal(err)
+			}
+			preview := string(encoded[:min(len(encoded), 2048)])
+			for _, required := range []string{"defer_command", "upgrade_command", "Maybe later", "bootstrap_deferred", "only after acceptance"} {
+				if !strings.Contains(preview, required) {
+					t.Fatalf("decision missing from short preview: %s", required)
+				}
+			}
+			if strings.Contains(update.Action, "## Skill upgrade decisions") {
+				t.Fatal("duplicated full runtime rules obscure the decision")
+			}
+			if scope == "project" {
+				command := newManagedBootstrapCommand()
+				command.SetOut(new(bytes.Buffer))
+				command.SetArgs(update.DeferCommand[2:])
+				if err := command.Execute(); err != nil {
+					t.Fatal(err)
+				}
+				if got := managedBootstrapUpdates(task); len(got) != 0 {
+					t.Fatalf("executing returned command did not suppress offer: %+v", got)
+				}
+				actual, err := os.ReadFile(path)
+				if err != nil || string(actual) != old {
+					t.Fatal("deferral changed the skill", err)
+				}
+			}
+		})
 	}
 }

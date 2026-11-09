@@ -156,12 +156,13 @@ func managedBootstrapUpdates(task managed.Task) []managed.BootstrapUpdate {
 				updates = append(updates, update)
 				continue
 			}
-			target := "--repo " + watch.Quote(base)
+			target := []string{"--repo", base}
 			if task.Bootstrap.Scope == "personal" {
-				target = "--personal"
+				target = []string{"--personal"}
 			}
-			command := watch.Quote(executable)
-			update.Action = managed.BootstrapUpgradeOffer(task.Bootstrap.Scope) + " Only after acceptance run " + command + " bootstrap upgrade --accept " + target + ". If the user chooses Maybe later, run " + command + " bootstrap defer " + target + " to suppress this version's offer for 24 hours. Use this exact executable because the PATH launcher may be older. The task keeps its release and update policy."
+			update.DeferCommand = append([]string{executable, "bootstrap", "defer"}, target...)
+			update.UpgradeCommand = append([]string{executable, "bootstrap", "upgrade", "--accept"}, target...)
+			update.Action = "If the user chooses Maybe later, execute defer_command and verify bootstrap_deferred before finishing; this suppresses this version's offer for 24 hours. Execute upgrade_command only after acceptance. Use these exact argument arrays because the PATH launcher may be older. Before offering, follow Skill upgrade decisions in instructions. " + managed.BootstrapUpgradeDecision(task.Bootstrap.Scope) + " The task keeps its release and update policy."
 		}
 		updates = append(updates, update)
 	}
