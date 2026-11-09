@@ -1,0 +1,32 @@
+cmd/managed_claude_permissions.go
+  h_aa44c3b5b60dec 179
+cmd/managed_hook_setup.go
+  h_aa44c3b5b60dec 55-64,76-78
+cmd/managed_hook_setup_test.go
+  h_aa44c3b5b60dec 60-73
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 225-236
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 223-230
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 58-60
+scripts/ci-agent-e2e.sh
+  h_aa44c3b5b60dec 66
+tests/codexinstall/claude_policy.go
+  h_aa44c3b5b60dec 25-28
+tests/codexinstall/hook_setup.go
+  h_aa44c3b5b60dec 95-134
+tests/codexinstall/policy_recovery.go
+  h_aa44c3b5b60dec 59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c6273be4178f45fa282e14820aec8e5817cca2da",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
