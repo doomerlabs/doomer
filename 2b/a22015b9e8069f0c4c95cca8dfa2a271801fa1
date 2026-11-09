@@ -1,0 +1,56 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 32,153-155,162,623,630-631,766-801,806-819,821-823,827-829
+cmd/managed_claude_permissions.go
+  h_aa44c3b5b60dec 10,12,30-40,111,122-169,181-183
+cmd/managed_claude_permissions_test.go
+  h_aa44c3b5b60dec 114-138,186-193
+cmd/managed_hook_setup.go
+  h_aa44c3b5b60dec 1-97
+cmd/managed_hook_setup_test.go
+  h_aa44c3b5b60dec 1-77
+internal/managed/bootstrap-2026.11.8.12.md
+  h_aa44c3b5b60dec 1-157
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 25-32
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 16,21,71-73,162
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 209,219-220
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 46-63
+scripts/ci-agent-e2e.sh
+  h_aa44c3b5b60dec 53
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 34-36
+tests/codexinstall/candidate_test.go
+  h_aa44c3b5b60dec 18
+tests/codexinstall/claude.go
+  h_aa44c3b5b60dec 172-173
+tests/codexinstall/claude_policy.go
+  h_aa44c3b5b60dec 1-85
+tests/codexinstall/codex.go
+  h_aa44c3b5b60dec 12-15,21,58
+tests/codexinstall/hook_setup.go
+  h_aa44c3b5b60dec 1-123
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 169-172
+tests/codexinstall/policy_recovery.go
+  h_aa44c3b5b60dec 18,64,112,127
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 17,173-176
+tests/codexinstall/skills.go
+  h_aa44c3b5b60dec 26-28
+tests/codexinstall/tui.go
+  h_aa44c3b5b60dec 64-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2ba22015b9e8069f0c4c95cca8dfa2a271801fa1",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
