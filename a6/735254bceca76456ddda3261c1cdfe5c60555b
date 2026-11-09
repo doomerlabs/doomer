@@ -1,0 +1,30 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 153,869,880,884
+cmd/managed_adoption.go
+  h_aa44c3b5b60dec 53-54
+cmd/managed_adoption_test.go
+  h_aa44c3b5b60dec 243-293
+cmd/managed_prompt_test.go
+  h_aa44c3b5b60dec 18,49,512-534
+docs/managed-runtime.md
+  h_aa44c3b5b60dec 113-114,125-127,130-133
+internal/managed/managed_test.go
+  h_aa44c3b5b60dec 470-495
+internal/managed/operations.go
+  h_aa44c3b5b60dec 102-103
+tests/codexinstall/fixture.go
+  h_aa44c3b5b60dec 27,108-129
+tests/codexinstall/fixture_adoption_test.go
+  h_aa44c3b5b60dec 1-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a6735254bceca76456ddda3261c1cdfe5c60555b",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
