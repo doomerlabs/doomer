@@ -1,0 +1,18 @@
+cmd/managed_preflight.go
+  h_aa44c3b5b60dec 36,40,57-59,98-126,142-143,152-153,165-171,176
+cmd/managed_preflight_test.go
+  h_aa44c3b5b60dec 255-341
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 58-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3021d979c645836ea5324615d8ce77af0f752909",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
