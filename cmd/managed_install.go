@@ -175,6 +175,9 @@ func newManagedHooksCommand(app *application.App, api, profile *string) *cobra.C
 	c.Flags().StringVar(&agent, "agent", "codex", "codex or claude")
 	c.Flags().StringVar(&taskHandle, "task", "", "approved Claude onboarding task; also configures its review-command permissions")
 	c.RunE = func(c *cobra.Command, _ []string) error {
+		if c.Name() == "install" && taskHandle != "" {
+			return fmt.Errorf("hooks install only configures hooks; use task claude-permissions separately for approved permission setup")
+		}
 		if agent != "codex" && agent != "claude" {
 			return fmt.Errorf("agent must be codex or claude")
 		}

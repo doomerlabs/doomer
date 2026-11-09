@@ -45,6 +45,9 @@ func TestHooksInstallIsLocalIdempotentAndHooksOnly(t *testing.T) {
 			t.Fatal("repeat installation changed settings")
 		}
 	}
+	if _, err := execute(t, "", "hooks", "--task", "anything", "install", "--agent", "claude"); err == nil {
+		t.Fatal("parent task flag bypassed hooks-only command")
+	}
 	if _, err := execute(t, "", "hooks", "install", "--agent", "unknown"); err == nil {
 		t.Fatal("accepted unknown agent")
 	}
