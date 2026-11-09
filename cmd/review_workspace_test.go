@@ -127,7 +127,7 @@ func TestReviewReturnsLookCloserAndPreservesFullReviewChoice(t *testing.T) {
 			if submitted.GitIdentity == nil || submitted.GitIdentity.Name != "Configured Reviewer" || submitted.GitIdentity.Email != "configured@example.test" || submitted.GitIdentity.Source != "git_config" {
 				t.Fatalf("missing submitted Git identity: %+v", submitted.GitIdentity)
 			}
-			if strings.Contains(out, "configured@example.test") {
+			if strings.Contains(out, "configured@example.test") || strings.Contains(out, "Configured Reviewer") {
 				t.Fatal("Git identity leaked into command output")
 			}
 			if strings.Contains(out, "\n+after\n") != (mode.name == "with diff") {
