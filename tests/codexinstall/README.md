@@ -280,9 +280,11 @@ The normal matrix must pass all three policy scenarios with the candidate fix.
 `browser-onboarding` runs Codex with the actual approval reviewer in a fresh
 isolated home. A team skill and CLI are already installed and only software
 updates are preapproved. The simulated browser grants uploads after Codex shows
-the approval link and starts the CLI wait command. No second chat reply is sent.
-The scenario requires policy installation in that same setup-only turn, then
-starts an ordinary coding chat and requires a completed review with the
+the approval link and starts the CLI wait command. If the host requires direct
+permission for the persistent policy, the scenario records that limitation and
+provides one explicit policy approval in the same chat. It never retries the
+denied change without that answer. After setup, it starts an ordinary coding
+chat and requires a completed review with the
 same grant and no repeated onboarding. Hooks are explicitly declined to verify
 that they remain optional. This scenario is Codex-only; Claude parity is separate.
 

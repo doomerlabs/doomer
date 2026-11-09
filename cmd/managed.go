@@ -30,6 +30,7 @@ import (
 
 type managedResult struct {
 	WaitCommand          []string                       `json:"wait_command,omitempty"`
+	PolicyResumeCommand  []string                       `json:"policy_resume_command,omitempty"`
 	LocalSetup           *preflightResult               `json:"local_setup,omitempty"`
 	AttentionRequired    bool                           `json:"attention_required,omitempty"`
 	Action               string                         `json:"action,omitempty"`
@@ -241,6 +242,17 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 	if t.OnboardingPending {
 		r.State = "onboarding_incomplete"
 		r.Action = "Upload approval was received, but its scoped Codex policy has not finished installing. Resume prepare for this same task to finish installation. Do not request upload approval again or submit source before setup succeeds."
+		if r.Authenticated && r.UploadApproved {
+			binary, err := os.Executable()
+			if err != nil {
+				return err
+			}
+			r.PolicyResumeCommand = []string{binary, "--api-url", t.API, "--profile", t.Profile, "task", "login", t.Handle}
+			if r.CodexReviewPolicy != nil {
+				r.CodexReviewPolicy.Action = "This exact scoped policy installation was disclosed with the browser approval and accepted. Finish it with policy_resume_command; no repository content is submitted by that command. Preserve any prior explicit policy decline."
+			}
+			r.Action = "Browser approval is verified and saved. It also covers the matching scoped Codex policy. Execute policy_resume_command now to finish that authorized installation, preserving any earlier explicit policy decline. Do not ask for upload or policy approval again. The browser wait only retrieves approval; this separate command applies the approved settings. Do not upload source before setup finishes."
+		}
 		r.Instructions = r.Action
 	}
 	if c.Name() == "prepare" {
@@ -252,7 +264,7 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 			return err
 		}
 		r.WaitCommand = []string{binary, "--api-url", t.API, "--profile", t.Profile, "task", "login", t.Handle, "--wait", "45s"}
-		r.Instructions = "Display the complete approval URL and action to the user, then immediately execute wait_command. Keep this turn open while the user decides on the page; repeat wait_command while approval_required, for up to ten minutes. Do not ask for a separate chat answer, infer approval, or end the task while waiting. On approval the CLI saves consent and completes the matching policy installation before returning. Hooks are a separate decision. On cancellation stop waiting; on timeout report onboarding pending without claiming completion."
+		r.Instructions = "Display the complete approval URL and action to the user, then immediately execute wait_command. Keep this turn open while the user decides on the page; repeat wait_command while approval_required, for up to ten minutes. Do not ask for a separate chat answer, infer approval, or end the task while waiting. On approval the CLI saves and returns consent evidence without installing policy in the wait command. Execute the returned policy_resume_command to finish authorized setup without another user question. Hooks are a separate decision. On cancellation stop waiting; on timeout report onboarding pending without claiming completion."
 	}
 	if t.Handle != "" {
 		if err := s.Observe(t, r.State); err != nil {

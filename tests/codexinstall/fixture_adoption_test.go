@@ -28,6 +28,9 @@ func TestFixtureDistinguishesAdoptionMetadataFromRepositoryUploads(t *testing.T)
 	if status := send("/v2/installations/activate", raw); status != http.StatusOK || f.Uploads != 0 || len(f.Adoptions) != 1 {
 		t.Fatalf("metadata counted as source upload: status=%d uploads=%d events=%d", status, f.Uploads, len(f.Adoptions))
 	}
+	if status := send("/v1/auth/device/code", []byte(`{}`)); status != http.StatusNotFound || f.Uploads != 0 {
+		t.Fatal("sign-in probe counted as repository upload", status, f.Uploads)
+	}
 	f.Approved = false
 	if status := send("/v2/installations/activate", raw); status != http.StatusForbidden || len(f.Adoptions) != 1 {
 		t.Fatal("unapproved adoption accepted", status)
