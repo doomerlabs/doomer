@@ -1,0 +1,26 @@
+cmd/managed_preflight.go
+  h_aa44c3b5b60dec 18,127-132
+cmd/managed_preflight_test.go
+  h_aa44c3b5b60dec 360-413
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 58-61
+tests/codexinstall/claude.go
+  h_aa44c3b5b60dec 173,201-243
+tests/codexinstall/codex.go
+  h_aa44c3b5b60dec 25
+tests/codexinstall/runner_test.go
+  h_aa44c3b5b60dec 371-388
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "af89f44e8e8ef9d57441a208227cf8db51d37aa2",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
