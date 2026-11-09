@@ -55,6 +55,10 @@ Remind once in each new session until trusted, including after a prior session's
 trust refusal; never repeat a denied operation in the same session or edit native
 trust records. A missing task callback alone is not proof of distrust: report
 activation as unverified until a real callback arrives, and do not claim it active.
+Preflight also reports local `hook_setup`, including Claude `disabled_by_host`.
+Relay the native-trust action even when this is only a read-only readiness check;
+do not require prepare or change settings merely to report it.
+
 A preflight policy preview can include `decline_command`. On an explicit refusal,
 execute that local command even if no task exists; it records only the setup
 decision and preserves upload consent. Do not turn silence into a decline.

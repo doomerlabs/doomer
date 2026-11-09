@@ -22,6 +22,7 @@ type codexTurn struct {
 	Messages        []string
 	HooksOffered    bool
 	PolicyOffered   bool
+	SetupPending    bool
 	UpdateRequested bool
 	Failed          bool
 }

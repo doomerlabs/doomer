@@ -15,6 +15,7 @@ import (
 // A local receipt is useful context for host review, not proof of the current
 // account or permission to transmit. Only online preparation establishes that.
 type preflightConsent struct {
+	HookSetup          *managedHookSetup       `json:"hook_setup,omitempty"`
 	Consent            *managedConsentEvidence `json:"consent"`
 	CodexPolicyPreview *codexReviewPolicy      `json:"codex_review_policy_preview,omitempty"`
 	CodexPolicyStatus  *codexPolicyStatus      `json:"codex_policy_status,omitempty"`
@@ -123,6 +124,12 @@ func newPreflightCommand(api, profile *string) *cobra.Command {
 			}
 			declineCommand := []string{binary, "--api-url", *api, "--profile", *profile, "preflight", "--agent", agent, "--repo", root, "--decline-policy", account}
 			entry := preflightConsent{Consent: evidence}
+			entry.HookSetup = inspectManagedHookSetup(s, managed.Task{Repo: root, RepositoryID: id, API: *api, Profile: *profile, Agent: agent, AccountID: account}, evidence)
+			entry.HookSetup.InstallCommand = nil
+			entry.HookSetup.DeclineCommand = nil
+			if entry.HookSetup.State == "missing" && entry.HookSetup.Decision == "pending" {
+				entry.HookSetup.Action = "Hook definitions are missing. Normal prepare verifies the account and returns the scoped install/decline choice. This local inspection does not authorize installation or change native trust."
+			}
 			if agent == "codex" {
 				proposal, status := inspectCodexPolicy(*evidence)
 				entry.CodexPolicyStatus = status

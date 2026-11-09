@@ -357,3 +357,57 @@ func TestPreflightRecordsLocalPolicyDeclineWithoutTaskOrNetwork(t *testing.T) {
 		})
 	}
 }
+
+func TestPreflightReportsDisabledClaudeHooksWithoutWritesOrNetwork(t *testing.T) {
+	isolate(t)
+	t.Setenv("HOME", t.TempDir())
+	repo := newWatchTestRepo(t)
+	id, err := watch.RepositoryIdentity(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests++; w.WriteHeader(500) }))
+	defer server.Close()
+	s, _ := managedStore()
+	task := managed.Task{AccountID: "account", RepositoryID: id, Repo: repo, API: server.URL, Profile: "default", Agent: "claude"}
+	if err := recordIntegrationConsent(s, task, "explicit_integration_approval", true); err != nil {
+		t.Fatal(err)
+	}
+	home, _ := os.UserHomeDir()
+	path := watch.HookFile(home, "claude")
+	if err := watch.Install(path, "doomer agent-hook --managed-task-adapter", "--managed-task-adapter", false); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err = json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	config["disableAllHooks"] = true
+	data, _ = json.Marshal(config)
+	if err = os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	before := preflightTree(t, home)
+	for i := 0; i < 2; i++ {
+		out, err := execute(t, "", "--api-url", server.URL, "preflight", "--repo", repo, "--agent", "claude")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var result preflightResult
+		if err = json.Unmarshal([]byte(out), &result); err != nil {
+			t.Fatal(err)
+		}
+		hooks := result.SavedConsents[0].HookSetup
+		if hooks == nil || hooks.State != "configured" || hooks.Activation != "disabled_by_host" || !strings.Contains(hooks.Action, "/hooks") || hooks.InstallCommand != nil || hooks.DeclineCommand != nil {
+			t.Fatal(out)
+		}
+	}
+	if requests != 0 || !reflect.DeepEqual(before, preflightTree(t, home)) {
+		t.Fatal("local hook inspection wrote state or contacted the service")
+	}
+}

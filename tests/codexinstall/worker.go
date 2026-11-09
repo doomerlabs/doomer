@@ -213,7 +213,7 @@ func runWorker(c config) (result report) {
 			record("Scripted user", prompt)
 			continue
 		}
-		if c.Harness == "claude" && observed.PolicyOffered && !approvedPolicy {
+		if c.Harness == "claude" && (observed.PolicyOffered || observed.SetupPending) && !approvedPolicy {
 			approvedPolicy = true
 			prompt = "I approve account verification and installing the displayed scoped Claude reviewer settings and hooks as part of the requested onboarding. Preserve unrelated settings and native hook trust. Still ask for any missing repository upload and software-update approval."
 			record("Scripted user", prompt)

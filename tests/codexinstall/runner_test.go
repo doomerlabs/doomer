@@ -368,3 +368,21 @@ func TestDeclineConfigAllowsOnlyNativeProjectTrust(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudeSetupChoiceUsesStructuredReadiness(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want bool
+	}{
+		{`{"claude_permissions":{"state":"missing"}}`, true},
+		{`{"saved_consents":[{"claude_permissions":{"state":"missing","decision":"pending"}}]}`, true},
+		{`{"saved_consents":[{"claude_permissions":{"state":"missing","decision":"declined"}}]}`, false},
+		{`{"claude_permissions":{"state":"missing","decision":"unreadable"}}`, false},
+		{`{"claude_permissions":{"state":"configured"}}`, false},
+		{`Please approve some permission`, false},
+	} {
+		if got := claudeSetupPending(tc.raw); got != tc.want {
+			t.Fatal(tc.raw, got)
+		}
+	}
+}
