@@ -341,6 +341,7 @@ func TestCodexPolicyQuestionWithoutPrepareOutput(t *testing.T) {
 		{"Approve account verification and the scoped Claude permission repair.", true},
 		{"The policy was declined. I preserved it and will not ask again.", false},
 		{"The user approved the policy last session.", false},
+		{"Your existing permissions are preserved. Ready to proceed?", false},
 		{"The policy is installed and ready.", false},
 	} {
 		raw, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"type": "agent_message", "text": tc.text}})

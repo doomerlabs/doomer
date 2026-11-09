@@ -896,12 +896,8 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				err = engine.Finish(c.Context(), &t, auth.Token)
 			case "respond":
 				var items []managed.Response
-				decoder := json.NewDecoder(io.LimitReader(c.InOrStdin(), 256<<10))
-				decoder.DisallowUnknownFields()
-				if err = decoder.Decode(&items); err == nil {
-					if decoder.Decode(new(any)) != io.EOF {
-						return fmt.Errorf("expected one JSON response array")
-					}
+				items, err = decodeManagedResponses(c.InOrStdin())
+				if err == nil {
 					err = engine.Respond(c.Context(), &t, auth.Token, items)
 				}
 			case "hook":
@@ -1245,4 +1241,20 @@ func taskRuntimeHome(task managed.Task) (string, error) {
 		return task.RuntimeHome, nil
 	}
 	return managedRuntimeHome()
+}
+
+// Keep schema guidance in the command result, even when a caller does not retain
+// the longer task instructions. Reject malformed input before sending feedback.
+func decodeManagedResponses(input io.Reader) ([]managed.Response, error) {
+	var items []managed.Response
+	decoder := json.NewDecoder(io.LimitReader(input, 256<<10))
+	decoder.DisallowUnknownFields()
+	err := decoder.Decode(&items)
+	if err == nil && decoder.Decode(new(any)) != io.EOF {
+		err = fmt.Errorf("expected one JSON response array")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%w; expected JSON array on stdin: [{\"lead_id\":\"FULL_LEAD_ID\",\"status\":\"fixed|dismissed|deferred\",\"agrees\":true,\"reason\":\"concrete evidence\"}]", err)
+	}
+	return items, nil
 }

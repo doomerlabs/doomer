@@ -172,7 +172,7 @@ func runWorker(c config) (result report) {
 		prompt = strings.Replace(prompt, "This test home persists for the scenario, so use ordinary setup without --portable.", "This scenario restarts the home, so use --portable.", 1)
 		prompt += " I will choose reusable setup at the browser approval."
 	}
-	for turn := 0; turn < 6; turn++ {
+	for turn := 0; turn < 8; turn++ {
 		result.Turns++
 		observed, err := runAgent(ctx, c, repo, env, prompt, session, record)
 		if err != nil {
@@ -204,9 +204,18 @@ func runWorker(c config) (result report) {
 			result.Passed = true
 			return result
 		}
-		if c.Harness == "codex" && observed.PolicyOffered && !approvedPolicy {
+		f.mu.Lock()
+		uploadGranted := f.Approved
+		f.mu.Unlock()
+		if c.Harness == "codex" && uploadGranted && observed.PolicyOffered && !approvedPolicy {
 			approvedPolicy = true
 			prompt = "I approve saving the displayed Doomer authorization in Codex's local approval-reviewer settings. Apply it, preserve unrelated settings, then verify setup."
+			record("Scripted user", prompt)
+			continue
+		}
+		if c.Harness == "claude" && observed.PolicyOffered && !approvedPolicy {
+			approvedPolicy = true
+			prompt = "I approve account verification and installing the displayed scoped Claude reviewer settings and hooks as part of the requested onboarding. Preserve unrelated settings and native hook trust. Still ask for any missing repository upload and software-update approval."
 			record("Scripted user", prompt)
 			continue
 		}
@@ -298,7 +307,7 @@ func runWorker(c config) (result report) {
 			return fail(fmt.Errorf("agent stopped before installation readiness without an expected approval request (checks: %v)", checks))
 		}
 	}
-	return fail(fmt.Errorf("installation exceeded six conversation turns"))
+	return fail(fmt.Errorf("installation exceeded eight conversation turns"))
 }
 
 type httpHandler func(http.ResponseWriter, *http.Request)

@@ -34,6 +34,7 @@ func (j *journey) claudePolicyRecovery(decline bool) error {
 		}
 	}
 	permissions["allow"] = kept
+	var removedPolicies []string
 	if !decline {
 		if auto, ok := settings["autoMode"].(map[string]any); ok {
 			entries, _ := auto["allow"].([]any)
@@ -42,10 +43,15 @@ func (j *journey) claudePolicyRecovery(decline bool) error {
 				text, _ := entry.(string)
 				if !strings.HasPrefix(text, "Doomer review authorization\n") {
 					retained = append(retained, entry)
+				} else {
+					removedPolicies = append(removedPolicies, text)
 				}
 			}
 			auto["allow"] = retained
 		}
+	}
+	if !decline && len(removedPolicies) == 0 {
+		return fmt.Errorf("fixture onboarding did not install the scoped classifier policy")
 	}
 	settings["disableAllHooks"] = true
 	before, err := json.Marshal(settings)
@@ -97,6 +103,28 @@ func (j *journey) claudePolicyRecovery(decline bool) error {
 		}
 		return nil
 	}
+	repaired, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var repairedSettings map[string]any
+	if err = json.Unmarshal(repaired, &repairedSettings); err != nil {
+		return err
+	}
+	auto, _ := repairedSettings["autoMode"].(map[string]any)
+	entries, _ := auto["allow"].([]any)
+	for _, policy := range removedPolicies {
+		found := false
+		for _, entry := range entries {
+			if entry == policy {
+				found = true
+			}
+		}
+		if !found {
+			return fmt.Errorf("repair did not restore the consent-scoped classifier policy")
+		}
+	}
+	j.result.Checks["claude_classifier_policy_restored"] = true
 	j.c.ReviewApprovals = true
 	if err := j.coding(j.repo, "Create claude-permissions.txt containing reviewed followed by a newline. Use the installed Doomer skill to complete its review. Keep hooks disabled and preserve permission settings."); err != nil {
 		return err
