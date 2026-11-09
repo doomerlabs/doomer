@@ -112,7 +112,7 @@ func responseError(resp *http.Response, token string) error {
 	}
 	if safeCode == "client_update_required" {
 		for _, n := range ValidNotices(body.NoticeEnvelope, time.Now()) {
-			if n.Blocking {
+			if n.Blocking && n.RecommendedVersion != "" {
 				message += " (recommended version " + n.RecommendedVersion + ")"
 				break
 			}
