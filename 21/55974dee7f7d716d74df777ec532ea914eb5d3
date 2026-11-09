@@ -1,0 +1,14 @@
+scripts/ci-agent-e2e.sh
+  h_aa44c3b5b60dec 44-49,51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2155974dee7f7d716d74df777ec532ea914eb5d3",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
