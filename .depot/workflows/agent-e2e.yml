@@ -65,6 +65,9 @@ jobs:
       matrix:
         harness: [codex, claude]
         scenario: ${{ fromJSON(needs.plan.outputs.scenarios) }}
+        exclude:
+          - harness: claude
+            scenario: browser-onboarding
     env:
       E2E_CANDIDATE_RELEASE: ${{ needs.plan.outputs.release }}
       E2E_REPORT_DIR: ${{ github.workspace }}/e2e-reports

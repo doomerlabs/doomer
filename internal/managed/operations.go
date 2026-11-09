@@ -30,6 +30,9 @@ type Engine struct {
 // Submit journals the exact request before sending it. A lost HTTP response
 // retries the same server idempotency key and the same uploaded snapshots.
 func (e Engine) Submit(ctx context.Context, task *Task, token string) error {
+	if task.OnboardingPending {
+		return fmt.Errorf("accepted onboarding is incomplete; finish policy installation before submitting")
+	}
 	if task.Purpose == "setup" {
 		task.Stage = "complete"
 		task.LastError = ""

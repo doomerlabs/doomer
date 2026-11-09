@@ -24,12 +24,12 @@ type preflightConsent struct {
 type preflightResult struct {
 	ClaudePermissions *claudePermissions `json:"claude_permissions,omitempty"`
 	State             string             `json:"state"`
+	Action            string             `json:"action"`
 	LocalOnly         bool               `json:"local_only"`
 	AccountVerified   bool               `json:"account_verified"`
 	Repository        string             `json:"repository"`
 	RepositoryID      string             `json:"repository_id"`
 	SavedConsents     []preflightConsent `json:"saved_consents"`
-	Action            string             `json:"action"`
 }
 
 func newPreflightCommand(api, profile *string) *cobra.Command {
@@ -133,7 +133,7 @@ func newPreflightCommand(api, profile *string) *cobra.Command {
 			if agent == "codex" {
 				proposal, status := inspectCodexPolicy(*evidence)
 				entry.CodexPolicyStatus = status
-				if status.State == "missing" {
+				if status.State == "missing" || status.State == "migration_required" {
 					declined, decisionErr := codexReviewPolicyDeclined(s, proposal)
 					if decisionErr != nil {
 						status.DecisionError = decisionErr.Error()
@@ -166,6 +166,16 @@ func newPreflightCommand(api, profile *string) *cobra.Command {
 		}
 		if len(result.SavedConsents) > 0 {
 			result.State = "saved_consent_found"
+		}
+		// A saved upload receipt does not mean this agent profile is ready.
+		// Put missing-policy repair ahead of any networked prepare operation.
+		for _, entry := range result.SavedConsents {
+			if entry.CodexPolicyPreview != nil {
+				result.State = "setup_decision_required"
+				result.Action = "STOP before running prepare: this Codex profile is missing its reviewer policy. Before prepare, show a concise summary of the saved account/service scope and proposed configuration changes, then ask Allow, Not now, or Never ask again. Allow authorizes account verification and installation of the displayed scoped policy: run prepare, verify live consent matches this preview, then execute the returned policy install_command. Never ask again executes this preview's decline_command. Not now leaves the decision pending. Do not request upload consent again merely because the local policy is missing. Do not attempt prepare or an upload while this decision is unanswered."
+				entry.CodexPolicyPreview.Action = result.Action
+				break
+			}
 		}
 		if declineAccount != "" {
 			if len(result.SavedConsents) == 0 {

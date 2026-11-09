@@ -35,7 +35,7 @@ go run ./tests/codexinstall --scenario list
 | `hooks-declined` | A hook-installation refusal persists across fresh sessions without reinstalling or re-offering |
 | `hooks-trust` | Codex native trust reminders recur until trusted; Claude native callbacks prove activation separately from installation |
 | `policy-installed` | Fresh real approval reviewer reuses the installed policy and upload grant without another prompt |
-| `policy-recovery` | Old delivery marker with a missing policy must offer setup, install after acceptance, and complete a review in a fresh process |
+| `policy-recovery` | Ordinary task with a saved grant but missing profile policy stops before prepare, offers policy then hooks, installs only after separate answers, and completes a fresh-session review |
 | `policy-declined` | Explicit policy decline persists across fresh chats without changing settings, revoking consent, or uploading source |
 | `new-chat` | Two fresh coding chats with no Doomer reminders complete reviews and finding responses with the original grant; Codex uses its real approval reviewer |
 | `worktrees` | Concurrent branches/worktrees keep files, tasks and reviews separate while sharing approval; Codex uses its real approval reviewer |
@@ -229,7 +229,7 @@ every failed scenario. No subscription token is
 written into the worker's command line or report. Remote workers receive it over
 SSH stdin, and disposable test homes and VMs are removed after the run.
 
-Codex subscription mode remains separate follow-up work.
+Local Codex subscription runs use `--auth subscription --codex-auth-home PATH`; CI continues to use API billing.
 
 ## Depot pull request CI
 
@@ -274,3 +274,18 @@ The CLI CI also builds immutable baseline commit `83f551519b8dcbc0786f9d2817a7df
 That comparison must fail at the specific missing-policy assertion. Provider,
 installation, and cleanup errors do not satisfy the expected regression.
 The normal matrix must pass all three policy scenarios with the candidate fix.
+
+## Browser approval and saved policy regression
+
+`browser-onboarding` runs Codex with the actual approval reviewer in a fresh
+isolated home. A team skill and CLI are already installed and only software
+updates are preapproved. The simulated browser grants uploads after Codex shows
+the approval link and starts the CLI wait command. No second chat reply is sent.
+The scenario requires policy installation in that same setup-only turn, then
+starts an ordinary coding chat and requires a completed review with the
+same grant and no repeated onboarding. Hooks are explicitly declined to verify
+that they remain optional. This scenario is Codex-only; Claude parity is separate.
+
+Run locally with `--scenario browser-onboarding` and the normal candidate and
+agent options above. The report records link delivery, the active wait, absence
+of uploads or policy before consent, completed setup and review, and grant reuse.

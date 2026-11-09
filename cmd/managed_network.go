@@ -25,6 +25,13 @@ func addManagedNetworkHelp(c *cobra.Command, r *managedResult, t managed.Task, e
 	}
 	retry := "prepare --task " + watch.Quote(t.Handle)
 	switch c.Name() {
+	case "login":
+		retry = "task login " + watch.Quote(t.Handle)
+		if c.Flags().Lookup("wait") != nil {
+			if wait, e := c.Flags().GetDuration("wait"); e == nil && wait > 0 {
+				retry += " --wait " + wait.String()
+			}
+		}
 	case "submit", "status", "finish":
 		retry = "task " + c.Name() + " " + watch.Quote(t.Handle)
 	case "retry":
@@ -41,6 +48,10 @@ func addManagedNetworkHelp(c *cobra.Command, r *managedResult, t managed.Task, e
 	// Portable setup requests another grant and cannot repair network access.
 	r.PortableSetupCommand = nil
 	if t.Agent == "codex" {
+		if c.Name() == "login" {
+			r.Action = fmt.Sprintf("Cannot reach %s to check the displayed browser approval. Retry %s with normal tool network permission. This command polls the user's approval and verifies the account; it does not upload repository source or submit a review. A new request with disclosed policy setup installs only that matching policy after the browser grants consent. Do not substitute prepare, portable setup, or submit. Keep waiting for the existing approval and respect an explicit denial.", connection.Host, retry)
+			return
+		}
 		r.Action = fmt.Sprintf("Cannot reach %s. "+
 			"Read the non-secret saved scope with doomer --api-url %s --profile %s preflight --agent codex --repo %s. "+
 			"Retry %s through Codex's normal tool network permissions. "+

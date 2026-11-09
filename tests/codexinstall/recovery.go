@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -44,7 +45,19 @@ func (j *journey) revokedUploads() error {
 	j.f.Request = ""
 	j.f.mu.Unlock()
 	j.result.Turns++
-	_, err := runAgent(j.ctx, j.c, j.repo, j.env, "Create hello.txt containing hello. Follow the installed Doomer skill and complete its review.", "", j.record)
+	baseURL := ""
+	for _, value := range j.env {
+		if strings.HasPrefix(value, "DOOMER_API_URL=") {
+			baseURL = strings.TrimPrefix(value, "DOOMER_API_URL=")
+		}
+	}
+	record := func(kind, text string) {
+		j.record(kind, text)
+		if observeBrowserDecision(j.f, baseURL, kind, text, true) {
+			j.record("Browser decision", "The user cancelled the new approval request after revocation; access remains revoked.")
+		}
+	}
+	_, err := runAgent(j.ctx, j.c, j.repo, j.env, "Create hello.txt containing hello. Follow the installed Doomer skill and complete its review.", "", record)
 	if err != nil {
 		return err
 	}

@@ -386,3 +386,44 @@ func TestClaudeSetupChoiceUsesStructuredReadiness(t *testing.T) {
 		}
 	}
 }
+
+func TestBrowserDecisionRequiresDisplayedExactURL(t *testing.T) {
+	for _, kind := range []string{"Codex", "Claude"} {
+		f := &fixture{Request: "opaque-request"}
+		if observeBrowserDecision(f, "https://fixture.invalid", "Command", "https://fixture.invalid/cli/setup#request=opaque-request", false) {
+			t.Fatal("tool output granted consent")
+		}
+		if observeBrowserDecision(f, "https://fixture.invalid", kind, "https://fixture.invalid/cli/setup", false) {
+			t.Fatal("incomplete URL granted consent")
+		}
+		if !observeBrowserDecision(f, "https://fixture.invalid", kind, "Approve https://fixture.invalid/cli/setup#request=opaque-request", false) || !f.Approved {
+			t.Fatal("displayed page decision was not delivered")
+		}
+		if observeBrowserDecision(f, "https://fixture.invalid", kind, "https://fixture.invalid/cli/setup#request=opaque-request", false) {
+			t.Fatal("repeated browser decision")
+		}
+	}
+	f := &fixture{Request: "decline"}
+	if !observeBrowserDecision(f, "https://fixture.invalid", "Codex", "https://fixture.invalid/cli/setup#request=decline", true) || !f.Cancelled || f.Approved {
+		t.Fatal("browser cancellation was ignored")
+	}
+	if observeBrowserDecision(&fixture{}, "https://fixture.invalid", "Codex", "https://fixture.invalid/cli/setup#request=", false) {
+		t.Fatal("no request was pending")
+	}
+}
+
+func TestPolicyChoiceObservation(t *testing.T) {
+	for _, tc := range []struct {
+		text string
+		want bool
+	}{
+		{"The missing policy would add that scope to Codex’s reviewer configuration. Allow, Not now, or Never ask again?", true},
+		{"The proposed setup adds that scoped authorization to Codex configuration. Allow, Not now, or Never ask again?", true},
+		{"Install optional hooks? Allow, Not now, or Never ask again?", false},
+		{"The policy is installed. No action is needed.", false},
+	} {
+		if got := policyChoiceOffered(tc.text); got != tc.want {
+			t.Fatalf("choice observation %q = %t", tc.text, got)
+		}
+	}
+}

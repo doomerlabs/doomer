@@ -15,9 +15,12 @@ import (
 	"github.com/doomerlabs/doomer/internal/watch"
 )
 
-var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-command-permissions", "upgrade-authorized-session", "policy-recovery", "policy-installed", "policy-declined", "hooks-upgrade", "hooks-declined", "hooks-trust", "policy-denied"}
+var scenarioNames = []string{"browser-onboarding", "install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-command-permissions", "upgrade-authorized-session", "policy-recovery", "policy-installed", "policy-declined", "hooks-upgrade", "hooks-declined", "hooks-trust", "policy-denied"}
 
 func validScenario(name string) bool {
+	if name == "ordinary-upgrade" || name == "policy-activation" {
+		return true
+	}
 	for _, candidate := range scenarioNames {
 		if name == candidate {
 			return true
@@ -72,6 +75,12 @@ func runAgent(ctx context.Context, c config, repo string, env []string, prompt, 
 	}
 	if observed.Failed || waitErr != nil {
 		return observed, fmt.Errorf("Codex execution failed: %s", strings.TrimSpace(stderr.String()))
+	}
+	// Desktop Codex question cards are function calls, not agent_message items.
+	// Include their user-visible titles when assessing an onboarding offer.
+	for _, question := range codexUserQuestions(env, observed.Session) {
+		observed.Messages = append(observed.Messages, question)
+		record("User question", question)
 	}
 	return observed, nil
 }
@@ -216,6 +225,9 @@ func (j *journey) afterInstall() error {
 		j.f.Deep = j.c.Scenario == "deep-review"
 		j.f.mu.Unlock()
 		prompt := "Create hello.txt containing hello followed by a newline."
+		if j.c.Scenario == "hooks-off" {
+			prompt += " Do not install hooks for this task; complete the review through explicit Doomer commands."
+		}
 		if personalScenario(j.c.Scenario) {
 			prompt = "Create hello.txt containing hello followed by a newline. Use the installed Doomer skill and complete the task."
 		}

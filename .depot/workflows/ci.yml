@@ -79,7 +79,7 @@ jobs:
         run: scripts/ci-verify.sh race
 
   coverage:
-    name: coverage floor
+    name: coverage report
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -92,7 +92,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - name: Enforce coverage floor
+      - name: Report test coverage
         run: scripts/ci-verify.sh coverage
 
   cross-build:

@@ -39,10 +39,26 @@ func validAgentVersion(c config, version string) bool {
 	if c.Harness == "claude" {
 		return version == claudeVersion+" (Claude Code)"
 	}
+	if c.AgentVersion != "" {
+		return version == "codex-cli "+c.AgentVersion
+	}
 	return version == "codex-cli 0.167.0"
 }
 func configureAgent(c config, home, proxyURL string) (string, error) {
 	configuration := fmt.Sprintf("model = %q\nmodel_provider = \"fixture\"\nmodel_reasoning_effort = \"low\"\n[model_providers.fixture]\nname = \"Budgeted test proxy\"\nbase_url = %q\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\n", c.Model, proxyURL+"/v1")
+	if c.CodexAuthHome != "" {
+		configuration = fmt.Sprintf("model = %q\nmodel_reasoning_effort = \"medium\"\n", c.Model)
+		auth, err := os.ReadFile(filepath.Join(c.CodexAuthHome, "auth.json"))
+		if err != nil {
+			return "", err
+		}
+		if err = os.MkdirAll(filepath.Join(home, ".codex"), 0700); err != nil {
+			return "", err
+		}
+		if err = os.WriteFile(filepath.Join(home, ".codex/auth.json"), auth, 0600); err != nil {
+			return "", err
+		}
+	}
 	if c.Harness == "claude" {
 		configuration = `{ "hasCompletedOnboarding": true, "theme": "dark", "autoUpdates": false }`
 	}

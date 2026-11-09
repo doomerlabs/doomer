@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 )
@@ -20,8 +21,8 @@ func validateAuthMode(harness, mode string) error {
 	if mode != "api" && mode != "subscription" {
 		return fmt.Errorf("authentication mode must be api or subscription")
 	}
-	if mode == "subscription" && harness != "claude" {
-		return fmt.Errorf("subscription authentication currently supports Claude only")
+	if mode == "subscription" && harness != "claude" && harness != "codex" {
+		return fmt.Errorf("subscription authentication supports Codex and Claude")
 	}
 	return nil
 }
@@ -31,6 +32,13 @@ func validateAuthentication(c config) error {
 		return err
 	}
 	if authenticationMode(c) == "subscription" {
+		if c.Harness == "codex" {
+			if c.APIKey != "" || c.OAuthToken != "" || c.CodexAuthHome == "" {
+				return fmt.Errorf("local Codex subscription requires only --codex-auth-home")
+			}
+			_, err := os.Stat(filepath.Join(c.CodexAuthHome, "auth.json"))
+			return err
+		}
 		if c.OAuthToken == "" {
 			return fmt.Errorf("set TEST_CLAUDE_CODE_OAUTH_TOKEN for subscription mode")
 		}
@@ -55,6 +63,9 @@ func validateAuthentication(c config) error {
 // and endpoints. Each mode supplies exactly one provider authentication route.
 func agentAuthenticationEnvironment(c config, home, proxyURL string) []string {
 	if c.Harness != "claude" {
+		if authenticationMode(c) == "subscription" {
+			return []string{"CODEX_HOME=" + filepath.Join(home, ".codex")}
+		}
 		return []string{"CODEX_HOME=" + filepath.Join(home, ".codex"), "OPENAI_API_KEY=fixture-proxy-token"}
 	}
 	env := []string{"CLAUDECODE=1", "CLAUDE_CONFIG_DIR=" + filepath.Join(home, ".claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "DISABLE_AUTOUPDATER=1", "DISABLE_UPDATES=1"}

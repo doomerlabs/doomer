@@ -56,6 +56,23 @@ func codexExtraPolicy(data []byte) (string, error) {
 	return config.AutoReview.ExtraPolicy, nil
 }
 
+func codexAutoReviewString(data []byte, key string) (string, error) {
+	var config map[string]any
+	if err := toml.Unmarshal(data, &config); err != nil {
+		return "", err
+	}
+	section, _ := config["auto_review"].(map[string]any)
+	raw, exists := section[key]
+	if !exists {
+		return "", nil
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return "", fmt.Errorf("Codex auto_review.%s must be a string", key)
+	}
+	return value, nil
+}
+
 func inspectCodexReviewPolicy(consent managedConsentEvidence) (*codexReviewPolicy, []byte, error) {
 	p := proposedCodexReviewPolicy(consent)
 	path, err := codexConfigPath()
@@ -80,6 +97,14 @@ func inspectCodexReviewPolicy(consent managedConsentEvidence) (*codexReviewPolic
 		}
 	} else if strings.Contains(policy, "Doomer repository review authorization\n") {
 		p.State = "migration_required"
+	}
+	if repair, err := codexReviewerTemplateRepair(path, data); err != nil {
+		return nil, nil, err
+	} else if repair != "" {
+		if p.State == "configured" {
+			p.State = "migration_required"
+		}
+		p.Changes = append(p.Changes, "Repair the Codex reviewer template's missing extra-policy slot, preserving its existing instructions and security policy. Track the compatibility override so later template changes are detected.")
 	}
 	return p, data, nil
 }
@@ -127,7 +152,11 @@ func mergeCodexExtraPolicy(existing string, consent managedConsentEvidence) stri
 // Patch only the string token, keeping comments, formatting and other settings.
 // Unusual table encodings are rejected instead of rewriting the whole config.
 func patchCodexExtraPolicy(data []byte, policy string) ([]byte, error) {
-	encoded, err := toml.Marshal(map[string]string{"extra_policy": policy})
+	return patchCodexAutoReviewString(data, "extra_policy", policy)
+}
+
+func patchCodexAutoReviewString(data []byte, keyName, policy string) ([]byte, error) {
+	encoded, err := toml.Marshal(map[string]string{keyName: policy})
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +188,7 @@ func patchCodexExtraPolicy(data []byte, policy string) ([]byte, error) {
 			continue
 		}
 		full := append(append([]string{}, table...), key...)
-		if strings.Join(full, ".") == "auto_review.extra_policy" {
+		if strings.Join(full, ".") == "auto_review."+keyName {
 			v := n.Value()
 			if v.Kind != unstable.String {
 				return nil, fmt.Errorf("Codex extra_policy must be a string")
@@ -184,7 +213,7 @@ func patchCodexExtraPolicy(data []byte, policy string) ([]byte, error) {
 		out = append(out, []byte("\n[auto_review]\n")...)
 		out = append(out, encoded...)
 	}
-	if got, err := codexExtraPolicy(out); err != nil || got != policy {
+	if got, err := codexAutoReviewString(out, keyName); err != nil || got != policy {
 		return nil, fmt.Errorf("unsupported Codex config layout; no settings changed")
 	}
 	return out, nil
@@ -209,12 +238,21 @@ func installCodexReviewPolicy(consent managedConsentEvidence) error {
 		return err
 	}
 	merged := mergeCodexExtraPolicy(policy, consent)
-	if merged == policy {
-		return nil
-	}
 	out, err := patchCodexExtraPolicy(data, merged)
 	if err != nil {
 		return err
+	}
+	if repair, err := codexReviewerTemplateRepair(path, data); err != nil {
+		return err
+	} else if repair != "" {
+		out, err = patchCodexAutoReviewString(out, "experimental_policy_template", repair)
+		if err != nil {
+			return err
+		}
+		out = markCodexReviewerTemplate(out, repair)
+	}
+	if bytes.Equal(out, data) {
+		return nil
 	}
 	if got, err := codexExtraPolicy(out); err != nil || got != merged {
 		return fmt.Errorf("Codex policy validation failed")

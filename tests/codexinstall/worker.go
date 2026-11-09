@@ -119,11 +119,27 @@ func runWorker(c config) (result report) {
 	if !validAgentVersion(c, result.CodexVersion) {
 		return fail(fmt.Errorf("unexpected agent version: %s", result.CodexVersion))
 	}
-	if authenticationMode(c) == "subscription" {
+	if authenticationMode(c) == "subscription" && c.Harness == "claude" {
 		if err := verifyClaudeSubscription(ctx, c, repo, env); err != nil {
 			return fail(err)
 		}
 		result.Checks["subscription_authentication"] = true
+	}
+	if c.Scenario == "browser-onboarding" {
+		j := journey{c: c, ctx: ctx, home: home, repo: repo, env: env, f: f, result: &result, codexConfig: configuration, record: record}
+		if err := j.browserOnboarding(); err != nil {
+			return fail(err)
+		}
+		result.Passed = true
+		return result
+	}
+	if c.Scenario == "ordinary-upgrade" || c.Scenario == "policy-activation" {
+		j := journey{c: c, ctx: ctx, home: home, repo: repo, env: env, f: f, result: &result, codexConfig: configuration, record: record}
+		if err := j.ordinaryUpgrade(); err != nil {
+			return fail(err)
+		}
+		result.Passed = true
+		return result
 	}
 	if c.SkillsGuide != "" {
 		guide, err := writeCandidateSkills(&c, root)
@@ -147,6 +163,7 @@ func runWorker(c config) (result report) {
 	}
 	session := ""
 	approvedUpdate := false
+	interruptedBrowserResumed := false
 	approvedPolicy := false
 	sawUpdateRequest := false
 	declined := false
@@ -174,7 +191,20 @@ func runWorker(c config) (result report) {
 	}
 	for turn := 0; turn < 8; turn++ {
 		result.Turns++
-		observed, err := runAgent(ctx, c, repo, env, prompt, session, record)
+		waitCapable := false
+		observed, err := runAgent(ctx, c, repo, env, prompt, session, func(kind, text string) {
+			record(kind, text)
+			if kind == "Command" && strings.Contains(text, `"wait_command"`) {
+				waitCapable = true
+			}
+			if waitCapable && observeBrowserDecision(f, server.URL, kind, text, c.Scenario == "decline-uploads") {
+				result.Checks["presented_approval_link"] = true
+				if c.Scenario == "decline-uploads" {
+					declined = true
+				}
+				record("Browser decision", "The simulated user answered on the displayed approval page while the agent turn remained active.")
+			}
+		})
 		if err != nil {
 			return fail(err)
 		}
@@ -189,6 +219,22 @@ func runWorker(c config) (result report) {
 			candidateInstalled = true
 		}
 		text := strings.Join(observed.Messages, "\n")
+		if c.Scenario == "interrupted" && !interruptedBrowserResumed {
+			f.mu.Lock()
+			accepted := f.Approved
+			f.mu.Unlock()
+			if accepted {
+				tasks, e := savedTasks(home)
+				if e != nil || len(tasks) != 1 {
+					return fail(fmt.Errorf("missing durable setup task"))
+				}
+				interruptedBrowserResumed = true
+				session = ""
+				prompt = "The browser approval is saved. Resume the existing Doomer setup in this persistent home with doomer prepare --task " + tasks[0].Handle + ". Finish hook configuration and verify setup without a replacement task."
+				result.Checks["fresh_agent_resumed_setup"] = true
+				continue
+			}
+		}
 		if declined {
 			f.mu.Lock()
 			safe := !f.Approved && f.Uploads == 0
@@ -382,4 +428,27 @@ func redact(text, key string) string {
 	}
 	text = strings.ReplaceAll(text, "fixture-account-token", "[TEST TOKEN]")
 	return text
+}
+
+// Answer only a complete URL actually shown in an agent message, never a URL
+// found in tool output. Older agents may end the turn; the fallback below the
+// runAgent call still resumes those installs using the same browser decision.
+func observeBrowserDecision(f *fixture, baseURL, kind, text string, decline bool) bool {
+	if kind != "Codex" && kind != "Claude" {
+		return false
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Request == "" || f.Approved || f.Cancelled {
+		return false
+	}
+	if !strings.Contains(text, baseURL+"/cli/setup#request="+f.Request) {
+		return false
+	}
+	if decline {
+		f.Cancelled = true
+	} else {
+		f.Approved = true
+	}
+	return true
 }

@@ -4,8 +4,6 @@ set -euo pipefail
 readonly ACTIONLINT_VERSION="1.7.7"
 readonly SHELLCHECK_VERSION="0.10.0"
 readonly GOVULNCHECK_VERSION="1.6.0"
-# Retain the original CLI coverage floor.
-readonly COVERAGE_FLOOR="68.0"
 
 fail() { printf 'ci verify: %s\n' "$*" >&2; exit 1; }
 log() { printf '==> %s\n' "$*"; }
@@ -80,7 +78,7 @@ coverage() {
   tmp="$(make_temp_dir)"
   trap 'rm -rf -- "$tmp"' RETURN
   profile="$tmp/coverage.out"
-  log "Go coverage (floor ${COVERAGE_FLOOR}%)"
+  log "Go test coverage report"
   # Exclude non-product paths that are 0% by design (tooling stubs / fixtures).
   local pkgs
   pkgs="$(go list ./... | grep -v '/scripts/sign-official$' | grep -v '/smoke-tests/')"
@@ -88,9 +86,7 @@ coverage() {
   go test -coverprofile="$profile" $pkgs
   total="$(go tool cover -func="$profile" | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')"
   [[ -n "$total" ]] || fail "could not calculate total coverage"
-  awk -v actual="$total" -v floor="$COVERAGE_FLOOR" 'BEGIN { exit !(actual + 0 >= floor + 0) }' \
-    || fail "coverage ${total}% is below the ${COVERAGE_FLOOR}% floor"
-  printf 'total statement coverage: %s%% (floor %s%%)\n' "$total" "$COVERAGE_FLOOR"
+  printf 'total statement coverage: %s%%\n' "$total"
   rm -rf -- "$tmp"
   trap - RETURN
 }

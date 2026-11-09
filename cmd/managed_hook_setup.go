@@ -49,6 +49,9 @@ func inspectManagedHookSetup(s managed.Store, t managed.Task, consent *managedCo
 	if installed {
 		p.State = "configured"
 		p.Action = "Hook definitions are installed; this does not prove native trust. If the current harness reports untrusted hooks, prompt the user to review and trust them through its native /hooks controls. Remind once per new session while untrusted, even after an earlier session declined trust. Never edit trust records or retry a trust refusal in the same session. Otherwise report activation as unverified until a real callback is observed."
+		if t.Agent == "codex" && !t.HookActivated {
+			p.Action += " In the onboarding completion message, explicitly say: Doomer hooks are installed; to enable them, open /hooks or Review hooks in Codex, inspect the four Doomer entries, then choose Allow all (or allow the entries you want). Installation is separate from native approval. Do not click approval controls or edit trust records for the user."
+		}
 		if t.HookActivated {
 			p.Activation = "observed_for_task"
 		}

@@ -21,11 +21,12 @@ import (
 )
 
 type pendingManagedApproval struct {
-	Input      adversarylabs.ManagedSetupRequest `json:"input"`
-	Credential string                            `json:"credential"`
-	Verifier   string                            `json:"verifier"`
-	URL        string                            `json:"url"`
-	Expires    time.Time                         `json:"expires"`
+	Input         adversarylabs.ManagedSetupRequest `json:"input"`
+	Credential    string                            `json:"credential"`
+	Verifier      string                            `json:"verifier"`
+	URL           string                            `json:"url"`
+	InstallPolicy bool                              `json:"install_policy,omitempty"`
+	Expires       time.Time                         `json:"expires"`
 }
 
 func displayManagedService(api string) string {
@@ -59,6 +60,11 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		if approved && (!t.Portable || t.PortableApproved || t.PortableDeclined) {
 			if t.PortableApproved {
 				if err := savePortable(c.Context(), app, s, *t, false); err != nil {
+					return err
+				}
+			}
+			if t.OnboardingPending {
+				if err := finishApprovedCodexPolicy(s, t); err != nil {
 					return err
 				}
 			}
@@ -97,7 +103,7 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 			return err
 		}
 		pending = pendingManagedApproval{Verifier: base64.RawURLEncoding.EncodeToString(secret[:32]),
-			Credential: auth.Token, Expires: time.Now().Add(30 * time.Minute)}
+			Credential: auth.Token, InstallPolicy: t.Agent == "codex", Expires: time.Now().Add(30 * time.Minute)}
 		if identityErr != nil {
 			pending.Credential = "doomer_anon_" + base64.RawURLEncoding.EncodeToString(secret[64:])
 		}
@@ -134,6 +140,33 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 	if err != nil {
 		return managed.NetworkError("repository_approval", err)
 	}
+	if c.Flags().Lookup("wait") != nil {
+		duration, err := c.Flags().GetDuration("wait")
+		if err != nil {
+			return err
+		}
+		if duration < 0 || duration > 45*time.Second {
+			return fmt.Errorf("--wait must be between 0 and 45s")
+		}
+		deadline := time.Now().Add(duration)
+		for result.State == "pending" && time.Now().Before(deadline) {
+			delay := time.Until(deadline)
+			if delay > 2*time.Second {
+				delay = 2 * time.Second
+			}
+			timer := time.NewTimer(delay)
+			select {
+			case <-c.Context().Done():
+				timer.Stop()
+				return c.Context().Err()
+			case <-timer.C:
+			}
+			result, err = client.PollManagedSetup(c.Context(), pending.Input.Request, pending.Verifier)
+			if err != nil {
+				return managed.NetworkError("repository_approval", err)
+			}
+		}
+	}
 	r := resultFor(*t)
 	r.Authenticated = identityErr == nil
 	switch result.State {
@@ -143,7 +176,12 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		if pending.Input.AllRepositories {
 			scope = "all current and future repositories used by this coding agent with the displayed Doomer account, service, and profile"
 		}
-		r.Action = "Show the complete approval URL to the user, including its #request fragment. Open the approval page to authorize repository snapshots, task context, and finding responses for " + scope + ". Reuse this approval across chats within that scope. Sign in there if needed. After choosing Allow, resume doomer prepare --task " + t.Handle
+		r.Action = "Show the complete approval URL, including #request, and say: Allow Doomer to review " + scope + ". It sends repository snapshots, task context and review responses to " + displayManagedService(t.API) + "."
+		if pending.InstallPolicy {
+			r.Action += " Choosing Allow also remembers this same permission in Codex by installing its scoped reviewer policy, preserving unrelated settings. Hook installation and trust are separate."
+		}
+		r.Action += " Keep this chat waiting with wait_command while the user chooses on the page; after Allow, the CLI completes setup automatically."
+
 	case "cancelled":
 		r.State, r.Action = "approval_declined", "Repository approval was cancelled. Doomer uploads remain disabled."
 	case "approved":
@@ -176,6 +214,14 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		}
 
 		t.AccountID = verifiedAccount
+		// Only requests issued with the policy disclosure can install settings.
+		// Old upload-only browser grants retain their original meaning.
+		if pending.InstallPolicy {
+			t.OnboardingPending = true
+			if err := s.Save(t); err != nil {
+				return err
+			}
+		}
 		// Pending requests created by older CLIs retain their original scope.
 		if pending.Input.AllRepositories {
 			err = recordIntegrationConsent(s, *t, "browser_integration_approval", true)
@@ -196,6 +242,11 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 			}
 			t.PortableApproved = *result.PortableState
 			t.PortableDeclined = !*result.PortableState
+		}
+		if t.OnboardingPending {
+			if err := finishApprovedCodexPolicy(s, t); err != nil {
+				return err
+			}
 		}
 		r.State, r.Authenticated, r.UploadApproved, r.Instructions = "ready", true, true, managedTaskInstructions(*t)
 	default:
@@ -238,4 +289,41 @@ func managedApprovalRepositories(s managed.Store, t managed.Task) ([]adversaryla
 		repos = append(repos, adversarylabs.ManagedSetupRepository{MainCheckout: path, Checkout: path, AlreadyGranted: true})
 	}
 	return repos, nil
+}
+
+// Complete the policy covered by the displayed browser approval before any
+// upload. A failed installation leaves a durable gate for the next invocation.
+func finishApprovedCodexPolicy(s managed.Store, t *managed.Task) error {
+	if !t.OnboardingPending {
+		return nil
+	}
+	if t.Agent != "codex" {
+		return fmt.Errorf("unsupported pending policy setup")
+	}
+	evidence, err := savedManagedConsentEvidence(s, *t)
+	if err != nil {
+		return err
+	}
+	if evidence == nil {
+		return fmt.Errorf("verified upload consent required before policy installation")
+	}
+	proposal, _, err := inspectCodexReviewPolicy(*evidence)
+	if err != nil {
+		return err
+	}
+	declined, err := codexReviewPolicyDeclined(s, proposal)
+	if err != nil {
+		return err
+	}
+	if declined {
+		// Upload approval does not revoke an earlier explicit settings refusal.
+		// Keep the grant, leave settings unchanged, and report the saved decline.
+		t.OnboardingPending = false
+		return s.Save(t)
+	}
+	if err := installCodexReviewPolicy(*evidence); err != nil {
+		return err
+	}
+	t.OnboardingPending = false
+	return s.Save(t)
 }
