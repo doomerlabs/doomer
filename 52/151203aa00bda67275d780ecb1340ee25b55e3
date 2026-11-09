@@ -1,0 +1,28 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 152-156,784-786,868-872
+cmd/managed_adoption.go
+  h_aa44c3b5b60dec 1-200
+cmd/managed_adoption_test.go
+  h_aa44c3b5b60dec 1-242
+cmd/managed_test.go
+  h_aa44c3b5b60dec 36,71-77,100-102,196-197,211-220
+docs/managed-runtime.md
+  h_aa44c3b5b60dec 94-108
+internal/managed/managed_test.go
+  h_aa44c3b5b60dec 128,147-149,156,170-172
+internal/managed/operations.go
+  h_aa44c3b5b60dec 103-106
+internal/managed/store.go
+  h_aa44c3b5b60dec 28-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "52151203aa00bda67275d780ecb1340ee25b55e3",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
