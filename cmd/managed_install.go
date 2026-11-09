@@ -287,6 +287,18 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 		if err != nil {
 			return err
 		}
+		// Profile-wide hooks do not opt every repository into Doomer. Resolve the
+		// same project/personal bootstrap as prepare before emitting instructions
+		// or touching task state.
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		if _, err := managed.ResolveBootstrap(repo, home, agent); os.IsNotExist(err) {
+			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
+		} else if err != nil {
+			return err
+		}
 		var s managed.Store
 		if statePath != "" {
 			if !filepath.IsAbs(statePath) {
