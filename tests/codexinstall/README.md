@@ -50,6 +50,7 @@ go run ./tests/codexinstall --scenario list
 | `personal` | Personal installation is discovered and completes a coding review |
 | `upgrade-untracked` | Updates untracked repository skill files without creating a PR |
 | `upgrade-personal` | Updates personal skill files without creating a PR |
+| `unconfigured-repo` | Installed profile hooks return no instructions in unrelated repositories and linked worktrees; ordinary real-agent edits complete without Doomer prompts, task creation, uploads, or settings changes |
 | `hooks-off` | Completes a review through per-call commands when hooks are absent |
 | `revoked-uploads` | Server-side revocation blocks subsequent content uploads |
 | `interrupted-review` | Terminated Codex resumes a pending review in a new process without duplicate submission |

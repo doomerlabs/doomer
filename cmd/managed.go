@@ -369,6 +369,12 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 				return e
 			}
 			bootstrap, e := managed.ResolveBootstrap(root, home, agent)
+			if os.IsNotExist(e) {
+				return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{
+					"state":  "not_configured",
+					"action": "Doomer is not configured here. Offer repository or personal setup only if the user wants to enable Doomer; do not install it automatically.",
+				})
+			}
 			if e != nil {
 				return e
 			}

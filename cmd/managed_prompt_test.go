@@ -362,7 +362,19 @@ func TestPendingSetupRequiresAnUnambiguousScope(t *testing.T) {
 
 func TestUnpreparedStopDoesNotRestartSetup(t *testing.T) {
 	isolate(t)
+	t.Setenv("HOME", t.TempDir())
 	repo := newWatchTestRepo(t)
+	text, err := managed.BootstrapText(managed.Policy{Protocol: managed.Protocol, Channel: "stable"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(repo, ".agents/skills/doomer-review/SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(text), 0600); err != nil {
+		t.Fatal(err)
+	}
 	raw, _ := json.Marshal(watch.HookInput{Event: "Stop", Session: "new-session", CWD: repo})
 	output, err := execute(t, string(raw), "agent-hook", "--agent", "claude", "--managed-task-adapter")
 	if err != nil {
