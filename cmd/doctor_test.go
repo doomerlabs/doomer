@@ -97,3 +97,18 @@ func TestDoctorBypassesMissingCheckoutRuntime(t *testing.T) {
 		t.Fatalf("doctor dispatched to broken runtime: %v %v", handled, err)
 	}
 }
+
+func TestDoctorShowsActiveClaudeProfileHooks(t *testing.T) {
+	isolate(t)
+	t.Setenv("HOME", t.TempDir())
+	profile := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", profile)
+	output := filepath.Join(t.TempDir(), "report.json")
+	out, err := execute(t, "", "doctor", "--repo", doctorRepo(t), "--no-upload", "--output", output)
+	if err != nil {
+		t.Fatal(out, err)
+	}
+	if !strings.Contains(out, "claude hooks: missing; activation: unverified") || !strings.Contains(out, "doomer hooks install --agent claude") {
+		t.Fatal(out)
+	}
+}

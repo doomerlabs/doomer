@@ -268,3 +268,23 @@ func TestPublishedBootstrapRejectsPolicyAndVersionDrift(t *testing.T) {
 		})
 	}
 }
+
+func TestReleasedNineTwoBootstrapUpgradesForHooksInstall(t *testing.T) {
+	policy := Policy{Protocol: Protocol, Channel: "stable"}
+	old, err := bootstrapText(policy, versionNineTwoBootstrapTemplate, "2026.11.9.2", ">=2026.11.9.2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "SKILL.md")
+	if err := os.WriteFile(path, []byte(old), 0600); err != nil {
+		t.Fatal(err)
+	}
+	update, err := InspectBootstrap(path, "project", BootstrapVersion)
+	if err != nil || update.State != "update_available" {
+		t.Fatalf("%+v %v", update, err)
+	}
+	blocked, err := InspectBootstrap(path, "project", "2026.11.9.2")
+	if err != nil || blocked.State != "incompatible" {
+		t.Fatalf("%+v %v", blocked, err)
+	}
+}

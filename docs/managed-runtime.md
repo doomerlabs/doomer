@@ -53,7 +53,13 @@ agent prose never selects the version.
   offer for 24 hours across linked worktrees. Use `--personal` for personal
   wrappers. Manual inspection and upgrades remain available.
 
-- `doomer hooks --agent codex|claude` installs the optional thin adapter. During
+- `doomer hooks install --agent codex|claude` installs and verifies the optional
+  thin adapter without installing review permissions or changing native trust.
+  If Claude blocks hook installation as self-modification, offer this command
+  for the user to run directly in a terminal; do not route around the host block.
+  `doomer doctor --no-upload` records whether hook definitions are installed,
+  partial, missing, or unreadable, separately from unverified activation.
+- The existing `doomer hooks --agent codex|claude` remains supported. During
   approved Claude onboarding, add `--task HANDLE` to verify the current account
   and upload consent and install the review-command permission rules. Without
   `--task`, this command only configures hooks. The user still controls native

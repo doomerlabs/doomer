@@ -19,6 +19,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/doomerlabs/doomer/internal/watch"
 )
 
 const MaxBytes = 4 * 1024 * 1024
@@ -280,6 +282,9 @@ func (c collector) hooks() []any {
 			result = append(result, c.hook(root, name))
 		}
 	}
+	if root := os.Getenv("CLAUDE_CONFIG_DIR"); root != "" {
+		result = append(result, c.hook(root, "settings.json"))
+	}
 	return result
 }
 
@@ -289,8 +294,9 @@ var agentClaude = regexp.MustCompile(`--agent[\\\s"']+claude`)
 func (c collector) hook(root, name string) object {
 	_, err := os.Lstat(filepath.Join(root, name))
 	commands := []any{}
-	for _, line := range strings.Split(string(readFile(root, name)), "\n") {
-		if !strings.Contains(strings.ToLower(line), "doomer") || !strings.Contains(line, "watch hook") {
+	data := readFile(root, name)
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.Contains(strings.ToLower(line), "doomer") || !(strings.Contains(line, "watch hook") || strings.Contains(line, "agent-hook")) {
 			continue
 		}
 		commands = append(commands, object{"dispatch": strings.Contains(line, "--dispatch"), "agent_codex": agentCodex.MatchString(line), "agent_claude": agentClaude.MatchString(line), "suppresses_stderr": strings.Contains(line, "2>/dev/null"), "has_state": strings.Contains(line, "--state")})
@@ -298,7 +304,25 @@ func (c collector) hook(root, name string) object {
 			break
 		}
 	}
-	return object{"path": filepath.Join(root, name), "exists": err == nil, "doomer_commands": commands}
+	status := "missing"
+	if len(commands) > 0 {
+		status = "partial"
+	}
+	if strings.HasSuffix(name, ".json") && err == nil {
+		managed, managedErr := watch.InstalledContent(name, data, "--managed-task-adapter")
+		legacy, legacyErr := watch.InstalledContent(name, data, "watch hook")
+		if managed || legacy {
+			status = "installed"
+		} else if managedErr != nil || legacyErr != nil {
+			status = "unreadable"
+		}
+	} else if !strings.HasSuffix(name, ".json") {
+		status = "not_applicable"
+	}
+	if err != nil && !os.IsNotExist(err) {
+		status = "unreadable"
+	}
+	return object{"path": filepath.Join(root, name), "exists": err == nil, "doomer_commands": commands, "installation": status, "activation": "unverified", "repair_commands": []string{"doomer hooks install --agent codex", "doomer hooks install --agent claude"}}
 }
 
 func processExists(value any) bool {

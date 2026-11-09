@@ -124,6 +124,11 @@ func Installed(file, marker string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	return InstalledContent(file, data, marker)
+}
+
+// InstalledContent checks bounded, already-read settings without accessing disk.
+func InstalledContent(file string, data []byte, marker string) (bool, error) {
 	var config struct {
 		Hooks map[string][]struct {
 			Hooks []struct {
