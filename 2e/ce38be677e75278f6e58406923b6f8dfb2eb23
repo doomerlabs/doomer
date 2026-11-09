@@ -1,0 +1,14 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 1257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2ece38be677e75278f6e58406923b6f8dfb2eb23",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
