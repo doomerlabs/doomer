@@ -1,0 +1,38 @@
+cmd/doctor.go
+  h_aa44c3b5b60dec 15,88-103
+cmd/doctor_test.go
+  h_aa44c3b5b60dec 100-114
+cmd/hooks_install_test.go
+  h_aa44c3b5b60dec 1-54
+cmd/managed_hook_setup.go
+  h_aa44c3b5b60dec 92-94
+cmd/managed_install.go
+  h_aa44c3b5b60dec 244-248,252,257-262
+docs/managed-runtime.md
+  h_aa44c3b5b60dec 56-62
+internal/doctor/collect.go
+  h_aa44c3b5b60dec 22-23,285-287,297-299,307-325
+internal/doctor/hooks_test.go
+  h_aa44c3b5b60dec 1-32
+internal/managed/bootstrap-2026.11.9.2.md
+  h_aa44c3b5b60dec 1-100
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 56-60
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 16,21,74-76,168
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 271-290
+internal/watch/install.go
+  h_aa44c3b5b60dec 127-131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f760f865ee7613bc8ad811ec44a01102e11f0ee4",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
