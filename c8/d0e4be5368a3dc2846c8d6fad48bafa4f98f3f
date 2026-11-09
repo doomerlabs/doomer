@@ -1,0 +1,18 @@
+cmd/managed_bootstrap.go
+  h_aa44c3b5b60dec 159,161,163-165
+cmd/managed_bootstrap_test.go
+  h_aa44c3b5b60dec 5,8,67,149-218
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 110-120,124-129,134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c8d0e4be5368a3dc2846c8d6fad48bafa4f98f3f",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
