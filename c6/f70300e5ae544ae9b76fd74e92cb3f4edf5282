@@ -1,0 +1,25 @@
+.agents/skills/doomer-review/SKILL.md
+  s_358d75484e30a8::t_66180209b483e4 1-140
+AGENTS.md
+  s_358d75484e30a8::t_66180209b483e4 11-21
+.claude/skills/doomer-review/SKILL.md
+  s_358d75484e30a8::t_66180209b483e4 1-140
+CLAUDE.md
+  s_358d75484e30a8::t_66180209b483e4 2-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c6f70300e5ae544ae9b76fd74e92cb3f4edf5282",
+  "prompts": {},
+  "sessions": {
+    "s_358d75484e30a8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4fa754f-e2ff-4d3e-a347-61848ef0d150",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
