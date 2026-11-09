@@ -1,0 +1,16 @@
+tests/codexinstall/cache_test.go
+  h_aa44c3b5b60dec 302-382
+tests/codexinstall/snapshot.go
+  h_aa44c3b5b60dec 74-91,105-115,144-145,166,243
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b67d45e069eca9ea2bbf8be48fa3f89831c0aef5",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
