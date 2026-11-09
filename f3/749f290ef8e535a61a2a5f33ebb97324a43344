@@ -1,0 +1,14 @@
+scripts/ci-verify.sh
+  h_aa44c3b5b60dec 135,159,164,173-187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f3749f290ef8e535a61a2a5f33ebb97324a43344",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
