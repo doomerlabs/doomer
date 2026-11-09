@@ -45,7 +45,8 @@ agent prose never selects the version.
 - `doomer task respond HANDLE` reads JSON responses from stdin, persists them
   before delivery, and records each server acknowledgment.
 - `doomer task finish HANDLE` verifies successful Quick review, response delivery,
-  and the current checkout tree before reporting completion.
+  and the current checkout tree for coding tasks. Setup-only tasks complete
+  without a review; unchanged tasks verify that the checkout is still unchanged.
 - `doomer bootstrap status` inspects wrapper compatibility. `upgrade --accept`
   applies an explicitly accepted update in the selected scope.
 - `doomer bootstrap defer --repo PATH` suppresses the current optional wrapper
@@ -66,6 +67,15 @@ Use task state and Quick readiness rather than aggregate review status or
 failed Deep status does not block successful Quick review. Do not fetch Deep
 results as a prerequisite for completion. Wait for Deep only when explicitly
 requested. Quick failures still block completion and require recovery.
+
+For an explicitly requested Deep review, take `review.id` from task status and
+run `doomer review get REVIEW_ID --workspace --format json`. Use the same API URL
+and profile as the task (`--api-url API --profile PROFILE` when needed). This
+existing read command fetches full results, including `full_review`. Poll it
+while `full_review.status` is pending; on completion read `full_review.result`
+and address confirmed findings, or report a failed Deep review. This explicit
+flow remains available after the coding task completes. It is not part of the
+automatic Quick completion gate and does not submit another review.
 
 New tasks without a coding prompt are setup-only. Their submit/finish operations
 complete with `review_not_required: setup_only` and never upload a review. Supplying
