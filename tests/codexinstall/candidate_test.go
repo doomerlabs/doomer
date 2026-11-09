@@ -13,6 +13,8 @@ import (
 )
 
 func TestCandidateAssemblyAcceptsUnrecognizedPublishedBootstrap(t *testing.T) {
+	// Keep the fixture compatible so this test isolates modified-wrapper handling.
+	const candidateVersion = "2099.1.1.1"
 	for _, scenario := range []string{"install", "personal"} {
 		for _, source := range []string{"generated", "skills", "repository"} {
 			t.Run(scenario+"/"+source, func(t *testing.T) {
@@ -32,12 +34,12 @@ func TestCandidateAssemblyAcceptsUnrecognizedPublishedBootstrap(t *testing.T) {
 				for _, agent := range []string{".agents", ".claude"} {
 					path := filepath.Join(root, agent, "skills/doomer-review/SKILL.md")
 					writeCandidateTestFile(t, path, []byte(published))
-					update, err := managed.InspectBootstrap(path, "project", "2026.11.8.5")
+					update, err := managed.InspectBootstrap(path, "project", candidateVersion)
 					if err != nil || update.State != "modified" {
 						t.Fatalf("fixture must reproduce rejection: %+v, %v", update, err)
 					}
 				}
-				c := config{Scenario: scenario, CandidateVersion: "2026.11.8.5", CandidateFile: filepath.Join(t.TempDir(), "candidate")}
+				c := config{Scenario: scenario, CandidateVersion: candidateVersion, CandidateFile: filepath.Join(t.TempDir(), "candidate")}
 				// This is deliberately not executable code: fixture assembly must inject
 				// the candidate, not invoke its production bootstrap upgrade command.
 				writeCandidateTestFile(t, c.CandidateFile, []byte("candidate runtime"))
