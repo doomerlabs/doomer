@@ -252,3 +252,90 @@ func TestPreflightClaudeMissingPermissionsWithoutConsent(t *testing.T) {
 		t.Fatal("unverified installation offered", out)
 	}
 }
+
+func TestPreflightRecordsLocalPolicyDeclineWithoutTaskOrNetwork(t *testing.T) {
+	for _, agent := range []string{"codex", "claude"} {
+		t.Run(agent, func(t *testing.T) {
+			isolate(t)
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("CODEX_HOME", t.TempDir())
+			repo := newWatchTestRepo(t)
+			id, err := watch.RepositoryIdentity(context.Background(), repo)
+			if err != nil {
+				t.Fatal(err)
+			}
+			requests := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests++; w.WriteHeader(500) }))
+			defer server.Close()
+			s, _ := managedStore()
+			task := managed.Task{AccountID: "account", RepositoryID: id, Repo: repo, API: server.URL, Profile: "default", Agent: agent}
+			if err := recordIntegrationConsent(s, task, "explicit_integration_approval", true); err != nil {
+				t.Fatal(err)
+			}
+			out, err := execute(t, "", "--api-url", server.URL, "preflight", "--repo", repo, "--agent", agent)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var first preflightResult
+			if err = json.Unmarshal([]byte(out), &first); err != nil {
+				t.Fatal(err)
+			}
+			var command []string
+			if agent == "codex" {
+				command = first.SavedConsents[0].CodexPolicyPreview.DeclineCommand
+			} else {
+				command = first.SavedConsents[0].ClaudePermissions.DeclineCommand
+			}
+			if len(command) == 0 {
+				t.Fatal("missing handle-free decline command", out)
+			}
+			for i := 0; i < 2; i++ {
+				out, err = execute(t, "", command[1:]...)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var result preflightResult
+				if err = json.Unmarshal([]byte(out), &result); err != nil || result.State != "reviewer_policy_declined" {
+					t.Fatal(out, err)
+				}
+			}
+			out, err = execute(t, "", "--api-url", server.URL, "preflight", "--repo", repo, "--agent", agent)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var after preflightResult
+			if err = json.Unmarshal([]byte(out), &after); err != nil {
+				t.Fatal(err)
+			}
+			if agent == "codex" {
+				if after.SavedConsents[0].CodexPolicyStatus.Decision != "declined" || after.SavedConsents[0].CodexPolicyPreview != nil {
+					t.Fatal(out)
+				}
+			} else if p := after.SavedConsents[0].ClaudePermissions; p.Decision != "declined" || p.InstallCommand != nil || p.DeclineCommand != nil {
+				t.Fatal(out)
+			}
+			if requests != 0 {
+				t.Fatal("decline contacted service", requests)
+			}
+			if tasks, _ := filepath.Glob(filepath.Join(s.Root, "tasks", "*.json")); len(tasks) != 0 {
+				t.Fatal("decline created task", tasks)
+			}
+			var config string
+			if agent == "codex" {
+				config, _ = codexConfigPath()
+			} else {
+				config, _ = claudePermissionPath()
+			}
+			if _, err := os.Stat(config); !os.IsNotExist(err) {
+				t.Fatal("decline changed settings", err)
+			}
+			evidence, err := savedManagedConsentEvidence(s, task)
+			if err != nil || evidence == nil {
+				t.Fatal("decline lost upload grant", err)
+			}
+			if _, err := execute(t, "", "--api-url", server.URL, "preflight", "--repo", repo, "--agent", agent, "--decline-policy", "unknown-account"); err == nil {
+				t.Fatal("accepted unknown scope")
+			}
+		})
+	}
+}
