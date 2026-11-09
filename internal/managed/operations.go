@@ -99,6 +99,10 @@ func (e Engine) Submit(ctx context.Context, task *Task, token string) error {
 		UserRequest: userRequest,
 		Client:      map[string]string{"name": "Doomer managed CLI", "agent": task.Agent, "task_id": task.Handle, "cli_version": task.Release, "bootstrap_protocol": fmt.Sprint(Protocol)},
 	}
+	if task.InstallationID != "" && task.InstallationAttemptID != "" {
+		task.Submission.Client["installation_id"] = task.InstallationID
+		task.Submission.Client["installation_attempt_id"] = task.InstallationAttemptID
+	}
 	task.ReviewedTree = capture.TargetTreeHash
 	task.Stage = "submitting"
 	if err = e.Store.Save(task); err != nil {
