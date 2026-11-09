@@ -1,0 +1,20 @@
+docs/client-notices.md
+  h_aa44c3b5b60dec 34-36
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 15-18
+pkg/adversarylabs/notices.go
+  h_aa44c3b5b60dec 28,33,40-46,240
+pkg/adversarylabs/notices_test.go
+  h_aa44c3b5b60dec 92,393-413
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "029162b4388b45a142a2bf6f69a9f4783425eb2e",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
