@@ -1,0 +1,26 @@
+internal/managed/bootstrap-2026.11.8.10.md
+  h_aa44c3b5b60dec 1-148
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 4,16,21,68-73,159,227-239
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 208-262
+internal/managed/policy.go
+  h_aa44c3b5b60dec 157,159
+internal/managed/upgrade-prompt-rules-legacy.md
+  h_aa44c3b5b60dec 1-19
+internal/managed/upgrade-prompt-rules.md
+  h_aa44c3b5b60dec 3-6,19-25
+scripts/verify-skill-bootstrap.go
+  h_aa44c3b5b60dec 1-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7eb01e0dee99366237cd6069708eae619ea61dda",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
