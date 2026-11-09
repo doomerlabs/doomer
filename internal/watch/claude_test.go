@@ -95,6 +95,7 @@ func TestClaudeReviewLifecycle(t *testing.T) {
 }
 
 func TestClaudeInstallPreservesSettingsAndOtherHooks(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	home := t.TempDir()
 	file := HookFile(home, "claude")
 	Write(file, map[string]any{"model": "sonnet", "hooks": map[string]any{"PostToolUse": []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": "other-tool"}}}}}})

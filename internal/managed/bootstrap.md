@@ -11,10 +11,10 @@ At task start, run `doomer preflight --agent AGENT --repo .` for local-only
 consent and Codex policy inspection. Saved receipts do not verify the current
 account or authorize uploads. Then run
 `doomer prepare --agent AGENT --repo . --prompt "USER TASK"`.
-For Claude, if preflight reports missing readiness permissions or an older CLI
-cannot inspect them, first offer to
-verify the account and repair those permissions. After acceptance run prepare,
-verify live consent, and install the returned rules. Preserve explicit denies.
+If preflight reports pending missing reviewer settings, first offer account
+verification and scoped policy repair. After acceptance run prepare, verify live
+consent, and install the proposal. Respect saved declines and explicit denies.
+For older Claude CLIs, offer the same verification and repair.
 Use codex or claude and the actual task without shell interpolation. Keep the
 returned task handle. An older CLI may lack preflight; continue with prepare.
 If a real harness session ID is available, pass it with `--session`. For Claude,

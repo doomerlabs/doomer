@@ -103,6 +103,9 @@ func Install(file, command, marker string, remove bool) error {
 }
 func HookFile(home, agent string) string {
 	if agent == "claude" {
+		if root := os.Getenv("CLAUDE_CONFIG_DIR"); root != "" {
+			return filepath.Join(root, "settings.json")
+		}
 		return filepath.Join(home, ".claude", "settings.json")
 	}
 	base := os.Getenv("CODEX_HOME")

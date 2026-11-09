@@ -184,3 +184,68 @@ func TestPreflightRetainsConsentBoundariesAndRevocation(t *testing.T) {
 		t.Fatal("reset consent", r)
 	}
 }
+
+func TestPreflightMissingCodexPolicyRespectsDecline(t *testing.T) {
+	isolate(t)
+	t.Setenv("CODEX_HOME", t.TempDir())
+	repo := newWatchTestRepo(t)
+	id, err := watch.RepositoryIdentity(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := managedStore()
+	task := managed.Task{AccountID: "account", RepositoryID: id, Repo: repo, API: "https://doomer.ai/api", Profile: "default", Agent: "codex"}
+	if err := recordIntegrationConsent(s, task, "explicit_integration_approval", true); err != nil {
+		t.Fatal(err)
+	}
+	for _, decline := range []bool{false, true} {
+		if decline {
+			evidence, err := savedManagedConsentEvidence(s, task)
+			if err != nil {
+				t.Fatal(err)
+			}
+			proposal, _, err := inspectCodexReviewPolicy(*evidence)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = declineCodexReviewPolicy(s, proposal); err != nil {
+				t.Fatal(err)
+			}
+		}
+		out, err := execute(t, "", "preflight", "--repo", repo, "--agent", "codex")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var r preflightResult
+		if err = json.Unmarshal([]byte(out), &r); err != nil {
+			t.Fatal(err)
+		}
+		status := r.SavedConsents[0].CodexPolicyStatus
+		if decline {
+			if status.Decision != "declined" || strings.Contains(r.Action, "Before prepare, offer") {
+				t.Fatal(out)
+			}
+		} else if status.Decision != "pending" || !strings.Contains(r.Action, "Before prepare, offer") {
+			t.Fatal(out)
+		}
+	}
+}
+
+func TestPreflightClaudeMissingPermissionsWithoutConsent(t *testing.T) {
+	isolate(t)
+	t.Setenv("HOME", t.TempDir())
+	out, err := execute(t, "", "preflight", "--agent", "claude", "--repo", newWatchTestRepo(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r preflightResult
+	if err = json.Unmarshal([]byte(out), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.ClaudePermissions == nil || r.ClaudePermissions.State != "missing" || !strings.Contains(r.Action, "before prepare") {
+		t.Fatal(out)
+	}
+	if r.ClaudePermissions.InstallCommand != nil {
+		t.Fatal("unverified installation offered", out)
+	}
+}

@@ -9,6 +9,8 @@ import (
 
 var policyProposal = regexp.MustCompile(`"codex_review_policy"\s*:\s*\{`)
 
+var policyQuestion = regexp.MustCompile(`(?is)(?:would you like|do you want|may I|can I|shall I).{0,120}(?:policy|reviewer settings|permissions)|(?:policy|reviewer settings|permissions).{0,120}\?`)
+
 var claudePermissionProposal = regexp.MustCompile(`"claude_permissions"\s*:\s*\{[^}]*"install_command"`)
 
 var hookProposal = regexp.MustCompile(`"hook_setup"\s*:\s*\{[^}]*"install_command"`)
@@ -59,6 +61,7 @@ func readCodexTurn(reader io.Reader, record func(string, string)) (codexTurn, er
 				record("Command", event.Item.Command+"\n"+event.Item.Output)
 			case "agent_message":
 				turn.Messages = append(turn.Messages, event.Item.Text)
+				turn.PolicyOffered = turn.PolicyOffered || policyQuestion.MatchString(event.Item.Text)
 				record("Codex", event.Item.Text)
 			}
 		}

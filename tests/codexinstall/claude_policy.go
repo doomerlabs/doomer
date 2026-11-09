@@ -34,6 +34,19 @@ func (j *journey) claudePolicyRecovery(decline bool) error {
 		}
 	}
 	permissions["allow"] = kept
+	if !decline {
+		if auto, ok := settings["autoMode"].(map[string]any); ok {
+			entries, _ := auto["allow"].([]any)
+			retained := []any{}
+			for _, entry := range entries {
+				text, _ := entry.(string)
+				if !strings.HasPrefix(text, "Doomer review authorization\n") {
+					retained = append(retained, entry)
+				}
+			}
+			auto["allow"] = retained
+		}
+	}
 	settings["disableAllHooks"] = true
 	before, err := json.Marshal(settings)
 	if err != nil {
@@ -49,7 +62,7 @@ func (j *journey) claudePolicyRecovery(decline bool) error {
 	if err != nil {
 		return err
 	}
-	j.result.Checks["claude_missing_permissions_prompted"] = turn.PolicyOffered || strings.Contains(strings.ToLower(strings.Join(turn.Messages, " ")), "permission")
+	j.result.Checks["claude_missing_permissions_prompted"] = turn.PolicyOffered
 	if !j.result.Checks["claude_missing_permissions_prompted"] {
 		return fmt.Errorf("Claude missing permissions were not offered")
 	}
@@ -195,9 +208,22 @@ func preservesCodexPolicyConfig(before, after []byte) bool {
 			return false
 		}
 	}
-	if _, exists := old["auto_review"]; !exists {
-		if policy, ok := current["auto_review"].(map[string]any); ok {
-			if text, _ := policy["extra_policy"].(string); text != "" {
+	for key, value := range current {
+		if _, exists := old[key]; exists {
+			continue
+		}
+		// Codex itself records project trust on startup; no other new settings
+		// are permitted after declining Doomer policy installation.
+		if key != "projects" {
+			return false
+		}
+		projects, ok := value.(map[string]any)
+		if !ok {
+			return false
+		}
+		for _, raw := range projects {
+			entry, ok := raw.(map[string]any)
+			if !ok || len(entry) != 1 || entry["trust_level"] != "trusted" {
 				return false
 			}
 		}

@@ -176,8 +176,9 @@ check and scoped settings change; still verify current consent before installati
 Do not reinterpret an explicit Claude deny as missing settings.
 After verifying upload approval during requested installation or accepted
 first-use onboarding, run `doomer hooks --agent claude --task HANDLE`. This
-installs the hooks and the six readiness and review-command rules reported in
-`claude_permissions`, preserving unrelated settings. Explain that these are
+installs the hooks, six readiness and review-command rules, and the consent-scoped
+`autoMode.allow` classifier policy reported in `claude_permissions`, preserving
+built-in defaults and unrelated settings. Show the classifier policy with the setup proposal. Explain that these are
 part of making the approved review integration work. Configure only Claude.
 If upload approval is missing, finish that approval first; do not change rules.
 For an already-onboarded session, reuse existing settings. When the user asks

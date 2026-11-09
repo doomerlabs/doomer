@@ -331,3 +331,37 @@ func TestCandidateInjectionRequiresCompletedPublicInstallation(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestCodexPolicyQuestionWithoutPrepareOutput(t *testing.T) {
+	for _, tc := range []struct {
+		text string
+		want bool
+	}{
+		{"For the missing Codex policy, would you like to install the Doomer policy or use per-call approvals?", true},
+		{"The policy was declined. I preserved it and will not ask again.", false},
+		{"The policy is installed and ready.", false},
+	} {
+		raw, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"type": "agent_message", "text": tc.text}})
+		turn, err := readCodexTurn(bytes.NewReader(raw), func(string, string) {})
+		if err != nil || turn.PolicyOffered != tc.want {
+			t.Fatal(tc, turn, err)
+		}
+	}
+}
+
+func TestDeclineConfigAllowsOnlyNativeProjectTrust(t *testing.T) {
+	before := []byte("model = 'test'\n")
+	for _, tc := range []struct {
+		extra string
+		want  bool
+	}{
+		{"[projects.'/tmp/repo']\ntrust_level = 'trusted'\n", true},
+		{"[auto_review]\nextra_policy = ''\n", false},
+		{"approval_policy = 'never'\n", false},
+		{"[projects.'/tmp/repo']\ntrust_level = 'trusted'\napproval_policy = 'never'\n", false},
+	} {
+		if got := preservesCodexPolicyConfig(before, append(append([]byte{}, before...), []byte(tc.extra)...)); got != tc.want {
+			t.Fatal(tc, got)
+		}
+	}
+}

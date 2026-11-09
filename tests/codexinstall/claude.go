@@ -162,6 +162,7 @@ func readClaudeTurn(reader io.Reader, record func(string, string)) (codexTurn, e
 			case "text":
 				if event.Type == "assistant" {
 					turn.Messages = append(turn.Messages, block.Text)
+					turn.PolicyOffered = turn.PolicyOffered || policyQuestion.MatchString(block.Text)
 					record("Claude", block.Text)
 				}
 			case "tool_use":

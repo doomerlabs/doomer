@@ -233,6 +233,13 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 	var portable bool
 	c := &cobra.Command{Use: "prepare", Short: "Prepare or resume a version-pinned managed review task", Args: cobra.NoArgs}
 	c.RunE = func(c *cobra.Command, _ []string) error {
+		if !c.Flags().Changed("session") && agent == "claude" && strings.TrimSpace(prompt) != "" {
+			if actual := os.Getenv("CLAUDE_CODE_SESSION_ID"); actual != "" {
+				if err := c.Flags().Set("session", actual); err != nil {
+					return err
+				}
+			}
+		}
 		if handle != "" && c.Flags().Changed("base") {
 			return fmt.Errorf("an existing task keeps its original baseline; --base is only for a new task")
 		}
@@ -824,7 +831,7 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 					return outputManaged(c, s, t, managedResult{State: "claude_permissions_declined", Authenticated: true, UploadApproved: true})
 				}
 				if allow {
-					if err := installClaudePermissions(s); err != nil {
+					if err := installClaudePermissions(s, evidence); err != nil {
 						return err
 					}
 					if err := os.Remove(decisionPath); err != nil && !os.IsNotExist(err) {

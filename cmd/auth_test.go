@@ -27,6 +27,7 @@ func execute(t *testing.T, input string, args ...string) (string, error) {
 func isolate(t *testing.T) adversarylabs.ConfigStore {
 	t.Helper()
 	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	t.Setenv("DOOMER_CONFIG_DIR", dir)
 	// Codex prefers CODEX_HOME over HOME, including when tests replace HOME.
 	// Never let integration tests write hooks into the invoking agent's profile.

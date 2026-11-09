@@ -20,13 +20,14 @@ type preflightConsent struct {
 	ClaudePermissions *claudePermissions      `json:"claude_permissions,omitempty"`
 }
 type preflightResult struct {
-	State           string             `json:"state"`
-	LocalOnly       bool               `json:"local_only"`
-	AccountVerified bool               `json:"account_verified"`
-	Repository      string             `json:"repository"`
-	RepositoryID    string             `json:"repository_id"`
-	SavedConsents   []preflightConsent `json:"saved_consents"`
-	Action          string             `json:"action"`
+	ClaudePermissions *claudePermissions `json:"claude_permissions,omitempty"`
+	State             string             `json:"state"`
+	LocalOnly         bool               `json:"local_only"`
+	AccountVerified   bool               `json:"account_verified"`
+	Repository        string             `json:"repository"`
+	RepositoryID      string             `json:"repository_id"`
+	SavedConsents     []preflightConsent `json:"saved_consents"`
+	Action            string             `json:"action"`
 }
 
 func newPreflightCommand(api, profile *string) *cobra.Command {
@@ -76,6 +77,13 @@ func newPreflightCommand(api, profile *string) *cobra.Command {
 		}
 		sort.Strings(names)
 		result := preflightResult{State: "no_saved_consent", LocalOnly: true, Repository: root, RepositoryID: id, SavedConsents: []preflightConsent{}, Action: "Run normal prepare to verify the current account and consent. For a sandbox restriction, request ordinary host approval for private-state writes and account checks, citing saved scope as context; respect explicit reviewer denials. Local preflight never authorizes an upload or changes settings. If review is blocked, continue authorized local work unless the user explicitly required review first."}
+		if agent == "claude" && len(names) == 0 {
+			result.ClaudePermissions = inspectClaudePermissions()
+			if result.ClaudePermissions.State == "missing" {
+				result.Action += " Claude readiness permissions are missing. Offer account verification and normal onboarding before prepare; obtain live upload consent before installing scoped settings."
+			}
+		}
+		claudeRepairOffered := false
 		for _, account := range names {
 			evidence, err := savedManagedConsentEvidence(s, managed.Task{Repo: root, RepositoryID: id, API: *api, Profile: *profile, Agent: agent, AccountID: account})
 			if err != nil {
@@ -86,10 +94,30 @@ func newPreflightCommand(api, profile *string) *cobra.Command {
 			}
 			entry := preflightConsent{Consent: evidence}
 			if agent == "codex" {
-				entry.CodexPolicyStatus = inspectCodexPolicyStatus(*evidence)
+				proposal, status := inspectCodexPolicy(*evidence)
+				entry.CodexPolicyStatus = status
+				if status.State == "missing" {
+					declined, decisionErr := codexReviewPolicyDeclined(s, proposal)
+					if decisionErr != nil {
+						status.DecisionError = decisionErr.Error()
+					} else if declined {
+						status.Decision = "declined"
+					} else {
+						status.Decision = "pending"
+					}
+					if status.Decision == "pending" {
+						result.Action += " Codex reviewer policy is missing. Before prepare, offer to verify the current account and install its scoped reviewer policy. After acceptance run prepare and install only after live consent verification. This settings choice is separate from upload consent."
+					}
+				}
 			} else {
-				entry.ClaudePermissions = inspectClaudePermissions()
-				if entry.ClaudePermissions.State == "missing" {
+				entry.ClaudePermissions = proposedClaudePermissions(s, managed.Task{Agent: agent, API: *api, Profile: *profile}, evidence)
+				entry.ClaudePermissions.InstallCommand = nil
+				entry.ClaudePermissions.DeclineCommand = nil
+				if entry.ClaudePermissions.Decision == "pending" {
+					entry.ClaudePermissions.Action = "Offer verification and scoped settings repair before prepare. After acceptance, verify live consent and use the returned task proposal to install. This local inspection does not authorize uploads or settings changes."
+				}
+				if entry.ClaudePermissions.State == "missing" && entry.ClaudePermissions.Decision == "pending" && !claudeRepairOffered {
+					claudeRepairOffered = true
 					result.Action += " Claude readiness permissions are missing. Before running prepare, offer to verify the current account and repair the displayed Claude permissions. After acceptance run prepare, then install only after live consent verification. This is a local settings decision, not a new repository upload grant. Do not bypass explicit deny rules."
 				}
 			}
