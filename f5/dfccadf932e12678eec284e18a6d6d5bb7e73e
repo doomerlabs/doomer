@@ -1,0 +1,18 @@
+internal/managed/bootstrap-2026.11.9.3.md
+  h_aa44c3b5b60dec 1-194
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 16,21,74-76,171
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 291-317
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f5dfccadf932e12678eec284e18a6d6d5bb7e73e",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
