@@ -1,0 +1,16 @@
+cmd/managed_preflight_test.go
+  h_aa44c3b5b60dec 414-460
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 228-230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1ce407004fa7eded69297d0e1723718ffc2c8a70",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
