@@ -296,6 +296,8 @@ func TestDirectReviewNoticeHTTPRoundTrip(t *testing.T) {
 		t.Fatal("wire notice not persisted", cached)
 	}
 	notice.Cached = true
+	notice.NotifyUser = true
+	notice.AcknowledgeCommand = []string{"doomer", "--api-url", server.URL, "notices", "--ack", notice.ID, "--revision", "7"}
 	got, _ = json.Marshal(cached)
 	want, _ = json.Marshal([]adversarylabs.ClientNotice{notice})
 	if !bytes.Equal(got, want) {
