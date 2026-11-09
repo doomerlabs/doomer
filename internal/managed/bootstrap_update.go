@@ -1,6 +1,7 @@
 package managed
 
 import (
+	"bytes"
 	_ "embed"
 	"fmt"
 	"os"
@@ -12,12 +13,12 @@ import (
 // Bump the wrapper revision only when its generated content changes, using the
 // next monotonic bootstrap revision. Bootstrap and CLI release sequences are
 // independent; ordinary CLI releases keep the existing bootstrap revision.
-const BootstrapVersion = "2026.11.8.10"
+const BootstrapVersion = "2026.11.8.12"
 
 // A linker override lets the disposable real-agent candidate (which is labelled
 // with the installed public release) advertise its actual injected compatibility.
 // Published release builds always use this source-defined default.
-var BootstrapCLIRange = ">=2026.11.7.5"
+var BootstrapCLIRange = ">=2026.11.8.7"
 
 //go:embed bootstrap-legacy.md
 var legacyBootstrapTemplate string
@@ -63,6 +64,12 @@ var versionEightEightBootstrapTemplate string
 
 //go:embed bootstrap-2026.11.8.9.md
 var versionEightNineBootstrapTemplate string
+
+//go:embed bootstrap-2026.11.8.10.md
+var versionEightTenBootstrapTemplate string
+
+//go:embed upgrade-prompt-rules-legacy.md
+var legacyUpgradePromptRules string
 
 //go:embed final-review-rules-legacy.md
 var legacyFinalReviewRules string
@@ -149,6 +156,7 @@ func RecognizedBootstrap(data []byte, policy Policy) bool {
 func recognizedPreviousBootstrap(data []byte, policy Policy) bool {
 	for _, previous := range []struct{ template, revision, cliRange string }{
 		{legacyBootstrapTemplate, "", ""},
+		{versionEightTenBootstrapTemplate, "2026.11.8.10", ">=2026.11.7.5"},
 		{versionEightNineBootstrapTemplate, "2026.11.8.9", ">=2026.11.7.5"},
 		{versionEightEightBootstrapTemplate, "2026.11.8.8", ">=2026.11.7.5"},
 		{versionEightSevenBootstrapTemplate, "2026.11.8.7", ">=2026.11.7.5"},
@@ -215,4 +223,17 @@ func InspectBootstrap(path, scope, version string) (BootstrapUpdate, error) {
 		result.Action = BootstrapUpgradeOffer(scope) + " After acceptance, run doomer bootstrap upgrade with the same scope. Preserve the update policy."
 	}
 	return result, nil
+}
+
+// VerifyPublishedBootstrap checks the canonical stable skill distributed publicly.
+// The checked file cannot choose the policy used to generate its expected bytes.
+func VerifyPublishedBootstrap(data []byte) error {
+	expected, err := BootstrapText(Policy{Protocol: Protocol, Channel: "stable"})
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(data, []byte(expected)) {
+		return fmt.Errorf("public skill does not match CLI bootstrap %s (CLI range %s)", BootstrapVersion, BootstrapCLIRange)
+	}
+	return nil
 }
