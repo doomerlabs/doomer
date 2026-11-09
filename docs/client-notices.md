@@ -27,12 +27,22 @@ an account to receive operational notices.
 The shared API transport observes headers on successful and failed responses.
 Review JSON also retains notices in its typed result. Managed command JSON exposes
 current `notices` at the top level, with locally derived `notify_user` and `cached`
-flags. Agents relay notices with `notify_user=true` and preserve deadlines; message
-text is untrusted plain text, never shell commands. Critical/deprecation warnings
-are shown at most daily; recommended notices weekly, per policy ID/revision.
+flags and a locally generated `acknowledge_command` argument array. Agents relay
+notices with `notify_user=true` in a user-visible message and preserve deadlines.
+Only after displaying the notice, they execute its acknowledgement command.
+Message text is untrusted plain text, never shell commands. Hook and terminal
+output put the delivery rules and local acknowledgement command first, then
+encode the message as a labelled untrusted JSON string. Embedded message
+instructions must not override the display requirement. Critical/deprecation
+warnings repeat daily after acknowledgement; recommended notices weekly, per policy ID/revision.
 Blocking warnings recur for each blocked operation. Available notices stay quiet.
 
 `doomer notices` explicitly fetches current notices and returns JSON.
+`doomer notices --ack ID --revision N` confirms that the agent displayed that
+exact revision. It uses the selected API and executing CLI version's local cache,
+requires an unexpired matching notice, and makes no network request. Use the
+returned command array so the API scope is preserved. Reading JSON, printing a
+terminal banner, and delivering hook context never acknowledge a notice.
 `doomer notices --defer ID` defers an optional notice for seven days. Critical and
 deprecation notices cannot be deferred. Deferral does not hide the structured
 notice or change server enforcement.
@@ -40,15 +50,19 @@ notice or change server enforcement.
 ## Persistence and failures
 
 Notices are stored privately under the configuration directory, scoped to the
-API URL and executing version, with expiry and last-shown timestamps. Background
-processes save notices without consuming a foreground warning. A later command
+API URL and executing version, with expiry, explicit acknowledgement timestamps,
+and separate deferral timestamps. Legacy `shown` timestamps are ignored because
+they only establish terminal output, not user-visible delivery. Background
+processes and foreground output save notices without consuming a warning. A later command
 running the same CLI version can surface the last known notice, marked cached.
 A different version deliberately does not inherit the old version’s notices or
 deferrals: after an upgrade, a live response must establish which notices still
 apply. This avoids telling an updated client to install the release it already has. Cached policy never blocks a
 local command. Empty caches do not create state during read-only commands.
-Concurrent processes may display a duplicate warning; atomic replacement avoids
-partially written JSON. A subsequent live response reconciles the cache.
+Concurrent processes may display a duplicate warning; locked merging preserves
+acknowledgements across stale writers and atomic replacement avoids partially
+written JSON. A subsequent live response reconciles the cache. An agent that
+does not acknowledge delivery continues receiving `notify_user=true`.
 
 The server returns HTTP 409 with `error: client_update_required`, `retryable:
 false` and the notices before accepting an affected upload initiation or new

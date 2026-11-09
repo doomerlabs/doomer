@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
 
 // Hook feedback is visible in the coding chat. Structured review details stay
@@ -17,7 +19,7 @@ func managedHookFeedback(event string, output []byte, operationErr error) map[st
 		var messages []string
 		for _, n := range result.Notices {
 			if n.NotifyUser {
-				messages = append(messages, "Doomer "+n.Severity+": "+n.Message+" Recommended version: "+n.RecommendedVersion+". Use the existing verified updater and preserve update permissions.")
+				messages = append(messages, adversarylabs.FormatNoticeForAgent(n))
 			}
 		}
 		noticeMessage = strings.Join(messages, "\n")
