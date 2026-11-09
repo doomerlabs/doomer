@@ -132,7 +132,7 @@ cli_smoke() {
 }
 
 tool_archive() {
-  local tool="$1" os arch version url sha archive_dir archive shell_arch
+  local tool="$1" os arch version url sha archive_dir archive shell_arch repository asset_id
   os="$(uname -s)"
   arch="$(uname -m)"
   case "$os/$arch" in
@@ -156,10 +156,12 @@ tool_archive() {
   esac
   if [[ "$tool" == actionlint ]]; then
     version="$ACTIONLINT_VERSION"
+    repository=rhysd/actionlint
     archive="actionlint_${version}_${os}_${arch}.tar.gz"
     url="https://github.com/rhysd/actionlint/releases/download/v${version}/${archive}"
   else
     version="$SHELLCHECK_VERSION"
+    repository=koalaman/shellcheck
     shell_arch="$arch"
     [[ "$arch" == amd64 ]] && shell_arch=x86_64
     [[ "$os/$arch" == darwin/arm64 ]] && shell_arch=aarch64
@@ -168,8 +170,21 @@ tool_archive() {
     url="https://github.com/koalaman/shellcheck/releases/download/v${version}/${archive}"
   fi
   need curl
-  curl --fail --location --silent --show-error --retry 3 --output "$archive_dir/$archive" "$url"
-  printf '%s  %s\n' "$sha" "$archive_dir/$archive" | shasum -a 256 -c - >/dev/null
+  if ! curl --fail --location --silent --show-error --retry 3 --connect-timeout 15 --max-time 180 --output "$archive_dir/$archive" "$url"; then
+    # Resolve the same tag and filename through the official asset API when
+    # GitHub's browser-download gateway fails. The pinned hash remains required.
+    need python3
+    asset_id="$(curl -fsSL --retry 3 --connect-timeout 15 --max-time 60 "https://api.github.com/repos/${repository}/releases/tags/v${version}" | python3 -c '
+import json, sys
+matches = [a for a in json.load(sys.stdin)["assets"] if a["name"] == sys.argv[1]]
+if len(matches) != 1 or not isinstance(matches[0]["id"], int) or matches[0]["id"] <= 0:
+    raise SystemExit("expected one matching release asset")
+print(matches[0]["id"])
+' "$archive")" || return
+    curl -fsSL --retry 3 --connect-timeout 15 --max-time 180 -H 'Accept: application/octet-stream' \
+      "https://api.github.com/repos/${repository}/releases/assets/${asset_id}" --output "$archive_dir/$archive" || return
+  fi
+  printf '%s  %s\n' "$sha" "$archive_dir/$archive" | shasum -a 256 -c - >/dev/null || return
   printf '%s\n' "$archive_dir/$archive"
 }
 
