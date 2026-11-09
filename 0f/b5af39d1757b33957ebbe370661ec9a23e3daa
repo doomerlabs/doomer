@@ -1,0 +1,20 @@
+cmd/review_get_test.go
+  h_aa44c3b5b60dec 95-124
+docs/managed-runtime.md
+  h_aa44c3b5b60dec 48-49,71-79
+internal/managed/final-review-rules.md
+  h_aa44c3b5b60dec 18-24
+pkg/adversarylabs/workspace_test.go
+  h_aa44c3b5b60dec 67-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0fb5af39d1757b33957ebbe370661ec9a23e3daa",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
