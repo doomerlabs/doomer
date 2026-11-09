@@ -1,0 +1,36 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 161,806-808,816-819,853-855
+cmd/managed_claude_permissions.go
+  h_aa44c3b5b60dec 19,23-24,103,131,133,146-151,160-165
+cmd/managed_claude_permissions_test.go
+  h_aa44c3b5b60dec 29,42,115,201-219
+cmd/managed_hook_setup.go
+  h_aa44c3b5b60dec 75
+cmd/managed_preflight.go
+  h_aa44c3b5b60dec 20,90-94
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 14-17,29-34
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 171-175,178
+tests/codexinstall/claude_policy.go
+  h_aa44c3b5b60dec 7-8,10-11,28,48-49,52,90-202
+tests/codexinstall/policy_recovery.go
+  h_aa44c3b5b60dec 154
+tests/codexinstall/preflight.go
+  h_aa44c3b5b60dec 8-9,18
+tests/codexinstall/runner_test.go
+  h_aa44c3b5b60dec 23-38
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 15,18,174-175,207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a3190a64a41536f310f4dfbd26f7cdcb4a7a5831",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
