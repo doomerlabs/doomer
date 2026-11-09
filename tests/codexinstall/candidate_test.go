@@ -13,6 +13,17 @@ import (
 )
 
 func TestCandidateAssemblyAcceptsUnrecognizedPublishedBootstrap(t *testing.T) {
+	for _, candidate := range []struct{ version, state string }{
+		{"2026.11.8.6", "incompatible"},
+		{"2026.11.8.7", "modified"},
+	} {
+		t.Run(candidate.version, func(t *testing.T) {
+			testCandidateAssemblyAcceptsUnrecognizedBootstrap(t, candidate.version, candidate.state)
+		})
+	}
+}
+
+func testCandidateAssemblyAcceptsUnrecognizedBootstrap(t *testing.T, candidateVersion, expectedState string) {
 	for _, scenario := range []string{"install", "personal"} {
 		for _, source := range []string{"generated", "skills", "repository"} {
 			t.Run(scenario+"/"+source, func(t *testing.T) {
@@ -32,12 +43,12 @@ func TestCandidateAssemblyAcceptsUnrecognizedPublishedBootstrap(t *testing.T) {
 				for _, agent := range []string{".agents", ".claude"} {
 					path := filepath.Join(root, agent, "skills/doomer-review/SKILL.md")
 					writeCandidateTestFile(t, path, []byte(published))
-					update, err := managed.InspectBootstrap(path, "project", "2026.11.8.5")
-					if err != nil || update.State != "modified" {
+					update, err := managed.InspectBootstrap(path, "project", candidateVersion)
+					if err != nil || update.State != expectedState {
 						t.Fatalf("fixture must reproduce rejection: %+v, %v", update, err)
 					}
 				}
-				c := config{Scenario: scenario, CandidateVersion: "2026.11.8.5", CandidateFile: filepath.Join(t.TempDir(), "candidate")}
+				c := config{Scenario: scenario, CandidateVersion: candidateVersion, CandidateFile: filepath.Join(t.TempDir(), "candidate")}
 				// This is deliberately not executable code: fixture assembly must inject
 				// the candidate, not invoke its production bootstrap upgrade command.
 				writeCandidateTestFile(t, c.CandidateFile, []byte("candidate runtime"))

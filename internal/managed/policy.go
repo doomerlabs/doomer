@@ -154,8 +154,9 @@ func BootstrapText(p Policy) (string, error) {
 }
 
 func bootstrapText(p Policy, template, revision, cliRange string) (string, error) {
-	// Historical wrappers must retain their original final-review instructions.
+	// Historical wrappers must retain the instructions users actually installed.
 	if revision != BootstrapVersion {
+		template = strings.ReplaceAll(template, "{{upgrade_prompt_rules}}", strings.TrimSpace(legacyUpgradePromptRules))
 		template = strings.ReplaceAll(template, "{{final_review_rules}}", strings.TrimSpace(legacyFinalReviewRules))
 	}
 	if err := p.Validate(); err != nil {
