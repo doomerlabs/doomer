@@ -71,7 +71,9 @@ func (j *journey) unconfiguredRepo() error {
 		if err != nil || string(content) != "hello\n" {
 			return fmt.Errorf("ordinary coding task did not complete")
 		}
-		if turn.HooksOffered || turn.PolicyOffered || turn.UpdateRequested || strings.Contains(strings.ToLower(strings.Join(turn.Messages, " ")), "doomer") {
+		// Fixture paths contain "doomer"; a link to the created file is not a setup offer.
+		messages := strings.ReplaceAll(strings.Join(turn.Messages, " "), repo, "<repo>")
+		if turn.HooksOffered || turn.PolicyOffered || turn.UpdateRequested || strings.Contains(strings.ToLower(messages), "doomer") {
 			return fmt.Errorf("agent offered unexpected Doomer setup")
 		}
 	}
