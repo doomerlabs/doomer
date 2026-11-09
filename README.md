@@ -47,9 +47,12 @@ It walks organization owners through adding the exact domain and resuming the
 same task after saving the setting.
 
 Reviews resume across separate CLI calls using the durable handle. Record
-finding responses with `doomer task respond HANDLE`, then use
+Quick finding responses with `doomer task respond HANDLE`, then use
 `doomer task finish HANDLE` to verify the reviewed tree and delivery. Optional
-hooks use this same task lifecycle. See [managed runtime](docs/managed-runtime.md)
+hooks use this same task lifecycle. Successful Quick review of the latest changes
+gates completion; Deep continues in the background and is awaited only when
+explicitly requested. Use task state and Quick readiness, not aggregate review
+status or `full_review.status`. See [managed runtime](docs/managed-runtime.md)
 for policies, recovery, adapter behavior, and deployment visibility.
 
 ## Watch repositories while you code

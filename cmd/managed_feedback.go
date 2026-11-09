@@ -52,11 +52,13 @@ func managedHookFeedback(event string, output []byte, operationErr error) map[st
 		}
 		switch {
 		case remaining > 0:
-			message = fmt.Sprintf("Doomer needs responses to its review findings (%d pending). Read the prepared task's status and consent evidence, then record the responses before finishing.", remaining)
+			message = fmt.Sprintf("Doomer needs responses to its Quick review findings (%d pending). Read the prepared task's status and consent evidence, then record the responses before finishing.", remaining)
+		case result.State == "reviewed":
+			message = "Doomer Quick review is ready. Run the prepared task's finish command to verify responses and current source. Do not fetch Deep results or wait for Deep unless explicitly requested."
 		case result.State == "no_changes":
 			message = "No changes need review. Run the prepared task’s finish command to complete it."
 		case result.State == "review_pending":
-			message = "Doomer review is still running. Wait for the prepared task's result before finishing."
+			message = "Doomer Quick review is still running. Use task state and Quick readiness, not aggregate review status or full_review.status. Deep runs in the background; wait for it only when explicitly requested."
 		case result.State == "authentication_required" || result.State == "consent_required" || result.State == "approval_required":
 			message = "Doomer needs repository authorization. Resume the prepared task for the required action."
 		case result.State == "client_update_required" || result.State == "operation_failed" || result.State == "review_failed":

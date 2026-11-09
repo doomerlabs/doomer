@@ -92,3 +92,33 @@ func TestReviewGetValidationAndUnavailableResults(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewGetWorkspaceDeepResults(t *testing.T) {
+	store := isolate(t)
+	calls := 0
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Method != "GET" || r.URL.Path != "/v1/reviews/workspace/review-123" || r.Header.Get("Authorization") != "Bearer work-token" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if r.URL.Query().Get("view") != "status" || r.URL.Query().Get("results") != "full" {
+			t.Errorf("explicit Deep lookup must request full results: %s", r.URL.RawQuery)
+		}
+		fmt.Fprint(w, `{"id":"review-123","status":"completed","full_review":{"enabled":true,"status":"completed","result":{"summary":"Deep summary","conclusion":"success","findings":[]}}}`)
+	}))
+	defer api.Close()
+	if err := store.SetAuth(adversarylabs.AuthKey(api.URL, "work"), adversarylabs.Auth{Token: "work-token"}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := execute(t, "", "--api-url", api.URL, "--profile", "work", "review", "get", "review-123", "--workspace", "--format", "json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result outputEnvelope[adversarylabs.WorkspaceReview]
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || result.Data.Full == nil || result.Data.Full.Result == nil || result.Data.Full.Result.Summary != "Deep summary" {
+		t.Fatalf("lost explicit Deep results: %s (calls %d)", out, calls)
+	}
+}

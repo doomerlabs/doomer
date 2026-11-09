@@ -154,6 +154,10 @@ func BootstrapText(p Policy) (string, error) {
 }
 
 func bootstrapText(p Policy, template, revision, cliRange string) (string, error) {
+	// Historical wrappers must retain their original final-review instructions.
+	if revision != BootstrapVersion {
+		template = strings.ReplaceAll(template, "{{final_review_rules}}", strings.TrimSpace(legacyFinalReviewRules))
+	}
 	if err := p.Validate(); err != nil {
 		return "", err
 	}

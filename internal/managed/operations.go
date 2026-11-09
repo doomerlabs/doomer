@@ -17,7 +17,6 @@ var ErrCheckoutChanged = errors.New("checkout changed after review; submit this 
 type ReviewClient interface {
 	StartWorkspace(context.Context, string, adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error)
 	GetWorkspace(context.Context, string, string) (adversarylabs.WorkspaceReview, error)
-	GetWorkspaceResults(context.Context, string, string) (adversarylabs.WorkspaceReview, error)
 	ReportWorkspaceLead(context.Context, string, string, string, string, string, *bool) error
 }
 
@@ -151,15 +150,6 @@ func (e Engine) Status(ctx context.Context, task *Task, token string) error {
 	if result.ID != task.Review.ID || result.Anonymous != adversarylabs.IsAnonymousToken(token) || (result.Anonymous && result.Full != nil && result.Full.Enabled) {
 		return fmt.Errorf("review identity mismatch")
 	}
-	if result.Full != nil && result.Full.Enabled && result.Full.Status == "completed" {
-		result, err = e.Client.GetWorkspaceResults(ctx, token, task.Review.ID)
-		if err != nil {
-			return NetworkError("review_results", err)
-		}
-		if result.ID != task.Review.ID || result.Anonymous || result.Full == nil || !result.Full.Enabled || result.Full.Status != "completed" || result.Full.Result == nil {
-			return fmt.Errorf("server did not return the completed deep review result")
-		}
-	}
 	// Older servers omit links from compact status responses.
 	if result.URL == "" {
 		result.URL = task.Review.URL
@@ -167,21 +157,37 @@ func (e Engine) Status(ctx context.Context, task *Task, token string) error {
 	}
 	task.Review = &result
 	task.Stage = "review_pending"
-	if result.Early != nil && (result.Early.Status == "ready") {
-		task.Stage = "responses_required"
-		if len(result.Early.Leads) == 0 {
-			task.Stage = "reviewed"
-			if result.Full != nil && result.Full.Enabled && result.Full.Status != "completed" {
-				task.Stage = "review_pending"
+	if result.Early != nil && result.Early.Status == "ready" {
+		task.Stage = "reviewed"
+		for _, lead := range result.Early.Leads {
+			if !task.Responses[result.ID+":"+lead.ID].Sent {
+				task.Stage = "responses_required"
+				break
 			}
 		}
 	}
-	deepDisabled := result.Error == "full_review_temporarily_disabled" && result.Full != nil && !result.Full.Enabled
-	if result.Status == "failed" || result.Status == "cancelled" && !deepDisabled || result.Status == "expired" || result.Early != nil && (result.Early.Status == "unavailable" || result.Early.FailureCode != "") {
+	// Aggregate status includes Deep. A successful Quick assessment takes
+	// precedence even when Deep is still running or has failed.
+	if quickReviewFailed(result) {
 		task.Stage = "review_failed"
 	}
 	return e.Store.Save(task)
 }
+
+// quickReviewFailed ignores aggregate failures once Quick is ready. Before
+// Quick is ready, terminal review statuses still indicate unavailable coverage.
+func quickReviewFailed(result adversarylabs.WorkspaceReview) bool {
+	if result.Early != nil {
+		if result.Early.FailureCode != "" || result.Early.Status == "unavailable" || result.Early.Status == "failed" {
+			return true
+		}
+		if result.Early.Status == "ready" {
+			return false
+		}
+	}
+	return result.Status == "failed" || result.Status == "cancelled" || result.Status == "expired"
+}
+
 func ValidateResponse(r Response) error {
 	if len(r.LeadID) != 64 || strings.TrimSpace(r.Reason) == "" || len(r.Reason) > 2000 {
 		return fmt.Errorf("response requires lead_id and evidence up to 2000 bytes")
@@ -207,7 +213,7 @@ func (e Engine) Respond(ctx context.Context, task *Task, token string, items []R
 	}
 	// A failed assessment can still contain actionable findings. Recording their
 	// responses must not turn the incomplete review into a successful one.
-	failed := task.Stage == "review_failed" || task.Review.Early.FailureCode != ""
+	failed := quickReviewFailed(*task.Review)
 	if task.Responses == nil {
 		task.Responses = map[string]Response{}
 	}
@@ -248,9 +254,6 @@ func (e Engine) Respond(ctx context.Context, task *Task, token string, items []R
 		}
 	}
 	task.Stage = "reviewed"
-	if task.Review.Full != nil && task.Review.Full.Enabled && task.Review.Full.Status != "completed" {
-		task.Stage = "review_pending"
-	}
 	for _, lead := range task.Review.Early.Leads {
 		if !task.Responses[task.Review.ID+":"+lead.ID].Sent {
 			task.Stage = "responses_required"

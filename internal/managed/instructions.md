@@ -43,10 +43,11 @@ After working on the user's task, when the CLI reports authenticated=true and
 upload_approved=true and the host permits the upload, reuse that approval and run
 `doomer task submit HANDLE`. This captures the checkout and requests automatic
 review selection. The server runs Look Closer and enables Deep when the account
-is eligible. Use `doomer task status HANDLE` to retrieve the result. If the status
-includes a completed Deep result, read it and address confirmed findings before
-finishing. Each call is
-resumable. If pending, follow the bounded polling procedure in Final source review
+is eligible. Use `doomer task status HANDLE` to retrieve Quick readiness and task
+state. Quick review of the latest submitted changes gates completion. Deep
+continues in the background; do not fetch Deep results as a prerequisite for
+finishing. Wait for Deep only when explicitly requested. Each call is resumable.
+If Quick is pending, follow the bounded polling procedure in Final source review
 below before ending the turn.
 Do not start another review while this revision is pending. If a call is rejected
 by network policy, show the returned required host and retain the same handle.
@@ -84,8 +85,9 @@ a failed submission as a completed review.
 
 If status reports `review_failed`, the review is terminal. Report incomplete
 coverage and stop polling. After addressing the cause, use `doomer task retry
-HANDLE` to request a new revision of the same task. A failed Deep review does
-not become complete merely because its Quick assessment finished.
+HANDLE` to request a new revision of the same task. Use task state and Quick
+readiness, not aggregate review status or `full_review.status`: a pending or
+failed Deep review does not block a successful Quick review.
 
 Keep raw CLI JSON, task handles, and local receipt paths out of user-facing
 progress messages. Summarize the review status and the next action in plain

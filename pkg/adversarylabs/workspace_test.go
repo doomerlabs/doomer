@@ -64,6 +64,9 @@ func TestWorkspaceRequestsCompactStatusOnSubmitAndPoll(t *testing.T) {
 		if r.Header.Get("Authorization") != "Bearer test-token" {
 			t.Error("missing authentication")
 		}
+		if r.URL.Query().Has("results") {
+			t.Error("compact status must not request Deep results")
+		}
 		json.NewEncoder(w).Encode(map[string]any{"id": "review", "status": "running", "early_assessment": map[string]any{"status": "ready", "leads": []map[string]any{{"id": strings.Repeat("a", 64), "path": "file.go", "line": 1, "concern": "Check behavior", "check": "Run a test"}}}})
 	}))
 	defer server.Close()
