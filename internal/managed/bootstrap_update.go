@@ -13,12 +13,12 @@ import (
 // Bump the wrapper revision only when its generated content changes, using the
 // next monotonic bootstrap revision. Bootstrap and CLI release sequences are
 // independent; ordinary CLI releases keep the existing bootstrap revision.
-const BootstrapVersion = "2026.11.9.3"
+const BootstrapVersion = "2026.11.9.4"
 
 // A linker override lets the disposable real-agent candidate (which is labelled
 // with the installed public release) advertise its actual injected compatibility.
 // Published release builds always use this source-defined default.
-var BootstrapCLIRange = ">=2026.11.9.3"
+var BootstrapCLIRange = ">=2026.11.9.4"
 
 //go:embed bootstrap-legacy.md
 var legacyBootstrapTemplate string
@@ -70,6 +70,9 @@ var versionEightTenBootstrapTemplate string
 
 //go:embed bootstrap-2026.11.8.12.md
 var versionEightTwelveBootstrapTemplate string
+
+//go:embed bootstrap-2026.11.9.3.md
+var versionNineThreeBootstrapTemplate string
 
 //go:embed bootstrap-2026.11.9.2.md
 var versionNineTwoBootstrapTemplate string
@@ -165,6 +168,7 @@ func RecognizedBootstrap(data []byte, policy Policy) bool {
 func recognizedPreviousBootstrap(data []byte, policy Policy) bool {
 	for _, previous := range []struct{ template, revision, cliRange string }{
 		{legacyBootstrapTemplate, "", ""},
+		{versionNineThreeBootstrapTemplate, "2026.11.9.3", ">=2026.11.9.3"},
 		{versionNineTwoBootstrapTemplate, "2026.11.9.2", ">=2026.11.9.2"},
 		{versionNineOneBootstrapTemplate, "2026.11.9.1", ">=2026.11.9.1"},
 		{versionEightTwelveBootstrapTemplate, "2026.11.8.12", ">=2026.11.8.7"},
