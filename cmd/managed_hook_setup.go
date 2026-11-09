@@ -52,6 +52,16 @@ func inspectManagedHookSetup(s managed.Store, t managed.Task, consent *managedCo
 		if t.HookActivated {
 			p.Activation = "observed_for_task"
 		}
+		if t.Agent == "claude" {
+			data, readErr := os.ReadFile(p.ConfigPath)
+			var settings struct {
+				Disabled bool `json:"disableAllHooks"`
+			}
+			if readErr == nil && json.Unmarshal(data, &settings) == nil && settings.Disabled {
+				p.Activation = "disabled_by_host"
+				p.Action = "Claude hooks are installed but disabled by its native settings. Ask once this session whether the user wants to enable them through /hooks; remind again in a later session while disabled. Preserve a no in this session. Do not change disableAllHooks or trust records without explicit user authorization. Continue permitted per-call reviews."
+			}
+		}
 		return p
 	}
 	p.State = "missing"
@@ -63,6 +73,9 @@ func inspectManagedHookSetup(s managed.Store, t managed.Task, consent *managedCo
 		return p
 	} else if err != nil && !os.IsNotExist(err) {
 		p.Error = err.Error()
+		p.Decision = "unreadable"
+		p.Action = "The saved hook-installation decision could not be read. Report the error and preserve settings; do not re-offer installation until the decision can be inspected."
+		return p
 	}
 	binary, err := os.Executable()
 	if err != nil {

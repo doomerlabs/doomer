@@ -22,6 +22,10 @@ func (j *journey) claudePolicyRecovery(decline bool) error {
 		return err
 	}
 	permissions, _ := settings["permissions"].(map[string]any)
+	if permissions == nil {
+		permissions = map[string]any{}
+		settings["permissions"] = permissions
+	}
 	allow, _ := permissions["allow"].([]any)
 	kept := []any{}
 	for _, rule := range allow {

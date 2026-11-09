@@ -176,7 +176,7 @@ func proposedClaudePermissions(s managed.Store, t managed.Task, evidence *manage
 	base := []string{binary, "--api-url", t.API, "--profile", t.Profile, "task", "claude-permissions", t.Handle}
 	p.InstallCommand = append(append([]string{}, base...), "--allow")
 	p.DeclineCommand = append(append([]string{}, base...), "--decline")
-	p.Action = "Claude review-command permissions are missing. Present rules and changes and ask to install unless already authorized. Execute install_command only after acceptance; record an explicit decline with decline_command. These settings do not grant repository upload consent and cannot override deny rules."
+	p.Action = "Claude review-command permissions are missing. Present rules and changes and ask to install unless already authorized. Execute install_command only after acceptance; record an explicit decline with decline_command. An unanswered offer remains pending for later chats; silence is not a decline. These settings do not grant repository upload consent and cannot override deny rules."
 	return p
 }
 

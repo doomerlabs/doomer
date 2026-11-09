@@ -56,7 +56,7 @@ func (j *journey) policyRecovery() error {
 	// This deterministic assertion is also run against the released CLI. It
 	// must fail for the precise regression, not a provider or install failure.
 	if prepared.Proposal == nil {
-		return fmt.Errorf("missing policy was not offered after old delivery")
+		return fmt.Errorf("deterministic prepare probe: missing policy after delivered offer")
 	}
 	c := j.c
 	c.ReviewApprovals = true

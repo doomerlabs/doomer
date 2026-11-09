@@ -222,6 +222,18 @@ func InspectBootstrap(path, scope, version string) (BootstrapUpdate, error) {
 	result.State = "modified"
 	result.Action = "Local skill content differs. Preserve local edits and report the difference; modified content alone is not an upgrade offer."
 	if recognizedPreviousBootstrap(data, b.Policy) && (b.Revision == "" || VersionLess(b.Revision, BootstrapVersion)) {
+		if runtimeversion.Release.MatchString(version) {
+			supported, err := BootstrapSupports(BootstrapCLIRange, version)
+			if err != nil {
+				return result, err
+			}
+			if !supported {
+				result.State = "incompatible"
+				result.Compatible = &supported
+				result.Action = "Use a CLI matching the offered skill's doomer-cli-range before upgrading the skill. Keep the installed skill until then."
+				return result, nil
+			}
+		}
 		result.State = "update_available"
 		result.UpgradeAvailable = true
 		result.Action = BootstrapUpgradeOffer(scope) + " After acceptance, run doomer bootstrap upgrade with the same scope. Preserve the update policy."

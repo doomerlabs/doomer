@@ -63,7 +63,7 @@ if [[ ${E2E_EXPECT_POLICY_REGRESSION:-0} == 1 ]]; then
   python3 - "$reports/report.json" <<'PY'
 import json, sys
 r = json.load(open(sys.argv[1]))
-if r.get("passed") or r.get("error") != "missing policy was not offered after old delivery" or not r.get("local_cleaned"):
+if r.get("passed") or r.get("error") != "deterministic prepare probe: missing policy after delivered offer" or not r.get("local_cleaned"):
     raise SystemExit("Baseline did not reproduce the expected missing-policy failure: " + r.get("error", ""))
 print("Confirmed: released CLI fails the missing-policy recovery assertion; isolated fixture cleaned.")
 PY

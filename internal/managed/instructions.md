@@ -55,8 +55,9 @@ Remind once in each new session until trusted, including after a prior session's
 trust refusal; never repeat a denied operation in the same session or edit native
 trust records. A missing task callback alone is not proof of distrust: report
 activation as unverified until a real callback arrives, and do not claim it active.
-For Claude, inspect `claude_permissions` separately. Offer missing rules once,
-execute its install command only after acceptance, and persist a decline with its
+For Claude, inspect `claude_permissions` separately. Offer missing rules once per task; unanswered offers remain available in later chats.
+Never record silence as a decline.
+Execute its install command only after acceptance, and persist a decline with its
 returned decline command. Explicit deny rules take precedence: do not add allows
 to work around them or re-prompt the user to remove them. Both the command rules
 and live Doomer consent are required for unattended reviews.

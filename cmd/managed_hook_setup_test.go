@@ -57,6 +57,20 @@ func TestManagedHookSetupDecisionsAndTrustRemainSeparate(t *testing.T) {
 			if r := run(); r.HookSetup.Decision != "declined" || len(r.HookSetup.InstallCommand) != 0 {
 				t.Fatal(r)
 			}
+			evidence, err := savedManagedConsentEvidence(s, task)
+			if err != nil {
+				t.Fatal(err)
+			}
+			decisionPath := hookSetupDecisionPath(s, task, evidence, run().HookSetup.ConfigPath)
+			if err := os.WriteFile(decisionPath, []byte("{"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if r := run(); r.HookSetup.Decision != "unreadable" || len(r.HookSetup.InstallCommand) != 0 || r.HookSetup.Error == "" {
+				t.Fatal("broken decision revived the offer", r)
+			}
+			if err := recordHookSetupDecline(s, task, evidence); err != nil {
+				t.Fatal(err)
+			}
 			if r := run("--allow"); r.HookSetup.State != "configured" || r.HookSetup.Activation != "unverified" {
 				t.Fatal(r)
 			}

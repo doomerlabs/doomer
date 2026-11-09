@@ -92,8 +92,46 @@ func (j *journey) hookSetupRecovery() error {
 
 func (j *journey) hookTrustRecovery() error {
 	if j.c.Harness == "claude" {
-		// Claude owns activation through its native settings and workspace trust;
-		// its existing TUI case verifies real callbacks without changing trust.
+		path := agentHooksPath(j.c, j.home)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var settings map[string]any
+		if err = json.Unmarshal(data, &settings); err != nil {
+			return err
+		}
+		settings["disableAllHooks"] = true
+		disabled, _ := json.Marshal(settings)
+		if err = os.WriteFile(path, disabled, 0600); err != nil {
+			return err
+		}
+		c := j.c
+		c.ReviewApprovals = true
+		for attempt := 1; attempt <= 2; attempt++ {
+			j.result.Turns++
+			turn, err := runAgent(j.ctx, c, j.repo, j.env, "Check Doomer readiness before the next coding task. Do not edit or upload source, and do not change my settings.", "", j.record)
+			if err != nil {
+				return err
+			}
+			message := strings.ToLower(strings.Join(turn.Messages, " "))
+			j.result.Checks[fmt.Sprintf("claude_disabled_hook_reminder_%d", attempt)] = strings.Contains(message, "hook") && (strings.Contains(message, "disabled") || strings.Contains(message, "enable"))
+			after, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if !bytes.Equal(after, disabled) {
+				return fmt.Errorf("Claude enabled hooks without acceptance")
+			}
+		}
+		// The scripted user changes the native setting, then a real terminal
+		// must demonstrate callbacks. The agent never edits the trust record.
+		delete(settings, "disableAllHooks")
+		enabled, _ := json.Marshal(settings)
+		if err = os.WriteFile(path, enabled, 0600); err != nil {
+			return err
+		}
+		j.record("Scripted user", "Enable hooks through Claude's native settings for the activation check.")
 		return j.tui()
 	}
 	// Inspect the native warning in two separate processes. Declining trust is
