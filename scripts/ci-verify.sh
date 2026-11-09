@@ -64,6 +64,8 @@ quality() {
   go mod verify
   log "Go vet"
   go vet ./...
+  log "E2E cache planning and reporting tests"
+  python3 scripts/test-agent-e2e-cache-plan.py
   log "CI and release workflow contract"
   go run ./scripts/verify-ci-contract.go
 }

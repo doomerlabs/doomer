@@ -380,3 +380,79 @@ func TestSnapshotCapturesNestedCandidateSeparately(t *testing.T) {
 		t.Fatal("unselected nested repository was silently ignored")
 	}
 }
+
+func TestCICacheAcceptanceKeepsPlatformAndInputs(t *testing.T) {
+	m := testCacheMetadata()
+	m.OS = "linux"
+	m.Environment = "ci"
+	candidates := cacheLookupEnvironments(m)
+	if len(candidates) != 2 || candidates[0].Environment != "ci" || candidates[1].Environment != "local" {
+		t.Fatalf("unexpected acceptance: %+v", candidates)
+	}
+	local := m
+	local.Environment = "local"
+	if candidates[1].fingerprint("install") != local.fingerprint("install") {
+		t.Fatal("matching Linux local result not considered")
+	}
+	local.OS = "darwin"
+	if candidates[1].fingerprint("install") == local.fingerprint("install") {
+		t.Fatal("macOS result satisfied Linux")
+	}
+	m.OS = "darwin"
+	if len(cacheLookupEnvironments(m)) != 1 {
+		t.Fatal("enabled cross-environment reuse outside Linux")
+	}
+}
+
+func TestExpectedRegressionCacheRequiresExactFailureAndCleanup(t *testing.T) {
+	keys := testCacheKey(t)
+	m := testCacheMetadata()
+	m.Settings["expect-policy-regression"] = "true"
+	r := report{Scenario: "policy-recovery", Harness: "codex", AuthMode: "api", Execution: "local", LocalCleaned: true, Error: "deterministic prepare probe: missing policy after delivered offer"}
+	if !cacheReportPassed(r, m) {
+		t.Fatal("expected regression rejected")
+	}
+	for _, wrong := range []report{{Passed: true, LocalCleaned: true}, {Error: "provider unavailable", Execution: "local", LocalCleaned: true}, {Error: r.Error, Execution: "local"}} {
+		if cacheReportPassed(wrong, m) {
+			t.Fatal("unrelated failure accepted as baseline regression")
+		}
+	}
+	store := &memoryCache{objects: map[string][]byte{}}
+	path := filepath.Join(t.TempDir(), "report.json")
+	raw, _ := json.Marshal(r)
+	os.WriteFile(path, raw, 0600)
+	os.WriteFile(path+".html", []byte("regression transcript"), 0600)
+	if err := publishCachedResult(context.Background(), store, m, "policy-recovery", path, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := verifyCachedResult(store.objects[cacheResultKey(m, "policy-recovery")], m, "policy-recovery", keys, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := reuseCachedResult(context.Background(), store, m, "policy-recovery", filepath.Join(t.TempDir(), "hit.json"), keys); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPinnedReleaseDoesNotFollowMovingStable(t *testing.T) {
+	version := "2026.11.9.3"
+	artifacts := map[string]string{}
+	for _, platform := range []string{"darwin_amd64", "darwin_arm64", "linux_amd64", "linux_arm64"} {
+		artifacts["doomer_"+version+"_"+platform+".tar.gz"] = "sha256:" + strings.Repeat("a", 64)
+	}
+	raw, _ := json.Marshal(map[string]any{"schemaVersion": 1, "version": version, "artifacts": artifacts})
+	pinned, err := channelFromManifest(raw, version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(pinned), version) || strings.Contains(string(pinned), "stable.json") {
+		t.Fatal("baseline was not pinned")
+	}
+	if _, err = channelFromManifest(raw, "2026.11.9.4"); err == nil {
+		t.Fatal("accepted different release version")
+	}
+	delete(artifacts, "doomer_"+version+"_linux_amd64.tar.gz")
+	raw, _ = json.Marshal(map[string]any{"schemaVersion": 1, "version": version, "artifacts": artifacts})
+	if _, err = channelFromManifest(raw, version); err == nil {
+		t.Fatal("accepted missing artifact digest")
+	}
+}

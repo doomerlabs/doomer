@@ -114,6 +114,14 @@ func sourceInventory(ctx context.Context, root, prefix, output string, excludedR
 			continue
 		}
 		absolute, _ := filepath.Abs(full)
+		outputDir := filepath.Dir(output)
+		outputRelative, outputRelativeErr := filepath.Rel(root, outputDir)
+		if output != "" && outputRelativeErr == nil && outputRelative != "." && outputRelative != ".." && !strings.HasPrefix(outputRelative, ".."+string(filepath.Separator)) {
+			relative, e := filepath.Rel(outputDir, absolute)
+			if e == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+				continue
+			}
+		}
 		if absolute == output || absolute == output+".inputs.json" || absolute == output+".tmp" {
 			continue
 		}

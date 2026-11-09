@@ -16,10 +16,14 @@ jobs:
   plan:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
+    environment: agent-e2e
     outputs:
       scenarios: ${{ steps.scenarios.outputs.scenarios }}
       release: ${{ steps.scenarios.outputs.release }}
+      cached: ${{ steps.cache.outputs.cached }}
+      regression: ${{ steps.cache.outputs.regression }}
+      max_parallel: ${{ steps.cache.outputs.max_parallel }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -50,6 +54,25 @@ jobs:
           fi
           printf 'release=%s\n' "$release" >> "$GITHUB_OUTPUT"
 
+      - name: Verify signed shared results
+        id: cache
+        env:
+          E2E_CANDIDATE_RELEASE: ${{ steps.scenarios.outputs.release }}
+          E2E_R2_ACCOUNT_ID: ${{ secrets.E2E_R2_ACCOUNT_ID }}
+          E2E_R2_BUCKET: ${{ secrets.E2E_R2_BUCKET }}
+          E2E_R2_ACCESS_KEY_ID: ${{ secrets.E2E_R2_READ_ACCESS_KEY_ID }}
+          E2E_R2_SECRET_ACCESS_KEY: ${{ secrets.E2E_R2_READ_SECRET_ACCESS_KEY }}
+        run: |
+          export E2E_BASELINE_SOURCE="$RUNNER_TEMP/e2e-baseline"
+          scripts/agent-e2e-baseline.sh "$E2E_BASELINE_SOURCE"
+          python3 scripts/agent-e2e-cache-plan.py --jobs 8 --output "$RUNNER_TEMP/e2e-cache"
+      - name: Save verified cached recordings
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agent-e2e-cached-results
+          path: ${{ runner.temp }}/e2e-cache/verified
+          retention-days: 14
+
   lifecycle:
     needs: plan
     # Fork PRs never run credential-bearing jobs, even after manual run approval.
@@ -61,7 +84,7 @@ jobs:
     strategy:
       fail-fast: false
       # Bound provider request bursts while keeping scenarios parallel.
-      max-parallel: 8
+      max-parallel: ${{ fromJSON(needs.plan.outputs.max_parallel) }}
       matrix:
         harness: [codex, claude]
         scenario: ${{ fromJSON(needs.plan.outputs.scenarios) }}
@@ -70,16 +93,30 @@ jobs:
             scenario: browser-onboarding
     env:
       E2E_CANDIDATE_RELEASE: ${{ needs.plan.outputs.release }}
-      E2E_REPORT_DIR: ${{ github.workspace }}/e2e-reports
+      E2E_REPORT_DIR: /tmp/doomer-e2e-reports
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Accept verified cached result
+        if: ${{ fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
+        run: |
+          echo 'Signed result and artifacts verified in plan; no agent execution.'
+          echo 'Result: verified shared-cache hit. Recording is in the combined gallery.' >> "$GITHUB_STEP_SUMMARY"
+      - if: ${{ !fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+      - if: ${{ !fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
       - name: Run lifecycle scenario
+        if: ${{ !fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
         env:
+          E2E_R2_ACCOUNT_ID: ${{ secrets.E2E_R2_ACCOUNT_ID }}
+          E2E_R2_BUCKET: ${{ secrets.E2E_R2_BUCKET }}
+          E2E_R2_ACCESS_KEY_ID: ${{ secrets.E2E_R2_WRITE_ACCESS_KEY_ID }}
+          E2E_R2_SECRET_ACCESS_KEY: ${{ secrets.E2E_R2_WRITE_SECRET_ACCESS_KEY }}
+          E2E_CACHE_SIGNING_KEY: ${{ secrets.E2E_CACHE_SIGNING_KEY }}
+          E2E_CACHE_SIGNING_KEY_ID: ${{ secrets.E2E_CACHE_SIGNING_KEY_ID }}
           TEST_OPENAI_API_KEY: ${{ matrix.harness == 'codex' && secrets.TEST_OPENAI_API_KEY || '' }}
           TEST_CLAUDE_CODE_OAUTH_TOKEN: ${{ matrix.harness == 'claude' && secrets.TEST_CLAUDE_CODE_OAUTH_TOKEN || '' }}
           E2E_SCENARIO: ${{ matrix.scenario }}
@@ -104,13 +141,13 @@ jobs:
           fi
           exit "$status"
       - name: Build recording index
-        if: always()
+        if: ${{ always() && !fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
         env:
           E2E_SCENARIO: ${{ matrix.scenario }}
           E2E_HARNESS: ${{ matrix.harness }}
         run: GITHUB_STEP_SUMMARY='' python3 scripts/ci-agent-e2e-report.py --single "$E2E_REPORT_DIR" "$E2E_HARNESS" "$E2E_SCENARIO"
       - name: Save HTML recording and JSON result
-        if: always()
+        if: ${{ always() && !fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: agent-e2e-${{ matrix.harness }}-${{ matrix.scenario }}
@@ -127,32 +164,45 @@ jobs:
     environment: agent-e2e
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Accept verified regression witness
+        if: needs.plan.outputs.regression == 'true'
+        run: echo 'Signed result verifies the exact missing-policy failure and cleanup; no agent execution.'
+      - if: needs.plan.outputs.regression != 'true'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
       - name: Check out released CLI baseline
+        if: needs.plan.outputs.regression != 'true'
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: 83f551519b8dcbc0786f9d2817a7df87656c60ff # 2026.11.8.7, before policy recovery
           path: baseline
           persist-credentials: false
-      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+      - if: needs.plan.outputs.regression != 'true'
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
       - name: Require the specific regression on the released CLI
+        if: needs.plan.outputs.regression != 'true'
         env:
+          E2E_R2_ACCOUNT_ID: ${{ secrets.E2E_R2_ACCOUNT_ID }}
+          E2E_R2_BUCKET: ${{ secrets.E2E_R2_BUCKET }}
+          E2E_R2_ACCESS_KEY_ID: ${{ secrets.E2E_R2_WRITE_ACCESS_KEY_ID }}
+          E2E_R2_SECRET_ACCESS_KEY: ${{ secrets.E2E_R2_WRITE_SECRET_ACCESS_KEY }}
+          E2E_CACHE_SIGNING_KEY: ${{ secrets.E2E_CACHE_SIGNING_KEY }}
+          E2E_CACHE_SIGNING_KEY_ID: ${{ secrets.E2E_CACHE_SIGNING_KEY_ID }}
           TEST_OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
           E2E_CANDIDATE_RELEASE: ${{ needs.plan.outputs.release }}
           E2E_CANDIDATE_SOURCE: ${{ github.workspace }}/baseline
           E2E_EXPECT_POLICY_REGRESSION: '1'
-          E2E_REPORT_DIR: ${{ github.workspace }}/policy-baseline-reports
+          E2E_REPORT_DIR: ${{ runner.temp }}/policy-baseline-reports
         run: scripts/ci-agent-e2e.sh codex policy-recovery
       - name: Save baseline failure evidence
-        if: always()
+        if: always() && needs.plan.outputs.regression != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: policy-regression-baseline
-          path: policy-baseline-reports
+          path: ${{ runner.temp }}/policy-baseline-reports
           retention-days: 14
           if-no-files-found: error
 
@@ -169,6 +219,11 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - name: Restore verified cached recordings
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: agent-e2e-cached-results
+          path: e2e-artifacts
       - name: Collect all scenario recordings
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:

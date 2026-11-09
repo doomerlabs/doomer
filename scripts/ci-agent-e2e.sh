@@ -6,12 +6,20 @@ scenario=${2:-all}
 reports=${E2E_REPORT_DIR:?expected E2E_REPORT_DIR}
 mkdir -p "$reports"
 printf '%s\n' "${DEPOT_JOB_URL:-}" > "$reports/ci-job-url.txt"
+export GOTOOLCHAIN=local CGO_ENABLED=1
 work=$(mktemp -d "${HOME}/doomer-agent-e2e.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/homes" "$work/agent"
+if ! command -v aws >/dev/null 2>&1 && [[ -n ${E2E_R2_ACCOUNT_ID:-} ]]; then
+  curl -fsSL --retry 3 https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.17.44.zip -o "$work/aws.zip"
+  echo "ed46356f6358c0dfa30416899bf3efe0001689520ffce22c128f5bc617e8f4c3  $work/aws.zip" | sha256sum -c -
+  unzip -q "$work/aws.zip" -d "$work"
+  "$work/aws/install" --install-dir "$work/aws-cli" --bin-dir "$work/bin"
+  export PATH="$work/bin:$PATH"
+fi
 case "$harness" in
   codex)
-    : "${TEST_OPENAI_API_KEY:?Codex API test credential is required}"
+    if [[ ${E2E_CACHE_ONLY:-0} != 1 ]]; then : "${TEST_OPENAI_API_KEY:?Codex API test credential is required}"; fi
     unset TEST_CLAUDE_CODE_OAUTH_TOKEN TEST_ANTHROPIC_API_KEY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
     if ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 180 https://github.com/openai/codex/releases/download/rust-v0.167.0/codex-package-x86_64-unknown-linux-musl.tar.gz -o "$work/agent.tar.gz"; then
       # This is the same pinned rust-v0.167.0 asset through GitHub's asset API.
@@ -24,7 +32,7 @@ case "$harness" in
     agent_args=(--harness codex --auth api --local-codex "$work/agent/bin/codex")
     ;;
   claude)
-    : "${TEST_CLAUDE_CODE_OAUTH_TOKEN:?Claude OAuth test credential is required; API fallback is forbidden}"
+    if [[ ${E2E_CACHE_ONLY:-0} != 1 ]]; then : "${TEST_CLAUDE_CODE_OAUTH_TOKEN:?Claude OAuth test credential is required; API fallback is forbidden}"; fi
     unset TEST_OPENAI_API_KEY TEST_ANTHROPIC_API_KEY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL
     curl -fsSL --retry 3 https://downloads.claude.ai/claude-code-releases/2.1.319/linux-x64/claude -o "$work/agent/claude"
     echo "dabafec82ca1319fa43d8be36a10fc61b1d11821cb98ad5df04ad95e199b8eed  $work/agent/claude" | sha256sum -c -
@@ -49,17 +57,20 @@ if [[ -n ${E2E_SKILLS_SOURCE:-} ]]; then
 else
   candidate_args+=(--generated-bootstrap)
 fi
-scenario_budget=0.35
-if [[ $harness == codex && ( $scenario == upgrade-authorized-session || $scenario == policy-recovery || $scenario == policy-declined || $scenario == hooks-upgrade || $scenario == hooks-declined ) ]]; then
-  # These scenarios include onboarding and additional approval/review turns.
-  # Leave room for the final response reservation.
-  scenario_budget=0.50
-fi
+# One contract for local population, CI preflight, and fallback execution.
+# Subscription mode does not consume the API dollar budget.
+scenario_budget=0.50
+extra_args=(--jobs "${E2E_JOBS:-4}")
+if [[ ${E2E_CACHE_ONLY:-0} == 1 ]]; then extra_args+=(--cache-only); fi
+if [[ ${E2E_FORCE_RUN:-0} == 1 ]]; then extra_args+=(--no-cache); fi
+if [[ ${E2E_EXPECT_POLICY_REGRESSION:-0} == 1 ]]; then extra_args+=(--expect-policy-regression); fi
+if [[ -n ${E2E_SUITE_SCENARIOS:-} ]]; then extra_args+=(--suite-scenarios "$E2E_SUITE_SCENARIOS"); fi
 run_result=0
 "$work/runner" "${agent_args[@]}" "${candidate_args[@]}" \
-  --local-root "$work/homes" --scenario "$scenario" --budget "$scenario_budget" --suite-budget 8.4 \
+  --local-root "$work/homes" --scenario "$scenario" --budget "$scenario_budget" --suite-budget 20 "${extra_args[@]}" \
   --output "$reports/report.json" || run_result=$?
 if [[ ${E2E_EXPECT_POLICY_REGRESSION:-0} == 1 ]]; then
+  if [[ $run_result != 0 && ${E2E_CACHE_ONLY:-0} == 1 ]]; then exit "$run_result"; fi
   python3 - "$reports/report.json" <<'PY'
 import json, sys
 r = json.load(open(sys.argv[1]))

@@ -71,9 +71,23 @@ func freezeExternalInputs(ctx context.Context, dir string, opts snapshotOptions,
 		}
 		return data, err
 	}
-	stable, err := capture("https://downloads.doomer.ai/cli/stable.json")
-	if err != nil {
-		return "", err
+	var stable []byte
+	var err error
+	version := opts.Settings["candidate-release"]
+	if version != "" {
+		manifest, fetchErr := capture("https://downloads.doomer.ai/cli/releases/" + version + "/release-manifest.json")
+		if fetchErr != nil {
+			return "", fetchErr
+		}
+		stable, err = channelFromManifest(manifest, version)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		stable, err = capture("https://downloads.doomer.ai/cli/stable.json")
+		if err != nil {
+			return "", err
+		}
 	}
 	var channel struct {
 		Version string `json:"version"`
@@ -84,9 +98,6 @@ func freezeExternalInputs(ctx context.Context, dir string, opts snapshotOptions,
 	}
 	m.Baseline = channel.Version
 	m.Stable = stable
-	if candidate := opts.Settings["candidate-release"]; candidate != "" && candidate != channel.Version {
-		return "", fmt.Errorf("candidate release differs from resolved public baseline %s", channel.Version)
-	}
 	catalog, err := capture(managed.CatalogURL)
 	if err != nil {
 		return "", err
@@ -95,7 +106,7 @@ func freezeExternalInputs(ctx context.Context, dir string, opts snapshotOptions,
 		return "", err
 	}
 	// Published historical runtimes are immutable, but include their exact manifests.
-	for _, version := range []string{channel.Version, "2026.11.6.9"} {
+	for _, version := range []string{"2026.11.6.9"} {
 		if _, err = capture("https://downloads.doomer.ai/cli/releases/" + version + "/release-manifest.json"); err != nil {
 			return "", err
 		}
@@ -174,4 +185,27 @@ func unchangedExternalInputs(ctx context.Context, m snapshotMetadata) error {
 		}
 	}
 	return nil
+}
+
+// Pin the installer to an immutable release selected before the suite starts,
+// even when the moving stable channel changes while jobs are queued.
+func channelFromManifest(raw []byte, version string) ([]byte, error) {
+	var manifest struct {
+		Schema    int               `json:"schemaVersion"`
+		Version   string            `json:"version"`
+		Artifacts map[string]string `json:"artifacts"`
+	}
+	if json.Unmarshal(raw, &manifest) != nil || manifest.Schema != 1 || manifest.Version != version {
+		return nil, fmt.Errorf("invalid pinned release manifest")
+	}
+	assets := map[string]map[string]string{}
+	for _, platform := range []string{"darwin_amd64", "darwin_arm64", "linux_amd64", "linux_arm64"} {
+		name := "doomer_" + version + "_" + platform + ".tar.gz"
+		digest := strings.TrimPrefix(manifest.Artifacts[name], "sha256:")
+		if !digestPattern.MatchString(digest) {
+			return nil, fmt.Errorf("missing pinned release artifact: %s", name)
+		}
+		assets[platform] = map[string]string{"url": "https://downloads.doomer.ai/cli/releases/" + version + "/" + name, "sha256": digest}
+	}
+	return json.Marshal(map[string]any{"schema_version": 1, "version": version, "assets": assets})
 }

@@ -29,7 +29,9 @@ def read_result(root, harness, scenario, relative):
         "detail": detail,
         "job_url": job_url,
         "replay": replay.as_posix() if (root / replay).is_file() else "",
-        "cost": (report.get("usage") or {}).get("estimated_cost_usd", 0),
+        "cached": (report.get("cache") or {}).get("hit") is True,
+        "origin": (report.get("cache") or {}).get("origin_environment", ""),
+        "cost": 0 if (report.get("cache") or {}).get("hit") else (report.get("usage") or {}).get("estimated_cost_usd", 0),
     }
 
 
@@ -44,7 +46,7 @@ def render(root, results):
                 "Each recording link opens its scenario’s Depot job with the downloadable HTML artifact.", "",
                 "| Agent | Scenario | Result | Recording |", "| --- | --- | --- | --- |"]
     for result in results:
-        status = "Passed" if result["passed"] else "Failed"
+        status = ("Cached (" + result["origin"] + ")" if result["cached"] else "Passed") if result["passed"] else "Failed"
         link = "Unavailable"
         if result["replay"]:
             link = f'<a href="{html.escape(result["replay"], quote=True)}">Conversation</a>'
@@ -53,6 +55,7 @@ def render(root, results):
         recording = f'[HTML artifact]({result["job_url"]})' if result["job_url"] else "See combined gallery"
         summary.append(f'| {result["harness"]} | {result["scenario"]} | {status} | {recording} |')
     passed = sum(result["passed"] for result in results)
+    summary += ["", f"{sum(result["cached"] for result in results)} cached; {sum(not result["cached"] for result in results)} executed or missing."]
     billing = "Codex uses API billing. Claude uses subscription allowance, with no Anthropic API fallback."
     cost = sum(result["cost"] for result in results if result["harness"] == "codex")
     summary += ["", f"{passed}/{len(results)} scenarios passed.", "", f"Estimated Codex model cost is ${cost:.4f}.", "", billing]

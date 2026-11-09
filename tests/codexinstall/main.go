@@ -90,6 +90,8 @@ func main() {
 	model := flag.String("model", "", "model under test; defaults to the pinned harness model")
 	version := flag.String("codex-version", "0.167.0", "exact supported Codex release version")
 	snapshotInput := flag.String("snapshot-input", "", "internal captured input manifest")
+	cacheOnly := flag.Bool("cache-only", false, "verify shared results without executing any agents; fail on a miss")
+	expectPolicyRegression := flag.Bool("expect-policy-regression", false, "require the known released-CLI missing-policy failure")
 	noCache := flag.Bool("no-cache", false, "run every requested scenario without shared cache lookup or publication")
 	jobs := flag.Int("jobs", 1, "maximum concurrent suite scenarios")
 	suiteScenarios := flag.String("suite-scenarios", "", "comma-separated subset for --scenario all")
@@ -113,7 +115,7 @@ func main() {
 	defer stopSignals()
 	if !*worker && *render == "" && *snapshotInput == "" {
 		settings := map[string]string{}
-		excluded := map[string]bool{"output": true, "local-root": true, "local-codex": true, "local-claude": true, "codex-auth-home": true, "candidate-source": true, "bootstrap-source": true, "skills-source": true, "install-guide": true, "scenario": true, "suite-scenarios": true, "jobs": true, "suite-budget": true, "no-cache": true, "snapshot-input": true, "render-report": true, "worker": true}
+		excluded := map[string]bool{"output": true, "local-root": true, "local-codex": true, "local-claude": true, "codex-auth-home": true, "candidate-source": true, "bootstrap-source": true, "skills-source": true, "install-guide": true, "scenario": true, "suite-scenarios": true, "jobs": true, "suite-budget": true, "no-cache": true, "cache-only": true, "snapshot-input": true, "render-report": true, "worker": true}
 		flag.VisitAll(func(f *flag.Flag) {
 			if !excluded[f.Name] {
 				settings[f.Name] = f.Value.String()
@@ -294,6 +296,10 @@ func main() {
 	if hit {
 		return
 	}
+	if *cacheOnly {
+		fmt.Fprintln(os.Stderr, "No verified cached result; agent execution disabled")
+		os.Exit(1)
+	}
 	var r report
 	if *localClaude != "" {
 		if *harness != "claude" {
@@ -333,6 +339,9 @@ func main() {
 		fmt.Printf("passed=%t auth=subscription billing=subscription_allowance cleanup_complete=%t report=%s\n", r.Passed, cleaned, *output)
 	} else {
 		fmt.Printf("passed=%t cost=$%.6f reserved=$%.6f cleanup_complete=%t report=%s\n", r.Passed, r.Usage.Cost, r.Usage.Reserved, cleaned, *output)
+	}
+	if *expectPolicyRegression && expectedPolicyRegression(r) {
+		return
 	}
 	if !r.Passed || (r.VM != "" && !r.Deleted) || (r.Execution == "local" && !r.LocalCleaned) {
 		fmt.Fprintln(os.Stderr, redact(redact(r.Error, c.APIKey), c.OAuthToken))

@@ -24,6 +24,7 @@ type cacheProvenance struct {
 	Fingerprint string `json:"fingerprint"`
 	Hit         bool   `json:"hit"`
 	Result      string `json:"result,omitempty"`
+	Origin      string `json:"origin_environment,omitempty"`
 }
 type cacheArtifact struct {
 	Kind   string `json:"kind"`
@@ -221,10 +222,10 @@ func reuseCachedResult(ctx context.Context, store cacheStore, m snapshotMetadata
 		artifacts[artifact.Kind] = raw
 	}
 	var r report
-	if json.Unmarshal(artifacts["report"], &r) != nil || !r.Passed || (r.Execution == "local" && !r.LocalCleaned) || (r.Execution == "remote" && !r.Deleted) || r.Scenario != scenario || r.Harness != m.Settings["harness"] || r.AuthMode != m.Settings["auth"] {
+	if json.Unmarshal(artifacts["report"], &r) != nil || !cacheReportPassed(r, m) || (r.Execution == "local" && !r.LocalCleaned) || (r.Execution == "remote" && !r.Deleted) || r.Scenario != scenario || r.Harness != m.Settings["harness"] || r.AuthMode != m.Settings["auth"] {
 		return fmt.Errorf("invalid cached report")
 	}
-	r.Cache = &cacheProvenance{m.fingerprint(scenario), true, cacheResultKey(m, scenario)}
+	r.Cache = &cacheProvenance{Fingerprint: m.fingerprint(scenario), Hit: true, Result: cacheResultKey(m, scenario), Origin: m.Environment}
 	encoded, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
 		return err
@@ -258,7 +259,7 @@ func publishCachedResult(ctx context.Context, store cacheStore, m snapshotMetada
 		return fmt.Errorf("invalid report")
 	}
 	result := cachedResult{Schema: fingerprintSchema, Fingerprint: m.fingerprint(scenario), Scenario: scenario, Harness: m.Settings["harness"], Outcome: "failed", Inputs: m, Started: started, Ended: time.Now().UTC(), Duration: time.Since(started).Seconds(), Attempts: 1, KeyID: keyID}
-	if r.Passed {
+	if cacheReportPassed(r, m) {
 		result.Outcome = "passed"
 	}
 	for _, artifact := range []struct{ kind, path, ext string }{{"report", output, "json"}, {"replay", output + ".html", "html"}} {
@@ -283,7 +284,7 @@ func publishCachedResult(ctx context.Context, store cacheStore, m snapshotMetada
 		return err
 	}
 	path := cacheResultKey(m, scenario)
-	if !r.Passed {
+	if !cacheReportPassed(r, m) {
 		path = "v1/failures/" + result.Fingerprint + "/" + fmt.Sprint(result.Ended.UnixNano()) + ".json"
 	}
 	// Artifacts are durable before the discoverable result is published.
@@ -321,9 +322,11 @@ func openScenarioCache(ctx context.Context, m *snapshotMetadata, noCache bool, s
 	}
 	lookup, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	if err = reuseCachedResult(lookup, store, *m, scenario, output, keys); err == nil {
-		fmt.Fprintln(os.Stderr, "Cache hit:", m.fingerprint(scenario), "(no agent calls)")
-		return nil, true
+	for _, candidate := range cacheLookupEnvironments(*m) {
+		if err = reuseCachedResult(lookup, store, candidate, scenario, output, keys); err == nil {
+			fmt.Fprintln(os.Stderr, "Cache hit:", candidate.fingerprint(scenario), "from", candidate.Environment, "(no agent calls)")
+			return nil, true
+		}
 	}
 	fmt.Fprintln(os.Stderr, "Cache miss:", err)
 	return &scenarioCache{*m, store, keys, time.Now().UTC()}, false
@@ -343,4 +346,31 @@ func (c *scenarioCache) publish(scenario, output string) {
 		return
 	}
 	fmt.Fprintln(os.Stderr, "Published signed E2E result:", c.metadata.fingerprint(scenario))
+}
+
+func expectedPolicyRegression(r report) bool {
+	return !r.Passed && r.Error == "deterministic prepare probe: missing policy after delivered offer" && r.Execution == "local" && r.LocalCleaned
+}
+func cacheReportPassed(r report, m snapshotMetadata) bool {
+	if m.Settings["expect-policy-regression"] == "true" {
+		return expectedPolicyRegression(r)
+	}
+	return r.Passed
+}
+
+// CI accepts locally executed Linux results only on the same architecture and
+// with every content, agent, toolchain, auth and execution input unchanged.
+// OS remains part of identity: macOS results never satisfy Linux checks.
+func cacheLookupEnvironments(m snapshotMetadata) []snapshotMetadata {
+	candidates := []snapshotMetadata{m}
+	if m.OS == "linux" && (m.Environment == "local" || m.Environment == "ci") {
+		alternate := m
+		if m.Environment == "local" {
+			alternate.Environment = "ci"
+		} else {
+			alternate.Environment = "local"
+		}
+		candidates = append(candidates, alternate)
+	}
+	return candidates
 }

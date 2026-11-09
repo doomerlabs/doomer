@@ -2,8 +2,7 @@
 
 Local runs capture their inputs, then reuse valid signed successful results or
 execute missing scenarios. `--no-cache` forces execution and disables reads and
-publication. CI's workflow and release gates are unchanged; wiring verified reuse
-into CI is a later step.
+publication. CI verifies shared successes before running misses; release gates are unchanged.
 
 ## Running
 
@@ -40,13 +39,16 @@ values are excluded. Identical contents therefore survive commits and rebases.
 
 ## Baselines and freshness
 
-The runner resolves the public stable channel once, verifies the pinned public
+When a candidate release is supplied, the runner constructs the installation
+channel from that immutable release manifest; otherwise it resolves the public
+stable channel once. It verifies the pinned public
 installer against the guide's SHA-256, and uses a fixture-local copy of that
 installer with the captured stable-channel JSON substituted. The guide receives
 the derived installer checksum. Archive download HTTPS/checksum verification
 remains intact. With `--skills-source`, the snapshot's installer receives the
 same narrowly scoped baseline substitution. Production installers are unchanged.
-A candidate release must match the resolved installation baseline for reuse.
+The selected candidate release remains the installation baseline even if a new
+stable release is published while jobs are queued.
 
 The signed managed catalog and relevant immutable release manifests also enter
 identity. The released CLI still fetches the live managed catalog, so reuse is
@@ -55,10 +57,10 @@ HTTPS input and is skipped if any changed or cannot be verified. This is an
 explicit freshness policy for remaining external mutability, not a promise that
 all external services are immutable. Unsupported installer layouts disable reuse.
 
-`local` and `ci` execution classes have separate fingerprints. OS and architecture
-are also separate: macOS results never claim Linux coverage. There is currently
-no rule accepting developer results as CI coverage. Enable such a rule only in a
-later reviewed change with representative environment parity evidence.
+`local` and `ci` execution classes remain explicit provenance. Linux results can
+be accepted across those two classes only with every other fingerprinted input
+matching; OS and architecture remain separate. macOS results never claim Linux
+coverage. Use the local Linux command below to populate CI-compatible results.
 
 ## Signed result contract
 
@@ -102,10 +104,9 @@ bucket and lifecycle rule were created in the dashboard and the dedicated
 credentials were provisioned with the account token. The setup token can be
 revoked afterward.
 
-The CI publisher and reader credentials are prepared in Doppler for later CI
-integration; no Depot secrets or workflow are changed here. Tests run by CI can
-publish with the same result contract once those credentials are explicitly
-wired in. The current policy trusts approved developers and CI that hold the
+The CI publisher and reader credentials are scoped in Depot to this repository,
+the `agent-e2e` environment and `agent-e2e.yml`. Verification receives read-only
+credentials; fallback execution receives publishing and signing credentials. The current policy trusts approved developers and CI that hold the
 dedicated signing key; stronger provenance attestations are outside this phase.
 
 To rotate, create a new independent signing key and ID, add its public key to the
@@ -114,3 +115,42 @@ retain the old public key for at least six hours. Then remove/revoke the old key
 Remove a compromised public key immediately: cached results using it become
 misses. Rotate bucket-scoped storage tokens independently. Never substitute the
 public release key or copy release credentials into the test configuration.
+
+## CI reuse and local Linux validation
+
+The E2E plan job verifies every required signed result and both report artifacts
+before classifying a scenario as cached. Cached matrix jobs retain their existing
+check names and complete without an agent process. Missing, expired, malformed,
+or unavailable results run through the existing fresh-home retry path and publish
+new signed results. The combined gallery includes both cached and executed
+recordings, labels their origin, and charges zero new provider spend for hits.
+The released-CLI regression check can reuse only a separately signed witness of
+the exact expected missing-policy failure with successful cleanup.
+
+Linux local and CI results are mutually acceptable only when OS, architecture,
+source, pinned agent package, toolchain, model, authentication and all other
+fingerprinted settings match. macOS and Windows results do not satisfy Linux
+checks. CI uses read-only bucket credentials for its verification plan and separate
+publisher credentials only in fallback jobs. The all-cached matrix can run its
+lightweight checks concurrently; any cache miss retains the eight-worker provider
+limit. Release gates and the required scenario set are unchanged.
+
+To populate matching Linux results from the current local checkout:
+
+```sh
+doppler run --project doomer --config test -- scripts/agent-e2e-local-linux.sh
+```
+
+This builds an Ubuntu 24.04 / linux-amd64 container with Go 1.26.10, runs both
+pinned harnesses and the historical regression with bounded concurrency, and
+publishes successful results. It uses the same execution script as CI, including
+a $0.50 per-case API reservation and subscription-only Claude authentication.
+Reports default to `/tmp/doomer-agent-e2e-linux` (`E2E_LOCAL_REPORTS` overrides it).
+`E2E_SUITE_SCENARIOS` can select a comma-separated subset for parity experiments;
+omit it when priming the full required suite. Each failed local scenario retries
+once in a fresh home. A partial local run never satisfies missing CI checks.
+
+`--cache-only` verifies and downloads shared results without making agent calls.
+It fails on a miss, allowing the plan to choose the ordinary execution path.
+The plan's `cache-plan.json` records required and verified counts, the separate
+regression result, and elapsed verification time.

@@ -68,8 +68,9 @@ each scenario finishes. Missing storage or invalid results are explicit misses.
 AWS CLI v2 plus dedicated `E2E_R2_*` and `E2E_CACHE_*` settings from Doppler
 `doomer/test` enable shared reuse. Never use release credentials or signing keys.
 Retained private reports expire from storage after seven days; reuse is limited
-to six hours and requires matching external inputs. Local/CI, OS and architecture
-remain separate identities; local results do not satisfy CI gates yet.
+to six hours and requires matching external inputs. OS and architecture remain separate identities. For CI-compatible results, use
+`scripts/agent-e2e-local-linux.sh` through Doppler; the Linux local/CI acceptance
+rule still requires every other fingerprinted input to match.
 
 Record the result fingerprint from each report's `cache` field, manifest/report
 locations, cache hits versus executed scenarios, harness/model/auth mode,

@@ -289,7 +289,7 @@ results and HTML conversations from both attempts, and the gallery shows the fin
 attempt. A final job collects all recordings into one offline `index.html` gallery
 for 14 days, including on test failure. The job summary links to the Depot job, identifies the recording artifact, and
 lists every scenario result, including missing or malformed reports as failures. Download the artifact and open `index.html` to browse
-recordings. Codex reserves at most $0.35 per scenario and $8.75 per suite. Claude
+recordings. Codex reserves at most $0.50 per scenario; local full-suite runs allow $20 in total reservations. Claude
 uses subscription allowance, which is not reported as zero-dollar API usage.
 
 The `review-command-permissions` scenario verifies the fallback command path,
@@ -321,3 +321,9 @@ that they remain optional. This scenario is Codex-only; Claude parity is separat
 Run locally with `--scenario browser-onboarding` and the normal candidate and
 agent options above. The report records link delivery, the active wait, absence
 of uploads or policy before consent, completed setup and review, and grant reuse.
+
+CI first verifies shared signed results, retains every per-scenario check, and
+executes only misses with the existing fresh-home retry. Use
+`scripts/agent-e2e-local-linux.sh` through Doppler to populate matching Linux
+results from a local checkout. macOS results never substitute for Linux coverage.
+See `docs/agent-e2e-cache.md` for the acceptance and credential boundaries.
