@@ -192,7 +192,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if err := os.Mkdir(decisionPath, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if r := run("", "prepare", "--task", handle); r.State != "ready" || r.CodexPolicyStatus.DecisionError == "" || !r.UploadApproved {
+	if r := run("", "prepare", "--task", handle); r.State != "ready" || r.CodexPolicyStatus.DecisionError == "" || r.CodexReviewPolicy == nil || !r.UploadApproved {
 		t.Fatal("unreadable bookkeeping blocked preparation", r)
 	}
 	if err := os.Remove(decisionPath); err != nil {

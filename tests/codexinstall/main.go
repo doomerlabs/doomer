@@ -110,10 +110,6 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		if *candidateSource != "" && (*candidate == "" || (*localCodex == "" && *localClaude == "")) {
-			fmt.Fprintln(os.Stderr, "--candidate-source requires a local agent and --candidate-release")
-			os.Exit(1)
-		}
 		var r report
 		if err := json.Unmarshal(data, &r); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -151,6 +147,10 @@ func main() {
 	}
 	if *model != expectedModel || (*auth == "api" && (*budget <= 0 || *budget > 1)) {
 		fmt.Fprintln(os.Stderr, "use the pinned harness model and a budget above zero and at most $1")
+		os.Exit(1)
+	}
+	if *candidateSource != "" && (*candidate == "" || (*localCodex == "" && *localClaude == "")) {
+		fmt.Fprintln(os.Stderr, "--candidate-source requires a local agent and --candidate-release")
 		os.Exit(1)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)

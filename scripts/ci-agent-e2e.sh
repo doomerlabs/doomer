@@ -50,9 +50,9 @@ else
   candidate_args+=(--generated-bootstrap)
 fi
 scenario_budget=0.35
-if [[ $harness == codex && $scenario == upgrade-authorized-session ]]; then
-  # This scenario includes onboarding, upgrade, and a second reviewed coding
-  # turn in one growing chat. Leave room for the final response reservation.
+if [[ $harness == codex && ( $scenario == upgrade-authorized-session || $scenario == policy-recovery || $scenario == policy-declined ) ]]; then
+  # These scenarios include onboarding and additional approval/review turns.
+  # Leave room for the final response reservation.
   scenario_budget=0.50
 fi
 run_result=0

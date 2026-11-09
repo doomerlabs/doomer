@@ -171,7 +171,7 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 				}
 				inspection := c.Name() == "codex-policy"
 				canOffer := inspection || c.Name() == "prepare" || c.Name() == "login" || c.Name() == "consent"
-				if canOffer && r.State != "codex_policy_declined" && (inspection || (!declined && decisionErr == nil)) {
+				if canOffer && r.State != "codex_policy_declined" && (inspection || !declined) {
 					binary, err := os.Executable()
 					if err != nil {
 						return err
