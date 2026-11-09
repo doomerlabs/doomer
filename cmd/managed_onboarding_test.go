@@ -113,6 +113,22 @@ func TestBrowserOnboardingWaitsThenInstallsOnlyPolicy(t *testing.T) {
 			}
 			allow.Store(true)
 			waitErr := <-done
+			if waitErr != nil {
+				t.Fatal(final, waitErr)
+			}
+			json.Unmarshal([]byte(final), &result)
+			if decision != "cancelled" {
+				if !result.UploadApproved || len(result.PolicyResumeCommand) == 0 {
+					t.Fatal("missing verified approval handoff", final)
+				}
+				if decision != "repair" {
+					if _, err := os.Stat(config); !os.IsNotExist(err) {
+						t.Fatal("browser wait changed policy", err)
+					}
+				}
+				// Ordinary resume performs the separate authorized installation.
+				final, waitErr = execute(t, "", args...)
+			}
 			if decision == "repair" {
 				if waitErr == nil {
 					t.Fatal("accepted malformed config")

@@ -34,6 +34,12 @@ func (f *fixture) serve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	send := func(v any) { _ = json.NewEncoder(w).Encode(v) }
 	switch r.URL.Path {
+	case "/v1/auth/device/code":
+		// Legacy login probes carry no repository content. This fixture uses
+		// the managed browser flow, so report it unsupported without counting
+		// an attempted sign-in as a source upload.
+		http.Error(w, "device login is not supported by this fixture", http.StatusNotFound)
+		return
 	case "/v1/setup/grants":
 		var in struct {
 			Request   string `json:"request"`

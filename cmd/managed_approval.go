@@ -38,6 +38,8 @@ func displayManagedService(api string) string {
 }
 
 func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t *managed.Task) error {
+	// Waiting retrieves consent evidence; apply policy only on a later command.
+	waitOnly := c.Name() == "login" && c.Flags().Changed("wait")
 	client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, t.API)
 	authKey := adversarylabs.AuthKey(t.API, t.Profile)
 	expectedAuth, hadAuth, err := app.Dependencies().Auth.StoredAuthE(authKey)
@@ -64,7 +66,7 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 				}
 			}
 			if t.OnboardingPending {
-				if err := finishApprovedCodexPolicy(s, t); err != nil {
+				if err := finishApprovedCodexPolicy(s, t, !waitOnly); err != nil {
 					return err
 				}
 			}
@@ -244,7 +246,7 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 			t.PortableDeclined = !*result.PortableState
 		}
 		if t.OnboardingPending {
-			if err := finishApprovedCodexPolicy(s, t); err != nil {
+			if err := finishApprovedCodexPolicy(s, t, !waitOnly); err != nil {
 				return err
 			}
 		}
@@ -293,8 +295,8 @@ func managedApprovalRepositories(s managed.Store, t managed.Task) ([]adversaryla
 
 // Complete the policy covered by the displayed browser approval before any
 // upload. A failed installation leaves a durable gate for the next invocation.
-func finishApprovedCodexPolicy(s managed.Store, t *managed.Task) error {
-	if !t.OnboardingPending {
+func finishApprovedCodexPolicy(s managed.Store, t *managed.Task, install bool) error {
+	if !t.OnboardingPending || !install {
 		return nil
 	}
 	if t.Agent != "codex" {

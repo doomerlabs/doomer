@@ -14,7 +14,8 @@ import (
 )
 
 // Drive the browser decision while the real coding agent is still running.
-// A second chat message must not be needed to finish accepted onboarding.
+// Browser-only completion is preferred. If host review explicitly rejects the
+// persistent policy, verify the one-time chat approval recovery and fresh reuse.
 func (j *journey) browserOnboarding() error {
 	if j.c.Harness != "codex" {
 		return fmt.Errorf("browser onboarding currently targets Codex")
@@ -107,7 +108,8 @@ func (j *journey) browserOnboarding() error {
 	}
 	j.c.ReviewApprovals = true
 	j.result.Turns++
-	if _, err := runAgent(j.ctx, j.c, j.repo, j.env, "Set up Doomer review in this repository using its existing installation. I allow automatic Doomer software updates and their version metadata reporting. Ask for repository upload approval on its browser page. Do not install hooks; I will use explicit reviews in new coding chats. This task is setup only; do not change or review source.", "", record); err != nil {
+	onboarding, err := runAgent(j.ctx, j.c, j.repo, j.env, "Set up Doomer review in this repository using its existing installation. I allow automatic Doomer software updates and their version metadata reporting. Ask for repository upload approval on its browser page. Do not install hooks; I will use explicit reviews in new coding chats. This task is setup only; do not change or review source.", "", record)
+	if err != nil {
 		return err
 	}
 	mu.Lock()
@@ -119,7 +121,32 @@ func (j *journey) browserOnboarding() error {
 	if err != nil {
 		return err
 	}
-	j.result.Checks["browser_approval_installed_policy"] = strings.Contains(string(raw), "Doomer repository review authorization")
+	installed := strings.Contains(string(raw), "Doomer repository review authorization")
+	if !installed {
+		// A host can require direct chat authorization for persistent settings;
+		// never bypass its refusal or manufacture a browser-only success.
+		messages := strings.ToLower(strings.Join(onboarding.Messages, "\n"))
+		j.f.mu.Lock()
+		noUpload := j.f.Uploads == 0 && len(j.f.Reviews) == 0
+		j.f.mu.Unlock()
+		if !noUpload || !strings.Contains(messages, "policy") ||
+			(!strings.Contains(messages, "approv") && !strings.Contains(messages, "allow")) {
+			return fmt.Errorf("browser onboarding stopped without a recoverable policy decision")
+		}
+		j.record("Host approval recovery", "Browser approval was saved, but the host required direct approval for persistent policy installation.")
+		j.result.Turns++
+		answer := "I approve installing the displayed scoped Codex reviewer policy for all current and future repositories used by this agent with this Doomer account, service, and profile. Preserve unrelated settings and the earlier no-hooks choice. Finish this same setup task; do not upload or review source in this setup turn."
+		j.record("Scripted user", answer)
+		if _, err := runAgent(j.ctx, j.c, j.repo, j.env, answer, onboarding.Session, record); err != nil {
+			return err
+		}
+		raw, err = os.ReadFile(configPath)
+		if err != nil {
+			return err
+		}
+		installed = strings.Contains(string(raw), "Doomer repository review authorization")
+	}
+	j.result.Checks["approved_policy_installed"] = installed
 	tasks, err := savedTasks(j.home)
 	if err != nil {
 		return err
@@ -130,9 +157,9 @@ func (j *journey) browserOnboarding() error {
 			ready = true
 		}
 	}
-	j.result.Checks["onboarding_completed_without_chat_reply"] = ready && j.result.Checks["browser_approval_installed_policy"]
-	if !j.result.Checks["onboarding_completed_without_chat_reply"] {
-		return fmt.Errorf("browser approval did not finish policy setup in the same agent turn")
+	j.result.Checks["onboarding_completed_after_required_approvals"] = ready && installed
+	if !j.result.Checks["onboarding_completed_after_required_approvals"] {
+		return fmt.Errorf("approved onboarding did not finish policy setup")
 	}
 	// The next process must reuse the saved policy/grant without any approval
 	// response from the fixture. This is the successful customer reproduction.
@@ -156,7 +183,7 @@ func (j *journey) browserOnboarding() error {
 	j.result.Checks["one_browser_grant"] = j.f.Creates == 1
 	j.result.Checks["fresh_review_uploaded"] = len(j.f.Reviews) >= 1
 	j.f.mu.Unlock()
-	j.result.Checks["fresh_session_completed_without_approval"] = len(tasks) > before && completed >= 1 && !turn.UpdateRequested
+	j.result.Checks["fresh_session_completed_without_approval"] = len(tasks) > before && completed >= 1 && !turn.UpdateRequested && !turn.PolicyOffered && !turn.HooksOffered
 	j.result.Checks["optional_hooks_not_installed"] = true
 	if _, err := os.Stat(filepath.Join(j.home, ".codex/hooks.json")); err == nil {
 		j.result.Checks["optional_hooks_not_installed"] = false
