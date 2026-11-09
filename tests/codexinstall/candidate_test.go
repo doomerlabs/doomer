@@ -13,8 +13,17 @@ import (
 )
 
 func TestCandidateAssemblyAcceptsUnrecognizedPublishedBootstrap(t *testing.T) {
-	// Keep the fixture compatible so this test isolates modified-wrapper handling.
-	const candidateVersion = "2099.1.1.1"
+	for _, candidate := range []struct{ version, state string }{
+		{"2026.11.8.6", "incompatible"},
+		{"2026.11.8.7", "modified"},
+	} {
+		t.Run(candidate.version, func(t *testing.T) {
+			testCandidateAssemblyAcceptsUnrecognizedBootstrap(t, candidate.version, candidate.state)
+		})
+	}
+}
+
+func testCandidateAssemblyAcceptsUnrecognizedBootstrap(t *testing.T, candidateVersion, expectedState string) {
 	for _, scenario := range []string{"install", "personal"} {
 		for _, source := range []string{"generated", "skills", "repository"} {
 			t.Run(scenario+"/"+source, func(t *testing.T) {
@@ -35,7 +44,7 @@ func TestCandidateAssemblyAcceptsUnrecognizedPublishedBootstrap(t *testing.T) {
 					path := filepath.Join(root, agent, "skills/doomer-review/SKILL.md")
 					writeCandidateTestFile(t, path, []byte(published))
 					update, err := managed.InspectBootstrap(path, "project", candidateVersion)
-					if err != nil || update.State != "modified" {
+					if err != nil || update.State != expectedState {
 						t.Fatalf("fixture must reproduce rejection: %+v, %v", update, err)
 					}
 				}
