@@ -1,0 +1,32 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 204
+cmd/managed_feedback.go
+  h_aa44c3b5b60dec 7-8,23-26
+cmd/managed_feedback_test.go
+  h_aa44c3b5b60dec 115,118
+cmd/notices.go
+  h_aa44c3b5b60dec 9-17,31-34,37-40
+cmd/notices_test.go
+  h_aa44c3b5b60dec 5,10,32-88
+cmd/review_workspace_test.go
+  h_aa44c3b5b60dec 299-300
+docs/client-notices.md
+  h_aa44c3b5b60dec 30-34,38-42,50-53,59-62
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 11-17
+pkg/adversarylabs/notices.go
+  h_aa44c3b5b60dec 22,28-29,32,70-71,85-88,94-100,105,109,126-128,146-161,163-164,167,170-179,181,183,187,193,195-196,198,201-202,219-220,228-229,234-261,277-278
+pkg/adversarylabs/notices_test.go
+  h_aa44c3b5b60dec 14,80,83-89,93,106-255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a5e6ba1858b9eccfc58f29a4e112f6f5b95b2ca0",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
