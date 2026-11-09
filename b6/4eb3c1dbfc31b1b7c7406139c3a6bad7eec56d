@@ -1,0 +1,20 @@
+cmd/managed_preflight.go
+  h_aa44c3b5b60dec 107-108
+cmd/managed_preflight_test.go
+  h_aa44c3b5b60dec 336-353
+tests/codexinstall/claude_policy.go
+  h_aa44c3b5b60dec 7,72-79,100-105,272-298
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 95-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b64eb3c1dbfc31b1b7c7406139c3a6bad7eec56d",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
