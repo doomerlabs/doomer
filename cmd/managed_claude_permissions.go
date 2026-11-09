@@ -16,10 +16,12 @@ import (
 	"github.com/doomerlabs/doomer/internal/watch"
 )
 
-// These rules allow only the task review interface, not install, reset, arbitrary
+// These rules allow readiness and task review interfaces, not install, reset, arbitrary
 // shell execution, or configuration changes. Every operation still checks the
 // task's live account, saved upload consent, and pause state inside Doomer.
 var claudeReviewRules = []string{
+	"Bash(doomer preflight *)",
+	"Bash(doomer prepare *)",
 	"Bash(doomer task submit *)",
 	"Bash(doomer task status *)",
 	"Bash(doomer task respond *)",
@@ -98,7 +100,7 @@ func readClaudePermissionConfig(path string) ([]byte, map[string]any, []any, err
 
 func inspectClaudePermissions() *claudePermissions {
 	p := &claudePermissions{Rules: slices.Clone(claudeReviewRules), State: "missing", Activation: "unverified", Changes: []string{
-		"Normal approved Claude onboarding installs these four review-command rules with the hooks, preserving all other settings.",
+		"Normal approved Claude onboarding installs these six readiness and review-command rules with the hooks, preserving all other settings.",
 		"The rules apply to these command forms across repositories. Doomer still requires live, matching upload consent for each task; these rules grant no Doomer upload permission.",
 		"Use the canonical doomer task commands. Different executable spellings, managed policy, sandbox restrictions, or classifier settings may still require approval. Do not disable those controls.",
 	}}
@@ -126,9 +128,9 @@ func inspectClaudePermissions() *claudePermissions {
 		if !ok {
 			continue
 		}
-		for _, operation := range []string{"submit", "status", "respond", "finish"} {
+		for _, command := range []string{"doomer preflight --agent claude --repo .", "doomer prepare --agent claude --repo .", "doomer task submit example-task", "doomer task status example-task", "doomer task respond example-task", "doomer task finish example-task"} {
 			pattern := strings.TrimSuffix(strings.TrimPrefix(rule, "Bash("), ")")
-			if rule == "Bash" || (strings.HasPrefix(rule, "Bash(") && regexp.MustCompile("^"+strings.ReplaceAll(regexp.QuoteMeta(strings.ReplaceAll(pattern, ":*", " *")), `\*`, ".*")+"$").MatchString("doomer task "+operation+" example-task")) {
+			if rule == "Bash" || (strings.HasPrefix(rule, "Bash(") && regexp.MustCompile("^"+strings.ReplaceAll(regexp.QuoteMeta(strings.ReplaceAll(pattern, ":*", " *")), `\*`, ".*")+"$").MatchString(command)) {
 				p.DeniedRules = append(p.DeniedRules, rule)
 				break
 			}
@@ -141,9 +143,12 @@ func inspectClaudePermissions() *claudePermissions {
 	return p
 }
 
-func claudePermissionDecisionPath(s managed.Store, t managed.Task, evidence *managedConsentEvidence) string {
-	path, _ := claudePermissionPath()
-	return filepath.Join(s.Root, "claude-permission-decisions", watch.Key(path+"\x00"+t.Agent+"\x00"+managedSetupScope(evidence)))
+func claudePermissionDecisionPath(s managed.Store, t managed.Task, evidence *managedConsentEvidence) (string, error) {
+	path, err := claudePermissionPath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(s.Root, "claude-permission-decisions", watch.Key(path+"\x00"+t.Agent+"\x00"+managedSetupScope(evidence))), nil
 }
 
 func proposedClaudePermissions(s managed.Store, t managed.Task, evidence *managedConsentEvidence) *claudePermissions {
@@ -152,7 +157,12 @@ func proposedClaudePermissions(s managed.Store, t managed.Task, evidence *manage
 		return p
 	}
 	var decision string
-	if err := watch.Read(claudePermissionDecisionPath(s, t, evidence), &decision); err == nil && decision == "declined" {
+	decisionPath, err := claudePermissionDecisionPath(s, t, evidence)
+	if err != nil {
+		p.Error = err.Error()
+		return p
+	}
+	if err := watch.Read(decisionPath, &decision); err == nil && decision == "declined" {
 		p.Decision = "declined"
 		p.Action = "This scoped Claude permission setup was declined. Do not ask again unless the user revisits that decision. Preserve existing upload consent and host restrictions."
 		return p

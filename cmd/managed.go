@@ -158,7 +158,7 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 			_ = bindManagedAdoption(s, &t, evidence)
 			reportManagedAdoption(c.Context(), s, t, evidence)
 		}
-		if evidence != nil && t.Agent == "claude" && (c.Name() == "prepare" || c.Name() == "login" || c.Name() == "consent" || c.Name() == "claude-permissions") {
+		if evidence != nil && t.Agent == "claude" {
 			r.ClaudePermissions = proposedClaudePermissions(s, t, evidence)
 		}
 		if evidence != nil && t.Agent == "codex" {
@@ -803,6 +803,9 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				if t.Agent != "claude" {
 					return fmt.Errorf("Claude permission rules require a Claude task")
 				}
+				if inspectClaudePermissions().State == "denied" {
+					return outputManaged(c, s, t, managedResult{State: "claude_permissions_denied", Authenticated: true, UploadApproved: true})
+				}
 				evidence, err := savedManagedConsentEvidence(s, t)
 				if err != nil {
 					return err
@@ -810,7 +813,10 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				if evidence == nil {
 					return fmt.Errorf("current upload consent required")
 				}
-				decisionPath := claudePermissionDecisionPath(s, t, evidence)
+				decisionPath, err := claudePermissionDecisionPath(s, t, evidence)
+				if err != nil {
+					return err
+				}
 				if decline {
 					if err := watch.Write(decisionPath, "declined"); err != nil {
 						return err
@@ -818,9 +824,6 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 					return outputManaged(c, s, t, managedResult{State: "claude_permissions_declined", Authenticated: true, UploadApproved: true})
 				}
 				if allow {
-					if inspectClaudePermissions().State == "denied" {
-						return outputManaged(c, s, t, managedResult{State: "claude_permissions_denied", Authenticated: true, UploadApproved: true})
-					}
 					if err := installClaudePermissions(s); err != nil {
 						return err
 					}
@@ -847,6 +850,9 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 						return err
 					}
 					if decline {
+						if proposal.State == "configured" {
+							return outputManaged(c, s, t, managedResult{State: "codex_policy_checked", Authenticated: true, UploadApproved: true})
+						}
 						if err := declineCodexReviewPolicy(s, proposal); err != nil {
 							return err
 						}

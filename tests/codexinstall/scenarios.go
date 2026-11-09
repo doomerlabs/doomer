@@ -12,9 +12,10 @@ import (
 	"sync"
 
 	"github.com/doomerlabs/doomer/internal/managed"
+	"github.com/doomerlabs/doomer/internal/watch"
 )
 
-var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-command-permissions", "upgrade-authorized-session", "policy-recovery", "policy-installed", "policy-declined", "hooks-upgrade", "hooks-declined", "hooks-trust"}
+var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-command-permissions", "upgrade-authorized-session", "policy-recovery", "policy-installed", "policy-declined", "hooks-upgrade", "hooks-declined", "hooks-trust", "policy-denied"}
 
 func validScenario(name string) bool {
 	for _, candidate := range scenarioNames {
@@ -170,6 +171,8 @@ func (j *journey) finish() error {
 }
 func (j *journey) afterInstall() error {
 	switch j.c.Scenario {
+	case "policy-denied":
+		return j.explicitPolicyDeny()
 	case "hooks-upgrade", "hooks-declined":
 		return j.hookSetupRecovery()
 	case "hooks-trust":
@@ -201,7 +204,7 @@ func (j *journey) afterInstall() error {
 			j.c.ReviewApprovals = j.c.Harness != "claude"
 		}
 		if j.c.Scenario == "hooks-off" {
-			if err := os.Remove(agentHooksPath(j.c, j.home)); err != nil {
+			if err := watch.Install(agentHooksPath(j.c, j.home), "", "--managed-task-adapter", true); err != nil {
 				return err
 			}
 		}

@@ -72,7 +72,7 @@ func inspectManagedHookSetup(s managed.Store, t managed.Task, consent *managedCo
 	base := []string{binary, "--api-url", t.API, "--profile", t.Profile, "task", "hook-setup", t.Handle}
 	p.InstallCommand = append(append([]string{}, base...), "--allow")
 	p.DeclineCommand = append(append([]string{}, base...), "--decline")
-	p.Action = "Doomer hooks are missing. Offer installation during onboarding or upgrade unless already authorized or explicitly declined. After acceptance execute install_command and verify configured; after an explicit decline execute decline_command. Do not interpret silence as a decline. Preserve unrelated hooks and native trust controls. For Claude, accepted setup also installs its four scoped review-command permission rules. Upload consent remains separate."
+	p.Action = "Doomer hooks are missing. Offer installation during onboarding or upgrade unless already authorized or explicitly declined. After acceptance execute install_command and verify configured; after an explicit decline execute decline_command. Do not interpret silence as a decline. Preserve unrelated hooks and native trust controls. For Claude, accepted setup also installs its six scoped readiness and review-command permission rules. Upload consent remains separate."
 	return p
 }
 

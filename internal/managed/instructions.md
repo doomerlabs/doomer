@@ -168,9 +168,14 @@ not a new upload grant; recheck saved consent after authentication succeeds.
 
 Approved Claude onboarding includes the narrow shell permissions needed for
 Doomer reviews. Do not ask a second permission question for each subcommand.
+Older installations may lack the preflight/prepare readiness rules. When local
+preflight reports missing Claude permissions or cannot inspect them, offer to verify the current account
+and repair those rules before prepare. The accepted repair authorizes the account
+check and scoped settings change; still verify current consent before installation.
+Do not reinterpret an explicit Claude deny as missing settings.
 After verifying upload approval during requested installation or accepted
 first-use onboarding, run `doomer hooks --agent claude --task HANDLE`. This
-installs the hooks and the four review-command rules reported in
+installs the hooks and the six readiness and review-command rules reported in
 `claude_permissions`, preserving unrelated settings. Explain that these are
 part of making the approved review integration work. Configure only Claude.
 If upload approval is missing, finish that approval first; do not change rules.

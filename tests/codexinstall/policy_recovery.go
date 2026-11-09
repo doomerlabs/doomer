@@ -151,7 +151,7 @@ func (j *journey) policyDeclined() error {
 	if err != nil {
 		return err
 	}
-	j.result.Checks["declined_config_unchanged"] = string(config) == j.codexConfig
+	j.result.Checks["declined_config_unchanged"] = preservesCodexPolicyConfig([]byte(j.codexConfig), config)
 	j.f.mu.Lock()
 	j.result.Checks["decline_preserved_grant_without_upload"] = j.f.Creates == 1 && j.f.Uploads == 0 && len(j.f.Reviews) == 0
 	j.f.mu.Unlock()

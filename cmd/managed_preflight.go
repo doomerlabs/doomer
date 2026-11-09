@@ -17,6 +17,7 @@ import (
 type preflightConsent struct {
 	Consent           *managedConsentEvidence `json:"consent"`
 	CodexPolicyStatus *codexPolicyStatus      `json:"codex_policy_status,omitempty"`
+	ClaudePermissions *claudePermissions      `json:"claude_permissions,omitempty"`
 }
 type preflightResult struct {
 	State           string             `json:"state"`
@@ -86,6 +87,11 @@ func newPreflightCommand(api, profile *string) *cobra.Command {
 			entry := preflightConsent{Consent: evidence}
 			if agent == "codex" {
 				entry.CodexPolicyStatus = inspectCodexPolicyStatus(*evidence)
+			} else {
+				entry.ClaudePermissions = inspectClaudePermissions()
+				if entry.ClaudePermissions.State == "missing" {
+					result.Action += " Claude readiness permissions are missing. Before running prepare, offer to verify the current account and repair the displayed Claude permissions. After acceptance run prepare, then install only after live consent verification. This is a local settings decision, not a new repository upload grant. Do not bypass explicit deny rules."
+				}
 			}
 			result.SavedConsents = append(result.SavedConsents, entry)
 		}

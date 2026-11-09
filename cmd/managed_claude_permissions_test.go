@@ -26,7 +26,7 @@ func TestClaudePermissionsPreserveSettingsAndOwnedReset(t *testing.T) {
 	os.WriteFile(path, []byte(original), 0640)
 	s, _ := managedStore()
 	p := inspectClaudePermissions()
-	if p.State != "missing" || len(p.Rules) != 4 {
+	if p.State != "missing" || len(p.Rules) != 6 {
 		t.Fatal(p)
 	}
 	data, _ := os.ReadFile(path)
@@ -39,7 +39,7 @@ func TestClaudePermissionsPreserveSettingsAndOwnedReset(t *testing.T) {
 		}
 	}
 	data, obj, allow, err := readClaudePermissionConfig(path)
-	if err != nil || len(allow) != 5 || obj["theme"] != "dark" {
+	if err != nil || len(allow) != 7 || obj["theme"] != "dark" {
 		t.Fatal(string(data), err)
 	}
 	if inspectClaudePermissions().State != "configured" {
@@ -112,7 +112,7 @@ func TestClaudePermissionsRejectUnsafeConfig(t *testing.T) {
 }
 
 func TestClaudeExplicitDenyIsNotMissingPermission(t *testing.T) {
-	for _, rule := range []string{"Bash", "Bash(*)", "Bash(doomer *)", "Bash(doomer task submit *)"} {
+	for _, rule := range []string{"Bash", "Bash(*)", "Bash(doomer *)", "Bash(doomer task submit *)", "Bash(doomer task submit:*)"} {
 		t.Run(rule, func(t *testing.T) {
 			isolate(t)
 			t.Setenv("HOME", t.TempDir())
@@ -197,6 +197,25 @@ func TestClaudeOnboardingIncludesPermissionsAfterLiveConsent(t *testing.T) {
 	}
 	if r := run(); r.ClaudePermissions == nil || r.ClaudePermissions.State != "configured" {
 		t.Fatal(r)
+	}
+	data, _ := os.ReadFile(path)
+	var denied map[string]any
+	if err := json.Unmarshal(data, &denied); err != nil {
+		t.Fatal(err)
+	}
+	denied["permissions"].(map[string]any)["deny"] = []string{"Bash(doomer task submit:*)"}
+	data, _ = json.Marshal(denied)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, flags := range [][]string{nil, {"--allow"}} {
+		if r := run(flags...); r.State != "claude_permissions_denied" || r.ClaudePermissions.State != "denied" {
+			t.Fatal(r)
+		}
+	}
+	after, _ := os.ReadFile(path)
+	if string(after) != string(data) {
+		t.Fatal("denied inspection changed settings")
 	}
 	recordIntegrationConsent(s, task, "revoked", false)
 	if r := run("--allow"); r.State != "consent_required" {

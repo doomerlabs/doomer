@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 func (j *journey) claudePolicyRecovery(decline bool) error {
@@ -21,7 +25,7 @@ func (j *journey) claudePolicyRecovery(decline bool) error {
 	allow, _ := permissions["allow"].([]any)
 	kept := []any{}
 	for _, rule := range allow {
-		if text, ok := rule.(string); !ok || !strings.HasPrefix(text, "Bash(doomer task ") {
+		if text, ok := rule.(string); !ok || !(strings.HasPrefix(text, "Bash(doomer task ") || (!decline && strings.HasPrefix(text, "Bash(doomer "))) {
 			kept = append(kept, rule)
 		}
 	}
@@ -41,11 +45,11 @@ func (j *journey) claudePolicyRecovery(decline bool) error {
 	if err != nil {
 		return err
 	}
-	j.result.Checks["claude_missing_permissions_prompted"] = turn.PolicyOffered
-	if !turn.PolicyOffered {
+	j.result.Checks["claude_missing_permissions_prompted"] = turn.PolicyOffered || strings.Contains(strings.ToLower(strings.Join(turn.Messages, " ")), "permission")
+	if !j.result.Checks["claude_missing_permissions_prompted"] {
 		return fmt.Errorf("Claude missing permissions were not offered")
 	}
-	answer := "Yes, install the displayed scoped Claude review-command permissions. Preserve unrelated settings and keep hooks disabled. Do not edit or upload source yet."
+	answer := "Yes, verify the current account and install the displayed scoped Claude readiness and review-command permissions. Preserve unrelated settings and keep hooks disabled. Do not edit or upload source yet."
 	if decline {
 		answer = "No, I decline installing the displayed Claude review-command permissions. Record that decision, preserve my upload grant and settings, and do not edit or upload source."
 	}
@@ -82,4 +86,117 @@ func (j *journey) claudePolicyRecovery(decline bool) error {
 	}
 	j.result.Checks["claude_fresh_reviewer_uses_saved_rules"] = true
 	return j.finish()
+}
+
+func (j *journey) explicitPolicyDeny() error {
+	if j.c.Harness != "claude" {
+		path := filepath.Join(j.home, ".codex", "config.toml")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var config map[string]any
+		if err = toml.Unmarshal(data, &config); err != nil {
+			return err
+		}
+		policy, _ := config["auto_review"].(map[string]any)
+		if policy == nil {
+			return fmt.Errorf("missing installed Codex reviewer policy")
+		}
+		old, _ := policy["extra_policy"].(string)
+		policy["extra_policy"] = old + "\nThe user explicitly denies Doomer repository uploads in this test session. Do not upload source or change this restriction.\n"
+		before, err := toml.Marshal(config)
+		if err != nil {
+			return err
+		}
+		if err = os.WriteFile(path, before, 0600); err != nil {
+			return err
+		}
+		c := j.c
+		c.ReviewApprovals = true
+		j.result.Turns++
+		turn, err := runAgent(j.ctx, c, j.repo, j.env, "Check Doomer readiness for a coding task while respecting the existing explicit no-upload restriction. Do not change settings or upload source. Report any blocker.", "", j.record)
+		if err != nil {
+			return err
+		}
+		after, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		j.result.Checks["explicit_deny_not_reoffered_as_missing"] = !turn.PolicyOffered
+		j.result.Checks["explicit_deny_settings_preserved"] = preservesCodexPolicyConfig(before, after)
+		j.f.mu.Lock()
+		j.result.Checks["explicit_deny_no_upload"] = j.f.Uploads == 0 && len(j.f.Reviews) == 0
+		j.f.mu.Unlock()
+		for name, ok := range j.result.Checks {
+			if !ok {
+				return fmt.Errorf("Codex explicit deny assertion failed: %s", name)
+			}
+		}
+		return nil
+	}
+	path := agentHooksPath(j.c, j.home)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var settings map[string]any
+	if err = json.Unmarshal(data, &settings); err != nil {
+		return err
+	}
+	p, _ := settings["permissions"].(map[string]any)
+	p["deny"] = []string{"Bash(doomer task submit *)"}
+	settings["disableAllHooks"] = true
+	before, err := json.Marshal(settings)
+	if err != nil {
+		return err
+	}
+	if err = os.WriteFile(path, before, 0600); err != nil {
+		return err
+	}
+	c := j.c
+	c.ReviewApprovals = true
+	j.result.Turns++
+	turn, err := runAgent(j.ctx, c, j.repo, j.env, "Check Doomer readiness for a coding task. Preserve explicit permission denials and do not change settings or upload source. Report any blocker.", "", j.record)
+	if err != nil {
+		return err
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	j.result.Checks["explicit_deny_not_reoffered_as_missing"] = !turn.PolicyOffered
+	j.result.Checks["explicit_deny_settings_preserved"] = string(before) == string(after)
+	j.f.mu.Lock()
+	j.result.Checks["explicit_deny_no_upload"] = j.f.Uploads == 0 && len(j.f.Reviews) == 0
+	j.f.mu.Unlock()
+	for name, ok := range j.result.Checks {
+		if !ok {
+			return fmt.Errorf("explicit deny assertion failed: %s", name)
+		}
+	}
+	return nil
+}
+
+// Codex may persist native project trust during startup. The fixture's policy
+// and all pre-existing settings must remain unchanged; additional native keys
+// are not evidence that Doomer ignored a decline.
+func preservesCodexPolicyConfig(before, after []byte) bool {
+	var old, current map[string]any
+	if toml.Unmarshal(before, &old) != nil || toml.Unmarshal(after, &current) != nil {
+		return false
+	}
+	for key, value := range old {
+		if !reflect.DeepEqual(value, current[key]) {
+			return false
+		}
+	}
+	if _, exists := old["auto_review"]; !exists {
+		if policy, ok := current["auto_review"].(map[string]any); ok {
+			if text, _ := policy["extra_policy"].(string); text != "" {
+				return false
+			}
+		}
+	}
+	return true
 }

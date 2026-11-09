@@ -11,6 +11,10 @@ At task start, run `doomer preflight --agent AGENT --repo .` for local-only
 consent and Codex policy inspection. Saved receipts do not verify the current
 account or authorize uploads. Then run
 `doomer prepare --agent AGENT --repo . --prompt "USER TASK"`.
+For Claude, if preflight reports missing readiness permissions or an older CLI
+cannot inspect them, first offer to
+verify the account and repair those permissions. After acceptance run prepare,
+verify live consent, and install the returned rules. Preserve explicit denies.
 Use codex or claude and the actual task without shell interpolation. Keep the
 returned task handle. An older CLI may lack preflight; continue with prepare.
 If a real harness session ID is available, pass it with `--session`. For Claude,
@@ -22,13 +26,12 @@ A prompt creates a coding task. Verify readiness/hooks without submitting code.
 
 {{permission_prompt_rules}}
 
-Read `hook_setup` and the agent's permission status before offering a skill
-upgrade. Offer missing hook installation or review permissions once unless
-already authorized or explicitly declined. Execute the returned install command
-after acceptance and the decline command only after an explicit refusal. Keep
-installation separate from native hook trust; when the harness reports untrusted
-hooks, guide the user to its native hook review controls in each new session
-until trusted. Preserve explicit deny rules and report blocked review coverage.
+Read `hook_setup` and permission status before skill upgrades. Offer missing
+setup unless already authorized or explicitly declined. Run the returned install
+command after acceptance; record only explicit refusals with the decline command.
+Keep installation separate from native hook trust. For untrusted hooks, guide the
+user to native review controls in each new session until trusted. Preserve deny
+rules and report blocked review coverage.
 
 Show complete clickable setup URLs, preserving fragments, before question tools.
 Use CLI state for approval; a missing binary does not imply missing consent.
