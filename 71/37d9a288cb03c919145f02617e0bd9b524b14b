@@ -1,0 +1,46 @@
+.agents/skills/agent-e2e/SKILL.md
+  h_aa44c3b5b60dec 71-73
+.depot/workflows/agent-e2e.yml
+  h_aa44c3b5b60dec 19-20,24-26,57-75,87,96,98-104,107-108,112,114-119,144,150,167-171,175,181-182,186,188-193,198,201,205,222-226
+docs/agent-e2e-cache.md
+  h_aa44c3b5b60dec 5,42-44,50-51,60-63,107-109,118-156
+scripts/agent-e2e-baseline.sh
+  h_aa44c3b5b60dec 1-8
+scripts/agent-e2e-cache-plan.py
+  h_aa44c3b5b60dec 1-104
+scripts/agent-e2e-local-linux.sh
+  h_aa44c3b5b60dec 1-24
+scripts/ci-agent-e2e-report.py
+  h_aa44c3b5b60dec 32-34,49,58
+scripts/ci-agent-e2e.sh
+  h_aa44c3b5b60dec 9,13-19,22,35,60-67,70,73
+scripts/ci-verify.sh
+  h_aa44c3b5b60dec 67-68
+scripts/test-agent-e2e-cache-plan.py
+  h_aa44c3b5b60dec 1-71
+tests/codexinstall/Dockerfile
+  h_aa44c3b5b60dec 1-19
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 292,324-329
+tests/codexinstall/cache.go
+  h_aa44c3b5b60dec 27,225,228,262,287,325-329,350-376
+tests/codexinstall/cache_inputs.go
+  h_aa44c3b5b60dec 74-90,109,189-211
+tests/codexinstall/cache_test.go
+  h_aa44c3b5b60dec 383-458
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 93-94,118,299-302,343-345
+tests/codexinstall/snapshot.go
+  h_aa44c3b5b60dec 117-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7137d9a288cb03c919145f02617e0bd9b524b14b",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
