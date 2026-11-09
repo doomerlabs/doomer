@@ -264,6 +264,9 @@ func TestWatchOnceUsesWorkspaceAndStableRetryIdentity(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
+	if client.input.GitIdentity == nil || *client.input.GitIdentity != (sourcesnapshot.GitIdentity{Name: "Test", Email: "test@example.com", Source: "git_config"}) {
+		t.Fatalf("missing watched Git identity: %+v", client.input.GitIdentity)
+	}
 	if client.starts != 2 || client.input.Revision != 1 || !client.input.Continuity {
 		t.Fatalf("bad retries %+v", client.input)
 	}

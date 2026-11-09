@@ -390,7 +390,7 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 		return err
 	}
 	hostname, _ := os.Hostname()
-	input := adversarylabs.WorkspaceSubmission{Hypotheses: requestState.Hypotheses, AgentDiff: requestState.AgentDiff, RepositoryID: baseRepo, SnapshotID: headID, BaseSnapshotID: baseID, ReviewID: rev.ID, GroupID: rev.Group, Revision: rev.Number, Repository: repo, Branch: capture.Source.Branch, Diff: diff, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "hostname": hostname, "agent": requestState.Agent}}
+	input := adversarylabs.WorkspaceSubmission{GitIdentity: capture.GitIdentity, Hypotheses: requestState.Hypotheses, AgentDiff: requestState.AgentDiff, RepositoryID: baseRepo, SnapshotID: headID, BaseSnapshotID: baseID, ReviewID: rev.ID, GroupID: rev.Group, Revision: rev.Number, Repository: repo, Branch: capture.Source.Branch, Diff: diff, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "hostname": hostname, "agent": requestState.Agent}}
 	if r.Config.ActivationReporting {
 		input.Client["installation_id"] = r.Config.InstallationID
 		if r.Config.InstallationAttemptID != "" {

@@ -42,6 +42,8 @@ func TestReviewReturnsLookCloserAndPreservesFullReviewChoice(t *testing.T) {
 			guest := strings.HasPrefix(mode.name, "anonymous")
 			dir := t.TempDir()
 			reviewGit(t, dir, "init", "-b", "main")
+			reviewGit(t, dir, "config", "user.name", "Configured Reviewer")
+			reviewGit(t, dir, "config", "user.email", "configured@example.test")
 			file := filepath.Join(dir, "file.txt")
 			if err := os.WriteFile(file, []byte("before\n"), 0600); err != nil {
 				t.Fatal(err)
@@ -121,6 +123,12 @@ func TestReviewReturnsLookCloserAndPreservesFullReviewChoice(t *testing.T) {
 			out, err := execute(t, "", args...)
 			if err != nil {
 				t.Fatalf("%v: %s", err, out)
+			}
+			if submitted.GitIdentity == nil || submitted.GitIdentity.Name != "Configured Reviewer" || submitted.GitIdentity.Email != "configured@example.test" || submitted.GitIdentity.Source != "git_config" {
+				t.Fatalf("missing submitted Git identity: %+v", submitted.GitIdentity)
+			}
+			if strings.Contains(out, "configured@example.test") {
+				t.Fatal("Git identity leaked into command output")
 			}
 			if strings.Contains(out, "\n+after\n") != (mode.name == "with diff") {
 				t.Fatal("patch display did not respect --show-diff")
