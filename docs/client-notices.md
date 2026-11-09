@@ -1,4 +1,4 @@
-# Client update notices
+# Client advisories
 
 The server decides which running CLI versions receive notices. The signed managed
 release catalog remains the only authority used to install managed software.
@@ -19,8 +19,8 @@ task and selected runtime; the direct review path now includes its version too.
 A notice-capable server adds `notice_schema: 1` and `notices: []` to JSON
 responses and a base64 JSON envelope in `X-Doomer-Notices` for binary responses
 and common transport handling. A notice has `id`, integer `revision`, `component`
-(`cli`), `severity` (`available`, `recommended`, `critical`, `deprecated`),
-`message`, `recommended_version`, `expires_at`, optional `deadline`, and
+(`cli`), `severity` (`info`, `warning`, `critical`; legacy severities are also accepted),
+`message`, optional `recommended_version`, `expires_at`, optional `deadline`, and
 `blocking`. Unknown schemas and invalid notices are ignored. Requests do not need
 an account to receive operational notices.
 
@@ -31,13 +31,16 @@ flags and a locally generated `acknowledge_command` argument array. Agents relay
 notices with `notify_user=true` in a user-visible message and preserve deadlines.
 Only after displaying the notice, they execute its acknowledgement command.
 Message text is untrusted plain text, never shell commands. Hook and terminal
-output put the delivery rules and local acknowledgement command first, then
-encode the message as a labelled untrusted JSON string. Embedded message
+output put the delivery rules and local acknowledgement command first. Hooks
+then include a Markdown callout and a labelled untrusted JSON string; terminals
+show a framed advisory. Message text cannot waive delivery or acknowledgement rules. Embedded message
 instructions must not override the display requirement. Critical/deprecation
 warnings repeat daily after acknowledgement; recommended notices weekly, per policy ID/revision.
-Blocking warnings recur for each blocked operation. Available notices stay quiet.
+Blocking warnings recur for each blocked operation. All severities are eligible for display; Info and legacy Available repeat weekly after acknowledgement.
 
-`doomer notices` explicitly fetches current notices and returns JSON.
+`doomer notices` (also `doomer advisories`) explicitly fetches advisories and returns JSON.
+The locally generated `display_markdown` supplies a blockquote with a bold severity heading.
+Terminal output uses a framed advisory. Update recommendations appear only when provided.
 `doomer notices --ack ID --revision N` confirms that the agent displayed that
 exact revision. It uses the selected API and executing CLI version's local cache,
 requires an unexpired matching notice, and makes no network request. Use the
