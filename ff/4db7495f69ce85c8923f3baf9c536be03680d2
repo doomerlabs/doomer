@@ -1,0 +1,14 @@
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 283-287
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ff4db7495f69ce85c8923f3baf9c536be03680d2",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
