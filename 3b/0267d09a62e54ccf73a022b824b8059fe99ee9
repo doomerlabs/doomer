@@ -1,0 +1,34 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 161-183,223,622,626-629,777,785-794,798-800
+cmd/managed_codex_config.go
+  h_aa44c3b5b60dec 18-24
+cmd/managed_codex_config_test.go
+  h_aa44c3b5b60dec 160,168-169,174,193,207-209
+cmd/managed_codex_policy.go
+  h_aa44c3b5b60dec 16-24,27-28,37-48,50-54,57,59,62-63,66,70,74
+cmd/managed_codex_policy_test.go
+  h_aa44c3b5b60dec 33,41,44,46,52
+cmd/managed_preflight.go
+  h_aa44c3b5b60dec 103-107,115
+cmd/managed_test.go
+  h_aa44c3b5b60dec 162-206,219-221
+docs/managed-runtime.md
+  h_aa44c3b5b60dec 146-151
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 187-202
+tests/codexinstall/policy_recovery.go
+  h_aa44c3b5b60dec 1-76
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 17,173-174
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3b0267d09a62e54ccf73a022b824b8059fe99ee9",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
