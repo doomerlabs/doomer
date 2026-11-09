@@ -1,0 +1,20 @@
+cmd/managed_preflight.go
+  h_aa44c3b5b60dec 18-21,110-112
+cmd/managed_preflight_test.go
+  h_aa44c3b5b60dec 225-230
+tests/codexinstall/policy_recovery.go
+  h_aa44c3b5b60dec 73,77-84
+tests/codexinstall/portable.go
+  h_aa44c3b5b60dec 42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "42b1be3812897e3c6249229203130dbc56ab594e",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
