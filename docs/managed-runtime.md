@@ -110,8 +110,8 @@ Active tasks keep their version until they finish.
 
 Every task produces a private current-state observation. Authenticated clients
 also report bounded operational metadata to `/api/v3/installations/observe`,
-which feeds the CLI adoption dashboard. Reporting has its own timeout and never
-blocks reviews. A per-task persisted sequence rejects delayed older observations.
+which feeds the CLI adoption dashboard. Reporting has its own timeout, and its
+failures do not prevent reviews. A per-task persisted sequence rejects delayed older observations.
 
 The adoption funnel is separate from those task observations. Approved managed
 setup reports approval, a live hook reports activation, and a completed Quick
@@ -122,11 +122,15 @@ the CLI does not. Review submissions carry the same installation and attempt
 IDs so the server can verify the first-review milestone.
 
 Reports are queued in the private managed `adoption` directory and retried in
-bounded batches on later authenticated, approved calls. Reporting failures do
-not stop reviews. Paused tasks, revoked/reset consent, and another account's
+bounded batches on later authenticated, approved calls. Each network-delivery
+pass shares a three-second timeout; failed reports stay queued with a retry delay.
+Reporting failures do not stop reviews. Paused tasks, revoked/reset consent, and another account's
 credentials cannot deliver those reports. Existing unreported approval receipts
 can be observed once after upgrading, but earlier reinstalls without retained
-receipts cannot be reconstructed from task observations.
+receipts cannot be reconstructed from task observations. Requests already
+journaled by an older release retain their original metadata on retry; they are
+never rewritten for analytics. A later newly created review can report the
+first-review milestone for the retained approval.
 Review submissions
 also identify their task, running CLI, and bootstrap protocol in the existing
 server-side client metadata. Installing software, authenticating, granting

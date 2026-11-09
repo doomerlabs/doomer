@@ -467,3 +467,29 @@ func TestStatusPreservesCompletedTask(t *testing.T) {
 		}
 	}
 }
+
+func TestLegacyJournaledSubmissionKeepsOriginalMetadata(t *testing.T) {
+	store := Store{Root: t.TempDir()}
+	handle, err := NewHandle()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := Task{Schema: Protocol, Handle: handle, Stage: "submitting", InstallationID: "new-installation", InstallationAttemptID: "new-attempt", Submission: &adversarylabs.WorkspaceSubmission{ReviewID: "old-review", Client: map[string]string{"name": "old CLI"}}}
+	before, err := json.Marshal(task.Submission)
+	if err != nil {
+		t.Fatal(err)
+	}
+	yes := true
+	client := &fakeReview{result: adversarylabs.WorkspaceReview{ID: "old-review", LookCloserEnabled: &yes, Full: &adversarylabs.WorkspaceFullReview{Enabled: false}}}
+	engine := Engine{Store: store, Client: client}
+	if err := engine.Submit(context.Background(), &task, "token"); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.submissions) != 1 {
+		t.Fatal("journal was not delivered once")
+	}
+	after, err := json.Marshal(client.submissions[0])
+	if err != nil || string(after) != string(before) {
+		t.Fatal("legacy journal was rewritten", string(before), string(after), err)
+	}
+}

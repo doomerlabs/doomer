@@ -99,6 +99,8 @@ func (e Engine) Submit(ctx context.Context, task *Task, token string) error {
 		UserRequest: userRequest,
 		Client:      map[string]string{"name": "Doomer managed CLI", "agent": task.Agent, "task_id": task.Handle, "cli_version": task.Release, "bootstrap_protocol": fmt.Sprint(Protocol)},
 	}
+	// The CLI binds both IDs from verified consent before new submissions.
+	// Missing telemetry must not block a review or invent an approval identity.
 	if task.InstallationID != "" && task.InstallationAttemptID != "" {
 		task.Submission.Client["installation_id"] = task.InstallationID
 		task.Submission.Client["installation_attempt_id"] = task.InstallationAttemptID

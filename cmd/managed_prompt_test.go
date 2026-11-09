@@ -15,6 +15,7 @@ import (
 
 	"github.com/doomerlabs/doomer/internal/managed"
 	"github.com/doomerlabs/doomer/internal/watch"
+	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +46,7 @@ func TestManagedHookCapturesPromptAndPreservesSubmittedContext(t *testing.T) {
 		t.Fatal("replaced task context")
 	}
 	task.LastError = "review_submission failed: request failed: 400 Bad Request: invalid_user_request"
-	for _, event := range []string{"PostToolUse", "Stop", "Stop"} {
+	for _, event := range []string{"PostToolUse", "PostToolUseFailure", "Stop", "Stop"} {
 		if err := run(watch.HookInput{CWD: repo, Event: event}); err == nil || !strings.Contains(err.Error(), "invalid_user_request") {
 			t.Fatal("failed hook retried submission", err)
 		}
@@ -506,5 +507,28 @@ func TestSetupRecheckKeepsPausedSessionsPaused(t *testing.T) {
 				t.Fatal(saved, err)
 			}
 		})
+	}
+}
+
+func TestManagedFailedToolHookCapturesChanges(t *testing.T) {
+	isolate(t)
+	repo := newWatchTestRepo(t)
+	store := managed.Store{Root: t.TempDir()}
+	handle, _ := managed.NewHandle()
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, Repo: repo, Stage: "ready", Prompt: "Fix the code"}
+	captures := 0
+	engine := managed.Engine{Store: store, Capture: func(context.Context, managed.Task) (sourcesnapshot.Capture, error) {
+		captures++
+		return sourcesnapshot.Capture{}, sourcesnapshot.ErrNoChanges
+	}}
+	input, _ := json.Marshal(watch.HookInput{CWD: repo, Event: "PostToolUseFailure"})
+	command := &cobra.Command{}
+	command.SetContext(context.Background())
+	command.SetIn(bytes.NewReader(input))
+	if err := managedHook(command, store, &task, engine, "token"); err != nil {
+		t.Fatal(err)
+	}
+	if captures != 1 || !task.HookActivated || !task.NoChanges {
+		t.Fatalf("failed tool hook not processed: captures=%d task=%+v", captures, task)
 	}
 }

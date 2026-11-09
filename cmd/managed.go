@@ -150,7 +150,7 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 		}
 		r.Consent = evidence
 		if evidence != nil {
-			// Adoption telemetry is best effort and must not block setup or review.
+			// Adoption delivery is bounded; its failures must not change setup or review outcomes.
 			_ = bindManagedAdoption(s, &t, evidence)
 			reportManagedAdoption(c.Context(), s, t, evidence)
 		}
@@ -866,7 +866,7 @@ func managedHook(c *cobra.Command, s managed.Store, t *managed.Task, e managed.E
 		return fmt.Errorf("hook session no longer owns this task")
 	}
 	switch event.Event {
-	case "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop":
+	case "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop":
 	default:
 		return fmt.Errorf("unsupported hook event")
 	}
@@ -877,11 +877,11 @@ func managedHook(c *cobra.Command, s managed.Store, t *managed.Task, e managed.E
 	if err := s.Save(t); err != nil {
 		return err
 	}
-	if t.LastError != "" && (event.Event == "PostToolUse" || event.Event == "Stop") {
+	if t.LastError != "" && (event.Event == "PostToolUse" || event.Event == "PostToolUseFailure" || event.Event == "Stop") {
 		return errors.New(t.LastError)
 	}
 	switch event.Event {
-	case "PostToolUse":
+	case "PostToolUse", "PostToolUseFailure":
 		return e.Submit(c.Context(), t, token)
 	case "Stop":
 		if err := e.Submit(c.Context(), t, token); err != nil {

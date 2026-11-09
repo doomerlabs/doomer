@@ -240,3 +240,54 @@ func TestManagedAdoptionReportsSetupAndStopsAfterRevocationOrAccountChange(t *te
 		t.Fatal("reported under paused, different-account, or revoked access", events)
 	}
 }
+
+func TestManagedAdoptionRetainsLegacyRepositoryConsentScope(t *testing.T) {
+	s := managed.Store{Root: filepath.Join(t.TempDir(), "managed")}
+	handle, err := managed.NewHandle()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := managed.Task{Schema: managed.Protocol, Handle: handle, AccountID: "account", API: "https://example.test/api", Profile: "default", Agent: "codex", RepositoryID: "/private/repo/.git", Release: "2026.11.8.6"}
+	if err := recordManagedConsent(s, task, "repository_approval"); err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := savedManagedConsentEvidence(s, task)
+	if err != nil || evidence == nil || evidence.AllRepositories || evidence.Repository != task.RepositoryID {
+		t.Fatalf("invalid repository evidence: %+v %v", evidence, err)
+	}
+	if err := bindManagedAdoption(s, &task, evidence); err != nil {
+		t.Fatal(err)
+	}
+	if err := queueManagedAdoption(s, task, evidence); err != nil {
+		t.Fatal(err)
+	}
+	if pending := pendingManagedAdoption(s, task, evidence); len(pending) != 1 {
+		t.Fatalf("repository-scoped event dropped: %v", pending)
+	}
+	other := task
+	other.RepositoryID = "/other/repo/.git"
+	if evidence, err := savedManagedConsentEvidence(s, other); err != nil || evidence != nil {
+		t.Fatalf("repository grant crossed scope: %+v %v", evidence, err)
+	}
+}
+
+func TestManagedAdoptionRepairsPartialIdentityFromVerifiedApproval(t *testing.T) {
+	for _, missing := range []string{"installation", "attempt", "both"} {
+		t.Run(missing, func(t *testing.T) {
+			s, task, evidence := adoptionFixture(t)
+			installation, attempt := task.InstallationID, task.InstallationAttemptID
+			if missing != "attempt" {
+				task.InstallationID = ""
+			}
+			if missing != "installation" {
+				task.InstallationAttemptID = ""
+			}
+			if err := bindManagedAdoption(s, &task, evidence); err != nil {
+				t.Fatal(err)
+			}
+			if task.InstallationID != installation || task.InstallationAttemptID != attempt {
+				t.Fatal("identity not repaired from approval", task)
+			}
+		})
+	}
+}

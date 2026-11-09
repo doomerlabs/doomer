@@ -50,6 +50,8 @@ type managedAdoptionRecord struct {
 
 func managedAdoptionDir(s managed.Store) string { return filepath.Join(s.Root, "adoption") }
 
+// Callers bind IDs from verified approval evidence before queuing. Never infer
+// a new approval identity from incomplete or mismatched task metadata here.
 func queueManagedAdoption(s managed.Store, t managed.Task, e *managedConsentEvidence) error {
 	if t.InstallationID == "" || t.InstallationAttemptID != managedAttemptID(e) || t.Paused {
 		return nil
