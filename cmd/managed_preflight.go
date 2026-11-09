@@ -15,9 +15,10 @@ import (
 // A local receipt is useful context for host review, not proof of the current
 // account or permission to transmit. Only online preparation establishes that.
 type preflightConsent struct {
-	Consent           *managedConsentEvidence `json:"consent"`
-	CodexPolicyStatus *codexPolicyStatus      `json:"codex_policy_status,omitempty"`
-	ClaudePermissions *claudePermissions      `json:"claude_permissions,omitempty"`
+	Consent            *managedConsentEvidence `json:"consent"`
+	CodexPolicyPreview *codexReviewPolicy      `json:"codex_review_policy_preview,omitempty"`
+	CodexPolicyStatus  *codexPolicyStatus      `json:"codex_policy_status,omitempty"`
+	ClaudePermissions  *claudePermissions      `json:"claude_permissions,omitempty"`
 }
 type preflightResult struct {
 	ClaudePermissions *claudePermissions `json:"claude_permissions,omitempty"`
@@ -106,7 +107,9 @@ func newPreflightCommand(api, profile *string) *cobra.Command {
 						status.Decision = "pending"
 					}
 					if status.Decision == "pending" {
-						result.Action += " Codex reviewer policy is missing. Before prepare, offer to verify the current account and install its scoped reviewer policy. After acceptance run prepare and install only after live consent verification. This settings choice is separate from upload consent."
+						entry.CodexPolicyPreview = proposal
+						proposal.Action = "Local preview only: present the full extra_policy and changes, including account, service, profile, agent and all-repositories versus repository-only scope, before asking the user to approve verification and installation. This is not verified upload consent. After acceptance, run prepare, verify live consent and compare the returned policy with this preview before installing. If the scope differs, obtain approval for the changed proposal."
+						result.Action += " Codex reviewer policy is missing. Before prepare, show codex_review_policy_preview in full, including its all-repositories or repository-only scope, and ask to verify the current account and install that exact policy. After acceptance run prepare and install only after live consent verification. This settings choice is separate from upload consent."
 					}
 				}
 			} else {

@@ -70,10 +70,18 @@ func (j *journey) policyRecovery() error {
 		return fmt.Errorf("missing policy was not offered after old delivery")
 	}
 	j.result.Turns++
-	_, err = runAgent(j.ctx, c, j.repo, j.env, "I approve saving the displayed scoped Doomer authorization in Codex's approval-reviewer settings. Apply it and verify the configuration. Do not upload or edit source yet.", turn.Session, j.record)
+	_, err = runAgent(j.ctx, c, j.repo, j.env, "I approve the displayed Doomer policy for all current and future repositories, linked worktrees and chats used by Codex with this same account, service and profile, covering repository snapshots, task context and finding responses. Verify live consent, save that exact policy in Codex approval-reviewer settings, and verify the configuration. Do not upload or edit source yet.", turn.Session, j.record)
 	if err != nil {
 		return err
 	}
+	repaired, err := j.policyTask(tasks[0].Handle, "prepare")
+	if err != nil {
+		return err
+	}
+	if repaired.Status.State != "configured" {
+		return fmt.Errorf("accepted Codex policy repair did not install the policy")
+	}
+	j.result.Checks["accepted_policy_repair_installed"] = true
 	// A separate reviewer process must load the repaired policy and complete a
 	// real submission without another upload grant or settings prompt.
 	j.c.ReviewApprovals = true

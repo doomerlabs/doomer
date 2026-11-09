@@ -222,11 +222,14 @@ func TestPreflightMissingCodexPolicyRespectsDecline(t *testing.T) {
 		}
 		status := r.SavedConsents[0].CodexPolicyStatus
 		if decline {
-			if status.Decision != "declined" || strings.Contains(r.Action, "Before prepare, offer") {
+			if status.Decision != "declined" || strings.Contains(r.Action, "Before prepare, show") {
 				t.Fatal(out)
 			}
-		} else if status.Decision != "pending" || !strings.Contains(r.Action, "Before prepare, offer") {
-			t.Fatal(out)
+		} else {
+			preview := r.SavedConsents[0].CodexPolicyPreview
+			if status.Decision != "pending" || !strings.Contains(r.Action, "Before prepare, show") || preview == nil || !strings.Contains(preview.ExtraPolicy, `"all_repositories":true`) || len(preview.InstallCommand) != 0 {
+				t.Fatal(out)
+			}
 		}
 	}
 }
