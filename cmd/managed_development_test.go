@@ -117,9 +117,10 @@ func TestDevelopmentPrepareAndResumeUseCurrentBinary(t *testing.T) {
 	if err != nil || binary != executable {
 		t.Fatal(binary, err)
 	}
-	if len(result.PortableSetupCommand) < 3 || result.PortableSetupCommand[2] != executable {
+	if !strings.Contains(strings.ToLower(os.Getenv("CODEX_INTERNAL_ORIGINATOR_OVERRIDE")), "desktop") && (len(result.PortableSetupCommand) < 3 || result.PortableSetupCommand[2] != executable) {
 		t.Fatal(result.PortableSetupCommand)
 	}
+
 	file := filepath.Join(s.Root, "approvals", task.Handle+".json")
 	var pending pendingManagedApproval
 	if err := watch.Read(file, &pending); err != nil {

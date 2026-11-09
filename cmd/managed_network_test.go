@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/doomerlabs/doomer/internal/managed"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
@@ -15,7 +16,7 @@ import (
 )
 
 func TestManagedNetworkHelpPreservesTaskAndOperation(t *testing.T) {
-	for _, operation := range []string{"prepare", "submit", "status", "respond", "retry"} {
+	for _, operation := range []string{"prepare", "submit", "status", "respond", "retry", "login"} {
 		t.Run(operation, func(t *testing.T) {
 			task := managed.Task{Handle: strings.Repeat("a", 48), API: "https://doomer.example/api", Profile: "team profile"}
 			err := managed.NetworkError("upload", &url.Error{URL: "https://storage.example/private?secret=token", Err: errors.New("denied")})
@@ -106,5 +107,15 @@ func TestCodexNetworkRecoveryReusesSavedApproval(t *testing.T) {
 		if !strings.Contains(result.Action, instruction) {
 			t.Fatalf("missing recovery instruction %q: %s", instruction, result.Action)
 		}
+	}
+}
+
+func TestBrowserWaitNetworkRecoveryPreservesOperation(t *testing.T) {
+	c := &cobra.Command{Use: "login"}
+	c.Flags().Duration("wait", 45*time.Second, "")
+	var r managedResult
+	addManagedNetworkHelp(c, &r, managed.Task{Handle: "task", Agent: "codex", API: "https://doomer.ai/api", Profile: "default"}, managed.NetworkError("approval", &url.Error{URL: "https://doomer.ai/api", Err: errors.New("blocked")}))
+	if r.NetworkAccess == nil || !strings.Contains(r.NetworkAccess.RetryCommand, "task login 'task' --wait 45s") || strings.Contains(r.NetworkAccess.RetryCommand, "prepare") || !strings.Contains(r.Action, "does not upload repository source") {
+		t.Fatal(r)
 	}
 }

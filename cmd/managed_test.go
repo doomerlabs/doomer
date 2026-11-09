@@ -153,6 +153,16 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if r := run("", "task", "login", handle); r.State != "approval_required" || !r.SoftwareReady || !strings.Contains(r.URL, "/cli/setup#request=") || r.CodexReviewPolicy != nil {
 		t.Fatal(r)
 	}
+	// Resume a grant issued before upload approval included policy setup.
+	approvalFile := filepath.Join(s.Root, "approvals", handle+".json")
+	var legacyApproval pendingManagedApproval
+	if err := watch.Read(approvalFile, &legacyApproval); err != nil {
+		t.Fatal(err)
+	}
+	legacyApproval.InstallPolicy = false
+	if err := watch.Write(approvalFile, legacyApproval); err != nil {
+		t.Fatal(err)
+	}
 	if r := run("", "task", "login", handle); r.State != "ready" || !r.Authenticated || !r.UploadApproved || r.Consent == nil || r.Consent.Source != "browser_integration_approval" || !r.Consent.AllRepositories || r.CodexReviewPolicy == nil {
 		t.Fatal(r)
 	}
@@ -192,7 +202,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if err := os.Mkdir(decisionPath, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if r := run("", "prepare", "--task", handle); r.State != "ready" || r.CodexPolicyStatus.DecisionError == "" || r.CodexReviewPolicy == nil || !r.UploadApproved {
+	if r := run("", "prepare", "--task", handle); (r.State != "ready" && r.State != "setup_decision_required") || r.CodexPolicyStatus.DecisionError == "" || r.CodexReviewPolicy == nil || !r.UploadApproved {
 		t.Fatal("unreadable bookkeeping blocked preparation", r)
 	}
 	if err := os.Remove(decisionPath); err != nil {

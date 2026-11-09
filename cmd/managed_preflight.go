@@ -133,7 +133,7 @@ func newPreflightCommand(api, profile *string) *cobra.Command {
 			if agent == "codex" {
 				proposal, status := inspectCodexPolicy(*evidence)
 				entry.CodexPolicyStatus = status
-				if status.State == "missing" {
+				if status.State == "missing" || status.State == "migration_required" {
 					declined, decisionErr := codexReviewPolicyDeclined(s, proposal)
 					if decisionErr != nil {
 						status.DecisionError = decisionErr.Error()

@@ -252,6 +252,7 @@ func TestPortableSetupRejectsPublicOrSymlinkedFiles(t *testing.T) {
 }
 
 func TestPortableSetupCommandUsesTheSelectedRuntime(t *testing.T) {
+	t.Setenv("CODEX_INTERNAL_ORIGINATOR_OVERRIDE", "")
 	task := managed.Task{Handle: "task", Stage: "preparing", API: "https://doomer.ai/api", Profile: "work", Release: "2026.11.6.9", RuntimeHome: t.TempDir()}
 	command := resultFor(task).PortableSetupCommand
 	if len(command) != 9 || command[0] == "doomer" || command[7] != task.Handle || command[8] != "--portable" {
@@ -318,5 +319,13 @@ func TestReadyTasksDoNotOfferAnotherPortableApproval(t *testing.T) {
 	task.Stage, task.Paused = "preparing", true
 	if len(resultFor(task).PortableSetupCommand) != 0 {
 		t.Fatal("paused task offered another setup approval")
+	}
+}
+
+func TestDesktopOnboardingDoesNotOfferPortableDetour(t *testing.T) {
+	t.Setenv("CODEX_INTERNAL_ORIGINATOR_OVERRIDE", "Codex Desktop")
+	task := managed.Task{Handle: "task", Agent: "codex", Stage: "approval_required", API: "https://doomer.ai/api", Profile: "default", Release: "2026.11.9.1", RuntimeHome: t.TempDir()}
+	if len(resultFor(task).PortableSetupCommand) != 0 {
+		t.Fatal("desktop should wait for browser approval without changing storage mode")
 	}
 }

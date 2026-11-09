@@ -24,6 +24,17 @@ invented prefixes do not establish a hook binding.
 For setup only, run `doomer prepare --agent AGENT --repo .` without `--prompt`.
 A prompt creates a coding task. Verify readiness/hooks without submitting code.
 
+## Browser upload approval
+
+When the CLI returns `approval_required` and `wait_command`, show its complete
+approval URL and explain that Allow also saves the matching scoped Codex review
+permission. Immediately run `wait_command` and repeat while approval is pending,
+for up to ten minutes. Keep the turn open; the user answers on the web page, not
+with a second chat message. The CLI installs the policy after approval. Do not
+upload source or claim the task finished while setup is pending. Respect Cancel
+and report a timeout as pending. Hooks remain optional and require separate
+installation and native trust decisions.
+
 {{permission_prompt_rules}}
 
 Read `hook_setup` and permission status before skill upgrades. Offer missing

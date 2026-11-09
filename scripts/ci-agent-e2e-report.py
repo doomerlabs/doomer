@@ -81,7 +81,8 @@ def main():
     elif mode == "--all":
         scenarios = json.loads(os.environ["E2E_SCENARIOS"])
         results = [read_result(root, harness, scenario, Path(f"agent-e2e-{harness}-{scenario}"))
-                   for harness in ("codex", "claude") for scenario in scenarios]
+                   for harness in ("codex", "claude") for scenario in scenarios
+                   if not (harness == "claude" and scenario == "browser-onboarding")]
     else:
         raise ValueError("expected --single or --all")
     render(root, results)

@@ -25,6 +25,7 @@ type Capabilities struct {
 }
 
 type Task struct {
+	OnboardingPending     bool                               `json:"onboarding_pending,omitempty"`
 	RuntimeHome           string                             `json:"runtime_home,omitempty"`
 	Schema                int                                `json:"schema"`
 	Handle                string                             `json:"handle"`

@@ -29,6 +29,10 @@ import (
 )
 
 type managedResult struct {
+	WaitCommand          []string                       `json:"wait_command,omitempty"`
+	LocalSetup           *preflightResult               `json:"local_setup,omitempty"`
+	AttentionRequired    bool                           `json:"attention_required,omitempty"`
+	Action               string                         `json:"action,omitempty"`
 	HookSetup            *managedHookSetup              `json:"hook_setup,omitempty"`
 	ClaudePermissions    *claudePermissions             `json:"claude_permissions,omitempty"`
 	Notices              []adversarylabs.ClientNotice   `json:"notices,omitempty"`
@@ -46,7 +50,6 @@ type managedResult struct {
 	Instructions         string                         `json:"instructions,omitempty"`
 	Review               *adversarylabs.WorkspaceReview `json:"review,omitempty"`
 	URL                  string                         `json:"url,omitempty"`
-	Action               string                         `json:"action,omitempty"`
 	Error                string                         `json:"error,omitempty"`
 	SoftwareReady        bool                           `json:"software_ready"`
 	Authenticated        bool                           `json:"authenticated"`
@@ -107,7 +110,7 @@ func resultFor(task managed.Task) managedResult {
 	r.SubmittedPromptRunes = min(len([]rune(task.Prompt)), 4000)
 	r.Capabilities = task.Capabilities
 	r.UpdateAvailable = task.OfferedRelease
-	if task.Release != "" && !task.Portable && !task.Paused && (task.Stage == "preparing" || task.Stage == "approval_required") {
+	if task.Release != "" && !task.Portable && !task.Paused && !strings.Contains(strings.ToLower(os.Getenv("CODEX_INTERNAL_ORIGINATOR_OVERRIDE")), "desktop") && (task.Stage == "preparing" || task.Stage == "approval_required") {
 		if binary, err := managedTaskBinary(task); err == nil {
 			r.PortableSetupCommand = []string{binary, "--api-url", task.API, "--profile", task.Profile, "prepare", "--task", task.Handle, "--portable"}
 			if task.Release == "dev" {
@@ -211,6 +214,45 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 	if r.URL == "" {
 		r.URL = taskResult.URL
 	}
+	if c.Name() == "prepare" && r.NetworkAccess != nil && !r.Authenticated && t.Agent == "codex" {
+		// Old launchers cannot preview the current policy. Recover locally before
+		// asking the host to permit account verification; this is not upload consent.
+		var preview bytes.Buffer
+		api, profile := t.API, t.Profile
+		local := newPreflightCommand(&api, &profile)
+		local.SetContext(c.Context())
+		local.SetArgs([]string{"--agent", t.Agent, "--repo", t.Repo})
+		local.SetOut(&preview)
+		local.SetErr(&preview)
+		if err := local.Execute(); err == nil {
+			var setup preflightResult
+			if json.Unmarshal(preview.Bytes(), &setup) == nil {
+				for _, consent := range setup.SavedConsents {
+					if consent.CodexPolicyPreview != nil {
+						r.LocalSetup = &setup
+						r.Action = "Before retrying account verification, present local_setup's full Codex policy preview and ask to verify the account and install that exact policy. This preview comes only from saved local scope; it does not verify current consent or authorize any upload. After acceptance, resume the same prepare task, verify live consent, then install only the matching policy. Preserve the network restriction until authorized."
+						break
+					}
+				}
+			}
+		}
+	}
+	if t.OnboardingPending {
+		r.State = "onboarding_incomplete"
+		r.Action = "Upload approval was received, but its scoped Codex policy has not finished installing. Resume prepare for this same task to finish installation. Do not request upload approval again or submit source before setup succeeds."
+		r.Instructions = r.Action
+	}
+	if c.Name() == "prepare" {
+		prepareAttention(&r)
+	}
+	if r.State == "approval_required" {
+		binary, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		r.WaitCommand = []string{binary, "--api-url", t.API, "--profile", t.Profile, "task", "login", t.Handle, "--wait", "45s"}
+		r.Instructions = "Display the complete approval URL and action to the user, then immediately execute wait_command. Keep this turn open while the user decides on the page; repeat wait_command while approval_required, for up to ten minutes. Do not ask for a separate chat answer, infer approval, or end the task while waiting. On approval the CLI saves consent and completes the matching policy installation before returning. Hooks are a separate decision. On cancellation stop waiting; on timeout report onboarding pending without claiming completion."
+	}
 	if t.Handle != "" {
 		if err := s.Observe(t, r.State); err != nil {
 			return err
@@ -225,6 +267,33 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 		return err
 	}
 	return nil
+}
+
+// Put outstanding user decisions before verbose review instructions. An old
+// launcher can truncate the response, and readiness to review is not evidence
+// that the agent delivered the independent setup and upgrade offers.
+func prepareAttention(r *managedResult) {
+	// Preserve authentication failures and in-flight review recovery actions.
+	if r.State != "ready" {
+		return
+	}
+	var decisions []string
+	if r.CodexReviewPolicy != nil {
+		decisions = append(decisions, "Offer to install the missing Codex reviewer policy now: show codex_review_policy.extra_policy and changes, then ask for acceptance. Use its install_command only after acceptance; preserve the existing upload grant. This is a settings decision, not a request to approve uploads again.")
+	}
+	for _, update := range r.BootstrapUpdates {
+		if update.State == "update_available" {
+			decisions = append(decisions, "Offer the Doomer skill upgrade from "+update.Installed+" to "+update.Available+" now. Check any existing skill PR's actual file revision; an older PR does not cover this update. Ask whether to create or update a separate skill-only PR (or apply a personal skill locally). Follow bootstrap_updates for the exact commands and preserve local edits. Do not apply without acceptance.")
+			break
+		}
+	}
+	if len(decisions) == 0 {
+		return
+	}
+	r.AttentionRequired = true
+	r.State = "setup_decision_required"
+	r.Action = "Present the following pending decisions to the user in your next response, before submitting a review or completing the task. " + strings.Join(decisions, " ") + " Ask for both decisions together. Local coding may continue while awaiting the answer."
+	r.Instructions = "Setup decisions are pending. Follow action and the proposal fields; do not infer acceptance or decline. After the user answers, execute only the accepted setup commands (or the explicit decline/defer commands), then rerun doomer prepare --task " + r.Task + " to obtain the review procedure. Preserve the current task, existing upload grant, unrelated settings, and local work."
 }
 
 func newPrepareCommand(app *application.App, api, profile *string) *cobra.Command {
@@ -632,12 +701,17 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 		var allow bool
 		var decline bool
 		var allRepositories bool
+		var waitForApproval time.Duration
 		c := &cobra.Command{Use: operation + " HANDLE", Args: cobra.ExactArgs(1)}
 		c.Flags().BoolVar(&allow, "allow", false, "record an explicit user approval; never supply on the user's behalf")
 		if operation == "codex-policy" || operation == "hook-setup" || operation == "claude-permissions" {
 			c.Flags().BoolVar(&decline, "decline", false, "record an explicit decline of the displayed scoped setup proposal")
 			c.MarkFlagsMutuallyExclusive("allow", "decline")
 		}
+		if operation == "login" {
+			c.Flags().DurationVar(&waitForApproval, "wait", 0, "wait up to 45 seconds for the displayed browser approval")
+		}
+
 		if operation == "consent" || operation == "revoke" {
 			c.Flags().BoolVar(&allRepositories, "all-repositories", false, "apply to all repositories for this agent, account, service, and profile")
 		}

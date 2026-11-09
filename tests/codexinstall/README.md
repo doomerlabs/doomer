@@ -229,7 +229,7 @@ every failed scenario. No subscription token is
 written into the worker's command line or report. Remote workers receive it over
 SSH stdin, and disposable test homes and VMs are removed after the run.
 
-Codex subscription mode remains separate follow-up work.
+Local Codex subscription runs use `--auth subscription --codex-auth-home PATH`; CI continues to use API billing.
 
 ## Depot pull request CI
 
@@ -274,3 +274,18 @@ The CLI CI also builds immutable baseline commit `83f551519b8dcbc0786f9d2817a7df
 That comparison must fail at the specific missing-policy assertion. Provider,
 installation, and cleanup errors do not satisfy the expected regression.
 The normal matrix must pass all three policy scenarios with the candidate fix.
+
+## Browser approval and saved policy regression
+
+`browser-onboarding` runs Codex with the actual approval reviewer in a fresh
+isolated home. A team skill and CLI are already installed and only software
+updates are preapproved. The simulated browser grants uploads after Codex shows
+the approval link and starts the CLI wait command. No second chat reply is sent.
+The scenario requires policy installation in that same setup-only turn, then
+starts an ordinary coding chat and requires a completed review with the
+same grant and no repeated onboarding. Hooks are explicitly declined to verify
+that they remain optional. This scenario is Codex-only; Claude parity is separate.
+
+Run locally with `--scenario browser-onboarding` and the normal candidate and
+agent options above. The report records link delivery, the active wait, absence
+of uploads or policy before consent, completed setup and review, and grant reuse.

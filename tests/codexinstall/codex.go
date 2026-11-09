@@ -53,6 +53,10 @@ func readCodexTurn(reader io.Reader, record func(string, string)) (codexTurn, er
 			record("Codex error", string(scanner.Bytes()))
 		case "error":
 			record("Codex error", string(scanner.Bytes()))
+		case "item.started":
+			if event.Item.Type == "command_execution" {
+				record("Command started", event.Item.Command)
+			}
 		case "item.completed":
 			switch event.Item.Type {
 			case "command_execution":

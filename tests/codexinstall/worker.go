@@ -119,11 +119,27 @@ func runWorker(c config) (result report) {
 	if !validAgentVersion(c, result.CodexVersion) {
 		return fail(fmt.Errorf("unexpected agent version: %s", result.CodexVersion))
 	}
-	if authenticationMode(c) == "subscription" {
+	if authenticationMode(c) == "subscription" && c.Harness == "claude" {
 		if err := verifyClaudeSubscription(ctx, c, repo, env); err != nil {
 			return fail(err)
 		}
 		result.Checks["subscription_authentication"] = true
+	}
+	if c.Scenario == "browser-onboarding" {
+		j := journey{c: c, ctx: ctx, home: home, repo: repo, env: env, f: f, result: &result, codexConfig: configuration, record: record}
+		if err := j.browserOnboarding(); err != nil {
+			return fail(err)
+		}
+		result.Passed = true
+		return result
+	}
+	if c.Scenario == "ordinary-upgrade" || c.Scenario == "policy-activation" {
+		j := journey{c: c, ctx: ctx, home: home, repo: repo, env: env, f: f, result: &result, codexConfig: configuration, record: record}
+		if err := j.ordinaryUpgrade(); err != nil {
+			return fail(err)
+		}
+		result.Passed = true
+		return result
 	}
 	if c.SkillsGuide != "" {
 		guide, err := writeCandidateSkills(&c, root)

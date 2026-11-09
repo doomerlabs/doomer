@@ -14,6 +14,8 @@ import (
 )
 
 type config struct {
+	CodexAuthHome    string            `json:"codex_auth_home,omitempty"`
+	AgentVersion     string            `json:"agent_version,omitempty"`
 	ReviewApprovals  bool              `json:"review_approvals,omitempty"`
 	Harness          string            `json:"harness,omitempty"`
 	SkillsGuide      string            `json:"skills_guide,omitempty"`
@@ -65,8 +67,9 @@ type report struct {
 }
 
 func main() {
+	authHome := flag.String("codex-auth-home", "", "reuse a local Codex sign-in inside disposable test homes")
 	harness := flag.String("harness", "codex", "agent harness: codex or claude")
-	auth := flag.String("auth", "api", "authentication mode: api or subscription (Claude only)")
+	auth := flag.String("auth", "api", "authentication mode: api or subscription (local Codex sign-in or Claude)")
 	localClaude := flag.String("local-claude", "", "dedicated pinned Claude executable for an isolated local run")
 	skillsSource := flag.String("skills-source", "", "candidate skills repository to exercise in the isolated fixture")
 	bootstrapSource := flag.String("bootstrap-source", "", "repository whose committed agent wrappers are exercised")
@@ -142,6 +145,9 @@ func main() {
 		expectedModel = "claude-haiku-5-5"
 		keyName = "TEST_ANTHROPIC_API_KEY"
 	}
+	if *authHome != "" {
+		expectedModel = "gpt-6.1-sol"
+	}
 	if *model == "" {
 		*model = expectedModel
 	}
@@ -155,10 +161,12 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	c := config{Harness: *harness, AuthMode: *auth, APIKey: os.Getenv(keyName), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate, CandidateSource: *candidateSource, InstallGuide: *guide}
+	c := config{CodexAuthHome: *authHome, AgentVersion: *version, Harness: *harness, AuthMode: *auth, APIKey: os.Getenv(keyName), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate, CandidateSource: *candidateSource, InstallGuide: *guide}
 	if *auth == "subscription" {
 		c.APIKey = ""
-		c.OAuthToken = os.Getenv("TEST_CLAUDE_CODE_OAUTH_TOKEN")
+		if *harness == "claude" {
+			c.OAuthToken = os.Getenv("TEST_CLAUDE_CODE_OAUTH_TOKEN")
+		}
 	}
 	if *bootstrapSource != "" {
 		if err := loadRepositoryBootstraps(&c, *bootstrapSource); err != nil {
