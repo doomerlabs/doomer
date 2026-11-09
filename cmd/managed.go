@@ -1254,7 +1254,7 @@ func decodeManagedResponses(input io.Reader) ([]managed.Response, error) {
 		err = fmt.Errorf("expected one JSON response array")
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%w; expected JSON array on stdin: [{\"lead_id\":\"FULL_LEAD_ID\",\"status\":\"fixed|dismissed|deferred\",\"agrees\":true,\"reason\":\"concrete evidence\"}]", err)
+		return nil, fmt.Errorf("%w; expected JSON array on stdin: [{\"lead_id\":\"FULL_LEAD_ID\",\"status\":\"fixed\",\"agrees\":true,\"reason\":\"concrete evidence\"}] (status: fixed, dismissed, or deferred; agrees: true, false, or null)", err)
 	}
 	return items, nil
 }
