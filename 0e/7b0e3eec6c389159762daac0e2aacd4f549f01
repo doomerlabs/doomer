@@ -1,0 +1,88 @@
+.agents/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 5-6,17-20,30-40,78-84,95-98,111-117,131,144-157
+.claude/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 5-6,17-20,30-40,78-84,95-98,111-117,131,144-157
+.depot/workflows/agent-e2e.yml
+  h_aa44c3b5b60dec 68-70
+cmd/managed.go
+  h_aa44c3b5b60dec 32-35,113,217-255,272-298,704,711-714
+cmd/managed_approval.go
+  h_aa44c3b5b60dec 24-29,66-70,106,143-169,179-184,217-224,246-250,293-329
+cmd/managed_attention_test.go
+  h_aa44c3b5b60dec 1-47
+cmd/managed_codex_config.go
+  h_aa44c3b5b60dec 59-75,101-108,155-159,191,216,245-256
+cmd/managed_codex_template.go
+  h_aa44c3b5b60dec 1-99
+cmd/managed_codex_template_test.go
+  h_aa44c3b5b60dec 1-78
+cmd/managed_development_test.go
+  h_aa44c3b5b60dec 120,123
+cmd/managed_hook_setup.go
+  h_aa44c3b5b60dec 52-54
+cmd/managed_local_setup_test.go
+  h_aa44c3b5b60dec 1-63
+cmd/managed_network.go
+  h_aa44c3b5b60dec 28-34,51-54
+cmd/managed_network_test.go
+  h_aa44c3b5b60dec 11,19,112-121
+cmd/managed_onboarding_test.go
+  h_aa44c3b5b60dec 1-161
+cmd/managed_portable_test.go
+  h_aa44c3b5b60dec 255,324-331
+cmd/managed_preflight.go
+  h_aa44c3b5b60dec 136
+cmd/managed_test.go
+  h_aa44c3b5b60dec 156-165,205
+internal/managed/bootstrap-2026.11.9.1.md
+  h_aa44c3b5b60dec 1-168
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 27-37
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 16,21,74-76,165
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 19-31
+internal/managed/onboarding_test.go
+  h_aa44c3b5b60dec 1-19
+internal/managed/operations.go
+  h_aa44c3b5b60dec 33-35
+internal/managed/store.go
+  h_aa44c3b5b60dec 28
+scripts/ci-agent-e2e-report.py
+  h_aa44c3b5b60dec 84-85
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 232,277-291
+tests/codexinstall/auth.go
+  h_aa44c3b5b60dec 8,24-25,35-41,66-68
+tests/codexinstall/browser_onboarding.go
+  h_aa44c3b5b60dec 1-167
+tests/codexinstall/claude.go
+  h_aa44c3b5b60dec 42-44,49-61
+tests/codexinstall/codex.go
+  h_aa44c3b5b60dec 56-59
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 17-18,70,72,148-150,164,167-169
+tests/codexinstall/ordinary_upgrade.go
+  h_aa44c3b5b60dec 1-204
+tests/codexinstall/policy_activation.go
+  h_aa44c3b5b60dec 1-87
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 18,21-23,79-84
+tests/codexinstall/user_questions.go
+  h_aa44c3b5b60dec 1-62
+tests/codexinstall/user_questions_test.go
+  h_aa44c3b5b60dec 1-29
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 122,128-143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e7b0e3eec6c389159762daac0e2aacd4f549f01",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
