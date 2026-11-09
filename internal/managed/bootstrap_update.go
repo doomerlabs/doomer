@@ -13,12 +13,12 @@ import (
 // Bump the wrapper revision only when its generated content changes, using the
 // next monotonic bootstrap revision. Bootstrap and CLI release sequences are
 // independent; ordinary CLI releases keep the existing bootstrap revision.
-const BootstrapVersion = "2026.11.8.12"
+const BootstrapVersion = "2026.11.9.1"
 
 // A linker override lets the disposable real-agent candidate (which is labelled
 // with the installed public release) advertise its actual injected compatibility.
 // Published release builds always use this source-defined default.
-var BootstrapCLIRange = ">=2026.11.8.7"
+var BootstrapCLIRange = ">=2026.11.9.1"
 
 //go:embed bootstrap-legacy.md
 var legacyBootstrapTemplate string
@@ -67,6 +67,9 @@ var versionEightNineBootstrapTemplate string
 
 //go:embed bootstrap-2026.11.8.10.md
 var versionEightTenBootstrapTemplate string
+
+//go:embed bootstrap-2026.11.8.12.md
+var versionEightTwelveBootstrapTemplate string
 
 //go:embed upgrade-prompt-rules-legacy.md
 var legacyUpgradePromptRules string
@@ -156,6 +159,7 @@ func RecognizedBootstrap(data []byte, policy Policy) bool {
 func recognizedPreviousBootstrap(data []byte, policy Policy) bool {
 	for _, previous := range []struct{ template, revision, cliRange string }{
 		{legacyBootstrapTemplate, "", ""},
+		{versionEightTwelveBootstrapTemplate, "2026.11.8.12", ">=2026.11.8.7"},
 		{versionEightTenBootstrapTemplate, "2026.11.8.10", ">=2026.11.7.5"},
 		{versionEightNineBootstrapTemplate, "2026.11.8.9", ">=2026.11.7.5"},
 		{versionEightEightBootstrapTemplate, "2026.11.8.8", ">=2026.11.7.5"},
@@ -218,6 +222,18 @@ func InspectBootstrap(path, scope, version string) (BootstrapUpdate, error) {
 	result.State = "modified"
 	result.Action = "Local skill content differs. Preserve local edits and report the difference; modified content alone is not an upgrade offer."
 	if recognizedPreviousBootstrap(data, b.Policy) && (b.Revision == "" || VersionLess(b.Revision, BootstrapVersion)) {
+		if runtimeversion.Release.MatchString(version) {
+			supported, err := BootstrapSupports(BootstrapCLIRange, version)
+			if err != nil {
+				return result, err
+			}
+			if !supported {
+				result.State = "incompatible"
+				result.Compatible = &supported
+				result.Action = "Use a CLI matching the offered skill's doomer-cli-range before upgrading the skill. Keep the installed skill until then."
+				return result, nil
+			}
+		}
 		result.State = "update_available"
 		result.UpgradeAvailable = true
 		result.Action = BootstrapUpgradeOffer(scope) + " After acceptance, run doomer bootstrap upgrade with the same scope. Preserve the update policy."

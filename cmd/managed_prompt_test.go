@@ -306,6 +306,35 @@ func TestPrepareDefaultsToActiveClaudeHarness(t *testing.T) {
 	}
 }
 
+func TestClaudePrepareBindsActualEnvironmentSession(t *testing.T) {
+	isolate(t)
+	t.Setenv("CLAUDECODE", "1")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "actual-session")
+	repo := newWatchTestRepo(t)
+	if out, err := execute(t, "", "install", "--repo", repo); err != nil {
+		t.Fatal(out, err)
+	}
+	out, err := execute(t, "", "prepare", "--repo", repo, "--prompt", "Review a change")
+	if err != nil {
+		t.Fatal(out, err)
+	}
+	var result managedResult
+	if err = json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatal(err)
+	}
+	store, err := managedStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := store.Load(result.Task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Agent != "claude" || task.Capabilities.SessionID != "actual-session" || !task.Capabilities.Hooks {
+		t.Fatal(task.Capabilities)
+	}
+}
+
 func TestPendingSetupRequiresAnUnambiguousScope(t *testing.T) {
 	store := managed.Store{Root: t.TempDir()}
 	handle, _ := managed.NewHandle()

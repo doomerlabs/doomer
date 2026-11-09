@@ -43,6 +43,33 @@ procedure and describe it accurately. Consult documented capabilities or permitt
 read-only introspection to determine hook support. Hook installation or callback
 probes require the user's normal hook-trust approval.
 
+Read `hook_setup` on preparation, including after a CLI upgrade. If hooks are
+missing and installation has not been declined, offer to install them. Reuse
+an explicit matching setup authorization; otherwise wait for acceptance before
+executing `hook_setup.install_command`. Record an explicit refusal with
+`hook_setup.decline_command`; preserve it across tasks and upgrades. Do not
+record silence as a refusal. Do not reinstall missing hooks against that choice.
+Hook installation and hook trust are separate. If hooks exist but the native
+harness reports them untrusted, explain how to review and trust them in `/hooks`.
+Remind once in each new session until trusted, including after a prior session's
+trust refusal; never repeat a denied operation in the same session or edit native
+trust records. A missing task callback alone is not proof of distrust: report
+activation as unverified until a real callback arrives, and do not claim it active.
+Preflight also reports local `hook_setup`, including Claude `disabled_by_host`.
+Relay the native-trust action even when this is only a read-only readiness check;
+do not require prepare or change settings merely to report it.
+
+A preflight policy preview can include `decline_command`. On an explicit refusal,
+execute that local command even if no task exists; it records only the setup
+decision and preserves upload consent. Do not turn silence into a decline.
+
+For Claude, inspect `claude_permissions` separately. Offer missing rules once per task; unanswered offers remain available in later chats.
+Never record silence as a decline.
+Execute its install command only after acceptance, and persist a decline with its
+returned decline command. Explicit deny rules take precedence: do not add allows
+to work around them or re-prompt the user to remove them. Both the command rules
+and live Doomer consent are required for unattended reviews.
+
 Readiness fields are separate. Software readiness is not upload consent, hook
 activation, account authentication, or a completed review. Native skill discovery,
 a browser callback, session IDs, and persistent processes are optional.
@@ -150,10 +177,16 @@ not a new upload grant; recheck saved consent after authentication succeeds.
 
 Approved Claude onboarding includes the narrow shell permissions needed for
 Doomer reviews. Do not ask a second permission question for each subcommand.
+Older installations may lack the preflight/prepare readiness rules. When local
+preflight reports missing Claude permissions or cannot inspect them, offer to verify the current account
+and repair those rules before prepare. The accepted repair authorizes the account
+check and scoped settings change; still verify current consent before installation.
+Do not reinterpret an explicit Claude deny as missing settings.
 After verifying upload approval during requested installation or accepted
 first-use onboarding, run `doomer hooks --agent claude --task HANDLE`. This
-installs the hooks and the four review-command rules reported in
-`claude_permissions`, preserving unrelated settings. Explain that these are
+installs the hooks, six readiness and review-command rules, and the consent-scoped
+`autoMode.allow` classifier policy reported in `claude_permissions`, preserving
+built-in defaults and unrelated settings. Show the classifier policy with the setup proposal. Explain that these are
 part of making the approved review integration work. Configure only Claude.
 If upload approval is missing, finish that approval first; do not change rules.
 For an already-onboarded session, reuse existing settings. When the user asks
@@ -184,20 +217,22 @@ policy; `unreadable` reports a configuration error without blocking local work.
 Delivery markers from older releases do not establish installation. Offers are
 scoped to the active config path and effective reviewer policy, so a changed or different profile
 can receive a migration offer. Do not repeat a declined settings question within
-the task. An unchanged previously offered configuration is reported in status
-without another offer; absence of a proposal never means acceptance.
-If status is `missing`, `migration_required` or `unreadable` without a proposal,
-report that configuration gap (and any read error) once for the task; do not
-silently claim setup is complete.
-During ordinary coding, report the gap without retrieving or re-offering an
-already delivered proposal and continue with the saved upload grant. If the
-user requests policy setup, migration or repair, use
-`doomer task codex-policy HANDLE` to retrieve the current proposal without
-changing settings, even if another chat previously received it. Follow the
-normal verified-proposal decision above. Honor an earlier decline for the same
-proposal and active config unless the user explicitly revisits that decision;
-a decline for another account, service, grant scope or Codex profile does not
-reject this proposal.
+the task. Only an explicit decline suppresses the unchanged proposal. Emitting CLI JSON,
+reading a proposal, or an old delivery marker is not evidence that the user saw
+or answered it. For a missing policy, resolve this setup decision before offering
+an unrelated skill upgrade. Ask once in the current task, not once per command.
+Use `install_command` after acceptance, or `decline_command` after an explicit
+refusal, and verify the resulting state. Never record a decline for silence.
+If the exact scoped policy repair is already authorized, perform it and verify
+configuration instead of asking again. Ordinary coding tasks may offer this
+missing setup; they must not silently leave it missing because another chat
+received the proposal. Keep local work moving while waiting for the decision.
+If status is `missing` or `migration_required` without a proposal and
+`codex_policy_status.decision` is not `declined`, use
+`doomer task codex-policy HANDLE` to inspect the current proposal. This is a
+read-only settings inspection, not authorization to install. Honor an explicit
+prior decline for the same proposal and active config unless the user revisits
+that decision. Report `unreadable` once with the configuration error.
 Before offering or installing the policy, compare its scope and permitted
 operations with fresh verified consent evidence. Require the same account,
 service, profile, coding agent, scope, and documented review data and operations.

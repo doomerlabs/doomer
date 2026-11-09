@@ -143,8 +143,12 @@ active `$CODEX_HOME/config.toml` (using `~/.codex/config.toml` only when
 `CODEX_HOME` is unset). Status, migration and offer identity use this same path. The
 states are `missing`, `migration_required`, `configured`, and `unreadable`.
 A shown proposal is not an installed policy. Older presentation-only markers are
-ignored; offers are now keyed by active config path, effective reviewer policy and proposal.
-Unchanged offers remain deduplicated while status continues to report the gap.
+ignored, including v2 delivery markers. Unanswered proposals remain available. Only an
+explicit `doomer task codex-policy HANDLE --decline` suppresses the matching
+proposal, keyed by active config path, effective reviewer policy, and consent scope.
+A changed profile, scope, or policy receives its own decision. Successful installation
+clears the prior decline so removing the policy can be repaired again.
+Explicit declines remain deduplicated while status continues to report the gap.
 Edits to unrelated settings or comments do not trigger another offer.
 The proposal covers only the saved grant's account, service, profile and
 repository identity (including linked worktrees), or all repositories for the

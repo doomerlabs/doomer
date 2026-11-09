@@ -20,6 +20,22 @@ import (
 
 type roundTrip func(*http.Request) (*http.Response, error)
 
+func TestNativeConfigUpdatesDoNotHidePolicyInstallation(t *testing.T) {
+	before := []byte("model='fixture'\n")
+	for _, tc := range []struct {
+		after string
+		want  bool
+	}{
+		{"model='fixture'\n[projects.'/tmp/repo']\ntrust_level='trusted'\n", true},
+		{"model='other'\n", false},
+		{"model='fixture'\n[auto_review]\nextra_policy='unexpected grant'\n", false},
+	} {
+		if got := preservesCodexPolicyConfig(before, []byte(tc.after)); got != tc.want {
+			t.Fatalf("preserve=%v want=%v for %s", got, tc.want, tc.after)
+		}
+	}
+}
+
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestMeterCountsUsageAndLimitsOutput(t *testing.T) {
@@ -313,5 +329,60 @@ func TestCandidateInjectionRequiresCompletedPublicInstallation(t *testing.T) {
 	err := installCandidate(config{CandidateFile: candidate, CandidateVersion: "2026.11.7.5"}, home)
 	if err == nil || !strings.Contains(err.Error(), "public installation did not produce the expected verified runtime") || !strings.Contains(err.Error(), "inspect the installation turn") {
 		t.Fatal(err)
+	}
+}
+
+func TestCodexPolicyQuestionWithoutPrepareOutput(t *testing.T) {
+	for _, tc := range []struct {
+		text string
+		want bool
+	}{
+		{"For the missing Codex policy, would you like to install the Doomer policy or use per-call approvals?", true},
+		{"Approve account verification and the scoped Claude permission repair.", true},
+		{"The policy was declined. I preserved it and will not ask again.", false},
+		{"The user approved the policy last session.", false},
+		{"Your existing permissions are preserved. Ready to proceed?", false},
+		{"The policy is installed and ready.", false},
+	} {
+		raw, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"type": "agent_message", "text": tc.text}})
+		turn, err := readCodexTurn(bytes.NewReader(raw), func(string, string) {})
+		if err != nil || turn.PolicyOffered != tc.want {
+			t.Fatal(tc, turn, err)
+		}
+	}
+}
+
+func TestDeclineConfigAllowsOnlyNativeProjectTrust(t *testing.T) {
+	before := []byte("model = 'test'\n")
+	for _, tc := range []struct {
+		extra string
+		want  bool
+	}{
+		{"[projects.'/tmp/repo']\ntrust_level = 'trusted'\n", true},
+		{"[auto_review]\nextra_policy = ''\n", false},
+		{"approval_policy = 'never'\n", false},
+		{"[projects.'/tmp/repo']\ntrust_level = 'trusted'\napproval_policy = 'never'\n", false},
+	} {
+		if got := preservesCodexPolicyConfig(before, append(append([]byte{}, before...), []byte(tc.extra)...)); got != tc.want {
+			t.Fatal(tc, got)
+		}
+	}
+}
+
+func TestClaudeSetupChoiceUsesStructuredReadiness(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want bool
+	}{
+		{`{"claude_permissions":{"state":"missing"}}`, true},
+		{`{"saved_consents":[{"claude_permissions":{"state":"missing","decision":"pending"}}]}`, true},
+		{`{"saved_consents":[{"claude_permissions":{"state":"missing","decision":"declined"}}]}`, false},
+		{`{"claude_permissions":{"state":"missing","decision":"unreadable"}}`, false},
+		{`{"claude_permissions":{"state":"configured"}}`, false},
+		{`Please approve some permission`, false},
+	} {
+		if got := claudeSetupPending(tc.raw); got != tc.want {
+			t.Fatal(tc.raw, got)
+		}
 	}
 }

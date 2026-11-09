@@ -22,11 +22,12 @@ func TestClaudePermissionsPreserveSettingsAndOwnedReset(t *testing.T) {
 	t.Setenv("HOME", home)
 	path, _ := claudePermissionPath()
 	os.MkdirAll(filepath.Dir(path), 0700)
-	original := `{"permissions":{"allow":["Bash(doomer task status *)","Read"],"deny":["Bash(curl *)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo keep-me"}]}]},"theme":"dark"}`
+	original := `{"permissions":{"allow":["Bash(doomer task status *)","Read"],"deny":["Bash(curl *)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo keep-me"}]}]},"autoMode":{"allow":["$defaults","Keep unrelated classifier rule"]},"theme":"dark"}`
 	os.WriteFile(path, []byte(original), 0640)
 	s, _ := managedStore()
-	p := inspectClaudePermissions()
-	if p.State != "missing" || len(p.Rules) != 4 {
+	evidence := &managedConsentEvidence{Account: "account", Service: "https://doomer.ai/api", Profile: "default", Agent: "claude", AllRepositories: true}
+	p := inspectClaudePermissions(evidence)
+	if p.State != "missing" || len(p.Rules) != 6 {
 		t.Fatal(p)
 	}
 	data, _ := os.ReadFile(path)
@@ -34,15 +35,15 @@ func TestClaudePermissionsPreserveSettingsAndOwnedReset(t *testing.T) {
 		t.Fatal("inspection changed settings")
 	}
 	for i := 0; i < 2; i++ {
-		if err := installClaudePermissions(s); err != nil {
+		if err := installClaudePermissions(s, evidence); err != nil {
 			t.Fatal(err)
 		}
 	}
 	data, obj, allow, err := readClaudePermissionConfig(path)
-	if err != nil || len(allow) != 5 || obj["theme"] != "dark" {
+	if err != nil || len(allow) != 7 || obj["theme"] != "dark" {
 		t.Fatal(string(data), err)
 	}
-	if inspectClaudePermissions().State != "configured" {
+	if inspectClaudePermissions(evidence).State != "configured" {
 		t.Fatal("missing installed rules")
 	}
 	info, _ := os.Stat(path)
@@ -71,6 +72,10 @@ func TestClaudePermissionsPreserveSettingsAndOwnedReset(t *testing.T) {
 	_, obj, allow, err = readClaudePermissionConfig(path)
 	if err != nil || len(allow) != 2 || !slices.Contains(allow, any("Bash(doomer task status *)")) || obj["theme"] != "dark" {
 		t.Fatal(obj, err)
+	}
+	auto, _ := obj["autoMode"].(map[string]any)
+	if entries, _ := auto["allow"].([]any); len(entries) != 2 {
+		t.Fatal("owned classifier policy was not removed", entries)
 	}
 	afterReset, _ := os.ReadFile(path)
 	if !strings.Contains(string(afterReset), "echo keep-me") {
@@ -109,6 +114,31 @@ func TestClaudePermissionsRejectUnsafeConfig(t *testing.T) {
 			t.Fatal("followed symlink")
 		}
 	})
+}
+
+func TestClaudeExplicitDenyIsNotMissingPermission(t *testing.T) {
+	for _, rule := range []string{"Bash", "Bash(*)", "Bash(doomer *)", "Bash(doomer task submit *)", "Bash(doomer task submit:*)"} {
+		t.Run(rule, func(t *testing.T) {
+			isolate(t)
+			t.Setenv("HOME", t.TempDir())
+			path, _ := claudePermissionPath()
+			os.MkdirAll(filepath.Dir(path), 0700)
+			original, _ := json.Marshal(map[string]any{"permissions": map[string]any{"deny": []string{rule}}, "theme": "dark"})
+			os.WriteFile(path, original, 0600)
+			s, _ := managedStore()
+			p := inspectClaudePermissions()
+			if p.State != "denied" || len(p.DeniedRules) != 1 {
+				t.Fatal(p)
+			}
+			if err := installClaudePermissions(s); err == nil {
+				t.Fatal("allow installation overrode an explicit deny")
+			}
+			after, _ := os.ReadFile(path)
+			if string(after) != string(original) {
+				t.Fatal("deny settings changed")
+			}
+		})
+	}
 }
 
 func TestClaudeOnboardingIncludesPermissionsAfterLiveConsent(t *testing.T) {
@@ -158,14 +188,39 @@ func TestClaudeOnboardingIncludesPermissionsAfterLiveConsent(t *testing.T) {
 	if r := run(); r.ClaudePermissions == nil || r.ClaudePermissions.State != "missing" {
 		t.Fatal(r)
 	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatal("inspection was treated as acceptance")
+	if r := run("--decline"); r.ClaudePermissions.Decision != "declined" || !r.UploadApproved {
+		t.Fatal(r)
+	}
+	if r := run(); r.ClaudePermissions.Decision != "declined" || len(r.ClaudePermissions.InstallCommand) != 0 {
+		t.Fatal(r)
+	}
+	if r := run("--allow"); r.ClaudePermissions.State != "configured" {
+		t.Fatal(r)
 	}
 	if out, err := execute(t, "", "--api-url", server.URL, "hooks", "--agent", "claude", "--task", handle); err != nil {
 		t.Fatal("approved onboarding did not configure command permissions", out, err)
 	}
 	if r := run(); r.ClaudePermissions == nil || r.ClaudePermissions.State != "configured" {
 		t.Fatal(r)
+	}
+	data, _ := os.ReadFile(path)
+	var denied map[string]any
+	if err := json.Unmarshal(data, &denied); err != nil {
+		t.Fatal(err)
+	}
+	denied["permissions"].(map[string]any)["deny"] = []string{"Bash(doomer task submit:*)"}
+	data, _ = json.Marshal(denied)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, flags := range [][]string{nil, {"--allow"}} {
+		if r := run(flags...); r.State != "claude_permissions_denied" || r.ClaudePermissions.State != "denied" {
+			t.Fatal(r)
+		}
+	}
+	after, _ := os.ReadFile(path)
+	if string(after) != string(data) {
+		t.Fatal("denied inspection changed settings")
 	}
 	recordIntegrationConsent(s, task, "revoked", false)
 	if r := run("--allow"); r.State != "consent_required" {
@@ -279,5 +334,41 @@ func TestClaudePermissionResetExplainsForeignHomeCleanup(t *testing.T) {
 	current, err := os.ReadFile(otherPath)
 	if err != nil || string(current) != string(original) {
 		t.Fatal("modified foreign settings", err)
+	}
+}
+
+func TestClaudeClassifierPolicyDefaultsScopeAndActiveConfig(t *testing.T) {
+	isolate(t)
+	root := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", root)
+	path, _ := claudePermissionPath()
+	if path != filepath.Join(root, "settings.json") || watch.HookFile("unused", "claude") != path {
+		t.Fatal(path)
+	}
+	s, _ := managedStore()
+	e := &managedConsentEvidence{Account: "a", Repository: "r", Service: "https://doomer.ai/api", Profile: "p", Agent: "claude"}
+	if !recognizedClaudeClassifierPolicy(claudeClassifierPolicy(e)) {
+		t.Fatal("scope did not round trip")
+	}
+	if err := installClaudePermissions(s); err != nil {
+		t.Fatal(err)
+	}
+	if inspectClaudePermissions(e).State != "missing" {
+		t.Fatal("command rules alone cannot establish classifier policy")
+	}
+	if err := installClaudePermissions(s, e); err != nil {
+		t.Fatal(err)
+	}
+	_, obj, _, err := readClaudePermissionConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := obj["autoMode"].(map[string]any)["allow"].([]any)
+	if len(entries) != 2 || entries[0] != "$defaults" || entries[1] != claudeClassifierPolicy(e) {
+		t.Fatal(entries)
+	}
+	e.Account = "other"
+	if inspectClaudePermissions(e).State != "missing" {
+		t.Fatal("another account inherited policy")
 	}
 }

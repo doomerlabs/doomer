@@ -39,7 +39,7 @@ func (j *journey) portableRestart() error {
 	}
 	j.home = fresh
 	j.record("Fixture", "Started a new environment with an empty Doomer account store. No Doomer credentials or receipts were copied.")
-	if err := j.coding(j.repo, "Create restored.txt containing restored followed by a newline. Use the installed Doomer workflow and finish its review."); err != nil {
+	if err := j.coding(j.repo, "Create restored.txt containing restored followed by a newline. This is a fresh environment: I approve local Doomer hook and reviewer-settings setup for the previously approved reusable grant after verification. Restore that existing portable access, preserve native trust controls, and finish the review without requesting a new upload grant."); err != nil {
 		return err
 	}
 	j.result.Checks["fresh_home_reused_grant"] = true

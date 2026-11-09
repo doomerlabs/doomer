@@ -206,7 +206,7 @@ func TestQuickCompletionGuidanceAndHistoricalBootstrap(t *testing.T) {
 	}
 }
 
-func TestReleasedTenBootstrapOffersBundledTwelve(t *testing.T) {
+func TestReleasedTenBootstrapOffersCurrentBootstrap(t *testing.T) {
 	policy := Policy{Protocol: Protocol, Channel: "stable"}
 	old, err := bootstrapText(policy, versionEightTenBootstrapTemplate, "2026.11.8.10", ">=2026.11.7.5")
 	if err != nil {
@@ -216,9 +216,17 @@ func TestReleasedTenBootstrapOffersBundledTwelve(t *testing.T) {
 	if err := os.WriteFile(path, []byte(old), 0600); err != nil {
 		t.Fatal(err)
 	}
-	update, err := InspectBootstrap(path, "project", "2026.11.8.7")
-	if err != nil || update.State != "update_available" || update.Installed != "2026.11.8.10" || update.Available != "2026.11.8.12" || update.CLIRange != ">=2026.11.8.7" {
+	update, err := InspectBootstrap(path, "project", BootstrapVersion)
+	if err != nil || update.State != "update_available" || update.Installed != "2026.11.8.10" || update.Available != BootstrapVersion || update.CLIRange != BootstrapCLIRange {
 		t.Fatalf("released skill cannot receive the matching update: %+v %v", update, err)
+	}
+	blocked, err := InspectBootstrap(path, "project", "2026.11.8.7")
+	if err != nil || blocked.State != "incompatible" || blocked.UpgradeAvailable || blocked.CLIRange != BootstrapCLIRange {
+		t.Fatalf("old CLI could install an unsupported skill: %+v %v", blocked, err)
+	}
+	previous, err := bootstrapText(policy, versionEightTwelveBootstrapTemplate, "2026.11.8.12", ">=2026.11.8.7")
+	if err != nil || !RecognizedBootstrap([]byte(previous), policy) {
+		t.Fatal("released .12 skill is no longer recognized", err)
 	}
 	current, err := BootstrapText(policy)
 	if err != nil {

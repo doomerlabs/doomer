@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/doomerlabs/doomer/internal/watch"
 )
 
 // Onboarding keeps its existing fixture permissions. This regression starts a
@@ -13,7 +15,7 @@ func (j *journey) reviewPreflight() error {
 	// This scenario isolates per-call preparation. Automatic hooks can submit
 	// after a tool call before the agent has processed the no-upload instruction.
 	// Hook-driven delivery is exercised by the other lifecycle scenarios.
-	if err := os.Remove(agentHooksPath(j.c, j.home)); err != nil && !os.IsNotExist(err) {
+	if err := watch.Install(agentHooksPath(j.c, j.home), "", "--managed-task-adapter", true); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	prior, err := savedTasks(j.home)

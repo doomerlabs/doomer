@@ -30,7 +30,7 @@ func TestCodexReviewPolicyKeepsScopeAsData(t *testing.T) {
 	}
 }
 
-func TestCodexReviewPolicyOfferPersistsWithoutGrantingSettings(t *testing.T) {
+func TestCodexReviewPolicyOnlyExplicitDeclineSuppressesProposal(t *testing.T) {
 	t.Setenv("CODEX_HOME", t.TempDir())
 	s := managed.Store{Root: t.TempDir()}
 	consent := managedConsentEvidence{Account: "one", Repository: "/repo/.git", Service: "https://doomer.ai/api", Profile: "default"}
@@ -38,18 +38,18 @@ func TestCodexReviewPolicyOfferPersistsWithoutGrantingSettings(t *testing.T) {
 	if err != nil || first == nil {
 		t.Fatal(first, err)
 	}
-	// Preparing output does not mark an undelivered proposal as shown.
+	// Merely inspecting or emitting a proposal must not suppress later prompts.
 	undelivered, err := offerCodexReviewPolicy(s, consent)
 	if err != nil || undelivered == nil {
-		t.Fatal("undelivered proposal was lost", undelivered, err)
+		t.Fatal("unanswered proposal was lost", undelivered, err)
 	}
-	if err := markCodexReviewPolicyOffered(s, first); err != nil {
+	if err := declineCodexReviewPolicy(s, first); err != nil {
 		t.Fatal(err)
 	}
 	// A new Store represents a later CLI process/chat.
 	later, err := offerCodexReviewPolicy(managed.Store{Root: s.Root}, consent)
 	if err != nil || later != nil {
-		t.Fatal("repeated optional settings prompt", later, err)
+		t.Fatal("explicit decline was ignored", later, err)
 	}
 	consent.Account = "two"
 	other, err := offerCodexReviewPolicy(s, consent)

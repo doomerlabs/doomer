@@ -162,6 +162,7 @@ func readClaudeTurn(reader io.Reader, record func(string, string)) (codexTurn, e
 			case "text":
 				if event.Type == "assistant" {
 					turn.Messages = append(turn.Messages, block.Text)
+					turn.PolicyOffered = turn.PolicyOffered || policyQuestion.MatchString(block.Text)
 					record("Claude", block.Text)
 				}
 			case "tool_use":
@@ -169,7 +170,9 @@ func readClaudeTurn(reader io.Reader, record func(string, string)) (codexTurn, e
 			case "tool_result":
 				text := claudeContentText(block.Content)
 				turn.UpdateRequested = turn.UpdateRequested || updateState.MatchString(text)
-				turn.PolicyOffered = turn.PolicyOffered || policyProposal.MatchString(text)
+				turn.SetupPending = turn.SetupPending || claudeSetupPending(text)
+				turn.PolicyOffered = turn.PolicyOffered || (policyProposal.MatchString(text) || claudePermissionProposal.MatchString(text))
+				turn.HooksOffered = turn.HooksOffered || hookProposal.MatchString(text)
 				record("Command", text)
 			}
 		}
@@ -194,4 +197,47 @@ func claudeContentText(raw json.RawMessage) string {
 		}
 	}
 	return strings.Join(texts, "\n")
+}
+
+// Use the CLI's structured readiness state to drive the scripted user's local
+// setup choice. The real agent's phrasing remains visible in the transcript.
+func claudeSetupPending(text string) bool {
+	type permission struct {
+		State    string `json:"state"`
+		Decision string `json:"decision"`
+	}
+	type entry struct {
+		Permissions permission `json:"claude_permissions"`
+	}
+	type result struct {
+		Permissions permission `json:"claude_permissions"`
+		Saved       []entry    `json:"saved_consents"`
+	}
+	pending := func(p permission) bool {
+		return p.State == "missing" && p.Decision != "declined" && p.Decision != "unreadable"
+	}
+	decode := func(raw string) bool {
+		var r result
+		if json.Unmarshal([]byte(raw), &r) != nil {
+			return false
+		}
+		if pending(r.Permissions) {
+			return true
+		}
+		for _, e := range r.Saved {
+			if pending(e.Permissions) {
+				return true
+			}
+		}
+		return false
+	}
+	if decode(text) {
+		return true
+	}
+	for _, line := range strings.Split(text, "\n") {
+		if decode(line) {
+			return true
+		}
+	}
+	return false
 }

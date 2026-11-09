@@ -28,12 +28,13 @@ type resetEntry struct {
 	apply  func(context.Context) error
 }
 type resetPlan struct {
-	Entries     []*resetEntry `json:"entries"`
-	DryRun      bool          `json:"dry_run"`
-	Complete    bool          `json:"complete"`
-	states      map[string]bool
-	repos       map[string]bool
-	claudeRules map[string][]string
+	Entries        []*resetEntry `json:"entries"`
+	DryRun         bool          `json:"dry_run"`
+	Complete       bool          `json:"complete"`
+	states         map[string]bool
+	repos          map[string]bool
+	claudeRules    map[string][]string
+	claudePolicies map[string][]string
 }
 
 func (p *resetPlan) add(kind, path, detail string, apply func(context.Context) error) {
@@ -259,6 +260,28 @@ func (p *resetPlan) discoverAgent(agent, home string) {
 			continue
 		}
 		n := 0
+		if owned := p.claudePolicies[file]; len(owned) > 0 {
+			if auto, ok := obj["autoMode"].(map[string]any); ok {
+				if allow, ok := auto["allow"].([]any); ok {
+					kept := []any{}
+					for _, entry := range allow {
+						text, _ := entry.(string)
+						remove := false
+						for _, policy := range owned {
+							if text == policy {
+								remove = true
+							}
+						}
+						if remove {
+							n++
+						} else {
+							kept = append(kept, entry)
+						}
+					}
+					auto["allow"] = kept
+				}
+			}
+		}
 		if rules := p.claudeRules[file]; len(rules) > 0 {
 			if permissions, ok := obj["permissions"].(map[string]any); ok {
 				if allow, ok := permissions["allow"].([]any); ok {
@@ -392,8 +415,8 @@ func (p *resetPlan) discoverState(root string) {
 			p.problem("Claude permissions", file, fmt.Errorf("invalid permission ownership receipt"))
 			continue
 		}
-		home, homeErr := os.UserHomeDir()
-		if homeErr != nil || receipt.ConfigPath != filepath.Join(home, ".claude", "settings.json") {
+		currentPath, pathErr := claudePermissionPath()
+		if pathErr != nil || receipt.ConfigPath != currentPath {
 			p.problem("Claude permissions", receipt.ConfigPath, fmt.Errorf("settings path does not match the current home; manually review and remove the recorded Doomer rules %q (ownership receipt: %s)", receipt.Added, file))
 			continue
 		}
@@ -405,6 +428,14 @@ func (p *resetPlan) discoverState(root string) {
 				if rule == known {
 					p.claudeRules[receipt.ConfigPath] = append(p.claudeRules[receipt.ConfigPath], rule)
 				}
+			}
+		}
+		for _, policy := range receipt.AddedPolicies {
+			if recognizedClaudeClassifierPolicy(policy) {
+				if p.claudePolicies == nil {
+					p.claudePolicies = map[string][]string{}
+				}
+				p.claudePolicies[receipt.ConfigPath] = append(p.claudePolicies[receipt.ConfigPath], policy)
 			}
 		}
 	}

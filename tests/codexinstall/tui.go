@@ -61,6 +61,9 @@ try:
                 time.sleep(0.2)
                 os.write(master,b'\r')
                 os.write(sys.stdout.fileno(),b'\n[Scripted hook trust choice: '+(b'deny' if deny else b'allow')+b']\n')
+                if os.getenv('DOOMER_TEST_HOOK_WARNING_ONLY')=='1':
+                    time.sleep(0.5)
+                    break
         if sys.stdin in ready:
             data=os.read(sys.stdin.fileno(),4096)
             if not data: break

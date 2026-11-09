@@ -31,6 +31,12 @@ go run ./tests/codexinstall --scenario list
 | `first-review` | An ordinary coding prompt with no Doomer reminder completes an account-linked review and records a finding response |
 | `review-command-permissions` | Fresh process with hooks disabled completes per-call review; Claude uses real auto mode with the onboarding command rules, Codex uses its approval reviewer |
 | `review-preflight` | Per-call preparation with automatic hooks removed; saved consent and local preflight in a fresh session; local coding continues if preparation is blocked; Codex uses workspace-write and auto-review |
+| `hooks-upgrade` | Missing owned hooks are offered again, accepted, and installed while preserving existing consent and unrelated settings |
+| `hooks-declined` | A hook-installation refusal persists across fresh sessions without reinstalling or re-offering |
+| `hooks-trust` | Codex native trust reminders recur until trusted; Claude native callbacks prove activation separately from installation |
+| `policy-installed` | Fresh real approval reviewer reuses the installed policy and upload grant without another prompt |
+| `policy-recovery` | Old delivery marker with a missing policy must offer setup, install after acceptance, and complete a review in a fresh process |
+| `policy-declined` | Explicit policy decline persists across fresh chats without changing settings, revoking consent, or uploading source |
 | `new-chat` | Two fresh coding chats with no Doomer reminders complete reviews and finding responses with the original grant; Codex uses its real approval reviewer |
 | `worktrees` | Concurrent branches/worktrees keep files, tasks and reviews separate while sharing approval; Codex uses its real approval reviewer |
 | `decline-updates` | Refusing updates does not grant repository access or upload content |
@@ -262,3 +268,9 @@ without `bypassPermissions`; installation still uses the fixture's standard
 mode. This catches a configured integration whose explicit submit/respond calls
 are blocked in a new process. It is a real-agent test, not covered by the free
 Go unit tests.
+
+The CLI CI also builds immutable baseline commit `83f551519b8dcbc0786f9d2817a7df87656c60ff`
+(release `2026.11.8.7`) using the current runner's `--candidate-source` option.
+That comparison must fail at the specific missing-policy assertion. Provider,
+installation, and cleanup errors do not satisfy the expected regression.
+The normal matrix must pass all three policy scenarios with the candidate fix.

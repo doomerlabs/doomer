@@ -39,6 +39,7 @@ func runLocal(ctx context.Context, c config, parent string) (result report) {
 	if c.CandidateVersion != "" {
 		c.CandidateFile = filepath.Join(dir, "candidate")
 		build := exec.CommandContext(ctx, "go", "build", "-ldflags", "-X github.com/doomerlabs/doomer/internal/version.Version="+c.CandidateVersion+" -X github.com/doomerlabs/doomer/internal/managed.BootstrapCLIRange=>="+c.CandidateVersion, "-o", c.CandidateFile, ".")
+		build.Dir = c.CandidateSource
 		if output, err := build.CombinedOutput(); err != nil {
 			result.Error = fmt.Sprintf("build local candidate: %v: %s", err, output)
 			return result

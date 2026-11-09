@@ -233,7 +233,7 @@ func newManagedHooksCommand(app *application.App, api, profile *string) *cobra.C
 			if evidence == nil {
 				return fmt.Errorf("Claude onboarding needs current Doomer upload approval before installing review-command permissions")
 			}
-			if err := installClaudePermissions(state); err != nil {
+			if err := installClaudePermissions(state, evidence); err != nil {
 				return err
 			}
 		}

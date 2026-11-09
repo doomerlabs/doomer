@@ -11,6 +11,10 @@ At task start, run `doomer preflight --agent AGENT --repo .` for local-only
 consent and Codex policy inspection. Saved receipts do not verify the current
 account or authorize uploads. Then run
 `doomer prepare --agent AGENT --repo . --prompt "USER TASK"`.
+If preflight reports pending missing reviewer settings, first offer account
+verification and scoped policy repair. After acceptance run prepare, verify live
+consent, and install the proposal. Respect saved declines and explicit denies.
+For older Claude CLIs, offer the same verification and repair.
 Use codex or claude and the actual task without shell interpolation. Keep the
 returned task handle. An older CLI may lack preflight; continue with prepare.
 If a real harness session ID is available, pass it with `--session`. For Claude,
@@ -21,6 +25,13 @@ For setup only, run `doomer prepare --agent AGENT --repo .` without `--prompt`.
 A prompt creates a coding task. Verify readiness/hooks without submitting code.
 
 {{permission_prompt_rules}}
+
+Read `hook_setup` and permission status before skill upgrades. Offer missing
+setup unless already authorized or explicitly declined. Run the returned install
+command after acceptance; record only explicit refusals with the decline command.
+Keep installation separate from native hook trust. For untrusted hooks, guide the
+user to native review controls in each new session until trusted. Preserve deny
+rules and report blocked review coverage.
 
 Show complete clickable setup URLs, preserving fragments, before question tools.
 Use CLI state for approval; a missing binary does not imply missing consent.

@@ -12,9 +12,10 @@ import (
 	"sync"
 
 	"github.com/doomerlabs/doomer/internal/managed"
+	"github.com/doomerlabs/doomer/internal/watch"
 )
 
-var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-command-permissions", "upgrade-authorized-session"}
+var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-command-permissions", "upgrade-authorized-session", "policy-recovery", "policy-installed", "policy-declined", "hooks-upgrade", "hooks-declined", "hooks-trust", "policy-denied"}
 
 func validScenario(name string) bool {
 	for _, candidate := range scenarioNames {
@@ -91,8 +92,11 @@ func (j *journey) coding(repo, prompt string) error {
 	if err != nil {
 		return err
 	}
-	if observed.PolicyOffered && j.c.Scenario != "portable-restart" {
-		return fmt.Errorf("unexpected repeated agent settings proposal")
+	if observed.PolicyOffered {
+		// Prose recognition is diagnostic, not a production consent boundary.
+		// A settings question that actually blocks the task still fails below
+		// because the task has not reached a completed review.
+		j.record("Permission prompt observation", "Agent used setup-related wording during coding; checking actual task completion.")
 	}
 	if observed.UpdateRequested {
 		return fmt.Errorf("unexpected repeat update approval")
@@ -170,6 +174,18 @@ func (j *journey) finish() error {
 }
 func (j *journey) afterInstall() error {
 	switch j.c.Scenario {
+	case "policy-denied":
+		return j.explicitPolicyDeny()
+	case "hooks-upgrade", "hooks-declined":
+		return j.hookSetupRecovery()
+	case "hooks-trust":
+		return j.hookTrustRecovery()
+	case "policy-installed":
+		return j.reviewCommandPermissions()
+	case "policy-declined":
+		return j.policyDeclined()
+	case "policy-recovery":
+		return j.policyRecovery()
 	case "review-command-permissions":
 		return j.reviewCommandPermissions()
 	case "review-preflight":
@@ -191,7 +207,7 @@ func (j *journey) afterInstall() error {
 			j.c.ReviewApprovals = j.c.Harness != "claude"
 		}
 		if j.c.Scenario == "hooks-off" {
-			if err := os.Remove(agentHooksPath(j.c, j.home)); err != nil {
+			if err := watch.Install(agentHooksPath(j.c, j.home), "", "--managed-task-adapter", true); err != nil {
 				return err
 			}
 		}
