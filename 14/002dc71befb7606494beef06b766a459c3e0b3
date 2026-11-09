@@ -1,0 +1,22 @@
+cmd/managed_codex_template_test.go
+  h_aa44c3b5b60dec 79-147
+tests/codexinstall/browser_onboarding.go
+  h_aa44c3b5b60dec 69-70,84,86
+tests/codexinstall/configuration_test.go
+  h_aa44c3b5b60dec 1-58
+tests/codexinstall/runner_test.go
+  h_aa44c3b5b60dec 389-413
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 166,194-207,222-237,432-454
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "14002dc71befb7606494beef06b766a459c3e0b3",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
