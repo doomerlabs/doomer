@@ -41,6 +41,12 @@ if [[ -n ${E2E_SKILLS_SOURCE:-} ]]; then
 else
   candidate_args+=(--generated-bootstrap)
 fi
+scenario_budget=0.35
+if [[ $harness == codex && $scenario == upgrade-authorized-session ]]; then
+  # This scenario includes onboarding, upgrade, and a second reviewed coding
+  # turn in one growing chat. Leave room for the final response reservation.
+  scenario_budget=0.50
+fi
 "$work/runner" "${agent_args[@]}" "${candidate_args[@]}" \
-  --local-root "$work/homes" --scenario "$scenario" --budget 0.35 --suite-budget 8.4 \
+  --local-root "$work/homes" --scenario "$scenario" --budget "$scenario_budget" --suite-budget 8.4 \
   --output "$reports/report.json"
