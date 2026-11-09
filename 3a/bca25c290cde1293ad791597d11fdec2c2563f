@@ -1,0 +1,26 @@
+.depot/workflows/agent-e2e.yml
+  h_aa44c3b5b60dec 119-155,158
+scripts/ci-agent-e2e.sh
+  h_aa44c3b5b60dec 44-46,58,61-72
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 34-36,268-273
+tests/codexinstall/local.go
+  h_aa44c3b5b60dec 42
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 27,77,113-116,158
+tests/codexinstall/policy_recovery.go
+  h_aa44c3b5b60dec 42,52-60,86-164
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 17,173-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3abca25c290cde1293ad791597d11fdec2c2563f",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
