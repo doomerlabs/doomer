@@ -1,0 +1,44 @@
+.agents/skills/agent-e2e/SKILL.md
+  h_aa44c3b5b60dec 1-78
+AGENTS.md
+  h_aa44c3b5b60dec 22-27
+docs/agent-e2e-cache.md
+  h_aa44c3b5b60dec 1-116
+docs/agent-e2e-measurements.md
+  h_aa44c3b5b60dec 1-77
+scripts/provision-agent-e2e-cache.py
+  h_aa44c3b5b60dec 1-156
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 193-194,198,203-234
+tests/codexinstall/cache-keys.json
+  h_aa44c3b5b60dec 1-3
+tests/codexinstall/cache.go
+  h_aa44c3b5b60dec 1-346
+tests/codexinstall/cache_inputs.go
+  h_aa44c3b5b60dec 1-177
+tests/codexinstall/cache_test.go
+  h_aa44c3b5b60dec 1-301
+tests/codexinstall/local.go
+  h_aa44c3b5b60dec 48
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 10-11,13,20,51-71,92-95,108-170,172-177,211,239,241-250,252-254,293-296,311-313,325-327
+tests/codexinstall/snapshot.go
+  h_aa44c3b5b60dec 1-390
+tests/codexinstall/suite.go
+  h_aa44c3b5b60dec 4,7,11,13,19-20,22-24,28-40,42-55,60-88,90-94,96,98-99,101-103,105-160,164-170,173-246,248-249,251
+tests/codexinstall/suite_test.go
+  h_aa44c3b5b60dec 1-290
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 19-23,67,148-155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4bd2980fda427f09345a20292a53f334410d519a",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
