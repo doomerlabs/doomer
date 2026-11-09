@@ -54,25 +54,26 @@ type WorkspaceHypothesis struct {
 	Check      string `json:"check"`
 }
 type WorkspaceSubmission struct {
-	LookCloserThreshold *int                  `json:"look_closer_threshold,omitempty"`
-	ReviewScope         string                `json:"review_scope,omitempty"`
-	LookCloser          *bool                 `json:"look_closer,omitempty"`
-	FullReview          *bool                 `json:"full_review,omitempty"`
-	Hypotheses          []WorkspaceHypothesis `json:"hypotheses,omitempty"`
-	AgentDiff           string                `json:"agent_diff,omitempty"`
-	UserRequest         *WorkspaceUserRequest `json:"user_request,omitempty"`
-	RepositoryID        string                `json:"repository_id"`
-	SnapshotID          string                `json:"snapshot_id"`
-	BaseSnapshotID      string                `json:"base_snapshot_id"`
-	ReviewID            string                `json:"review_id"`
-	GroupID             string                `json:"review_group_id"`
-	Revision            int                   `json:"revision"`
-	Repository          string                `json:"repository"`
-	Branch              string                `json:"branch"`
-	Diff                string                `json:"diff"`
-	Continuity          bool                  `json:"review_continuity"`
-	Client              map[string]string     `json:"client"`
-	PromptProvenance    any                   `json:"prompt_provenance,omitempty"`
+	GitIdentity         *sourcesnapshot.GitIdentity `json:"git_identity,omitempty"`
+	LookCloserThreshold *int                        `json:"look_closer_threshold,omitempty"`
+	ReviewScope         string                      `json:"review_scope,omitempty"`
+	LookCloser          *bool                       `json:"look_closer,omitempty"`
+	FullReview          *bool                       `json:"full_review,omitempty"`
+	Hypotheses          []WorkspaceHypothesis       `json:"hypotheses,omitempty"`
+	AgentDiff           string                      `json:"agent_diff,omitempty"`
+	UserRequest         *WorkspaceUserRequest       `json:"user_request,omitempty"`
+	RepositoryID        string                      `json:"repository_id"`
+	SnapshotID          string                      `json:"snapshot_id"`
+	BaseSnapshotID      string                      `json:"base_snapshot_id"`
+	ReviewID            string                      `json:"review_id"`
+	GroupID             string                      `json:"review_group_id"`
+	Revision            int                         `json:"revision"`
+	Repository          string                      `json:"repository"`
+	Branch              string                      `json:"branch"`
+	Diff                string                      `json:"diff"`
+	Continuity          bool                        `json:"review_continuity"`
+	Client              map[string]string           `json:"client"`
+	PromptProvenance    any                         `json:"prompt_provenance,omitempty"`
 }
 type workspaceUpload struct {
 	RepositoryID string             `json:"repository_id"`

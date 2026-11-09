@@ -35,7 +35,16 @@ type SourceMetadata struct {
 	Dirty      bool   `json:"dirty"`
 }
 
+// GitIdentity is the unverified identity configured for this checkout.
+// It is review metadata, never part of the content-addressed source snapshot.
+type GitIdentity struct {
+	Name   string `json:"name,omitempty"`
+	Email  string `json:"email,omitempty"`
+	Source string `json:"source"`
+}
+
 type Capture struct {
+	GitIdentity    *GitIdentity
 	Bytes          []byte
 	Digest         string
 	BaseTreeHash   string
@@ -259,6 +268,7 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 	if remote, err := g.text("config", "--get", "remote.origin.url"); err == nil {
 		result.Source.Repository = repositoryIdentity(remote)
 	}
+	result.GitIdentity = g.gitIdentity()
 	return result, nil
 }
 
