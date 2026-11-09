@@ -104,10 +104,8 @@ func newPreflightCommand(api, profile *string) *cobra.Command {
 					if err != nil {
 						return err
 					}
-					if proposal.State != "configured" {
-						if err := declineCodexReviewPolicy(s, proposal); err != nil {
-							return err
-						}
+					if err := declineCodexReviewPolicy(s, proposal); err != nil {
+						return err
 					}
 				} else {
 					path, err := claudePermissionDecisionPath(s, managed.Task{Agent: agent}, evidence)

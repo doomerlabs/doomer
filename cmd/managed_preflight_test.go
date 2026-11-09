@@ -333,6 +333,24 @@ func TestPreflightRecordsLocalPolicyDeclineWithoutTaskOrNetwork(t *testing.T) {
 			if err != nil || evidence == nil {
 				t.Fatal("decline lost upload grant", err)
 			}
+			if agent == "codex" {
+				if err := installCodexReviewPolicy(*evidence); err != nil {
+					t.Fatal(err)
+				}
+				before, _ := os.ReadFile(config)
+				if _, err := execute(t, "", command[1:]...); err != nil {
+					t.Fatal(err)
+				}
+				proposal, _, err := inspectCodexReviewPolicy(*evidence)
+				if err != nil {
+					t.Fatal(err)
+				}
+				declined, err := codexReviewPolicyDeclined(s, proposal)
+				after, _ := os.ReadFile(config)
+				if err != nil || !declined || string(before) != string(after) {
+					t.Fatal("configured decline was not persisted without changing settings", err)
+				}
+			}
 			if _, err := execute(t, "", "--api-url", server.URL, "preflight", "--repo", repo, "--agent", agent, "--decline-policy", "unknown-account"); err == nil {
 				t.Fatal("accepted unknown scope")
 			}

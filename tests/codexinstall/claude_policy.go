@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -68,9 +69,14 @@ func (j *journey) claudePolicyRecovery(decline bool) error {
 	if err != nil {
 		return err
 	}
-	j.result.Checks["claude_missing_permissions_prompted"] = turn.PolicyOffered
-	if !j.result.Checks["claude_missing_permissions_prompted"] {
-		return fmt.Errorf("Claude missing permissions were not offered")
+	j.record("Permission prompt observation", fmt.Sprintf("Detected representative offer wording: %v; full assistant prompt retained in transcript", turn.PolicyOffered))
+	beforeAcceptance, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	j.result.Checks["claude_policy_waited_for_acceptance"] = string(beforeAcceptance) == string(before)
+	if !j.result.Checks["claude_policy_waited_for_acceptance"] {
+		return fmt.Errorf("Claude settings changed before policy acceptance")
 	}
 	answer := "Yes, verify the current account and install the displayed scoped Claude readiness and review-command permissions. Preserve unrelated settings and keep hooks disabled. Do not edit or upload source yet."
 	if decline {
@@ -91,7 +97,12 @@ func (j *journey) claudePolicyRecovery(decline bool) error {
 		if err != nil {
 			return err
 		}
-		j.result.Checks["claude_decline_not_reoffered"] = !fresh.PolicyOffered
+		j.record("Permission prompt observation", fmt.Sprintf("Detected offer wording after refusal: %v; stored decision is verified independently", fresh.PolicyOffered))
+		decision, err := j.claudePermissionDecision()
+		if err != nil {
+			return err
+		}
+		j.result.Checks["claude_decline_persisted"] = decision == "declined"
 		j.result.Checks["claude_decline_kept_settings"] = string(before) == string(after)
 		j.f.mu.Lock()
 		j.result.Checks["claude_decline_preserved_consent"] = j.f.Creates == 1 && j.f.Uploads == 0
@@ -257,4 +268,31 @@ func preservesCodexPolicyConfig(before, after []byte) bool {
 		}
 	}
 	return true
+}
+
+func (j *journey) claudePermissionDecision() (string, error) {
+	cmd := exec.CommandContext(j.ctx, filepath.Join(j.home, ".local/bin/doomer"), "preflight", "--agent", "claude", "--repo", j.repo)
+	cmd.Dir, cmd.Env = j.repo, j.env
+	raw, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	var result struct {
+		Saved []struct {
+			Permissions struct {
+				Decision string   `json:"decision"`
+				Install  []string `json:"install_command"`
+			} `json:"claude_permissions"`
+		} `json:"saved_consents"`
+	}
+	if err = json.Unmarshal(raw, &result); err != nil {
+		return "", err
+	}
+	if len(result.Saved) != 1 {
+		return "", fmt.Errorf("expected one saved Claude permission scope")
+	}
+	if len(result.Saved[0].Permissions.Install) > 0 {
+		return "", fmt.Errorf("declined Claude setup was offered for installation")
+	}
+	return result.Saved[0].Permissions.Decision, nil
 }

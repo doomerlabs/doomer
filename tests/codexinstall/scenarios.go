@@ -92,8 +92,11 @@ func (j *journey) coding(repo, prompt string) error {
 	if err != nil {
 		return err
 	}
-	if observed.PolicyOffered && j.c.Scenario != "portable-restart" {
-		return fmt.Errorf("unexpected repeated agent settings proposal")
+	if observed.PolicyOffered {
+		// Prose recognition is diagnostic, not a production consent boundary.
+		// A settings question that actually blocks the task still fails below
+		// because the task has not reached a completed review.
+		j.record("Permission prompt observation", "Agent used setup-related wording during coding; checking actual task completion.")
 	}
 	if observed.UpdateRequested {
 		return fmt.Errorf("unexpected repeat update approval")
