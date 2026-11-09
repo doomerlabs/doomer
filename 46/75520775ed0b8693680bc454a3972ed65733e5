@@ -1,0 +1,24 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 899-900,1245-1260
+cmd/managed_response_input_test.go
+  h_aa44c3b5b60dec 1-20
+tests/codexinstall/claude_policy.go
+  h_aa44c3b5b60dec 37,46-47,53-55,106-127
+tests/codexinstall/codex.go
+  h_aa44c3b5b60dec 12
+tests/codexinstall/runner_test.go
+  h_aa44c3b5b60dec 344
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 175,207-210,216-221,310
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4675520775ed0b8693680bc454a3972ed65733e5",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
