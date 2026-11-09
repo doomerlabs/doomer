@@ -1,0 +1,46 @@
+README.md
+  h_aa44c3b5b60dec 50,52-55
+cmd/managed.go
+  h_aa44c3b5b60dec 93,96
+cmd/managed_feedback.go
+  h_aa44c3b5b60dec 55-57,61
+cmd/managed_feedback_test.go
+  h_aa44c3b5b60dec 195-216
+cmd/managed_prompt_test.go
+  h_aa44c3b5b60dec 384
+cmd/managed_test.go
+  h_aa44c3b5b60dec 92,94
+docs/managed-runtime.md
+  h_aa44c3b5b60dec 41-42,47-48,54,61-69
+internal/managed/bootstrap-2026.11.8.9.md
+  h_aa44c3b5b60dec 1-68
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 44
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 15,64-69,144
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 63,77,184-207
+internal/managed/final-review-rules-legacy.md
+  h_aa44c3b5b60dec 1-17
+internal/managed/final-review-rules.md
+  h_aa44c3b5b60dec 10-16
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 46-50,88-90
+internal/managed/managed_test.go
+  h_aa44c3b5b60dec 98-103,120-121,289-364
+internal/managed/operations.go
+  h_aa44c3b5b60dec 160-165,169-171,176-190,216
+internal/managed/policy.go
+  h_aa44c3b5b60dec 157-160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d7f6d9f19f96a5e616f12a3e30a5fdc0e398e087",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
