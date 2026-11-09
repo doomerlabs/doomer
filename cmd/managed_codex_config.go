@@ -15,11 +15,13 @@ import (
 )
 
 type codexPolicyStatus struct {
-	Action     string `json:"action"`
-	ConfigPath string `json:"config_path"`
-	State      string `json:"state"`
-	Activation string `json:"activation"`
-	Error      string `json:"error,omitempty"`
+	Action        string `json:"action"`
+	ConfigPath    string `json:"config_path"`
+	State         string `json:"state"`
+	Activation    string `json:"activation"`
+	Error         string `json:"error,omitempty"`
+	Decision      string `json:"decision,omitempty"`
+	DecisionError string `json:"decision_error,omitempty"`
 }
 
 func codexConfigPath() (string, error) {

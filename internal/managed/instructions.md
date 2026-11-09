@@ -184,20 +184,22 @@ policy; `unreadable` reports a configuration error without blocking local work.
 Delivery markers from older releases do not establish installation. Offers are
 scoped to the active config path and effective reviewer policy, so a changed or different profile
 can receive a migration offer. Do not repeat a declined settings question within
-the task. An unchanged previously offered configuration is reported in status
-without another offer; absence of a proposal never means acceptance.
-If status is `missing`, `migration_required` or `unreadable` without a proposal,
-report that configuration gap (and any read error) once for the task; do not
-silently claim setup is complete.
-During ordinary coding, report the gap without retrieving or re-offering an
-already delivered proposal and continue with the saved upload grant. If the
-user requests policy setup, migration or repair, use
-`doomer task codex-policy HANDLE` to retrieve the current proposal without
-changing settings, even if another chat previously received it. Follow the
-normal verified-proposal decision above. Honor an earlier decline for the same
-proposal and active config unless the user explicitly revisits that decision;
-a decline for another account, service, grant scope or Codex profile does not
-reject this proposal.
+the task. Only an explicit decline suppresses the unchanged proposal. Emitting CLI JSON,
+reading a proposal, or an old delivery marker is not evidence that the user saw
+or answered it. For a missing policy, resolve this setup decision before offering
+an unrelated skill upgrade. Ask once in the current task, not once per command.
+Use `install_command` after acceptance, or `decline_command` after an explicit
+refusal, and verify the resulting state. Never record a decline for silence.
+If the exact scoped policy repair is already authorized, perform it and verify
+configuration instead of asking again. Ordinary coding tasks may offer this
+missing setup; they must not silently leave it missing because another chat
+received the proposal. Keep local work moving while waiting for the decision.
+If status is `missing` or `migration_required` without a proposal and
+`codex_policy_status.decision` is not `declined`, use
+`doomer task codex-policy HANDLE` to inspect the current proposal. This is a
+read-only settings inspection, not authorization to install. Honor an explicit
+prior decline for the same proposal and active config unless the user revisits
+that decision. Report `unreadable` once with the configuration error.
 Before offering or installing the policy, compare its scope and permitted
 operations with fresh verified consent evidence. Require the same account,
 service, profile, coding agent, scope, and documented review data and operations.

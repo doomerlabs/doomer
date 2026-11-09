@@ -158,21 +158,30 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 			r.ClaudePermissions = inspectClaudePermissions()
 		}
 		if evidence != nil && t.Agent == "codex" {
-			r.CodexPolicyStatus = inspectCodexPolicyStatus(*evidence)
-		}
-		if evidence != nil && t.Agent == "codex" && r.CodexPolicyStatus.Error == "" && (c.Name() == "prepare" || c.Name() == "login" || c.Name() == "consent" || c.Name() == "codex-policy") {
-			if c.Name() == "codex-policy" {
-				// An explicit inspection must remain able to recover a proposal that
-				// an older chat displayed but never installed.
-				r.CodexReviewPolicy, _, err = inspectCodexReviewPolicy(*evidence)
-				if err == nil && r.CodexReviewPolicy.State == "configured" {
-					r.CodexReviewPolicy = nil
+			proposal, status := inspectCodexPolicy(*evidence)
+			r.CodexPolicyStatus = status
+			if proposal != nil && status.Error == "" && status.State != "configured" {
+				declined, decisionErr := codexReviewPolicyDeclined(s, proposal)
+				status.Decision = "pending"
+				if declined {
+					status.Decision = "declined"
 				}
-			} else {
-				r.CodexReviewPolicy, err = offerCodexReviewPolicy(s, *evidence)
-			}
-			if err != nil {
-				return err
+				if decisionErr != nil {
+					status.DecisionError = decisionErr.Error()
+				}
+				inspection := c.Name() == "codex-policy"
+				canOffer := inspection || c.Name() == "prepare" || c.Name() == "login" || c.Name() == "consent"
+				if canOffer && r.State != "codex_policy_declined" && (inspection || (!declined && decisionErr == nil)) {
+					binary, err := os.Executable()
+					if err != nil {
+						return err
+					}
+					base := []string{binary, "--api-url", t.API, "--profile", t.Profile, "task", "codex-policy", t.Handle}
+					proposal.InstallCommand = append(append([]string{}, base...), "--allow")
+					proposal.DeclineCommand = append(append([]string{}, base...), "--decline")
+					proposal.Action = "The Codex review policy is missing or outdated. Show extra_policy and changes, then offer to install it unless this exact change is already authorized. Execute install_command only after acceptance; execute decline_command only for an explicit decline. An unanswered or previously delivered proposal is not a decline. This settings decision is separate from software updates and upload consent."
+					r.CodexReviewPolicy = proposal
+				}
 			}
 		}
 	}
@@ -211,7 +220,7 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 	if err := json.NewEncoder(c.OutOrStdout()).Encode(r); err != nil {
 		return err
 	}
-	return markCodexReviewPolicyOffered(s, r.CodexReviewPolicy)
+	return nil
 }
 
 func newPrepareCommand(app *application.App, api, profile *string) *cobra.Command {
@@ -610,9 +619,14 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume", "rollback", "retry", "repair", "context", "codex-policy", "claude-permissions"} {
 		operation := operation
 		var allow bool
+		var decline bool
 		var allRepositories bool
 		c := &cobra.Command{Use: operation + " HANDLE", Args: cobra.ExactArgs(1)}
 		c.Flags().BoolVar(&allow, "allow", false, "record an explicit user approval; never supply on the user's behalf")
+		if operation == "codex-policy" {
+			c.Flags().BoolVar(&decline, "decline", false, "record an explicit decline of this scoped Codex policy proposal")
+			c.MarkFlagsMutuallyExclusive("allow", "decline")
+		}
 		if operation == "consent" || operation == "revoke" {
 			c.Flags().BoolVar(&allRepositories, "all-repositories", false, "apply to all repositories for this agent, account, service, and profile")
 		}
@@ -760,7 +774,7 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 				if t.Agent != "codex" {
 					return fmt.Errorf("reviewer policy requires a Codex task")
 				}
-				if allow {
+				if allow || decline {
 					evidence, err := savedManagedConsentEvidence(s, t)
 					if err != nil {
 						return err
@@ -768,7 +782,20 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 					if evidence == nil {
 						return fmt.Errorf("current upload consent required")
 					}
+					proposal, _, err := inspectCodexReviewPolicy(*evidence)
+					if err != nil {
+						return err
+					}
+					if decline {
+						if err := declineCodexReviewPolicy(s, proposal); err != nil {
+							return err
+						}
+						return outputManaged(c, s, t, managedResult{State: "codex_policy_declined", Authenticated: true, UploadApproved: true, Action: "The scoped settings change was declined. Preserve Codex settings and existing upload consent; do not repeat this unchanged proposal. Host approval remains separate."})
+					}
 					if err := installCodexReviewPolicy(*evidence); err != nil {
+						return err
+					}
+					if err := os.Remove(codexReviewPolicyDecisionPath(s, proposal)); err != nil && !os.IsNotExist(err) {
 						return err
 					}
 				}

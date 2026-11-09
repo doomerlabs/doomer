@@ -159,6 +159,51 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if data, err := os.ReadFile(config); err != nil || string(data) != originalConfig {
 		t.Fatal("offering reviewer policy changed Codex settings", err)
 	}
+	// A later preparation must still offer the missing policy, even after the
+	// first JSON response has been emitted and ignored by a previous chat.
+	if r := run("", "prepare", "--task", handle); r.CodexReviewPolicy == nil || len(r.CodexReviewPolicy.InstallCommand) == 0 || len(r.CodexReviewPolicy.DeclineCommand) == 0 {
+		t.Fatal("unanswered policy proposal was lost", r)
+	}
+	currentTask, err := s.Load(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := savedManagedConsentEvidence(s, currentTask)
+	if err != nil || evidence == nil {
+		t.Fatal(evidence, err)
+	}
+	proposal, _, err := inspectCodexReviewPolicy(*evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisionPath := codexReviewPolicyDecisionPath(s, proposal)
+	if err := os.MkdirAll(filepath.Dir(decisionPath), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(decisionPath, []byte("delivered, not installed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if r := run("", "prepare", "--task", handle); r.CodexReviewPolicy == nil || !r.UploadApproved {
+		t.Fatal("malformed bookkeeping blocked preparation", r)
+	}
+	if err := os.Remove(decisionPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(decisionPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if r := run("", "prepare", "--task", handle); r.State != "ready" || r.CodexPolicyStatus.DecisionError == "" || !r.UploadApproved {
+		t.Fatal("unreadable bookkeeping blocked preparation", r)
+	}
+	if err := os.Remove(decisionPath); err != nil {
+		t.Fatal(err)
+	}
+	if r := run("", "task", "codex-policy", handle, "--decline"); r.State != "codex_policy_declined" || r.CodexReviewPolicy != nil || !r.UploadApproved {
+		t.Fatal("decline did not preserve consent", r)
+	}
+	if r := run("", "prepare", "--task", handle); r.CodexReviewPolicy != nil || r.CodexPolicyStatus.State != "missing" || r.CodexPolicyStatus.Decision != "declined" || !r.UploadApproved {
+		t.Fatal("explicit decline was not respected", r)
+	}
 	if r := run("", "task", "codex-policy", handle); r.CodexPolicyStatus == nil || r.CodexPolicyStatus.State != "missing" || r.CodexPolicyStatus.Activation != "unverified" || r.CodexReviewPolicy == nil {
 		t.Fatal(r)
 	}
@@ -170,6 +215,9 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	}
 	if data, err := os.ReadFile(config); err != nil || !strings.Contains(string(data), "Keep my policy") {
 		t.Fatal("policy install lost user settings", err)
+	}
+	if r := run("", "prepare", "--task", handle); r.CodexReviewPolicy != nil || r.CodexPolicyStatus.State != "configured" {
+		t.Fatal("installed policy offered again", r)
 	}
 	portablePath, _, err := portableLocation(context.Background(), task)
 	if err != nil {

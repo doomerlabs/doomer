@@ -157,7 +157,7 @@ func TestCodexPolicyMigrationRejectsInvalidConfig(t *testing.T) {
 	}
 }
 
-func TestCodexPolicyOfferMigratesOldMarkersAndTracksActiveProfile(t *testing.T) {
+func TestCodexPolicyDeclineTracksActiveProfileAndConfiguration(t *testing.T) {
 	t.Setenv("CODEX_HOME", t.TempDir())
 	s := managed.Store{Root: t.TempDir()}
 	consent := managedConsentEvidence{Account: "one", Agent: "codex", AllRepositories: true, Service: "https://doomer.ai/api", Profile: "default"}
@@ -165,11 +165,13 @@ func TestCodexPolicyOfferMigratesOldMarkersAndTracksActiveProfile(t *testing.T) 
 	oldPath := filepath.Join(s.Root, "codex-policy-offers", watch.Key(proposedCodexReviewPolicy(consent).ExtraPolicy))
 	os.MkdirAll(filepath.Dir(oldPath), 0700)
 	os.WriteFile(oldPath, []byte("delivered\n"), 0600)
+	oldV2 := filepath.Join(s.Root, "codex-policy-offers", watch.Key("config-v2\x00"+filepath.Join(os.Getenv("CODEX_HOME"), "config.toml")+"\x00\x00"+proposedCodexReviewPolicy(consent).ExtraPolicy))
+	os.WriteFile(oldV2, []byte("delivered, not installed\n"), 0600)
 	p, err := offerCodexReviewPolicy(s, consent)
 	if err != nil || p == nil || p.State != "missing" {
 		t.Fatal(p, err)
 	}
-	if err := markCodexReviewPolicyOffered(s, p); err != nil {
+	if err := declineCodexReviewPolicy(s, p); err != nil {
 		t.Fatal(err)
 	}
 	if p, err := offerCodexReviewPolicy(s, consent); err != nil || p != nil {
@@ -188,7 +190,7 @@ func TestCodexPolicyOfferMigratesOldMarkersAndTracksActiveProfile(t *testing.T) 
 	if err := os.WriteFile(pathBeforeEdit, []byte("[auto_review]\nextra_policy = 'concurrent change'\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := markCodexReviewPolicyOffered(s, p); err != nil {
+	if err := declineCodexReviewPolicy(s, p); err != nil {
 		t.Fatal(err)
 	}
 	if next, err := offerCodexReviewPolicy(s, consent); err != nil || next == nil {
@@ -202,9 +204,9 @@ func TestCodexPolicyOfferMigratesOldMarkersAndTracksActiveProfile(t *testing.T) 
 	if p, err := offerCodexReviewPolicy(s, consent); err != nil || p == nil {
 		t.Fatal("changed configuration lost its offer", p, err)
 	}
-	markers, _ := filepath.Glob(filepath.Join(s.Root, "codex-policy-offers", "*"))
-	if len(markers) < 2 {
-		t.Fatal("delivery marker missing from managed store", markers)
+	markers, _ := filepath.Glob(filepath.Join(s.Root, "codex-policy-decisions", "*"))
+	if len(markers) != 1 {
+		t.Fatal("decline decision missing from managed store", markers)
 	}
 	configFiles, _ := os.ReadDir(os.Getenv("CODEX_HOME"))
 	if len(configFiles) != 1 || configFiles[0].Name() != "config.toml" {

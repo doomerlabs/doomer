@@ -13,16 +13,19 @@ import (
 // A proposal is returned only after verifying the account and its saved grant.
 // Installing it remains a separate user choice, handled by the coding agent.
 type codexReviewPolicy struct {
-	configData  []byte
-	ExtraPolicy string   `json:"extra_policy"`
-	ConfigPath  string   `json:"config_path,omitempty"`
-	State       string   `json:"state,omitempty"`
-	Changes     []string `json:"changes"`
-	Activation  string   `json:"activation"`
+	configData     []byte
+	ExtraPolicy    string   `json:"extra_policy"`
+	ConfigPath     string   `json:"config_path,omitempty"`
+	State          string   `json:"state,omitempty"`
+	Changes        []string `json:"changes"`
+	Activation     string   `json:"activation"`
+	Action         string   `json:"action,omitempty"`
+	InstallCommand []string `json:"install_command,omitempty"`
+	DeclineCommand []string `json:"decline_command,omitempty"`
 }
 
-// Remember presentation, never acceptance. A new scope or proposal can be
-// offered again, while ordinary chats keep using the existing review grant.
+// Only an explicit decision suppresses a missing policy. Writing a proposal to
+// stdout does not establish that the agent showed it or the user answered it.
 func offerCodexReviewPolicy(s managed.Store, consent managedConsentEvidence) (*codexReviewPolicy, error) {
 	proposal, _, err := inspectCodexReviewPolicy(consent)
 	if err != nil {
@@ -31,33 +34,44 @@ func offerCodexReviewPolicy(s managed.Store, consent managedConsentEvidence) (*c
 	if proposal.State == "configured" {
 		return nil, nil
 	}
-	// Old presentation-only markers do not establish installation. Include the
-	// active profile and its effective reviewer policy in the new offer identity.
-	_, err = os.Stat(codexReviewPolicyOfferPath(s, proposal, proposal.configData))
-	if err == nil {
-		return nil, nil
-	}
-	if !os.IsNotExist(err) {
+	declined, err := codexReviewPolicyDeclined(s, proposal)
+	if err != nil || declined {
 		return nil, err
 	}
 	return proposal, nil
 }
 
-func codexReviewPolicyOfferPath(s managed.Store, proposal *codexReviewPolicy, data []byte) string {
-	return filepath.Join(s.Root, "codex-policy-offers", watch.Key("config-v2\x00"+proposal.ConfigPath+"\x00"+string(data)+"\x00"+proposal.ExtraPolicy))
+func codexReviewPolicyDeclined(s managed.Store, proposal *codexReviewPolicy) (bool, error) {
+	if proposal == nil {
+		return false, nil
+	}
+	data, err := os.ReadFile(codexReviewPolicyDecisionPath(s, proposal))
+	if err == nil {
+		if string(data) == "declined\n" {
+			return true, nil
+		}
+		// Incomplete or obsolete bookkeeping never counts as a user decision.
+		return false, nil
+	}
+	if !os.IsNotExist(err) {
+		return false, err
+	}
+	return false, nil
 }
 
-func markCodexReviewPolicyOffered(s managed.Store, proposal *codexReviewPolicy) error {
+func codexReviewPolicyDecisionPath(s managed.Store, proposal *codexReviewPolicy) string {
+	return filepath.Join(s.Root, "codex-policy-decisions", watch.Key("config-v1\x00"+proposal.ConfigPath+"\x00"+string(proposal.configData)+"\x00"+proposal.ExtraPolicy))
+}
+
+func declineCodexReviewPolicy(s managed.Store, proposal *codexReviewPolicy) error {
 	if proposal == nil {
 		return nil
 	}
-	// Mark the exact configuration observed when the proposal was created.
-	// Re-reading here could suppress a new offer after a concurrent edit.
-	path := codexReviewPolicyOfferPath(s, proposal, proposal.configData)
+	path := codexReviewPolicyDecisionPath(s, proposal)
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte("delivered, not installed\n"), 0600)
+	return os.WriteFile(path, []byte("declined\n"), 0600)
 }
 
 func proposedCodexReviewPolicy(consent managedConsentEvidence) *codexReviewPolicy {

@@ -100,6 +100,11 @@ func newPreflightCommand(api, profile *string) *cobra.Command {
 }
 
 func inspectCodexPolicyStatus(consent managedConsentEvidence) *codexPolicyStatus {
+	_, status := inspectCodexPolicy(consent)
+	return status
+}
+
+func inspectCodexPolicy(consent managedConsentEvidence) (*codexReviewPolicy, *codexPolicyStatus) {
 	p, _, err := inspectCodexReviewPolicy(consent)
 	status := &codexPolicyStatus{State: "unreadable", Activation: "unverified", Action: "Configuration inspection cannot verify the running Codex reviewer. After an accepted policy installation, reload or restart Codex and verify an ordinary permitted Doomer operation in a fresh session; retain host and organization restrictions."}
 	if err != nil {
@@ -107,5 +112,5 @@ func inspectCodexPolicyStatus(consent managedConsentEvidence) *codexPolicyStatus
 	} else {
 		status.ConfigPath, status.State = p.ConfigPath, p.State
 	}
-	return status
+	return p, status
 }
