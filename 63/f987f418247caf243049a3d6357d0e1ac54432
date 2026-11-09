@@ -1,0 +1,30 @@
+.agents/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 41-46
+.claude/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 41-46
+cmd/managed.go
+  h_aa44c3b5b60dec 33,245-255,267
+cmd/managed_approval.go
+  h_aa44c3b5b60dec 41-42,69,249,298-299
+cmd/managed_onboarding_test.go
+  h_aa44c3b5b60dec 116-131
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 38-43
+tests/codexinstall/browser_onboarding.go
+  h_aa44c3b5b60dec 17-18,111-112,124-149,160-162,186
+tests/codexinstall/fixture.go
+  h_aa44c3b5b60dec 37-42
+tests/codexinstall/fixture_adoption_test.go
+  h_aa44c3b5b60dec 31-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "63f987f418247caf243049a3d6357d0e1ac54432",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
