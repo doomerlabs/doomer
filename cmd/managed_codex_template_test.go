@@ -76,3 +76,72 @@ func TestCodexAutoReviewStringRejectsInvalidTemplateType(t *testing.T) {
 		t.Fatal("accepted non-string reviewer template")
 	}
 }
+
+func TestCodexTemplateCatalogFailuresAndDesktopSelection(t *testing.T) {
+	for _, tc := range []struct {
+		name, raw string
+		wantError bool
+	}{
+		{"malformed", `{`, true},
+		{"unrecognized", `{"models":[{"slug":"codex-auto-review","model_messages":{"auto_review":{"policy_template":"unknown instructions"}}}]}`, true},
+		{"other model", `{"models":[{"slug":"other-model"}]}`, false},
+		{"empty template", `{"models":[{"slug":"codex-auto-review","model_messages":{"auto_review":{"policy_template":""}}}]}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			path := filepath.Join(home, "config.toml")
+			if err := os.WriteFile(filepath.Join(home, "models_cache.json"), []byte(tc.raw), 0600); err != nil {
+				t.Fatal(err)
+			}
+			repair, err := codexReviewerTemplateRepair(path, nil)
+			if (err != nil) != tc.wantError || repair != "" {
+				t.Fatal(repair, err)
+			}
+		})
+	}
+	t.Run("unreadable catalog", func(t *testing.T) {
+		home := t.TempDir()
+		os.Mkdir(filepath.Join(home, "models_cache.json"), 0700)
+		if _, err := codexReviewerTemplateRepair(filepath.Join(home, "config.toml"), nil); err == nil {
+			t.Fatal("ignored unreadable catalog")
+		}
+	})
+	t.Run("desktop catalog takes precedence", func(t *testing.T) {
+		t.Setenv("CODEX_INTERNAL_ORIGINATOR_OVERRIDE", "Codex Desktop")
+		home := t.TempDir()
+		path := filepath.Join(home, "config.toml")
+		catalog := func(template string) []byte {
+			raw, _ := json.Marshal(map[string]any{"models": []any{map[string]any{"slug": "codex-auto-review", "model_messages": map[string]any{"auto_review": map[string]any{"policy_template": template}}}}})
+			return raw
+		}
+		os.WriteFile(filepath.Join(home, "models_cache.json"), catalog("wrong catalog {{ tenant_policy_config }}"), 0600)
+		os.WriteFile(filepath.Join(home, "models_cache.codex_work_desktop.json"), catalog("desktop catalog {{ tenant_policy_config }}"), 0600)
+		repair, err := codexReviewerTemplateRepair(path, nil)
+		if err != nil || !strings.HasPrefix(repair, "desktop catalog") {
+			t.Fatal(repair, err)
+		}
+	})
+}
+
+func TestCodexTemplateOwnershipAndMarker(t *testing.T) {
+	template := "Custom {{ tenant_policy_config }} {{ extra_policy }}"
+	data, err := patchCodexAutoReviewString([]byte("# unrelated\n"), "experimental_policy_template", template)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marked := markCodexReviewerTemplate(data, template)
+	marked = markCodexReviewerTemplate(marked, template)
+	if strings.Count(string(marked), codexTemplateMarker) != 1 || !strings.Contains(string(marked), "# unrelated") {
+		t.Fatal(string(marked))
+	}
+	changed := strings.Replace(string(marked), "Custom", "User modified", 1)
+	home := t.TempDir()
+	raw, _ := json.Marshal(map[string]any{"models": []any{map[string]any{"slug": "codex-auto-review", "model_messages": map[string]any{"auto_review": map[string]any{"policy_template": "New default {{ tenant_policy_config }} {{ extra_policy }}"}}}}})
+	os.WriteFile(filepath.Join(home, "models_cache.json"), raw, 0600)
+	if repair, err := codexReviewerTemplateRepair(filepath.Join(home, "config.toml"), []byte(changed)); err != nil || repair != "" {
+		t.Fatal("overwrote a user-edited template", repair, err)
+	}
+	if _, err := codexReviewerTemplateRepair(filepath.Join(home, "config.toml"), []byte("[broken")); err == nil {
+		t.Fatal("ignored malformed settings")
+	}
+}

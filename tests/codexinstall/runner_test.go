@@ -386,3 +386,28 @@ func TestClaudeSetupChoiceUsesStructuredReadiness(t *testing.T) {
 		}
 	}
 }
+
+func TestBrowserDecisionRequiresDisplayedExactURL(t *testing.T) {
+	for _, kind := range []string{"Codex", "Claude"} {
+		f := &fixture{Request: "opaque-request"}
+		if observeBrowserDecision(f, "https://fixture.invalid", "Command", "https://fixture.invalid/cli/setup#request=opaque-request", false) {
+			t.Fatal("tool output granted consent")
+		}
+		if observeBrowserDecision(f, "https://fixture.invalid", kind, "https://fixture.invalid/cli/setup", false) {
+			t.Fatal("incomplete URL granted consent")
+		}
+		if !observeBrowserDecision(f, "https://fixture.invalid", kind, "Approve https://fixture.invalid/cli/setup#request=opaque-request", false) || !f.Approved {
+			t.Fatal("displayed page decision was not delivered")
+		}
+		if observeBrowserDecision(f, "https://fixture.invalid", kind, "https://fixture.invalid/cli/setup#request=opaque-request", false) {
+			t.Fatal("repeated browser decision")
+		}
+	}
+	f := &fixture{Request: "decline"}
+	if !observeBrowserDecision(f, "https://fixture.invalid", "Codex", "https://fixture.invalid/cli/setup#request=decline", true) || !f.Cancelled || f.Approved {
+		t.Fatal("browser cancellation was ignored")
+	}
+	if observeBrowserDecision(&fixture{}, "https://fixture.invalid", "Codex", "https://fixture.invalid/cli/setup#request=", false) {
+		t.Fatal("no request was pending")
+	}
+}

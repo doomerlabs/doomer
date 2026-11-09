@@ -66,7 +66,8 @@ func (j *journey) browserOnboarding() error {
 	var linkShown, waitStarted, browserApproved, cleanBeforeApproval bool
 	var once sync.Once
 	done := make(chan struct{})
-	defer close(done)
+	var browser sync.WaitGroup
+	defer func() { close(done); browser.Wait() }()
 	record := func(kind, text string) {
 		j.record(kind, text)
 		mu.Lock()
@@ -80,7 +81,9 @@ func (j *journey) browserOnboarding() error {
 		mu.Unlock()
 		if trigger {
 			once.Do(func() {
+				browser.Add(1)
 				go func() {
+					defer browser.Done()
 					select {
 					case <-time.After(2200 * time.Millisecond):
 					case <-done:
