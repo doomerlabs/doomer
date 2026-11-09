@@ -1,0 +1,36 @@
+.agents/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 14-25
+.claude/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 14-25
+cmd/managed.go
+  h_aa44c3b5b60dec 51,139,281-288,290-295,298,301,304-306
+cmd/managed_attention_test.go
+  h_aa44c3b5b60dec 11,17,48-73
+cmd/managed_development_test.go
+  h_aa44c3b5b60dec 154
+cmd/managed_network_test.go
+  h_aa44c3b5b60dec 93
+cmd/managed_preflight.go
+  h_aa44c3b5b60dec 27,170-179
+cmd/managed_preflight_test.go
+  h_aa44c3b5b60dec 177,230
+internal/managed/bootstrap.md
+  h_aa44c3b5b60dec 11-22
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 38
+tests/codexinstall/policy_recovery.go
+  h_aa44c3b5b60dec 9,65-72,76-83,87,99-111,115
+tests/codexinstall/recovery.go
+  h_aa44c3b5b60dec 8,48-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "55d8bc192da524bd438cf86a1603e0d6d3a200ce",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
