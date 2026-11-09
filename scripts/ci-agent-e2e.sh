@@ -13,7 +13,12 @@ case "$harness" in
   codex)
     : "${TEST_OPENAI_API_KEY:?Codex API test credential is required}"
     unset TEST_CLAUDE_CODE_OAUTH_TOKEN TEST_ANTHROPIC_API_KEY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
-    curl -fsSL --retry 3 https://github.com/openai/codex/releases/download/rust-v0.167.0/codex-package-x86_64-unknown-linux-musl.tar.gz -o "$work/agent.tar.gz"
+    if ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 180 https://github.com/openai/codex/releases/download/rust-v0.167.0/codex-package-x86_64-unknown-linux-musl.tar.gz -o "$work/agent.tar.gz"; then
+      # This is the same pinned rust-v0.167.0 asset through GitHub's asset API.
+      # The release page can return gateway errors while the asset API works.
+      curl -fsSL --retry 3 --connect-timeout 15 --max-time 180 -H 'Accept: application/octet-stream' \
+        https://api.github.com/repos/openai/codex/releases/assets/715506641 -o "$work/agent.tar.gz"
+    fi
     echo "3bbf75e83de6b58aed28f2cf6e33ad423ec31fd4700a1457b94be557ea5a7c6e  $work/agent.tar.gz" | sha256sum -c -
     tar -xzf "$work/agent.tar.gz" -C "$work/agent"
     agent_args=(--harness codex --auth api --local-codex "$work/agent/bin/codex")

@@ -149,6 +149,11 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 			return err
 		}
 		r.Consent = evidence
+		if evidence != nil {
+			// Adoption delivery is bounded; its failures must not change setup or review outcomes.
+			_ = bindManagedAdoption(s, &t, evidence)
+			reportManagedAdoption(c.Context(), s, t, evidence)
+		}
 		if evidence != nil && t.Agent == "claude" && (c.Name() == "prepare" || c.Name() == "login" || c.Name() == "consent" || c.Name() == "claude-permissions") {
 			r.ClaudePermissions = inspectClaudePermissions()
 		}
@@ -776,6 +781,9 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 			if t.Release == "" {
 				return fmt.Errorf("resume prepare to install the selected release")
 			}
+			if evidence, e := savedManagedConsentEvidence(s, t); e == nil && evidence != nil {
+				_ = bindManagedAdoption(s, &t, evidence)
+			}
 			engine := managedEngine(s, t)
 			switch operation {
 			case "submit":
@@ -857,6 +865,11 @@ func managedHook(c *cobra.Command, s managed.Store, t *managed.Task, e managed.E
 	if t.Capabilities.SessionID != "" && event.Session != t.Capabilities.SessionID {
 		return fmt.Errorf("hook session no longer owns this task")
 	}
+	switch event.Event {
+	case "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop":
+	default:
+		return fmt.Errorf("unsupported hook event")
+	}
 	if event.Event == "UserPromptSubmit" && t.Submission == nil && strings.TrimSpace(t.Prompt) == "" && strings.TrimSpace(event.Prompt) != "" {
 		t.Prompt = event.Prompt
 	}
@@ -864,11 +877,11 @@ func managedHook(c *cobra.Command, s managed.Store, t *managed.Task, e managed.E
 	if err := s.Save(t); err != nil {
 		return err
 	}
-	if t.LastError != "" && (event.Event == "PostToolUse" || event.Event == "Stop") {
+	if t.LastError != "" && (event.Event == "PostToolUse" || event.Event == "PostToolUseFailure" || event.Event == "Stop") {
 		return errors.New(t.LastError)
 	}
 	switch event.Event {
-	case "PostToolUse":
+	case "PostToolUse", "PostToolUseFailure":
 		return e.Submit(c.Context(), t, token)
 	case "Stop":
 		if err := e.Submit(c.Context(), t, token); err != nil {

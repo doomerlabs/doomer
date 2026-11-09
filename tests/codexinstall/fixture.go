@@ -24,6 +24,7 @@ type fixture struct {
 	Approved                                        bool
 	Creates, Polls, Uploads                         int
 	Events                                          []string
+	Adoptions                                       []adversarylabs.ActivationEvent
 }
 
 func (f *fixture) serve(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +105,28 @@ func (f *fixture) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		f.Reviews[input.ReviewID] = input
 		send(f.review(input.ReviewID))
+	case "/v2/installations/activate":
+		if !f.authorized(r) {
+			http.Error(w, "unauthorized", 403)
+			return
+		}
+		var event adversarylabs.ActivationEvent
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if r.Method != http.MethodPost || decoder.Decode(&event) != nil || event.InstallationID == "" || event.AttemptID == "" || event.Repository == "" ||
+			(event.Stage != "approved" && event.Stage != "activated" && event.Stage != "first_review") {
+			http.Error(w, "invalid adoption event", 400)
+			return
+		}
+		if event.Stage == "first_review" {
+			submission, ok := f.Reviews[event.ReviewID]
+			if !ok || submission.Client["installation_id"] != event.InstallationID || submission.Client["installation_attempt_id"] != event.AttemptID {
+				http.Error(w, "unverified first review", 400)
+				return
+			}
+		}
+		f.Adoptions = append(f.Adoptions, event)
+		send(map[string]bool{"accepted": true})
 	case "/v3/installations/observe":
 		send(map[string]bool{"accepted": true})
 	default:

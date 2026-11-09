@@ -127,7 +127,7 @@ func (f *fakeReview) ReportWorkspaceLead(context.Context, string, string, string
 func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	store := Store{Root: t.TempDir()}
 	handle, _ := NewHandle()
-	task := Task{Schema: Protocol, Handle: handle, Repo: t.TempDir(), Release: "2026.11.6.1", Stage: "ready"}
+	task := Task{Schema: Protocol, Handle: handle, Repo: t.TempDir(), Release: "2026.11.6.1", Stage: "ready", InstallationID: strings.Repeat("a", 64), InstallationAttemptID: strings.Repeat("b", 64)}
 	manifest := sourcesnapshot.Manifest{Version: 1, Scope: "worktree", Base: []sourcesnapshot.Entry{}, Target: []sourcesnapshot.Entry{}, Blobs: map[string][]byte{}}
 	content := []byte("changed\n")
 	hash := sourcesnapshot.Digest(content)
@@ -146,12 +146,16 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	if engine.Submit(context.Background(), &task, "token") == nil {
 		t.Fatal("lost response not reported")
 	}
+	if sent := client.submissions[0].Client; sent["installation_id"] != task.InstallationID || sent["installation_attempt_id"] != task.InstallationAttemptID {
+		t.Fatal("submission is missing the approval cohort", sent)
+	}
 	// Throw away all process-local task state and reconstruct the engine's input.
 	resumed, err := store.Load(handle)
 	if err != nil {
 		t.Fatal(err)
 	}
 	resumed.LastError = "recorded submission failure"
+	resumed.InstallationAttemptID = strings.Repeat("c", 64)
 	attempts := len(client.ids)
 	if err := engine.Status(context.Background(), &resumed, "token"); err == nil || len(client.ids) != attempts {
 		t.Fatal("status retried a recorded failed submission")
@@ -164,6 +168,9 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	}
 	if len(client.ids) != 2 || client.ids[0] != client.ids[1] {
 		t.Fatal("submission id changed on resume", client.ids)
+	}
+	if client.submissions[1].Client["installation_attempt_id"] != task.InstallationAttemptID {
+		t.Fatal("retry reassigned an existing review to a new installation attempt")
 	}
 	resumed.Review.URL = "https://doomer.test/look-closer/owner/repo/" + strings.Repeat("a", 64)
 	if err = engine.Status(context.Background(), &resumed, "token"); err != nil {
@@ -458,5 +465,31 @@ func TestStatusPreservesCompletedTask(t *testing.T) {
 		if err := engine.Status(context.Background(), &task, "token"); err != nil || task.Stage != "complete" {
 			t.Fatal(task, err)
 		}
+	}
+}
+
+func TestLegacyJournaledSubmissionKeepsOriginalMetadata(t *testing.T) {
+	store := Store{Root: t.TempDir()}
+	handle, err := NewHandle()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := Task{Schema: Protocol, Handle: handle, Stage: "submitting", InstallationID: "new-installation", InstallationAttemptID: "new-attempt", Submission: &adversarylabs.WorkspaceSubmission{ReviewID: "old-review", Client: map[string]string{"name": "old CLI"}}}
+	before, err := json.Marshal(task.Submission)
+	if err != nil {
+		t.Fatal(err)
+	}
+	yes := true
+	client := &fakeReview{result: adversarylabs.WorkspaceReview{ID: "old-review", LookCloserEnabled: &yes, Full: &adversarylabs.WorkspaceFullReview{Enabled: false}}}
+	engine := Engine{Store: store, Client: client}
+	if err := engine.Submit(context.Background(), &task, "token"); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.submissions) != 1 {
+		t.Fatal("journal was not delivered once")
+	}
+	after, err := json.Marshal(client.submissions[0])
+	if err != nil || string(after) != string(before) {
+		t.Fatal("legacy journal was rewritten", string(before), string(after), err)
 	}
 }

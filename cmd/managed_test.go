@@ -33,6 +33,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	var approvals int
 	var approvalPolls int
 	var approvalRequest string
+	var adoptionEvents []adversarylabs.ActivationEvent
 	portableChoice := true
 	lead := strings.Repeat("a", 64)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +68,13 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 			}
 		case "/v3/installations/observe":
 			w.Write([]byte(`{"accepted":true}`))
+		case "/v2/installations/activate":
+			var event adversarylabs.ActivationEvent
+			if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+				t.Error(err)
+			}
+			adoptionEvents = append(adoptionEvents, event)
+			w.Write([]byte(`{"accepted":true}`))
 		case "/v1/repositories":
 			w.Write([]byte(`{"repository_id":"repo","snapshot_id":"snapshot","complete":true}`))
 		case "/v1/reviews/workspace":
@@ -88,6 +96,9 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 			}
 			if input.FullReview != nil || input.UserRequest == nil || input.UserRequest.Prompt != "Fix the code" || input.Repository == "" || filepath.IsAbs(input.Repository) {
 				t.Error("incorrect task context or review mode")
+			}
+			if len(adoptionEvents) != 1 || input.Client["installation_id"] != adoptionEvents[0].InstallationID || input.Client["installation_attempt_id"] != adoptionEvents[0].AttemptID {
+				t.Error("review is not bound to its approved installation", input.Client)
 			}
 			w.Write([]byte(`{"id":"managed-review","status":"running","look_closer_enabled":true,"full_review":{"enabled":true,"status":"running"}}`))
 		case "/v1/reviews/workspace/managed-review":
@@ -182,6 +193,8 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	if r := run("", "task", "submit", handle); r.State != "review_pending" {
 		t.Fatal(r)
 	}
+	hook, _ := json.Marshal(map[string]string{"hook_event_name": "PreToolUse", "cwd": repo})
+	run(string(hook), "task", "hook", handle)
 	if r := run("", "task", "status", handle); r.State != "responses_required" || r.Consent == nil || strings.Join(r.Consent.Includes, ",") != "repository_snapshots,task_context,finding_responses" || r.Consent.Account != "user-account" || r.Consent.Repository != "" || !r.Consent.AllRepositories || r.Consent.Service != server.URL || r.CodexReviewPolicy != nil {
 		t.Fatal(r)
 	}
@@ -194,6 +207,16 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 	}
 	if submissions != 1 || feedback != 1 {
 		t.Fatal(submissions, feedback)
+	}
+	stages := map[string]bool{}
+	for _, event := range adoptionEvents {
+		stages[event.Stage] = true
+		if event.AttemptID != adoptionEvents[0].AttemptID {
+			t.Fatal("one approval created multiple cohorts", adoptionEvents)
+		}
+	}
+	if len(adoptionEvents) != 3 || !stages["approved"] || !stages["activated"] || !stages["first_review"] {
+		t.Fatal("managed lifecycle did not deliver the complete funnel", adoptionEvents)
 	}
 	if r := run("", "task", "revoke", handle); r.State != "consent_revoked" || !r.Authenticated || r.UploadApproved || !r.SoftwareReady {
 		t.Fatal(r)
