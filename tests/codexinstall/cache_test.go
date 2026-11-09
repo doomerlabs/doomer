@@ -299,3 +299,84 @@ func TestSnapshotKeepsEmbeddedTemplateBuildFiles(t *testing.T) {
 		t.Fatal("included root build artifact")
 	}
 }
+
+func TestSnapshotCapturesNestedCandidateSeparately(t *testing.T) {
+	ctx := context.Background()
+	root, destination := t.TempDir(), t.TempDir()
+	candidate := filepath.Join(root, "baseline")
+	git := func(dir string, args ...string) {
+		t.Helper()
+		command := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		if out, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	git(root, "init", "-q")
+	if err := os.Mkdir(candidate, 0700); err != nil {
+		t.Fatal(err)
+	}
+	git(candidate, "init", "-q")
+	write := func(path, content string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(root, "main.go"), "current CLI")
+	// A lexical prefix match must not accidentally exclude an adjacent file.
+	write(filepath.Join(root, "baseline-not-a-checkout.go"), "parent source")
+	write(filepath.Join(candidate, "main.go"), "released CLI")
+	git(root, "add", "main.go", "baseline-not-a-checkout.go")
+	git(candidate, "add", "main.go")
+
+	// This is the inventory shape produced by actions/checkout with path: baseline.
+	inventory, err := exec.Command("git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z").Output()
+	if err != nil || !strings.Contains(string(inventory), "baseline/\x00") {
+		t.Fatalf("missing nested checkout fixture: %q %v", inventory, err)
+	}
+	sources := map[string]string{"cli": root, "candidate": candidate, "bootstrap": root}
+	parentFiles, err := copySource(ctx, root, destination, "cli", "", nestedSnapshotSources(root, sources)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidateFiles, err := copySource(ctx, candidate, destination, "candidate", "", nestedSnapshotSources(candidate, sources)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parentFiles) != 2 || len(candidateFiles) != 1 {
+		t.Fatalf("wrong role membership: parent=%+v candidate=%+v", parentFiles, candidateFiles)
+	}
+	for _, file := range parentFiles {
+		if strings.HasPrefix(file.Path, "cli/baseline/") {
+			t.Fatalf("nested candidate leaked into parent: %s", file.Path)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(destination, "cli", "baseline")); !os.IsNotExist(err) {
+		t.Fatal("candidate directory copied into parent")
+	}
+	frozen := filepath.Join(destination, "candidate", "main.go")
+	raw, err := os.ReadFile(frozen)
+	if err != nil || string(raw) != "released CLI" {
+		t.Fatalf("candidate was not captured: %q %v", raw, err)
+	}
+	before := testCacheMetadata()
+	before.Files = append(parentFiles, candidateFiles...)
+	write(filepath.Join(candidate, "main.go"), "changed released CLI")
+	changedCandidate, err := sourceInventory(ctx, candidate, "candidate", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := before
+	after.Files = append(append([]snapshotEntry(nil), parentFiles...), changedCandidate...)
+	if before.fingerprint("policy-recovery") == after.fingerprint("policy-recovery") {
+		t.Fatal("candidate change did not invalidate fingerprint")
+	}
+	raw, err = os.ReadFile(frozen)
+	if err != nil || string(raw) != "released CLI" {
+		t.Fatal("candidate edit changed its captured snapshot")
+	}
+	// Do not silently skip arbitrary unselected repositories or unsupported inputs.
+	if _, err := sourceInventory(ctx, root, "cli", ""); err == nil {
+		t.Fatal("unselected nested repository was silently ignored")
+	}
+}

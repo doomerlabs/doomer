@@ -71,7 +71,24 @@ func excludedSnapshotPath(path string) bool {
 	return false
 }
 
-func sourceInventory(ctx context.Context, root, prefix, output string) ([]snapshotEntry, error) {
+// Exclude only explicitly selected nested sources from their parent's inventory.
+// They are captured under their own role, including all of their source bytes.
+func nestedSnapshotSources(root string, sources map[string]string) []string {
+	var nested []string
+	seen := map[string]bool{}
+	for _, source := range sources {
+		relative, err := filepath.Rel(root, source)
+		if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || seen[source] {
+			continue
+		}
+		seen[source] = true
+		nested = append(nested, source)
+	}
+	sort.Strings(nested)
+	return nested
+}
+
+func sourceInventory(ctx context.Context, root, prefix, output string, excludedRoots ...string) ([]snapshotEntry, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z")
 	raw, err := cmd.Output()
 	if err != nil {
@@ -85,6 +102,17 @@ func sourceInventory(ctx context.Context, root, prefix, output string) ([]snapsh
 		}
 		seen[p] = true
 		full := filepath.Join(root, p)
+		excluded := false
+		for _, excludedRoot := range excludedRoots {
+			relative, err := filepath.Rel(excludedRoot, full)
+			if err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+				excluded = true
+				break
+			}
+		}
+		if excluded {
+			continue
+		}
 		absolute, _ := filepath.Abs(full)
 		if absolute == output || absolute == output+".inputs.json" || absolute == output+".tmp" {
 			continue
@@ -113,8 +141,8 @@ func sourceInventory(ctx context.Context, root, prefix, output string) ([]snapsh
 	return entries, nil
 }
 
-func copySource(ctx context.Context, root, destination, prefix, output string) ([]snapshotEntry, error) {
-	before, err := sourceInventory(ctx, root, prefix, output)
+func copySource(ctx context.Context, root, destination, prefix, output string, excludedRoots ...string) ([]snapshotEntry, error) {
+	before, err := sourceInventory(ctx, root, prefix, output, excludedRoots...)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +163,7 @@ func copySource(ctx context.Context, root, destination, prefix, output string) (
 			return nil, err
 		}
 	}
-	after, err := sourceInventory(ctx, root, prefix, output)
+	after, err := sourceInventory(ctx, root, prefix, output, excludedRoots...)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +240,7 @@ func runSnapshot(ctx context.Context, opts snapshotOptions, args []string) error
 			mapped[role] = previous
 			continue
 		}
-		entries, err := copySource(ctx, source, dir, role, output)
+		entries, err := copySource(ctx, source, dir, role, output, nestedSnapshotSources(source, sources)...)
 		if err != nil {
 			return err
 		}
