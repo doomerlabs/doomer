@@ -186,7 +186,11 @@ func TestClaudeHookReportsExistingReviewAfterDeniedSubmit(t *testing.T) {
 
 func TestCompletedClaudeTaskStillReportsExistingReview(t *testing.T) {
 	isolate(t)
+	t.Setenv("HOME", t.TempDir())
 	repo := newWatchTestRepo(t)
+	if out, err := execute(t, "", "install", "--repo", repo); err != nil {
+		t.Fatal(out, err)
+	}
 	s, _ := managedStore()
 	handle, _ := managed.NewHandle()
 	task := managed.Task{Schema: 2, Handle: handle, Agent: "claude", Repo: repo, API: "https://doomer.ai/api", Profile: "default", Stage: "complete", Capabilities: managed.Capabilities{SessionID: "claude-session"}, Review: &adversarylabs.WorkspaceReview{ID: "private-review-id"}}
