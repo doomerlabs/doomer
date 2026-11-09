@@ -95,6 +95,7 @@ func (e Engine) Submit(ctx context.Context, task *Task, token string) error {
 		userRequest = &adversarylabs.WorkspaceUserRequest{Prompt: string(prompt), SessionID: task.Handle, TurnID: fmt.Sprint(task.Revision)}
 	}
 	task.Submission = &adversarylabs.WorkspaceSubmission{
+		GitIdentity: capture.GitIdentity,
 		ReviewScope: "diff", LookCloser: &look, LookCloserThreshold: &threshold,
 		RepositoryID: repo, BaseSnapshotID: base, SnapshotID: head,
 		ReviewID: fmt.Sprintf("managed-%s-%d", task.Handle, task.Revision), GroupID: task.Handle, Revision: task.Revision,

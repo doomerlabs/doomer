@@ -134,7 +134,8 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	manifest.Target = []sourcesnapshot.Entry{{Path: "file.txt", Hash: hash, Mode: "100644"}}
 	manifest.Blobs[hash] = content
 	raw, _ := json.Marshal(manifest)
-	capture := sourcesnapshot.Capture{Bytes: raw, TargetTreeHash: "tree-a"}
+	identity := sourcesnapshot.GitIdentity{Name: "Configured Reviewer", Email: "reviewer@example.test", Source: "git_config"}
+	capture := sourcesnapshot.Capture{Bytes: raw, TargetTreeHash: "tree-a", GitIdentity: &identity}
 	yes, no := true, false
 	client := &fakeReview{lost: true, result: adversarylabs.WorkspaceReview{ID: "review-id", LookCloserEnabled: &yes, Full: &adversarylabs.WorkspaceFullReview{Enabled: false}, Early: &adversarylabs.WorkspaceAssessment{Status: "ready", Leads: []adversarylabs.WorkspaceLead{{ID: strings.Repeat("a", 64)}}}}}
 	engine := Engine{Store: store, Client: client, Capture: func(context.Context, Task) (sourcesnapshot.Capture, error) { return capture, nil }, Upload: func(context.Context, Task, string, string, sourcesnapshot.Manifest) (string, string, string, error) {
@@ -149,6 +150,9 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	if sent := client.submissions[0].Client; sent["installation_id"] != task.InstallationID || sent["installation_attempt_id"] != task.InstallationAttemptID {
 		t.Fatal("submission is missing the approval cohort", sent)
 	}
+	if sent := client.submissions[0].GitIdentity; sent == nil || *sent != identity {
+		t.Fatalf("submission is missing the configured Git identity: %+v", sent)
+	}
 	// Throw away all process-local task state and reconstruct the engine's input.
 	resumed, err := store.Load(handle)
 	if err != nil {
@@ -156,6 +160,9 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	}
 	resumed.LastError = "recorded submission failure"
 	resumed.InstallationAttemptID = strings.Repeat("c", 64)
+	// Retrying the journaled submission preserves its identity even if the
+	// checkout's configured reviewer changes before the retry.
+	capture.GitIdentity = &sourcesnapshot.GitIdentity{Name: "Another Reviewer", Email: "another@example.test", Source: "git_config"}
 	attempts := len(client.ids)
 	if err := engine.Status(context.Background(), &resumed, "token"); err == nil || len(client.ids) != attempts {
 		t.Fatal("status retried a recorded failed submission")
@@ -171,6 +178,9 @@ func TestInterruptedTaskResumesSameReviewAndRecordsResponses(t *testing.T) {
 	}
 	if client.submissions[1].Client["installation_attempt_id"] != task.InstallationAttemptID {
 		t.Fatal("retry reassigned an existing review to a new installation attempt")
+	}
+	if sent := client.submissions[1].GitIdentity; sent == nil || *sent != identity {
+		t.Fatalf("retry changed the journaled Git identity: %+v", sent)
 	}
 	resumed.Review.URL = "https://doomer.test/look-closer/owner/repo/" + strings.Repeat("a", 64)
 	if err = engine.Status(context.Background(), &resumed, "token"); err != nil {
