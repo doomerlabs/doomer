@@ -411,3 +411,19 @@ func TestBrowserDecisionRequiresDisplayedExactURL(t *testing.T) {
 		t.Fatal("no request was pending")
 	}
 }
+
+func TestPolicyChoiceObservation(t *testing.T) {
+	for _, tc := range []struct {
+		text string
+		want bool
+	}{
+		{"The missing policy would add that scope to Codex’s reviewer configuration. Allow, Not now, or Never ask again?", true},
+		{"The proposed setup adds that scoped authorization to Codex configuration. Allow, Not now, or Never ask again?", true},
+		{"Install optional hooks? Allow, Not now, or Never ask again?", false},
+		{"The policy is installed. No action is needed.", false},
+	} {
+		if got := policyChoiceOffered(tc.text); got != tc.want {
+			t.Fatalf("choice observation %q = %t", tc.text, got)
+		}
+	}
+}

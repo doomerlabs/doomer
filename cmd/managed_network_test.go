@@ -93,6 +93,17 @@ func TestPrepareNetworkFailureCanResumeSameTask(t *testing.T) {
 	if (result.State != "ready" && result.State != "setup_decision_required") || result.Task != handle || !result.UploadApproved || result.NetworkAccess != nil {
 		t.Fatal(result)
 	}
+	if result.State == "setup_decision_required" {
+		for _, operation := range []string{"claude-permissions", "hook-setup"} {
+			if out, err := execute(t, "", "--api-url", server.URL, "task", operation, handle, "--decline"); err != nil {
+				t.Fatal(out, err)
+			}
+		}
+		result = run()
+	}
+	if result.State != "ready" || result.Task != handle || !result.UploadApproved || result.NetworkAccess != nil {
+		t.Fatal("recovered task did not reach ready after setup decisions", result)
+	}
 }
 
 func TestCodexNetworkRecoveryReusesSavedApproval(t *testing.T) {

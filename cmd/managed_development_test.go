@@ -154,6 +154,17 @@ func TestDevelopmentPrepareAndResumeUseCurrentBinary(t *testing.T) {
 	if (result.State != "ready" && result.State != "setup_decision_required") || !result.Anonymous || !result.UploadApproved {
 		t.Fatal(result)
 	}
+	if result.State == "setup_decision_required" {
+		if result.CodexReviewPolicy != nil || result.ClaudePermissions == nil || result.ClaudePermissions.Decision != "pending" {
+			t.Fatal("expected optional Claude setup, not a Codex policy", result)
+		}
+		run("task", "claude-permissions", task.Handle, "--decline")
+		run("task", "hook-setup", task.Handle, "--decline")
+		result = run("prepare", "--task", task.Handle)
+	}
+	if result.State != "ready" || !result.Anonymous || !result.UploadApproved {
+		t.Fatal("accepted anonymous grant did not reach ready after setup decisions", result)
+	}
 	config := adversarylabs.ConfigStore{Path: filepath.Join(filepath.Dir(s.Root), "config.json")}
 	auth, ok, err := config.StoredAuthE(adversarylabs.AuthKey(task.API, task.Profile))
 	if err != nil || !ok || auth.Token != pending.Credential {

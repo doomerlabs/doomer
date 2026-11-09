@@ -5,11 +5,20 @@ import (
 	"encoding/json"
 	"io"
 	"regexp"
+	"strings"
 )
 
 var policyProposal = regexp.MustCompile(`"codex_review_policy"\s*:\s*\{`)
 
 var policyQuestion = regexp.MustCompile(`(?is)\b(?:would you like|do you want|may I|can I|shall I|approve)\b.{0,120}(?:policy|reviewer settings|permissions?)`)
+
+// A policy choice can name its subject before listing the answers rather than
+// phrase the entire offer as "May I install the policy?".
+func policyChoiceOffered(text string) bool {
+	text = strings.ToLower(text)
+	subject := strings.Contains(text, "policy") || strings.Contains(text, "reviewer settings") || strings.Contains(text, "scoped authorization")
+	return subject && strings.Contains(text, "allow") && strings.Contains(text, "not now") && strings.Contains(text, "never ask again")
+}
 
 var claudePermissionProposal = regexp.MustCompile(`"claude_permissions"\s*:\s*\{[^}]*"install_command"`)
 
@@ -66,7 +75,7 @@ func readCodexTurn(reader io.Reader, record func(string, string)) (codexTurn, er
 				record("Command", event.Item.Command+"\n"+event.Item.Output)
 			case "agent_message":
 				turn.Messages = append(turn.Messages, event.Item.Text)
-				turn.PolicyOffered = turn.PolicyOffered || policyQuestion.MatchString(event.Item.Text)
+				turn.PolicyOffered = turn.PolicyOffered || (policyQuestion.MatchString(event.Item.Text) || policyChoiceOffered(event.Item.Text))
 				record("Codex", event.Item.Text)
 			}
 		}

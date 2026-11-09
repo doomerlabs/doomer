@@ -73,8 +73,7 @@ func (j *journey) policyRecovery() error {
 	if err != nil {
 		return err
 	}
-	message := strings.ToLower(strings.Join(turn.Messages, " "))
-	offered := strings.Contains(message, "allow") && strings.Contains(message, "never ask again") && (strings.Contains(message, "policy") || strings.Contains(message, "authorization"))
+	offered := policyChoiceOffered(strings.Join(turn.Messages, " "))
 	j.result.Checks["missing_policy_offered_from_ordinary_task"] = offered
 	j.result.Checks["policy_prompt_before_prepare"] = !attemptedPrepare
 	j.f.mu.Lock()
