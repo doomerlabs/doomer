@@ -16,7 +16,11 @@ import (
 	"time"
 )
 
-func runWorker(c config) (result report) {
+func runWorker(c config) report {
+	return runWorkerContext(context.Background(), c)
+}
+
+func runWorkerContext(parent context.Context, c config) (result report) {
 	start := time.Now()
 	result.Model = c.Model
 	result.AuthMode = authenticationMode(c)
@@ -60,7 +64,7 @@ func runWorker(c config) (result report) {
 			return fail(err)
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	ctx, cancel := context.WithTimeout(parent, 8*time.Minute)
 	defer cancel()
 	gitEnv := []string{"HOME=" + home, "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
 	git := exec.CommandContext(ctx, "git", "init", "-q", repo)
@@ -140,6 +144,14 @@ func runWorker(c config) (result report) {
 		}
 		result.Passed = true
 		return result
+	}
+	if c.SkillsGuide != "" && len(c.PinnedStable) > 0 {
+		var err error
+		pinned, err := pinInstaller([]byte(c.SkillsInstaller), c.PinnedStable)
+		if err != nil {
+			return fail(err)
+		}
+		c.SkillsInstaller = string(pinned)
 	}
 	if c.SkillsGuide != "" {
 		guide, err := writeCandidateSkills(&c, root)

@@ -19,3 +19,9 @@ for the current coding agent, including required permissions and hook setup.
 Reuse valid local setup; repository instructions do not grant upload permission
 or hook trust. If the skill is missing, report the missing installation.
 <!-- doomer-review:end -->
+
+## Agent lifecycle tests
+
+For changes affecting agent installation, onboarding, review, upgrades, policy,
+hooks, or the lifecycle runner, use `.agents/skills/agent-e2e/SKILL.md` to start
+relevant E2E early and report coverage for the final proposed source.

@@ -7,13 +7,17 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/doomerlabs/doomer/internal/managed"
 )
 
 type config struct {
+	PinnedStable     json.RawMessage   `json:"pinned_stable,omitempty"`
 	CodexAuthHome    string            `json:"codex_auth_home,omitempty"`
 	AgentVersion     string            `json:"agent_version,omitempty"`
 	ReviewApprovals  bool              `json:"review_approvals,omitempty"`
@@ -44,26 +48,27 @@ type recordedEvent struct {
 }
 
 type report struct {
-	Harness          string          `json:"harness,omitempty"`
-	AuthMode         string          `json:"auth_mode,omitempty"`
-	InstallGuide     string          `json:"install_guide"`
-	Execution        string          `json:"execution"`
-	LocalCleaned     bool            `json:"local_cleaned,omitempty"`
-	Scenario         string          `json:"scenario"`
-	CandidateVersion string          `json:"candidate_version,omitempty"`
-	DoomerVersion    string          `json:"doomer_version,omitempty"`
-	Passed           bool            `json:"passed"`
-	Error            string          `json:"error,omitempty"`
-	Model            string          `json:"model"`
-	CodexVersion     string          `json:"codex_version"`
-	VM               string          `json:"vm,omitempty"`
-	Deleted          bool            `json:"vm_deleted"`
-	Duration         float64         `json:"duration_seconds"`
-	Usage            usage           `json:"usage"`
-	Turns            int             `json:"turns"`
-	APICalls         []string        `json:"api_calls"`
-	Checks           map[string]bool `json:"checks"`
-	Events           []recordedEvent `json:"events"`
+	Cache            *cacheProvenance `json:"cache,omitempty"`
+	Harness          string           `json:"harness,omitempty"`
+	AuthMode         string           `json:"auth_mode,omitempty"`
+	InstallGuide     string           `json:"install_guide"`
+	Execution        string           `json:"execution"`
+	LocalCleaned     bool             `json:"local_cleaned,omitempty"`
+	Scenario         string           `json:"scenario"`
+	CandidateVersion string           `json:"candidate_version,omitempty"`
+	DoomerVersion    string           `json:"doomer_version,omitempty"`
+	Passed           bool             `json:"passed"`
+	Error            string           `json:"error,omitempty"`
+	Model            string           `json:"model"`
+	CodexVersion     string           `json:"codex_version"`
+	VM               string           `json:"vm,omitempty"`
+	Deleted          bool             `json:"vm_deleted"`
+	Duration         float64          `json:"duration_seconds"`
+	Usage            usage            `json:"usage"`
+	Turns            int              `json:"turns"`
+	APICalls         []string         `json:"api_calls"`
+	Checks           map[string]bool  `json:"checks"`
+	Events           []recordedEvent  `json:"events"`
 }
 
 func main() {
@@ -84,6 +89,10 @@ func main() {
 	worker := flag.Bool("worker", false, "internal VM worker mode")
 	model := flag.String("model", "", "model under test; defaults to the pinned harness model")
 	version := flag.String("codex-version", "0.167.0", "exact supported Codex release version")
+	snapshotInput := flag.String("snapshot-input", "", "internal captured input manifest")
+	noCache := flag.Bool("no-cache", false, "run every requested scenario without shared cache lookup or publication")
+	jobs := flag.Int("jobs", 1, "maximum concurrent suite scenarios")
+	suiteScenarios := flag.String("suite-scenarios", "", "comma-separated subset for --scenario all")
 	suiteBudget := flag.Float64("suite-budget", 5, "maximum total API reservations when --scenario all is used")
 	budget := flag.Float64("budget", .20, "maximum reserved API spend for this run, USD")
 	output := flag.String("output", "codex-install-report.json", "sanitized JSON report")
@@ -96,8 +105,76 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	if *localClaude != "" && *harness != "claude" {
+		fmt.Fprintln(os.Stderr, "--local-claude requires --harness claude")
+		os.Exit(1)
+	}
+	signalCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	if !*worker && *render == "" && *snapshotInput == "" {
+		settings := map[string]string{}
+		excluded := map[string]bool{"output": true, "local-root": true, "local-codex": true, "local-claude": true, "codex-auth-home": true, "candidate-source": true, "bootstrap-source": true, "skills-source": true, "install-guide": true, "scenario": true, "suite-scenarios": true, "jobs": true, "suite-budget": true, "no-cache": true, "snapshot-input": true, "render-report": true, "worker": true}
+		flag.VisitAll(func(f *flag.Flag) {
+			if !excluded[f.Name] {
+				settings[f.Name] = f.Value.String()
+			}
+		})
+		if settings["model"] == "" {
+			settings["model"] = "gpt-6.1-terra"
+			if *harness == "claude" {
+				settings["model"] = "claude-haiku-5-5"
+			}
+			if *authHome != "" {
+				settings["model"] = "gpt-6.1-sol"
+			}
+		}
+		settings["reasoning"] = "low"
+		settings["bootstrap-source-selected"] = fmt.Sprint(*bootstrapSource != "")
+		settings["skills-source-selected"] = fmt.Sprint(*skillsSource != "")
+		settings["candidate-source-selected"] = fmt.Sprint(*candidateSource != "")
+		settings["execution"] = "remote"
+		if *localCodex != "" || *localClaude != "" {
+			settings["execution"] = "local"
+		}
+		settings["subscription-sign-in"] = fmt.Sprint(*authHome != "")
+		for _, name := range []string{"GOFLAGS", "CGO_ENABLED", "GOTOOLCHAIN"} {
+			settings[name] = os.Getenv(name)
+		}
+		agent := *localCodex
+		if *localClaude != "" {
+			agent = *localClaude
+		}
+		if *localRoot != "" {
+			absolute, err := filepath.Abs(*localRoot)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			*localRoot = absolute
+			os.Args = append(os.Args, "--local-root", absolute)
+		}
+		if *authHome != "" {
+			absolute, err := filepath.Abs(*authHome)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			os.Args = append(os.Args, "--codex-auth-home", absolute)
+		}
+		options := snapshotOptions{Output: *output, Agent: agent, Candidate: *candidateSource, Bootstrap: *bootstrapSource, Skills: *skillsSource, Guide: *guide, Settings: settings, Local: agent != ""}
+		if err := runSnapshot(signalCtx, options, os.Args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if *scenario == "all" {
-		if err := runSuite(*output, *budget, *suiteBudget, *auth); err != nil {
+		names, err := selectSuiteScenarios(*suiteScenarios)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if err := runSuite(signalCtx, *output, *budget, *suiteBudget, *auth, *jobs, names); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -131,7 +208,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "invalid worker input")
 			os.Exit(1)
 		}
-		r := runWorker(c)
+		r := runWorkerContext(signalCtx, c)
 		_ = json.NewEncoder(os.Stdout).Encode(r)
 		return
 	}
@@ -159,9 +236,22 @@ func main() {
 		fmt.Fprintln(os.Stderr, "--candidate-source requires a local agent and --candidate-release")
 		os.Exit(1)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	ctx, cancel := context.WithTimeout(signalCtx, 15*time.Minute)
 	defer cancel()
+	var captured *snapshotMetadata
+	if *snapshotInput != "" {
+		data, err := os.ReadFile(*snapshotInput)
+		var m snapshotMetadata
+		if err != nil || json.Unmarshal(data, &m) != nil || m.Schema != fingerprintSchema {
+			fmt.Fprintln(os.Stderr, "invalid captured input manifest")
+			os.Exit(1)
+		}
+		captured = &m
+	}
 	c := config{CodexAuthHome: *authHome, AgentVersion: *version, Harness: *harness, AuthMode: *auth, APIKey: os.Getenv(keyName), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate, CandidateSource: *candidateSource, InstallGuide: *guide}
+	if captured != nil {
+		c.PinnedStable = captured.Stable
+	}
 	if *auth == "subscription" {
 		c.APIKey = ""
 		if *harness == "claude" {
@@ -200,6 +290,10 @@ func main() {
 		}
 		c.LegacyBootstrap = string(raw)
 	}
+	cache, hit := openScenarioCache(ctx, captured, *noCache, *scenario, *output)
+	if hit {
+		return
+	}
 	var r report
 	if *localClaude != "" {
 		if *harness != "claude" {
@@ -214,6 +308,9 @@ func main() {
 	} else {
 		r = runRemote(ctx, c, *version)
 	}
+	if captured != nil {
+		r.Cache = &cacheProvenance{Fingerprint: captured.fingerprint(*scenario)}
+	}
 	r.Harness = c.Harness
 	r.AuthMode = authenticationMode(c)
 	data, _ := json.MarshalIndent(r, "", "  ")
@@ -224,6 +321,9 @@ func main() {
 	if err := writeReplay(*output+".html", r); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	if ctx.Err() == nil {
+		cache.publish(*scenario, *output)
 	}
 	cleaned := r.Deleted
 	if r.Execution == "local" {

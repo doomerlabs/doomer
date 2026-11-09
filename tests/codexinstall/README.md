@@ -190,18 +190,48 @@ Sources
 - https://code.claude.com/docs/en/hooks
 - https://platform.claude.com/docs/en/models/haiku-5-5/overview
 
-Run all scenarios sequentially with a per-case cap and an aggregate cap:
+Run all scenarios with a per-case cap and an aggregate cap. The default is
+serial (`--jobs 1`); opt into bounded concurrency with `--jobs 4`:
 
 ```sh
 doppler run --project doomer --config test -- \
-  go run ./tests/codexinstall --harness claude --scenario all \
+  go run ./tests/codexinstall --harness claude --scenario all --jobs 4 \
   --budget 0.20 --suite-budget 5 --output /tmp/claude-suite.json
 ```
 
 Use a new output prefix for each suite so earlier recordings remain available.
-The suite writes its result index after every case, continues past assertion
-failures, and stops before starting a case whose reservation would exceed the
-aggregate budget.
+The suite atomically updates its result index in requested scenario order,
+continues past assertion failures, and reserves the full per-case cap before
+starting each worker. Completed charges plus active reservations cannot exceed
+the aggregate budget; missing or invalid accounting retains the full reservation.
+When no further reservation fits, all remaining cases are explicitly `unstarted`
+and the command fails. Dollar caps apply only to API authentication.
+
+Use `--suite-scenarios first-review,upgrade,policy-installed,tui` with
+`--scenario all` for a representative comparison. Repeat unchanged inputs with
+`--jobs 1` and `--jobs 4`, using distinct output prefixes. Each case retains its
+own disposable home and output directory. An aggregate at `/tmp/suite.json`
+references `/tmp/suite-runs/SCENARIO/report.json`, the adjacent HTML replay and
+`runner.log`. The terminal summary prints wall time, every case's duration,
+pass/fail/unstarted counts and the five slowest cases. JSON durations include
+setup, build, agent execution and cleanup. No automatic local retry is added.
+
+Ctrl-C or SIGTERM stops new work and propagates cancellation through local
+workers, allowing active cases to clean up and write reports. The coordinator
+waits up to 60 seconds for each child to exit before a hard kill. SIGKILL, a stuck
+cleanup or lost remote access may still require manual cleanup. Completed
+results remain available even if another scenario fails or is cancelled.
+
+The runner captures an immutable source copy and rebuilds itself there before
+execution. Normal runs reuse verified signed successes from the private test
+bucket when dedicated E2E storage/signing credentials are present; otherwise
+cache misses execute normally. `--no-cache` forces fresh execution and disables
+publication. The private `OUTPUT.inputs.json` records the manifest; each report's
+`cache` field records the fingerprint and hit status. See
+`docs/agent-e2e-cache.md` for keys, freshness, storage, failure handling and the
+explicit separation between local and CI results.
+See `.agents/skills/agent-e2e/SKILL.md` for the development workflow and
+`docs/agent-e2e-measurements.md` for measured concurrency evidence.
 
 ### Claude subscription authentication
 

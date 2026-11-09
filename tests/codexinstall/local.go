@@ -45,7 +45,7 @@ func runLocal(ctx context.Context, c config, parent string) (result report) {
 			return result
 		}
 	}
-	result = runWorker(c)
+	result = runWorkerContext(ctx, c)
 	result.Execution = "local"
 	return result
 }
