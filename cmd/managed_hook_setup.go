@@ -89,6 +89,9 @@ func inspectManagedHookSetup(s managed.Store, t managed.Task, consent *managedCo
 	p.InstallCommand = append(append([]string{}, base...), "--allow")
 	p.DeclineCommand = append(append([]string{}, base...), "--decline")
 	p.Action = "Doomer hooks are missing. Offer installation during onboarding or upgrade unless already authorized or explicitly declined. After acceptance execute install_command and verify configured; after an explicit decline execute decline_command. Do not interpret silence as a decline. Preserve unrelated hooks and native trust controls. For Claude, accepted setup also installs its six scoped readiness and review-command permission rules. Upload consent remains separate."
+	if t.Agent == "claude" {
+		p.Action += " If Claude blocks installation as self-modification or a settings change, stop the blocked operation and offer the user this command to run directly in their terminal: doomer hooks install --agent claude. It installs hooks only; review permissions and native trust remain separate. After the user runs it, rerun preflight to verify installation. Do not retry through another agent tool or disguise the settings change."
+	}
 	return p
 }
 

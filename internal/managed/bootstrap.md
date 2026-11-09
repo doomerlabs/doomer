@@ -53,6 +53,11 @@ command after acceptance; record only explicit refusals with the decline command
 Keep installation separate from native hook trust. For untrusted hooks, guide the
 user to native review controls in each new session until trusted. Preserve deny
 rules and report blocked review coverage.
+For Claude, if the host blocks hook installation as self-modification, stop that
+operation and offer `doomer hooks install --agent claude` for the user to run
+directly in their terminal. This installs hooks only, not review permissions or
+native trust. Recheck with preflight afterward; do not disguise the mutation or
+retry through another tool to bypass the host block.
 
 Show complete clickable setup URLs, preserving fragments, before question tools.
 Use CLI state for approval; a missing binary does not imply missing consent.

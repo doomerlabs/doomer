@@ -241,15 +241,25 @@ func newManagedHooksCommand(app *application.App, api, profile *string) *cobra.C
 		if err = watch.Install(watch.HookFile(userHome, agent), command, "--managed-task-adapter", false); err != nil {
 			return err
 		}
-		result := map[string]any{"state": "hooks_configured", "hook_activated": false, "action": "Complete the agent's hook trust controls. Bind each task with prepare --session using that agent's actual session ID."}
+		installed, err := watch.Installed(watch.HookFile(userHome, agent), "--managed-task-adapter")
+		if err != nil || !installed {
+			return fmt.Errorf("verify installed hooks: installed=%t: %v", installed, err)
+		}
+		result := map[string]any{"config_path": watch.HookFile(userHome, agent), "state": "hooks_configured", "hook_activated": false, "action": "Complete the agent's hook trust controls. Bind each task with prepare --session using that agent's actual session ID."}
 		if agent == "claude" {
 			result["claude_permissions"] = inspectClaudePermissions()
 			if taskHandle == "" && inspectClaudePermissions().State != "configured" {
-				result["action"] = "During approved Claude onboarding, rerun doomer hooks --agent claude --task HANDLE using the prepared task to configure its review-command permissions. This is part of the same onboarding, not a new upload approval. Complete native hook trust controls separately."
+				result["action"] = "Hooks are installed. Review-command permissions remain separate; use the prepared task’s claude-permissions command only after authorization. Complete native hook trust controls separately."
 			}
 		}
 		return json.NewEncoder(c.OutOrStdout()).Encode(result)
 	}
+	// Keep the original `hooks` invocation compatible. The explicit install
+	// spelling is a hooks-only terminal fallback, never a policy installer.
+	install := &cobra.Command{Use: "install", Short: "Install review hooks without changing upload permissions or native trust", Args: cobra.NoArgs, RunE: c.RunE}
+	install.Flags().StringVar(&agent, "agent", "codex", "codex or claude (select the agent whose hooks should be installed)")
+	c.AddCommand(install)
+
 	return c
 }
 
