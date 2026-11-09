@@ -1,0 +1,28 @@
+cmd/review_workspace.go
+  h_aa44c3b5b60dec 63
+cmd/review_workspace_test.go
+  h_aa44c3b5b60dec 45-46,127-132
+internal/watch/runner.go
+  h_aa44c3b5b60dec 393
+internal/watch/watch_test.go
+  h_aa44c3b5b60dec 267-269
+pkg/adversarylabs/workspace.go
+  h_aa44c3b5b60dec 57-76
+pkg/sourcesnapshot/capture.go
+  h_aa44c3b5b60dec 38-45,47,271
+pkg/sourcesnapshot/git_identity.go
+  h_aa44c3b5b60dec 1-25
+pkg/sourcesnapshot/git_identity_test.go
+  h_aa44c3b5b60dec 1-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a1625d453acf69e523054200400ab9084a8a2093",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
