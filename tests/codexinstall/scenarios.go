@@ -14,7 +14,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/managed"
 )
 
-var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-command-permissions", "upgrade-authorized-session", "policy-recovery"}
+var scenarioNames = []string{"install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-command-permissions", "upgrade-authorized-session", "policy-recovery", "policy-installed", "policy-declined"}
 
 func validScenario(name string) bool {
 	for _, candidate := range scenarioNames {
@@ -170,6 +170,10 @@ func (j *journey) finish() error {
 }
 func (j *journey) afterInstall() error {
 	switch j.c.Scenario {
+	case "policy-installed":
+		return j.reviewCommandPermissions()
+	case "policy-declined":
+		return j.policyDeclined()
 	case "policy-recovery":
 		return j.policyRecovery()
 	case "review-command-permissions":

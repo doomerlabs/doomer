@@ -24,6 +24,7 @@ type config struct {
 	OAuthToken       string            `json:"oauth_token,omitempty"`
 	InstallGuide     string            `json:"install_guide"`
 	WorkRoot         string            `json:"work_root,omitempty"`
+	CandidateSource  string            `json:"candidate_source,omitempty"`
 	CandidateFile    string            `json:"candidate_file,omitempty"`
 	CandidateVersion string            `json:"candidate_version,omitempty"`
 	APIKey           string            `json:"api_key"`
@@ -73,6 +74,7 @@ func main() {
 	guide := flag.String("install-guide", "https://doomer.ai/install.md", "verified installation guide to exercise")
 	localCodex := flag.String("local-codex", "", "dedicated pinned Codex executable for an isolated local run")
 	localRoot := flag.String("local-root", "", "writable parent directory for disposable local test homes")
+	candidateSource := flag.String("candidate-source", "", "local checkout to build as candidate; default is this checkout")
 	candidate := flag.String("candidate-release", "", "test this checkout as the given installed release after public installation")
 	scenario := flag.String("scenario", "install", "manual scenario name; use list to show available scenarios")
 	render := flag.String("render-report", "", "render an existing JSON report to PATH.html without running a test")
@@ -106,6 +108,10 @@ func main() {
 		data, err := os.ReadFile(*render)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if *candidateSource != "" && (*candidate == "" || (*localCodex == "" && *localClaude == "")) {
+			fmt.Fprintln(os.Stderr, "--candidate-source requires a local agent and --candidate-release")
 			os.Exit(1)
 		}
 		var r report
@@ -149,7 +155,7 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	c := config{Harness: *harness, AuthMode: *auth, APIKey: os.Getenv(keyName), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate, InstallGuide: *guide}
+	c := config{Harness: *harness, AuthMode: *auth, APIKey: os.Getenv(keyName), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate, CandidateSource: *candidateSource, InstallGuide: *guide}
 	if *auth == "subscription" {
 		c.APIKey = ""
 		c.OAuthToken = os.Getenv("TEST_CLAUDE_CODE_OAUTH_TOKEN")

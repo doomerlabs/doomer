@@ -39,7 +39,7 @@ func (j *journey) policyRecovery() error {
 			ExtraPolicy string `json:"extra_policy"`
 		} `json:"codex_review_policy"`
 	}
-	if err := json.Unmarshal(raw, &state); err != nil || state.Proposal.ExtraPolicy == "" {
+	if err := json.Unmarshal(raw, &state); err != nil || state.Proposal.ExtraPolicy == "" || state.Proposal.ConfigPath != filepath.Join(j.home, ".codex", "config.toml") {
 		return fmt.Errorf("missing fixture proposal: %v", err)
 	}
 	oldMarker := filepath.Join(j.home, ".config/doomer/managed/codex-policy-offers", watch.Key("config-v2\x00"+state.Proposal.ConfigPath+"\x00\x00"+state.Proposal.ExtraPolicy))
@@ -48,6 +48,15 @@ func (j *journey) policyRecovery() error {
 	}
 	if err := os.WriteFile(oldMarker, []byte("delivered, not installed\n"), 0600); err != nil {
 		return err
+	}
+	prepared, err := j.policyTask(tasks[0].Handle, "prepare")
+	if err != nil {
+		return err
+	}
+	// This deterministic assertion is also run against the released CLI. It
+	// must fail for the precise regression, not a provider or install failure.
+	if prepared.Proposal == nil {
+		return fmt.Errorf("missing policy was not offered after old delivery")
 	}
 	c := j.c
 	c.ReviewApprovals = true
@@ -73,4 +82,83 @@ func (j *journey) policyRecovery() error {
 	}
 	j.result.Checks["fresh_reviewer_completed_after_policy_repair"] = true
 	return j.finish()
+}
+
+type policyTaskState struct {
+	Proposal *json.RawMessage `json:"codex_review_policy"`
+	Status   struct {
+		State    string `json:"state"`
+		Decision string `json:"decision"`
+	} `json:"codex_policy_status"`
+}
+
+func (j *journey) policyTask(handle, operation string) (policyTaskState, error) {
+	args := []string{"task", "codex-policy", handle}
+	if operation == "prepare" {
+		args = []string{"prepare", "--task", handle}
+	}
+	cmd := exec.CommandContext(j.ctx, filepath.Join(j.home, ".local/bin/doomer"), args...)
+	cmd.Dir, cmd.Env = j.repo, j.env
+	raw, err := cmd.Output()
+	var state policyTaskState
+	if err == nil {
+		err = json.Unmarshal(raw, &state)
+	}
+	return state, err
+}
+
+func (j *journey) policyDeclined() error {
+	if j.c.Harness != "codex" {
+		return j.reviewCommandPermissions()
+	}
+	if err := os.Remove(agentHooksPath(j.c, j.home)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := writeAgentConfig(j.c, j.home, j.codexConfig); err != nil {
+		return err
+	}
+	tasks, err := savedTasks(j.home)
+	if err != nil || len(tasks) != 1 {
+		return fmt.Errorf("read onboarding task: %v (%d tasks)", err, len(tasks))
+	}
+	c := j.c
+	c.ReviewApprovals = true
+	j.result.Turns++
+	turn, err := runAgent(j.ctx, c, j.repo, j.env, "Use the installed Doomer skill to prepare a coding task. You may verify my existing account and grant. Ask about missing settings, but do not edit or upload source yet.", "", j.record)
+	if err != nil {
+		return err
+	}
+	if !turn.PolicyOffered {
+		return fmt.Errorf("missing policy was not offered before decline")
+	}
+	j.result.Turns++
+	_, err = runAgent(j.ctx, c, j.repo, j.env, "No. I decline installing this Codex policy. Preserve my settings and existing Doomer upload grant. Record my decision using the returned command. Do not edit or upload source.", turn.Session, j.record)
+	if err != nil {
+		return err
+	}
+	state, err := j.policyTask(tasks[0].Handle, "prepare")
+	if err != nil {
+		return err
+	}
+	j.result.Checks["explicit_decline_persisted"] = state.Status.State == "missing" && state.Status.Decision == "declined" && state.Proposal == nil
+	j.result.Turns++
+	fresh, err := runAgent(j.ctx, c, j.repo, j.env, "Use the installed Doomer skill to prepare a new coding task. You may verify my account and existing grant. Do not edit or upload source for this check. Preserve settings and report readiness.", "", j.record)
+	if err != nil {
+		return err
+	}
+	j.result.Checks["decline_not_reoffered_in_new_chat"] = !fresh.PolicyOffered
+	config, err := os.ReadFile(filepath.Join(j.home, ".codex", "config.toml"))
+	if err != nil {
+		return err
+	}
+	j.result.Checks["declined_config_unchanged"] = string(config) == j.codexConfig
+	j.f.mu.Lock()
+	j.result.Checks["decline_preserved_grant_without_upload"] = j.f.Creates == 1 && j.f.Uploads == 0 && len(j.f.Reviews) == 0
+	j.f.mu.Unlock()
+	for name, ok := range j.result.Checks {
+		if !ok {
+			return fmt.Errorf("policy decline assertion failed: %s", name)
+		}
+	}
+	return nil
 }

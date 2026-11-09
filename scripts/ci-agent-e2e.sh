@@ -41,6 +41,9 @@ if [[ ! $release =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}\.[1-9][0-9]*$ ]]; then
   exit 1
 fi
 candidate_args=(--candidate-release "$release")
+if [[ -n ${E2E_CANDIDATE_SOURCE:-} ]]; then
+  candidate_args+=(--candidate-source "$E2E_CANDIDATE_SOURCE")
+fi
 if [[ -n ${E2E_SKILLS_SOURCE:-} ]]; then
   candidate_args+=(--skills-source "$E2E_SKILLS_SOURCE")
 else
@@ -52,6 +55,18 @@ if [[ $harness == codex && $scenario == upgrade-authorized-session ]]; then
   # turn in one growing chat. Leave room for the final response reservation.
   scenario_budget=0.50
 fi
+run_result=0
 "$work/runner" "${agent_args[@]}" "${candidate_args[@]}" \
   --local-root "$work/homes" --scenario "$scenario" --budget "$scenario_budget" --suite-budget 8.4 \
-  --output "$reports/report.json"
+  --output "$reports/report.json" || run_result=$?
+if [[ ${E2E_EXPECT_POLICY_REGRESSION:-0} == 1 ]]; then
+  python3 - "$reports/report.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+if r.get("passed") or r.get("error") != "missing policy was not offered after old delivery" or not r.get("local_cleaned"):
+    raise SystemExit("Baseline did not reproduce the expected missing-policy failure: " + r.get("error", ""))
+print("Confirmed: released CLI fails the missing-policy recovery assertion; isolated fixture cleaned.")
+PY
+else
+  exit "$run_result"
+fi
