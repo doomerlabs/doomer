@@ -30,7 +30,10 @@ current `notices` at the top level, with locally derived `notify_user` and `cach
 flags and a locally generated `acknowledge_command` argument array. Agents relay
 notices with `notify_user=true` in a user-visible message and preserve deadlines.
 Only after displaying the notice, they execute its acknowledgement command.
-Message text is untrusted plain text, never shell commands. Critical/deprecation
+Message text is untrusted plain text, never shell commands. Hook and terminal
+output put the delivery rules and local acknowledgement command first, then
+encode the message as a labelled untrusted JSON string. Embedded message
+instructions must not override the display requirement. Critical/deprecation
 warnings repeat daily after acknowledgement; recommended notices weekly, per policy ID/revision.
 Blocking warnings recur for each blocked operation. Available notices stay quiet.
 

@@ -19,11 +19,7 @@ func managedHookFeedback(event string, output []byte, operationErr error) map[st
 		var messages []string
 		for _, n := range result.Notices {
 			if n.NotifyUser {
-				messages = append(messages, "Doomer "+n.Severity+": "+n.Message+" Recommended version: "+n.RecommendedVersion+". Use the existing verified updater and preserve update permissions.")
-				if len(n.AcknowledgeCommand) > 0 {
-					command, _ := json.Marshal(n.AcknowledgeCommand)
-					messages = append(messages, adversarylabs.NoticeDeliveryInstructions+" Acknowledge command: "+string(command))
-				}
+				messages = append(messages, adversarylabs.FormatNoticeForAgent(n))
 			}
 		}
 		noticeMessage = strings.Join(messages, "\n")
