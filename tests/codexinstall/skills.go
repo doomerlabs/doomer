@@ -23,6 +23,9 @@ func loadCandidateSkills(c *config, source string) error {
 		}
 		*target = string(raw)
 	}
+	if c.CandidateVersion != "" {
+		c.SkillsBootstrap = regexp.MustCompile(`(?m)^  doomer-cli-range:.*$`).ReplaceAllString(c.SkillsBootstrap, "  doomer-cli-range: '>="+c.CandidateVersion+"'")
+	}
 	return nil
 }
 

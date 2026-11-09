@@ -50,7 +50,7 @@ else
   candidate_args+=(--generated-bootstrap)
 fi
 scenario_budget=0.35
-if [[ $harness == codex && ( $scenario == upgrade-authorized-session || $scenario == policy-recovery || $scenario == policy-declined ) ]]; then
+if [[ $harness == codex && ( $scenario == upgrade-authorized-session || $scenario == policy-recovery || $scenario == policy-declined || $scenario == hooks-upgrade || $scenario == hooks-declined ) ]]; then
   # These scenarios include onboarding and additional approval/review turns.
   # Leave room for the final response reservation.
   scenario_budget=0.50

@@ -15,7 +15,7 @@ import (
 func TestCandidateAssemblyAcceptsUnrecognizedPublishedBootstrap(t *testing.T) {
 	for _, candidate := range []struct{ version, state string }{
 		{"2026.11.8.6", "incompatible"},
-		{"2026.11.8.7", "modified"},
+		{managed.BootstrapVersion, "modified"},
 	} {
 		t.Run(candidate.version, func(t *testing.T) {
 			testCandidateAssemblyAcceptsUnrecognizedBootstrap(t, candidate.version, candidate.state)

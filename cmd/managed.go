@@ -29,6 +29,7 @@ import (
 )
 
 type managedResult struct {
+	HookSetup            *managedHookSetup              `json:"hook_setup,omitempty"`
 	ClaudePermissions    *claudePermissions             `json:"claude_permissions,omitempty"`
 	Notices              []adversarylabs.ClientNotice   `json:"notices,omitempty"`
 	NetworkAccess        *managedNetworkAccess          `json:"network_access,omitempty"`
@@ -150,12 +151,15 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 		}
 		r.Consent = evidence
 		if evidence != nil {
+			r.HookSetup = inspectManagedHookSetup(s, t, evidence)
+		}
+		if evidence != nil {
 			// Adoption delivery is bounded; its failures must not change setup or review outcomes.
 			_ = bindManagedAdoption(s, &t, evidence)
 			reportManagedAdoption(c.Context(), s, t, evidence)
 		}
 		if evidence != nil && t.Agent == "claude" && (c.Name() == "prepare" || c.Name() == "login" || c.Name() == "consent" || c.Name() == "claude-permissions") {
-			r.ClaudePermissions = inspectClaudePermissions()
+			r.ClaudePermissions = proposedClaudePermissions(s, t, evidence)
 		}
 		if evidence != nil && t.Agent == "codex" {
 			proposal, status := inspectCodexPolicy(*evidence)
@@ -616,15 +620,15 @@ func managedConsent(s managed.Store, t managed.Task, token string, allow bool) (
 
 func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Command {
 	parent := &cobra.Command{Use: "task", Short: "Resume a durable managed review without a persistent process"}
-	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume", "rollback", "retry", "repair", "context", "codex-policy", "claude-permissions"} {
+	for _, operation := range []string{"submit", "status", "respond", "finish", "consent", "revoke", "login", "hook", "pause", "resume", "rollback", "retry", "repair", "context", "codex-policy", "claude-permissions", "hook-setup"} {
 		operation := operation
 		var allow bool
 		var decline bool
 		var allRepositories bool
 		c := &cobra.Command{Use: operation + " HANDLE", Args: cobra.ExactArgs(1)}
 		c.Flags().BoolVar(&allow, "allow", false, "record an explicit user approval; never supply on the user's behalf")
-		if operation == "codex-policy" {
-			c.Flags().BoolVar(&decline, "decline", false, "record an explicit decline of this scoped Codex policy proposal")
+		if operation == "codex-policy" || operation == "hook-setup" || operation == "claude-permissions" {
+			c.Flags().BoolVar(&decline, "decline", false, "record an explicit decline of the displayed scoped setup proposal")
 			c.MarkFlagsMutuallyExclusive("allow", "decline")
 		}
 		if operation == "consent" || operation == "revoke" {
@@ -759,12 +763,68 @@ func newManagedTaskCommand(app *application.App, api, profile *string) *cobra.Co
 			if !approved {
 				return outputManaged(c, s, t, managedResult{State: "consent_required", Task: t.Handle, Authenticated: true})
 			}
+			if operation == "hook-setup" {
+				evidence, err := savedManagedConsentEvidence(s, t)
+				if err != nil {
+					return err
+				}
+				if evidence == nil {
+					return fmt.Errorf("current upload consent required")
+				}
+				if decline {
+					if err := recordHookSetupDecline(s, t, evidence); err != nil {
+						return err
+					}
+					return outputManaged(c, s, t, managedResult{State: "hook_setup_declined", Authenticated: true, UploadApproved: true})
+				}
+				if allow {
+					install := newManagedHooksCommand(app, api, profile)
+					args := []string{"--agent", t.Agent}
+					if t.Agent == "claude" {
+						args = append(args, "--task", t.Handle)
+					}
+					install.SetArgs(args)
+					install.SetOut(io.Discard)
+					install.SetErr(c.ErrOrStderr())
+					if err := install.ExecuteContext(c.Context()); err != nil {
+						return err
+					}
+					if err := clearHookSetupDecline(s, t, evidence); err != nil {
+						return err
+					}
+					t.HookActivated = false
+					if err := s.Save(&t); err != nil {
+						return err
+					}
+				}
+				return outputManaged(c, s, t, managedResult{State: "hook_setup_checked", Authenticated: true, UploadApproved: true})
+			}
 			if operation == "claude-permissions" {
 				if t.Agent != "claude" {
 					return fmt.Errorf("Claude permission rules require a Claude task")
 				}
+				evidence, err := savedManagedConsentEvidence(s, t)
+				if err != nil {
+					return err
+				}
+				if evidence == nil {
+					return fmt.Errorf("current upload consent required")
+				}
+				decisionPath := claudePermissionDecisionPath(s, t, evidence)
+				if decline {
+					if err := watch.Write(decisionPath, "declined"); err != nil {
+						return err
+					}
+					return outputManaged(c, s, t, managedResult{State: "claude_permissions_declined", Authenticated: true, UploadApproved: true})
+				}
 				if allow {
+					if inspectClaudePermissions().State == "denied" {
+						return outputManaged(c, s, t, managedResult{State: "claude_permissions_denied", Authenticated: true, UploadApproved: true})
+					}
 					if err := installClaudePermissions(s); err != nil {
+						return err
+					}
+					if err := os.Remove(decisionPath); err != nil && !os.IsNotExist(err) {
 						return err
 					}
 				}

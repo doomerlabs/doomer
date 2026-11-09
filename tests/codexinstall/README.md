@@ -31,6 +31,9 @@ go run ./tests/codexinstall --scenario list
 | `first-review` | An ordinary coding prompt with no Doomer reminder completes an account-linked review and records a finding response |
 | `review-command-permissions` | Fresh process with hooks disabled completes per-call review; Claude uses real auto mode with the onboarding command rules, Codex uses its approval reviewer |
 | `review-preflight` | Per-call preparation with automatic hooks removed; saved consent and local preflight in a fresh session; local coding continues if preparation is blocked; Codex uses workspace-write and auto-review |
+| `hooks-upgrade` | Missing owned hooks are offered again, accepted, and installed while preserving existing consent and unrelated settings |
+| `hooks-declined` | A hook-installation refusal persists across fresh sessions without reinstalling or re-offering |
+| `hooks-trust` | Codex native trust reminders recur until trusted; Claude native callbacks prove activation separately from installation |
 | `policy-installed` | Fresh real approval reviewer reuses the installed policy and upload grant without another prompt |
 | `policy-recovery` | Old delivery marker with a missing policy must offer setup, install after acceptance, and complete a review in a fresh process |
 | `policy-declined` | Explicit policy decline persists across fresh chats without changing settings, revoking consent, or uploading source |

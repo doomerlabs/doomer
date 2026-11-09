@@ -166,6 +166,10 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if *candidate != "" {
+		// The disposable candidate uses the published release label, not its future production minimum.
+		managed.BootstrapCLIRange = ">=" + *candidate
+	}
 	if *generatedBootstrap {
 		var err error
 		c.SkillsBootstrap, err = managed.BootstrapText(managed.Policy{Protocol: managed.Protocol, Channel: "stable"})

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/doomerlabs/doomer/internal/managed"
@@ -25,12 +27,17 @@ var claudeReviewRules = []string{
 }
 
 type claudePermissions struct {
-	ConfigPath string   `json:"config_path"`
-	State      string   `json:"state"`
-	Rules      []string `json:"rules"`
-	Changes    []string `json:"changes"`
-	Activation string   `json:"activation"`
-	Error      string   `json:"error,omitempty"`
+	ConfigPath     string   `json:"config_path"`
+	State          string   `json:"state"`
+	Rules          []string `json:"rules"`
+	Changes        []string `json:"changes"`
+	Activation     string   `json:"activation"`
+	Error          string   `json:"error,omitempty"`
+	DeniedRules    []string `json:"denied_rules,omitempty"`
+	Decision       string   `json:"decision,omitempty"`
+	InstallCommand []string `json:"install_command,omitempty"`
+	DeclineCommand []string `json:"decline_command,omitempty"`
+	Action         string   `json:"action,omitempty"`
 }
 
 type claudePermissionReceipt struct {
@@ -101,7 +108,7 @@ func inspectClaudePermissions() *claudePermissions {
 		p.State, p.Error = "unreadable", err.Error()
 		return p
 	}
-	_, _, allow, err := readClaudePermissionConfig(p.ConfigPath)
+	_, obj, allow, err := readClaudePermissionConfig(p.ConfigPath)
 	if err != nil {
 		p.State, p.Error = "unreadable", err.Error()
 		return p
@@ -112,6 +119,54 @@ func inspectClaudePermissions() *claudePermissions {
 			p.State = "missing"
 		}
 	}
+	permissions, _ := obj["permissions"].(map[string]any)
+	deny, _ := permissions["deny"].([]any)
+	for _, raw := range deny {
+		rule, ok := raw.(string)
+		if !ok {
+			continue
+		}
+		for _, operation := range []string{"submit", "status", "respond", "finish"} {
+			pattern := strings.TrimSuffix(strings.TrimPrefix(rule, "Bash("), ")")
+			if rule == "Bash" || (strings.HasPrefix(rule, "Bash(") && regexp.MustCompile("^"+strings.ReplaceAll(regexp.QuoteMeta(strings.ReplaceAll(pattern, ":*", " *")), `\*`, ".*")+"$").MatchString("doomer task "+operation+" example-task")) {
+				p.DeniedRules = append(p.DeniedRules, rule)
+				break
+			}
+		}
+	}
+	if len(p.DeniedRules) > 0 {
+		p.State = "denied"
+		p.Action = "Explicit Claude deny rules cover Doomer review commands. Preserve them and do not offer an allow rule to override the denial. Report the blocked operations; changing deny rules requires the user's explicit request."
+	}
+	return p
+}
+
+func claudePermissionDecisionPath(s managed.Store, t managed.Task, evidence *managedConsentEvidence) string {
+	path, _ := claudePermissionPath()
+	return filepath.Join(s.Root, "claude-permission-decisions", watch.Key(path+"\x00"+t.Agent+"\x00"+managedSetupScope(evidence)))
+}
+
+func proposedClaudePermissions(s managed.Store, t managed.Task, evidence *managedConsentEvidence) *claudePermissions {
+	p := inspectClaudePermissions()
+	if p.State != "missing" {
+		return p
+	}
+	var decision string
+	if err := watch.Read(claudePermissionDecisionPath(s, t, evidence), &decision); err == nil && decision == "declined" {
+		p.Decision = "declined"
+		p.Action = "This scoped Claude permission setup was declined. Do not ask again unless the user revisits that decision. Preserve existing upload consent and host restrictions."
+		return p
+	}
+	p.Decision = "pending"
+	binary, err := os.Executable()
+	if err != nil {
+		p.Error = err.Error()
+		return p
+	}
+	base := []string{binary, "--api-url", t.API, "--profile", t.Profile, "task", "claude-permissions", t.Handle}
+	p.InstallCommand = append(append([]string{}, base...), "--allow")
+	p.DeclineCommand = append(append([]string{}, base...), "--decline")
+	p.Action = "Claude review-command permissions are missing. Present rules and changes and ask to install unless already authorized. Execute install_command only after acceptance; record an explicit decline with decline_command. These settings do not grant repository upload consent and cannot override deny rules."
 	return p
 }
 
@@ -123,6 +178,9 @@ func installClaudePermissionsWithWriters(s managed.Store,
 	writeSettings func(string, []byte, []byte, os.FileMode) error,
 	writeReceipt func(string, any) error,
 ) (resultErr error) {
+	if p := inspectClaudePermissions(); p.State == "denied" {
+		return fmt.Errorf("Claude deny rules block Doomer review commands; preserve the user's denial")
+	}
 	path, err := claudePermissionPath()
 	if err != nil {
 		return err

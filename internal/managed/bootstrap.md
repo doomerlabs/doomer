@@ -22,6 +22,14 @@ A prompt creates a coding task. Verify readiness/hooks without submitting code.
 
 {{permission_prompt_rules}}
 
+Read `hook_setup` and the agent's permission status before offering a skill
+upgrade. Offer missing hook installation or review permissions once unless
+already authorized or explicitly declined. Execute the returned install command
+after acceptance and the decline command only after an explicit refusal. Keep
+installation separate from native hook trust; when the harness reports untrusted
+hooks, guide the user to its native hook review controls in each new session
+until trusted. Preserve explicit deny rules and report blocked review coverage.
+
 Show complete clickable setup URLs, preserving fragments, before question tools.
 Use CLI state for approval; a missing binary does not imply missing consent.
 

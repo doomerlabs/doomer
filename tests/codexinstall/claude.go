@@ -169,7 +169,8 @@ func readClaudeTurn(reader io.Reader, record func(string, string)) (codexTurn, e
 			case "tool_result":
 				text := claudeContentText(block.Content)
 				turn.UpdateRequested = turn.UpdateRequested || updateState.MatchString(text)
-				turn.PolicyOffered = turn.PolicyOffered || policyProposal.MatchString(text)
+				turn.PolicyOffered = turn.PolicyOffered || (policyProposal.MatchString(text) || claudePermissionProposal.MatchString(text))
+				turn.HooksOffered = turn.HooksOffered || hookProposal.MatchString(text)
 				record("Command", text)
 			}
 		}

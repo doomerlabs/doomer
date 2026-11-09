@@ -43,6 +43,24 @@ procedure and describe it accurately. Consult documented capabilities or permitt
 read-only introspection to determine hook support. Hook installation or callback
 probes require the user's normal hook-trust approval.
 
+Read `hook_setup` on preparation, including after a CLI upgrade. If hooks are
+missing and installation has not been declined, offer to install them. Reuse
+an explicit matching setup authorization; otherwise wait for acceptance before
+executing `hook_setup.install_command`. Record an explicit refusal with
+`hook_setup.decline_command`; preserve it across tasks and upgrades. Do not
+record silence as a refusal. Do not reinstall missing hooks against that choice.
+Hook installation and hook trust are separate. If hooks exist but the native
+harness reports them untrusted, explain how to review and trust them in `/hooks`.
+Remind once in each new session until trusted, including after a prior session's
+trust refusal; never repeat a denied operation in the same session or edit native
+trust records. A missing task callback alone is not proof of distrust: report
+activation as unverified until a real callback arrives, and do not claim it active.
+For Claude, inspect `claude_permissions` separately. Offer missing rules once,
+execute its install command only after acceptance, and persist a decline with its
+returned decline command. Explicit deny rules take precedence: do not add allows
+to work around them or re-prompt the user to remove them. Both the command rules
+and live Doomer consent are required for unattended reviews.
+
 Readiness fields are separate. Software readiness is not upload consent, hook
 activation, account authentication, or a completed review. Native skill discovery,
 a browser callback, session IDs, and persistent processes are optional.

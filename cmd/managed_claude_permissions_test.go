@@ -111,6 +111,31 @@ func TestClaudePermissionsRejectUnsafeConfig(t *testing.T) {
 	})
 }
 
+func TestClaudeExplicitDenyIsNotMissingPermission(t *testing.T) {
+	for _, rule := range []string{"Bash", "Bash(*)", "Bash(doomer *)", "Bash(doomer task submit *)"} {
+		t.Run(rule, func(t *testing.T) {
+			isolate(t)
+			t.Setenv("HOME", t.TempDir())
+			path, _ := claudePermissionPath()
+			os.MkdirAll(filepath.Dir(path), 0700)
+			original, _ := json.Marshal(map[string]any{"permissions": map[string]any{"deny": []string{rule}}, "theme": "dark"})
+			os.WriteFile(path, original, 0600)
+			s, _ := managedStore()
+			p := inspectClaudePermissions()
+			if p.State != "denied" || len(p.DeniedRules) != 1 {
+				t.Fatal(p)
+			}
+			if err := installClaudePermissions(s); err == nil {
+				t.Fatal("allow installation overrode an explicit deny")
+			}
+			after, _ := os.ReadFile(path)
+			if string(after) != string(original) {
+				t.Fatal("deny settings changed")
+			}
+		})
+	}
+}
+
 func TestClaudeOnboardingIncludesPermissionsAfterLiveConsent(t *testing.T) {
 	store := isolate(t)
 	t.Setenv("HOME", t.TempDir())
@@ -158,8 +183,14 @@ func TestClaudeOnboardingIncludesPermissionsAfterLiveConsent(t *testing.T) {
 	if r := run(); r.ClaudePermissions == nil || r.ClaudePermissions.State != "missing" {
 		t.Fatal(r)
 	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatal("inspection was treated as acceptance")
+	if r := run("--decline"); r.ClaudePermissions.Decision != "declined" || !r.UploadApproved {
+		t.Fatal(r)
+	}
+	if r := run(); r.ClaudePermissions.Decision != "declined" || len(r.ClaudePermissions.InstallCommand) != 0 {
+		t.Fatal(r)
+	}
+	if r := run("--allow"); r.ClaudePermissions.State != "configured" {
+		t.Fatal(r)
 	}
 	if out, err := execute(t, "", "--api-url", server.URL, "hooks", "--agent", "claude", "--task", handle); err != nil {
 		t.Fatal("approved onboarding did not configure command permissions", out, err)

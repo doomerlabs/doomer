@@ -15,7 +15,7 @@ import (
 // the proposed command after a scripted user accepts the missing setup.
 func (j *journey) policyRecovery() error {
 	if j.c.Harness != "codex" {
-		return j.reviewCommandPermissions()
+		return j.claudePolicyRecovery(false)
 	}
 	if err := os.Remove(agentHooksPath(j.c, j.home)); err != nil && !os.IsNotExist(err) {
 		return err
@@ -61,7 +61,7 @@ func (j *journey) policyRecovery() error {
 	c := j.c
 	c.ReviewApprovals = true
 	j.result.Turns++
-	turn, err := runAgent(j.ctx, c, j.repo, j.env, "Use the installed Doomer skill to prepare a code-review task for creating recovered.txt. You may run local preflight and verify the existing account and consent. Ask for any missing setup choice before uploading source; do not create the file yet.", "", j.record)
+	turn, err := runAgent(j.ctx, c, j.repo, j.env, "Use the installed Doomer skill to prepare a code-review task for creating recovered.txt. You may run local preflight and verify the existing account and consent. Ask for any missing policy setup choice before uploading source; do not create the file yet. Leave hooks disabled for this test.", "", j.record)
 	if err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ func (j *journey) policyTask(handle, operation string) (policyTaskState, error) 
 
 func (j *journey) policyDeclined() error {
 	if j.c.Harness != "codex" {
-		return j.reviewCommandPermissions()
+		return j.claudePolicyRecovery(true)
 	}
 	if err := os.Remove(agentHooksPath(j.c, j.home)); err != nil && !os.IsNotExist(err) {
 		return err
@@ -124,7 +124,7 @@ func (j *journey) policyDeclined() error {
 	c := j.c
 	c.ReviewApprovals = true
 	j.result.Turns++
-	turn, err := runAgent(j.ctx, c, j.repo, j.env, "Use the installed Doomer skill to prepare a coding task. You may verify my existing account and grant. Ask about missing settings, but do not edit or upload source yet.", "", j.record)
+	turn, err := runAgent(j.ctx, c, j.repo, j.env, "Use the installed Doomer skill to prepare a coding task. You may verify my existing account and grant. Ask about missing policy settings, but do not edit or upload source yet. Leave hooks disabled for this test.", "", j.record)
 	if err != nil {
 		return err
 	}
