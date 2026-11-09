@@ -107,23 +107,31 @@ func BootstrapSupports(constraint, version string) (bool, error) {
 }
 
 type BootstrapUpdate struct {
-	Path             string `json:"path"`
-	Scope            string `json:"scope"`
-	UpgradeAvailable bool   `json:"upgrade_available"`
-	State            string `json:"state"`
-	Installed        string `json:"installed,omitempty"`
-	Available        string `json:"available"`
-	CLIRange         string `json:"cli_range"`
-	Action           string `json:"action,omitempty"`
-	Compatible       *bool  `json:"compatible,omitempty"`
+	Path             string   `json:"path"`
+	Scope            string   `json:"scope"`
+	UpgradeAvailable bool     `json:"upgrade_available"`
+	State            string   `json:"state"`
+	Installed        string   `json:"installed,omitempty"`
+	Available        string   `json:"available"`
+	CLIRange         string   `json:"cli_range"`
+	DeferCommand     []string `json:"defer_command,omitempty"`
+	UpgradeCommand   []string `json:"upgrade_command,omitempty"`
+	Action           string   `json:"action,omitempty"`
+	Compatible       *bool    `json:"compatible,omitempty"`
 }
 
 func BootstrapUpgradeOffer(scope string) string {
+	return strings.TrimSpace(UpgradePromptRules) + "\n\n" + BootstrapUpgradeDecision(scope)
+}
+
+// BootstrapUpgradeDecision omits the shared rules already returned in runtime
+// instructions, keeping each actionable update small enough to read in full.
+func BootstrapUpgradeDecision(scope string) string {
 	location := "this repository’s"
 	if scope == "personal" {
 		location = "your personal"
 	}
-	offer := strings.TrimSpace(UpgradePromptRules) + "\n\nIf the checks above permit an offer, ask the user: ‘A new version of the Doomer skill is available. Update " + location + " skill files now? Your current version still works.’ Present choices in this order: ‘Update skill (recommended)’, ‘Maybe later’."
+	offer := "If the checks above permit an offer, ask the user: ‘A new version of the Doomer skill is available. Update " + location + " skill files now? Your current version still works.’ Present choices in this order: ‘Update skill (recommended)’, ‘Maybe later’."
 	if scope == "personal" {
 		return offer + " Apply an accepted personal update locally without creating a pull request."
 	}
