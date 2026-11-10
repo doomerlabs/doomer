@@ -1,0 +1,20 @@
+cmd/managed_bootstrap_skills_test.go
+  h_aa44c3b5b60dec 303-311
+cmd/managed_install.go
+  h_aa44c3b5b60dec 138
+tests/codexinstall/global_npx_discovery.go
+  h_aa44c3b5b60dec 8,38,50-51,54-56,85-90,108-151
+tests/codexinstall/global_npx_discovery_test.go
+  h_aa44c3b5b60dec 1-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8fb8b56ab6610a4f8f27e1df270d11d19779e7a8",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
