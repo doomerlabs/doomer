@@ -1,0 +1,26 @@
+docs/agent-e2e-cache.md
+  h_aa44c3b5b60dec 73-79,108-113,160-162
+scripts/agent-e2e-cache-plan.py
+  h_aa44c3b5b60dec 15-16
+scripts/agent-e2e-local-linux.sh
+  h_aa44c3b5b60dec 4,7-11,14-25,27,29-32,39
+scripts/ci-verify.sh
+  h_aa44c3b5b60dec 61
+scripts/test-agent-e2e-cache-plan.py
+  h_aa44c3b5b60dec 30-32
+tests/codexinstall/Dockerfile
+  h_aa44c3b5b60dec 1
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 331-333
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "80cd2ae8a62b5227d446eeb80ae5eaaed3c40982",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
