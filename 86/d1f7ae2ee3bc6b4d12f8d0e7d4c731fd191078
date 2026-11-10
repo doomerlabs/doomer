@@ -1,0 +1,16 @@
+.depot/workflows/agent-e2e.yml
+  h_aa44c3b5b60dec 26,39,46,70,235
+scripts/verify-ci-contract.go
+  h_aa44c3b5b60dec 457-458,460-464,468
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "86d1f7ae2ee3bc6b4d12f8d0e7d4c731fd191078",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
