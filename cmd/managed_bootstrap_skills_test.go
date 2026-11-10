@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -170,6 +171,85 @@ func TestSkillsInstallerOwnershipRequiresValidMatchingLock(t *testing.T) {
 			project, err := inspectManagedBootstrap(path, "project", "dev", base)
 			if err != nil || project.UpdateManager != "" {
 				t.Fatal("personal lock changed repository handling", project, err)
+			}
+		})
+	}
+}
+
+func TestSkillsHomeLockSurvivesXDGChange(t *testing.T) {
+	for _, activeLock := range []string{"", `{"version":3,"skills":{}}`} {
+		t.Run(fmt.Sprint("active-lock-", activeLock != ""), func(t *testing.T) {
+			isolate(t)
+			home, stateHome := t.TempDir(), t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("XDG_STATE_HOME", stateHome)
+			path := filepath.Join(home, ".agents/skills/doomer-review/SKILL.md")
+			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+				t.Fatal(err)
+			}
+			content, _ := managed.BootstrapText(managed.Policy{Protocol: managed.Protocol, Channel: "stable"})
+			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(home, ".agents/.skill-lock.json"), []byte(`{"version":3,"skills":{"doomer-review":{"source":"doomerlabs/skills","sourceType":"github"}}}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if activeLock != "" {
+				if err := os.MkdirAll(filepath.Join(stateHome, "skills"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(stateHome, "skills/.skill-lock.json"), []byte(activeLock), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			update, err := inspectManagedBootstrap(path, "personal", "dev", home)
+			if err != nil || update.UpdateManager != "skills" || !strings.Contains(update.Action, "XDG_STATE_HOME unset") {
+				t.Fatal(update, err)
+			}
+			out, err := execute(t, "", "bootstrap", "upgrade", "--personal", "--accept")
+			if err != nil || !strings.Contains(out, "external_update_required") {
+				t.Fatal(out, err)
+			}
+			actual, err := os.ReadFile(path)
+			if err != nil || string(actual) != content {
+				t.Fatal("installer-owned skill changed", err)
+			}
+		})
+	}
+}
+
+func TestSkillsManualNoticePreservesInspectionState(t *testing.T) {
+	for _, state := range []string{"modified", "newer", "incompatible"} {
+		t.Run(state, func(t *testing.T) {
+			isolate(t)
+			t.Setenv("XDG_STATE_HOME", "")
+			home := t.TempDir()
+			path := filepath.Join(home, ".agents/skills/doomer-review/SKILL.md")
+			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+				t.Fatal(err)
+			}
+			content, _ := managed.BootstrapTextForScope(managed.Policy{Protocol: managed.Protocol, Channel: "stable"}, "personal")
+			switch state {
+			case "modified":
+				content += "\nCustom instructions.\n"
+			case "newer":
+				content = strings.Replace(content, managed.BootstrapVersion, "2099.1.1.1", 1)
+			case "incompatible":
+				content = strings.Replace(content, managed.BootstrapCLIRange, ">=2099.1.1.1", 1)
+			}
+			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(home, ".agents/.skill-lock.json"), []byte(`{"version":3,"skills":{"doomer-review":{"source":"doomerlabs/skills","sourceType":"github"}}}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			original, err := managed.InspectBootstrap(path, "personal", managed.BootstrapVersion)
+			if err != nil || original.State != state {
+				t.Fatal(original, err)
+			}
+			update, err := inspectManagedBootstrap(path, "personal", managed.BootstrapVersion, home)
+			if err != nil || update.State != state || update.UpdateManager != "skills" || !strings.Contains(update.Action, "npx skills update doomer-review --global") || !strings.Contains(update.Action, original.Action) {
+				t.Fatal(update, err)
 			}
 		})
 	}

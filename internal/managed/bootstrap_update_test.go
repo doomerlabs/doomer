@@ -323,12 +323,14 @@ func TestReleasedDiscoveryBootstrapsRemainUpgradable(t *testing.T) {
 		{Protocol: Protocol, Channel: "delayed", DelayHours: 24},
 		{Protocol: Protocol, Channel: "pinned", Version: "2026.11.9.5"},
 	} {
-		for _, previous := range []struct{ scope, template, revision string }{
-			{"project", versionNineFourBootstrapTemplate, "2026.11.9.4"},
-			{"personal", versionNineFivePersonalBootstrapTemplate, "2026.11.9.5"},
+		for _, previous := range []struct{ scope, template, revision, cliRange string }{
+			{"project", versionNineFourBootstrapTemplate, "2026.11.9.4", ">=2026.11.9.4"},
+			{"personal", versionNineFivePersonalBootstrapTemplate, "2026.11.9.5", ">=2026.11.9.4"},
+			{"project", versionNineSixBootstrapTemplate, "2026.11.9.6", ">=2026.11.9.6"},
+			{"personal", personalBootstrapTemplate(versionNineSixBootstrapTemplate), "2026.11.9.6", ">=2026.11.9.6"},
 		} {
 			t.Run(policy.Channel+"/"+previous.scope, func(t *testing.T) {
-				old, err := bootstrapText(policy, previous.template, previous.revision, ">=2026.11.9.4")
+				old, err := bootstrapText(policy, previous.template, previous.revision, previous.cliRange)
 				if err != nil {
 					t.Fatal(err)
 				}

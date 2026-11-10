@@ -159,10 +159,13 @@ func BootstrapTextForScope(p Policy, scope string) (string, error) {
 	if scope != "personal" {
 		return BootstrapText(p)
 	}
-	template := strings.Replace(bootstrapTemplate,
+	return bootstrapText(p, personalBootstrapTemplate(bootstrapTemplate), BootstrapVersionForScope(scope), BootstrapCLIRange)
+}
+
+func personalBootstrapTemplate(template string) string {
+	return strings.Replace(template,
 		"description: Review edited source with Doomer and reuse approved setup.",
 		"description: >-\n  Use Doomer for every coding task that creates or modifies source code, fixes\n  bugs, refactors code, or changes tests or build configuration. Start before\n  editing and complete the review workflow before delivering changes, even\n  when the user does not explicitly request code review.", 1)
-	return bootstrapText(p, template, BootstrapVersionForScope(scope), BootstrapCLIRange)
 }
 
 func bootstrapText(p Policy, template, revision, cliRange string) (string, error) {
