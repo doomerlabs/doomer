@@ -43,7 +43,7 @@ var fixtureScopes = map[string][]string{
 // A mismatch safely falls back to shared fixture bodies until that audit occurs.
 // Personal/repository discovery remains shared; its new dispatch paths do not
 // call the existing scenario-scoped fixture helpers.
-const fixtureAuditSHA256 = "1824f09b23fe519c2671df1607427582a0ca32f0048f244e0b9f1d441620eb23"
+const fixtureAuditSHA256 = "8c532f4138d0275ec35c849d55c5681c3d84bd0a08c666a7d8dff71bbe55257d"
 
 func (m snapshotMetadata) fingerprintFiles(scenario string) []snapshotEntry {
 	if len(m.RuntimeFiles) == 0 {

@@ -79,6 +79,9 @@ var terminalEscapes = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x
 func (j *journey) tui() error {
 	started := time.Now()
 	prompt := "Create hello.txt containing hello followed by a newline. Follow the installed Doomer skill and finish its review, recording responses to any findings. Keep agent approval settings unchanged."
+	if j.c.Scenario == "global-npx-discovery" {
+		prompt = "Create hello.txt containing hello followed by a newline."
+	}
 	j.record("Scripted user", prompt)
 	j.f.mu.Lock()
 	j.f.Findings = true
@@ -162,7 +165,7 @@ wait:
 	if err != nil || strings.TrimSpace(string(raw)) != "hello" {
 		return fmt.Errorf("interactive coding result is missing")
 	}
-	if choice == "allow" {
+	if choice == "allow" && j.c.Scenario != "global-npx-discovery" {
 		j.result.Checks["native_hook_activated"] = hookActivated
 	} else {
 		j.result.Checks["native_hook_stayed_inactive"] = !hookActivated

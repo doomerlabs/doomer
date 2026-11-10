@@ -187,7 +187,27 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 	declined := false
 	candidateInstalled := false
 	approvalLinkRetries := 0
-	if c.CandidateFile != "" || c.SkillsGuide != "" {
+	if c.Scenario == "global-npx-discovery" {
+		if err := installGlobalNpxSkill(ctx, home, repo, env, record); err != nil {
+			return fail(err)
+		}
+		if c.CandidateFile != "" {
+			// Exercise first-use runtime installation without touching the npx skill.
+			install := exec.CommandContext(ctx, c.CandidateFile, "install", "--runtime", "--personal")
+			install.Dir, install.Env = repo, env
+			output, err := install.CombinedOutput()
+			record("Runtime installation", string(output))
+			if err != nil {
+				return fail(fmt.Errorf("candidate runtime installation: %w: %s", err, output))
+			}
+			if err := installCandidate(c, home); err != nil {
+				return fail(err)
+			}
+		}
+		// Exercise the published bootstrap and its own runtime installer unchanged.
+		candidateInstalled = true
+		prompt = "Complete Doomer setup using the already installed personal skill. Use its instructions, preserve the skill files, and ask for required approvals. This isolated test uses DOOMER_API_URL for its account service. Use --agent " + agentName(c) + ". Decline optional hooks; this installation uses per-call reviews."
+	} else if c.CandidateFile != "" || c.SkillsGuide != "" {
 		result.Turns++
 		software, err := runAgent(ctx, c, repo, env, prompt+" Install the verified runtime and skill files only in this turn. The team PR step belongs to later agent onboarding; this turn only authorizes local installation. Do not run doomer prepare or begin onboarding yet. Stop after the install command completes.", "", record)
 		if err != nil {
@@ -288,7 +308,7 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 			record("Scripted user", prompt)
 			continue
 		}
-		discovery := c.Scenario == "personal-discovery" || c.Scenario == "repository-discovery"
+		discovery := c.Scenario == "personal-discovery" || c.Scenario == "repository-discovery" || c.Scenario == "global-npx-discovery"
 		ready, checks := inspectInstall(ctx, repo, home, env, personalScenario(c.Scenario), c.Harness, !discovery)
 		if discovery && !ready && checks["authenticated"] && checks["upload_approved"] && !checks["hooks_configured"] {
 			prompt = "I decline optional Doomer hook installation. Record that choice, preserve my existing upload approval and reviewer settings, and finish verifying setup for per-call reviews."

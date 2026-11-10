@@ -254,3 +254,75 @@ func TestSkillsManualNoticePreservesInspectionState(t *testing.T) {
 		})
 	}
 }
+
+func TestPersonalInstallPreservesNpxOwnedSkill(t *testing.T) {
+	for _, linked := range []bool{false, true} {
+		t.Run(fmt.Sprint("symlink-", linked), func(t *testing.T) {
+			isolate(t)
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("XDG_STATE_HOME", "")
+			policy := managed.Policy{Protocol: managed.Protocol, Channel: "stable"}
+			content, err := managed.BootstrapText(policy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			canonical := filepath.Join(home, ".agents/skills/doomer-review/SKILL.md")
+			claude := filepath.Join(home, ".claude/skills/doomer-review/SKILL.md")
+			if err := os.MkdirAll(filepath.Dir(canonical), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(canonical, []byte(content), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Dir(filepath.Dir(claude)), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if linked {
+				if err := os.Symlink("../../.agents/skills/doomer-review", filepath.Dir(claude)); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := os.MkdirAll(filepath.Dir(claude), 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(claude, []byte(content), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			lockPath := filepath.Join(home, ".agents/.skill-lock.json")
+			lock := []byte(`{"version":3,"skills":{"doomer-review":{"source":"doomerlabs/skills","sourceType":"github"}}}`)
+			if err := os.WriteFile(lockPath, lock, 0600); err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < 2; i++ {
+				out, err := execute(t, "", "install", "--personal")
+				if err != nil {
+					t.Fatal(out, err)
+				}
+			}
+			for _, path := range []string{canonical, claude, lockPath} {
+				want := []byte(content)
+				if path == lockPath {
+					want = lock
+				}
+				data, err := os.ReadFile(path)
+				if err != nil || !bytes.Equal(data, want) {
+					t.Fatalf("changed npx file %s: %v", path, err)
+				}
+			}
+			if linked {
+				target, err := os.Readlink(filepath.Dir(claude))
+				if err != nil || target != "../../.agents/skills/doomer-review" {
+					t.Fatal(target, err)
+				}
+			}
+			if _, err := os.Stat(filepath.Join(filepath.Dir(canonical), "agents/openai.yaml")); !os.IsNotExist(err) {
+				t.Fatal("added metadata to npx-owned skill", err)
+			}
+			if out, err := execute(t, "", "install", "--personal", "--policy", "manual"); err == nil {
+				t.Fatal("replaced installer-owned policy", out)
+			}
+		})
+	}
+}

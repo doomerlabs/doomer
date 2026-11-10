@@ -119,6 +119,25 @@ func newManagedInstallCommand() *cobra.Command {
 const personalCodexSkillConfig = "policy:\n  allow_implicit_invocation: true\n"
 
 func managedBootstrapFiles(base string, policy managed.Policy, scope string) ([]string, map[string][]byte, map[string][]byte, error) {
+	if scope == "personal" {
+		path := filepath.Join(base, ".agents/skills/doomer-review/SKILL.md")
+		update, err := inspectManagedBootstrap(path, scope, "dev", base)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, nil, nil, err
+		}
+		if update.UpdateManager == "skills" {
+			bootstrap, err := managed.ReadBootstrap(path, scope)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			if bootstrap.Policy != policy {
+				return nil, nil, nil, fmt.Errorf("npx-managed skill policy differs from the requested installation policy")
+			}
+			// npx owns the skill files, their agent links, and invocation metadata.
+			// A first-use runtime installation must leave that installation intact.
+			return nil, nil, nil, nil
+		}
+	}
 	content, err := managed.BootstrapTextForScope(policy, scope)
 	if err != nil {
 		return nil, nil, nil, err
