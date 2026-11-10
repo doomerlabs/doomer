@@ -148,7 +148,11 @@ func (j *journey) npxSkillUpgrade() error {
 		if task.Bootstrap.Scope != scope || !strings.HasPrefix(task.Bootstrap.Path, base+string(filepath.Separator)) {
 			return fmt.Errorf("task used the wrong skill scope: %+v", task.Bootstrap)
 		}
+		if j.c.CandidateVersion != "" && task.Release != j.c.CandidateVersion {
+			return fmt.Errorf("task used release %s instead of candidate %s", task.Release, j.c.CandidateVersion)
+		}
 		j.result.Checks["correct_skill_precedence"] = true
+		j.result.Checks["candidate_runtime_used"] = true
 	}
 	if personal {
 		return j.finish()
