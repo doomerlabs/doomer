@@ -154,6 +154,8 @@ func newRootCommand(injected *application.App) *cobra.Command {
 	root.Version = fmt.Sprintf("%s (commit %s, built %s)", version.Version, version.Commit, version.BuildDate)
 	root.SetVersionTemplate("doomer {{.Version}}\n")
 	root.CompletionOptions.DisableDefaultCmd = true
+	root.SetHelpFunc(writeMarkdownHelp)
+	configureCommandHelp(root)
 	return root
 }
 
