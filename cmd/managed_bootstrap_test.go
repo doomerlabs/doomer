@@ -140,17 +140,14 @@ func TestPersonalBootstrapUpgradeAddsDiscoveryAndPreservesPolicy(t *testing.T) {
 			home := t.TempDir()
 			t.Setenv("HOME", home)
 			policy := managed.Policy{Protocol: managed.Protocol, Channel: "manual"}
-			old, err := managed.BootstrapText(policy)
-			if err != nil {
-				t.Fatal(err)
-			}
-			old = strings.ReplaceAll(old, managed.BootstrapVersion, "2026.11.9.4")
+			old := legacyDiscoveryBootstrap(t, policy.Channel)
+			var err error
 			// A previous personal install may have only one agent's copy.
 			path := filepath.Join(home, ".agents/skills/doomer-review/SKILL.md")
-			if err = os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 				t.Fatal(err)
 			}
-			if err = os.WriteFile(path, []byte(old), 0600); err != nil {
+			if err := os.WriteFile(path, []byte(old), 0600); err != nil {
 				t.Fatal(err)
 			}
 			configPath := filepath.Join(filepath.Dir(path), "agents/openai.yaml")
@@ -219,8 +216,7 @@ func TestPersonalBootstrapRejectsUnsafeConfigWithoutPartialWrites(t *testing.T) 
 			args := []string{"install", "--personal"}
 			old := ""
 			if operation == "upgrade" {
-				old, _ = managed.BootstrapText(managed.Policy{Protocol: managed.Protocol, Channel: "stable"})
-				old = strings.ReplaceAll(old, managed.BootstrapVersion, "2026.11.9.4")
+				old = legacyDiscoveryBootstrap(t, "stable")
 				if err := os.WriteFile(path, []byte(old), 0600); err != nil {
 					t.Fatal(err)
 				}
@@ -368,4 +364,16 @@ func TestBootstrapDecisionCommandsRemainVisibleAndScoped(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Use the real pre-discovery bootstrap so new instructions cannot invalidate
+// the legacy-upgrade fixture merely by changing the current template.
+func legacyDiscoveryBootstrap(t *testing.T, channel string) string {
+	t.Helper()
+	template, err := os.ReadFile("../internal/managed/bootstrap-2026.11.9.4.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata := fmt.Sprintf("  doomer-bootstrap-version: 2026.11.9.4\n  doomer-cli-range: '>=2026.11.9.4'\n  doomer-protocol: \"%d\"\n  doomer-update-policy: %s", managed.Protocol, channel)
+	return strings.Replace(string(template), "{{metadata}}", metadata, 1)
 }

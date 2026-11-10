@@ -6,6 +6,9 @@ RUN curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.17.44.zip 
     && echo 'ed46356f6358c0dfa30416899bf3efe0001689520ffce22c128f5bc617e8f4c3  /tmp/aws.zip' | sha256sum -c - \
     && unzip -q /tmp/aws.zip -d /tmp && /tmp/aws/install \
     && rm -rf /tmp/aws /tmp/aws.zip
+RUN curl -fsSL https://nodejs.org/dist/v22.20.0/node-v22.20.0-linux-x64.tar.gz -o /tmp/node.tar.gz \
+    && echo 'eeaccb0378b79406f2208e8b37a62479c70595e20be6b659125eb77dd1ab2a29  /tmp/node.tar.gz' | sha256sum -c - \
+    && tar -C /usr/local --strip-components=1 -xzf /tmp/node.tar.gz && rm /tmp/node.tar.gz
 ARG GO_VERSION=1.26.10
 RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tar.gz \
     && curl -fsSL 'https://go.dev/dl/?mode=json&include=all' -o /tmp/go.json \

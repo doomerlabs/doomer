@@ -301,6 +301,10 @@ type scenarioCache struct {
 }
 
 func openScenarioCache(ctx context.Context, m *snapshotMetadata, noCache bool, scenario, output string) (*scenarioCache, bool) {
+	if scenario == "global-npx-discovery" {
+		fmt.Fprintln(os.Stderr, "Cache bypass: global npx discovery exercises the live published skill")
+		return nil, false
+	}
 	if m == nil {
 		return nil, false
 	}
