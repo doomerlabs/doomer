@@ -1,0 +1,22 @@
+docs/e2e-dependency-planner.md
+  h_aa44c3b5b60dec 51-53
+tests/codexinstall/dependencies.go
+  h_aa44c3b5b60dec 17-20,32-34
+tests/codexinstall/impact.go
+  h_aa44c3b5b60dec 46
+tests/codexinstall/impact_test.go
+  h_aa44c3b5b60dec 247-253
+tests/codexinstall/snapshot.go
+  h_aa44c3b5b60dec 315-325
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a60b8bd5562c3b6b8461abb1262388e3b7985c18",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
