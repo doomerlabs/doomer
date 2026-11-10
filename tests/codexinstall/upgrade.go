@@ -79,9 +79,10 @@ func (j *journey) upgrade() error {
 	}
 	marker := filepath.Join(j.home, "pr-created")
 	oldLauncher := "#!/bin/sh\nexec '" + runtimeversion.Binary(j.home, "2026.11.6.9") + "' \"$@\"\n"
-	// The precedence scenario must exercise the candidate's update routing. An
-	// ancient launcher can select a newer public release before the candidate runs.
-	if j.c.Scenario != "upgrade-repo-over-personal-npx" {
+	// These scenarios must exercise the candidate's update routing and revision
+	// deferrals. An ancient launcher can select a public runtime advertising a
+	// different bootstrap revision before the candidate runs.
+	if j.c.Scenario != "upgrade-repo-over-personal-npx" && j.c.Scenario != "upgrade-defer" {
 		if err = os.WriteFile(filepath.Join(bin, "doomer"), []byte(oldLauncher), 0700); err != nil {
 			return err
 		}
