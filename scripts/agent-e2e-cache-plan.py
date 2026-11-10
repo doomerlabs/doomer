@@ -95,7 +95,6 @@ def main():
         with open(output, 'a') as stream:
             stream.write('cached=' + json.dumps(cached, separators=(',', ':')) + '\n')
             stream.write('regression=' + json.dumps(regression) + '\n')
-            stream.write('max_parallel=' + str(80 if status['complete'] else 8) + '\n')
     print(f"Verified {hits}/{expected} scenario results; baseline={regression}; {status['duration_seconds']:.1f}s")
     if args.populate and not status['complete']:
         raise SystemExit('Local population has failures; inspect retained reports')

@@ -23,7 +23,6 @@ jobs:
       release: ${{ steps.scenarios.outputs.release }}
       cached: ${{ steps.cache.outputs.cached }}
       regression: ${{ steps.cache.outputs.regression }}
-      max_parallel: ${{ steps.cache.outputs.max_parallel }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -81,7 +80,7 @@ jobs:
     strategy:
       fail-fast: false
       # Bound provider request bursts while keeping scenarios parallel.
-      max-parallel: ${{ fromJSON(needs.plan.outputs.max_parallel) }}
+      max-parallel: 8
       matrix:
         harness: [codex, claude]
         scenario: ${{ fromJSON(needs.plan.outputs.scenarios) }}

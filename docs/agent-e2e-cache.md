@@ -142,9 +142,8 @@ Linux local and CI results are mutually acceptable only when OS, architecture,
 source, pinned agent package, toolchain, model, authentication and all other
 fingerprinted settings match. macOS and Windows results do not satisfy Linux
 checks. CI uses read-only bucket credentials for its verification plan and separate
-publisher credentials only in fallback jobs. The all-cached matrix can run its
-lightweight checks concurrently; any cache miss retains the eight-worker provider
-limit. Release gates and the required scenario set are unchanged.
+publisher credentials only in fallback jobs. The matrix retains a fixed eight-job limit for both lightweight cached
+checks and provider-backed fallback execution. Release gates and the required scenario set are unchanged.
 
 To populate matching Linux results from the current local checkout:
 
