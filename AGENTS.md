@@ -37,6 +37,9 @@ Start this as soon as the changes stabilize, while review and PR preparation
 continue. Run it against the final proposed contents, investigate failures, and
 report the result before marking the PR ready. Successful Linux results populate
 the shared cache so CI can verify them instead of repeating agent calls. The
+cache accepts successes for six hours from their original execution. If results
+will be older than that when CI runs, repeat the helper before marking the PR
+ready when expecting cache reuse; a cache hit does not extend that window. The
 runner also reuses unaffected scenarios locally; report cache hits separately
 from newly executed tests. Native
 macOS runs do not populate the Linux CI cache. Check access without printing

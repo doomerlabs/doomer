@@ -32,8 +32,10 @@ outputs. Symlinks and submodules fail capture until explicitly supported, rather
 than reading external paths. Nonempty `GOFLAGS` is rejected to prevent overlays
 outside the captured tree.
 
-A versioned SHA-256 identity covers the sorted path/byte-hash/mode manifest,
-harness, model, reasoning, auth mode, per-run budget, toolchain and relevant build
+A versioned SHA-256 identity covers the scenario's selected runtime manifest
+(sorted paths, byte hashes and modes), including shared inputs and its relevant
+fixture bodies. The full captured inventory is provenance, not the cache key.
+The identity also covers harness, model, reasoning, auth mode, per-run budget, toolchain and relevant build
 settings, pinned local agent package bytes, OS, architecture, execution class,
 scenario and external input identities. Commit SHA is provenance only. Worker
 count, suite-wide budget, temporary paths, report destination and credential
@@ -57,6 +59,9 @@ reflection makes a scoped fixture shared again. A pinned audit of shared runner
 control flow disables narrow scopes if that code changes; update that audit only
 after reviewing the dependency boundaries. New or uncertain dependencies
 therefore cause reruns rather than optimistic reuse.
+The audit pin itself is in shared `impact.go`, whose complete bytes are hashed;
+updating the pin also invalidates every scenario. Re-enabling narrow scopes never
+restores results from before a shared runner or audit-pin change.
 
 | Change | Invalidation |
 | --- | --- |

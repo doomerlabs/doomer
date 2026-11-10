@@ -301,3 +301,32 @@ func TestScopeAuditSurvivesBodyEditButNotSharedControlChange(t *testing.T) {
 		t.Fatal("shared control change retained the old scope audit")
 	}
 }
+
+func TestUpdatingAuditPinCannotReuseSharedRunnerResults(t *testing.T) {
+	root, _ := impactFixture(t, "return nil", "")
+	writeImpactFile(t, root, "tests/codexinstall/impact.go", "package main\nconst fixtureAuditSHA256 = \"old audit\"\n")
+	before := impactMetadata(t, filepath.Dir(root), root)
+	shared := filepath.Join(root, "tests/codexinstall/scenarios.go")
+	raw, err := os.ReadFile(shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(shared, append(raw, []byte("\nfunc sharedControl() { panic(\"changed\") }\n")...), 0600); err != nil {
+		t.Fatal(err)
+	}
+	changed := impactMetadata(t, filepath.Dir(root), root)
+	digest, err := fixtureAuditDigest(root, changed.ScenarioFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeImpactFile(t, root, "tests/codexinstall/impact.go", "package main\nconst fixtureAuditSHA256 = \""+digest+"\"\n")
+	after := impactMetadata(t, filepath.Dir(root), root)
+	if len(after.ScenarioFiles) == 0 {
+		t.Fatal("test must retain narrow scopes after updating the audit pin")
+	}
+	for _, scenario := range scenarioNames {
+		if before.fingerprint(scenario) == after.fingerprint(scenario) {
+			t.Fatalf("shared runner and audit-pin change reused %s", scenario)
+		}
+	}
+}
