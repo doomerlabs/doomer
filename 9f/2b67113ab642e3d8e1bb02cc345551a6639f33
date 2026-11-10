@@ -1,0 +1,40 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 261-269,314-317
+cmd/managed_bootstrap.go
+  h_aa44c3b5b60dec 53,59-61,115,145,171-174
+cmd/managed_bootstrap_skills.go
+  h_aa44c3b5b60dec 1-56
+cmd/managed_bootstrap_skills_test.go
+  h_aa44c3b5b60dec 1-176
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 144-156,167,170,172
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 13
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 55-56
+tests/codexinstall/impact.go
+  h_aa44c3b5b60dec 32-33,46
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 17,21-43,301-312,369-383
+tests/codexinstall/npx_upgrade.go
+  h_aa44c3b5b60dec 1-162
+tests/codexinstall/npx_upgrade_test.go
+  h_aa44c3b5b60dec 1-28
+tests/codexinstall/runner_test.go
+  h_aa44c3b5b60dec 297,302
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 18,186-187,396
+tests/codexinstall/upgrade.go
+  h_aa44c3b5b60dec 92-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9f2b67113ab642e3d8e1bb02cc345551a6639f33",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
