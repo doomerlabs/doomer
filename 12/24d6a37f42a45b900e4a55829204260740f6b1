@@ -1,0 +1,34 @@
+.depot/workflows/agent-e2e.yml
+  h_aa44c3b5b60dec 47
+docs/agent-e2e-cache.md
+  h_aa44c3b5b60dec 157-166
+scripts/agent-e2e-local-linux.sh
+  h_aa44c3b5b60dec 22
+tests/codexinstall/baseline-release.txt
+  h_aa44c3b5b60dec 1
+tests/codexinstall/build_pin.go
+  h_aa44c3b5b60dec 1-43
+tests/codexinstall/cache_inputs.go
+  h_aa44c3b5b60dec 70,101,108-117,143,164-166,196-201,231-266
+tests/codexinstall/cache_test.go
+  h_aa44c3b5b60dec 10,179,460-527
+tests/codexinstall/candidate.go
+  h_aa44c3b5b60dec 74-80
+tests/codexinstall/local.go
+  h_aa44c3b5b60dec 41-46
+tests/codexinstall/snapshot.go
+  h_aa44c3b5b60dec 27-29
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 154-159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1224d6a37f42a45b900e4a55829204260740f6b1",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
