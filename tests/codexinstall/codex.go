@@ -23,7 +23,7 @@ func policyChoiceOffered(text string) bool {
 var claudePermissionProposal = regexp.MustCompile(`"claude_permissions"\s*:\s*\{[^}]*"install_command"`)
 
 // Agents may extract the hook object from a large prepare response.
-var hookProposal = regexp.MustCompile(`"hook_setup"\s*:\s*\{[^}]*"install_command"|"install_command"\s*:\s*\[[^\]]*"hook-setup"`)
+var hookProposal = regexp.MustCompile(`"hook_setup"\s*:\s*\{[^}]*"install_command"|"install_command"\s*:\s*\[[^\]]*"hook-setup"[^\]]*"--allow"`)
 
 var updateState = regexp.MustCompile(`"state"\s*:\s*"update_permission_required"`)
 

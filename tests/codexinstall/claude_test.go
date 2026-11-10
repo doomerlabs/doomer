@@ -207,6 +207,8 @@ func TestHookProposalRecognizesExtractedSetup(t *testing.T) {
 		{"extracted", "{\n  \"state\": \"missing\",\n  \"install_command\": [\n    \"doomer\", \"task\", \"hook-setup\", \"handle\", \"--allow\"\n  ]\n}", true},
 		{"other setup", `{"state":"missing","install_command":["doomer","task","policy","handle","--allow"]}`, false},
 		{"declined", `{"state":"declined","decline_command":["doomer","task","hook-setup","handle","--decline"]}`, false},
+		{"decline echo", `{"state":"declined","install_command":["doomer","task","hook-setup","handle","--decline"]}`, false},
+		{"unrelated path", `{"install_command":["/tmp/hook-setup","--allow"]}`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := hookProposal.MatchString(tc.output); got != tc.want {
