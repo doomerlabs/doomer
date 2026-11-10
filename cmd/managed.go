@@ -1114,6 +1114,9 @@ func dispatchManaged(ctx context.Context, args []string, in io.Reader, out, stde
 	if err != nil {
 		return false, nil
 	}
+	// Parse help as a real flag before looking up a task or its runtime. Cobra
+	// normally initializes this during Execute, after launcher dispatch.
+	command.InitDefaultHelpFlag()
 	var handle string
 	if command.Parent() != nil && command.Parent().Name() == "task" {
 		if command.Name() == "repair" {
@@ -1131,6 +1134,9 @@ func dispatchManaged(ctx context.Context, args []string, in io.Reader, out, stde
 			return true, err
 		}
 		handle, _ = command.Flags().GetString("task")
+	}
+	if help, _ := command.Flags().GetBool("help"); help {
+		return false, nil
 	}
 	if handle == "" {
 		return false, nil
