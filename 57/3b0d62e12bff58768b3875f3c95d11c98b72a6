@@ -1,0 +1,18 @@
+AGENTS.md
+  h_aa44c3b5b60dec 40-42
+docs/agent-e2e-cache.md
+  h_aa44c3b5b60dec 35-38,62-64
+tests/codexinstall/impact_test.go
+  h_aa44c3b5b60dec 304-332
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "573b0d62e12bff58768b3875f3c95d11c98b72a6",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
