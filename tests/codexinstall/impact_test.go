@@ -241,6 +241,9 @@ func TestPrunedRuntimeBuildsRealCLIAndRunner(t *testing.T) {
 	if err = prepareRuntimeInputs(context.Background(), snapshot, map[string]string{"cli": captured}, &m); err != nil {
 		t.Fatal(err)
 	}
+	if m.DependencyAnalysis == nil || m.DependencyAnalysis.Error != "" || m.DependencyAnalysis.Footprint == nil {
+		t.Fatalf("real captured dependency analysis failed: %+v", m.DependencyAnalysis)
+	}
 	for _, target := range []string{".", "./tests/codexinstall"} {
 		binary := filepath.Join(t.TempDir(), "program.exe")
 		cmd := exec.Command("go", "build", "-mod=readonly", "-buildvcs=false", "-o", binary, target)

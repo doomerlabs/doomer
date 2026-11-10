@@ -41,8 +41,9 @@ var fixtureScopes = map[string][]string{
 // Updating shared runner control flow requires reviewing the scope boundaries.
 // A mismatch safely falls back to shared fixture bodies until that audit occurs.
 // Personal/repository discovery remains shared; its new dispatch paths do not
-// call the existing scenario-scoped fixture helpers.
-const fixtureAuditSHA256 = "4e4befdfbe4157aac8abe3ce1ed76f60ba7c0d9d22d9203e025b17e6c021c71a"
+// call the existing scenario-scoped fixture helpers. Dependency capture and
+// shadow analysis add no calls to scenario-scoped journey methods.
+const fixtureAuditSHA256 = "690b88bece9c86f8a0e0ece533c4b257ae0f99ade7b8a8cc7ed8c565611ddb1c"
 
 func (m snapshotMetadata) fingerprintFiles(scenario string) []snapshotEntry {
 	if len(m.RuntimeFiles) == 0 {
@@ -55,6 +56,13 @@ func (m snapshotMetadata) fingerprintFiles(scenario string) []snapshotEntry {
 	known := scenario == "ordinary-upgrade" || scenario == "policy-activation"
 	for _, name := range scenarioNames {
 		known = known || name == scenario
+	}
+	for name, paths := range m.ExtraFiles {
+		if name == scenario || !known {
+			for _, path := range paths {
+				selected[path] = true
+			}
+		}
 	}
 	var result []snapshotEntry
 	for _, entry := range m.Files {
@@ -128,6 +136,7 @@ func prepareRuntimeInputs(ctx context.Context, snapshot string, roots map[string
 		"scripts/ci-agent-e2e.sh", "scripts/agent-e2e-local-linux.sh",
 		"scripts/agent-e2e-baseline.sh", "scripts/agent-e2e-cache-plan.py",
 		".depot/workflows/agent-e2e.yml",
+		"e2e-extra-dependencies.yml",
 	} {
 		add(roots["cli"], path)
 	}
@@ -148,6 +157,12 @@ func prepareRuntimeInputs(ctx context.Context, snapshot string, roots map[string
 			}
 		}
 	}
+	// The manifest may only add inputs. Keep extra-only files in the execution
+	// tree without turning an unrelated test's key into the entire file set.
+	m.ExtraFiles, err = extraDependencyFiles(roots["cli"], snapshot, *m)
+	if err != nil {
+		return err
+	}
 	m.RuntimeFiles = nil
 	for _, entry := range m.Files {
 		if selected[entry.Path] {
@@ -155,6 +170,12 @@ func prepareRuntimeInputs(ctx context.Context, snapshot string, roots map[string
 		}
 	}
 	sort.Strings(m.RuntimeFiles)
+	for _, paths := range m.ExtraFiles {
+		for _, path := range paths {
+			selected[path] = true
+		}
+	}
+	m.DependencyAnalysis = analyzeDependencyShadow(ctx, roots["cli"])
 	m.ScenarioFiles, err = scopedFixtureInputs(roots["cli"], snapshot)
 	if err != nil {
 		return err

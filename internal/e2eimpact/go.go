@@ -16,10 +16,15 @@ import (
 // AnalyzeGoPackage analyzes one build-selected Go package. Callers must select
 // the actual GOOS/GOARCH/build-tag inputs before calling it. Analysis failure is
 // an error, never an empty dependency graph that could authorize a cache hit.
-// Cross-package calls currently remain unresolved and force broad dependencies.
+// Use AnalyzeGoPackages to resolve calls across captured packages; this single
+// package entry point conservatively leaves external calls unresolved.
 // Sources also contains the captured bytes of non-Go extra inputs; tracing must
 // reject an extra path whose bytes were not captured in this same snapshot.
 func AnalyzeGoPackage(importPath string, sources map[string][]byte) (Graph, error) {
+	return analyzeGoPackage(importPath, sources, importer.Default(), nil)
+}
+
+func analyzeGoPackage(importPath string, sources map[string][]byte, imports types.Importer, known map[string]bool) (Graph, error) {
 	g := Graph{Nodes: map[string]Node{}, Files: map[string][]byte{}}
 	set := token.NewFileSet()
 	var files []*ast.File
@@ -56,7 +61,7 @@ func AnalyzeGoPackage(importPath string, sources map[string][]byte) (Graph, erro
 		Defs: map[*ast.Ident]types.Object{}, Uses: map[*ast.Ident]types.Object{},
 		Types: map[ast.Expr]types.TypeAndValue{}, Selections: map[*ast.SelectorExpr]*types.Selection{},
 	}
-	config := types.Config{Importer: importer.Default()}
+	config := types.Config{Importer: imports}
 	pkg, err := config.Check(importPath, set, files, info)
 	if err != nil {
 		return g, fmt.Errorf("type-check dependencies: %w", err)
@@ -125,6 +130,8 @@ func AnalyzeGoPackage(importPath string, sources map[string][]byte) (Graph, erro
 				object := info.Uses[ident]
 				if id, exists := objects[object]; exists {
 					refs[id] = true
+				} else if id, ok := importedSymbol(object, pkg, known); ok {
+					refs[id] = true
 				} else if object != nil && object.Pkg() != nil && object.Pkg() != pkg {
 					node.Unresolved = append(node.Unresolved, "external declaration: "+object.String())
 				}
@@ -165,7 +172,9 @@ func AnalyzeGoPackage(importPath string, sources map[string][]byte) (Graph, erro
 			if _, builtin := object.(*types.Builtin); builtin {
 				return true
 			}
-			if _, known := objects[object]; !known {
+			_, local := objects[object]
+			_, imported := importedSymbol(object, pkg, known)
+			if !local && !imported {
 				position := set.Position(call.Pos())
 				name := "dynamic call"
 				if object != nil {
@@ -185,7 +194,12 @@ func AnalyzeGoPackage(importPath string, sources map[string][]byte) (Graph, erro
 		name := fileNames[file]
 		for _, spec := range file.Imports {
 			id := importPath + ".import@" + name + ":" + spec.Path.Value
-			g.Nodes[id] = Node{File: name, Unresolved: []string{"external package initialization: " + spec.Path.Value}}
+			node := Node{File: name}
+			importName, _ := strconv.Unquote(spec.Path.Value)
+			if !known[importName] {
+				node.Unresolved = []string{"external package initialization: " + spec.Path.Value}
+			}
+			g.Nodes[id] = node
 			g.Always = append(g.Always, id)
 		}
 		for _, group := range file.Comments {
@@ -228,4 +242,22 @@ func AnalyzeGoPackage(importPath string, sources map[string][]byte) (Graph, erro
 	}
 	sort.Strings(g.Always)
 	return g, nil
+}
+
+// Only package-level declarations and concrete methods have graph identities.
+func importedSymbol(object types.Object, current *types.Package, known map[string]bool) (string, bool) {
+	if object == nil || object.Pkg() == nil || object.Pkg() == current || !known[object.Pkg().Path()] {
+		return "", false
+	}
+	switch object := object.(type) {
+	case *types.Func:
+		return object.FullName(), true
+	case *types.TypeName, *types.Const:
+		return object.Pkg().Path() + "." + object.Name(), true
+	case *types.Var:
+		if object.Parent() == object.Pkg().Scope() {
+			return object.Pkg().Path() + "." + object.Name(), true
+		}
+	}
+	return "", false
 }

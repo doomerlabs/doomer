@@ -250,6 +250,23 @@ func TestManifestRejectsSilentTyposAndUnsafePaths(t *testing.T) {
 	}
 }
 
+func TestAllTestsSelectorDeliberatelyCrossesHarnessSeparator(t *testing.T) {
+	e := Extras{Version: 1, ExtraDependencies: map[string][]string{"a.go": {"*"}}}
+	expanded, err := e.Expand([]string{"a.go"}, []string{"codex/A", "codex/B", "claude/A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for id, paths := range expanded {
+		if len(paths) != 1 || paths[0] != "a.go" {
+			t.Fatalf("all-tests selector missed %s: %v", id, paths)
+		}
+	}
+	e.ExtraDependencies["a.go"] = []string{"codex/["}
+	if _, err := e.Expand([]string{"a.go"}, []string{"codex/A"}); err == nil {
+		t.Fatal("malformed selector accepted")
+	}
+}
+
 func TestFingerprintIgnoresExplanationsButIncludesExecutionSettings(t *testing.T) {
 	f := footprint(t, analyze(t, fixture()), "A")
 	before := key(t, f)
