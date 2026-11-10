@@ -29,20 +29,23 @@ type externalInput struct {
 	Version string `json:"catalog_release,omitempty"`
 }
 type snapshotMetadata struct {
-	Schema        int                     `json:"schema"`
-	Files         []snapshotEntry         `json:"files"`
-	RuntimeFiles  []string                `json:"runtime_files,omitempty"`
-	ScenarioFiles map[string]scenarioFile `json:"scenario_files,omitempty"`
-	Settings      map[string]string       `json:"settings"`
-	External      []externalInput         `json:"external"`
-	Environment   string                  `json:"environment"`
-	OS            string                  `json:"os"`
-	Arch          string                  `json:"arch"`
-	Commit        string                  `json:"commit,omitempty"`
-	Baseline      string                  `json:"baseline,omitempty"`
-	Stable        json.RawMessage         `json:"stable,omitempty"`
-	Captured      time.Time               `json:"captured"`
-	CacheDisabled string                  `json:"cache_disabled,omitempty"`
+	Schema             int                          `json:"schema"`
+	Files              []snapshotEntry              `json:"files"`
+	RuntimeFiles       []string                     `json:"runtime_files,omitempty"`
+	ScenarioFiles      map[string]scenarioFile      `json:"scenario_files,omitempty"`
+	ScenarioHashes     map[string]map[string]string `json:"scenario_hashes,omitempty"`
+	ExtraFiles         map[string][]string          `json:"extra_files,omitempty"`
+	DependencyAnalysis *dependencyAnalysis          `json:"dependency_analysis,omitempty"`
+	Settings           map[string]string            `json:"settings"`
+	External           []externalInput              `json:"external"`
+	Environment        string                       `json:"environment"`
+	OS                 string                       `json:"os"`
+	Arch               string                       `json:"arch"`
+	Commit             string                       `json:"commit,omitempty"`
+	Baseline           string                       `json:"baseline,omitempty"`
+	Stable             json.RawMessage              `json:"stable,omitempty"`
+	Captured           time.Time                    `json:"captured"`
+	CacheDisabled      string                       `json:"cache_disabled,omitempty"`
 }
 
 type snapshotOptions struct {
@@ -307,6 +310,17 @@ func runSnapshot(ctx context.Context, opts snapshotOptions, args []string) error
 	sort.Slice(metadata.Files, func(i, j int) bool { return metadata.Files[i].Path < metadata.Files[j].Path })
 	if opts.Local {
 		if err := prepareRuntimeInputs(ctx, dir, mapped, &metadata); err != nil {
+			return err
+		}
+	}
+	if analysis := metadata.DependencyAnalysis; analysis != nil && analysis.Footprint != nil {
+		// Keep the complete graph available without copying its thousands of
+		// explanations into every signed cache record.
+		graph, err := json.MarshalIndent(analysis.Footprint, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(output+".dependencies.json", append(graph, '\n'), 0600); err != nil {
 			return err
 		}
 	}

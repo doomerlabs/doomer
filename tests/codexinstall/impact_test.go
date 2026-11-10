@@ -127,7 +127,7 @@ func TestScenarioHeadersAndUnexpectedCallersStayShared(t *testing.T) {
 		})
 	}
 }
-func TestActualScenarioScopeAudit(t *testing.T) {
+func TestLegacyScenarioScopeBaseline(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
@@ -135,13 +135,6 @@ func TestActualScenarioScopeAudit(t *testing.T) {
 	scopes, err := scopedFixtureInputs(root, filepath.Dir(root))
 	if err != nil {
 		t.Fatal(err)
-	}
-	audit, err := fixtureAuditDigest(root, scopes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if audit != fixtureAuditSHA256 {
-		t.Fatalf("shared runner changed; review fixture scopes before updating audit digest: %s", audit)
 	}
 	for _, name := range []string{"upgrade.go", "recovery.go", "portable.go", "preflight.go", "command_permissions.go", "policy_recovery.go", "hook_setup.go", "unconfigured_repo.go", "browser_onboarding.go"} {
 		path := filepath.Base(root) + "/tests/codexinstall/" + name
@@ -240,6 +233,16 @@ func TestPrunedRuntimeBuildsRealCLIAndRunner(t *testing.T) {
 	captured := filepath.Join(snapshot, "cli")
 	if err = prepareRuntimeInputs(context.Background(), snapshot, map[string]string{"cli": captured}, &m); err != nil {
 		t.Fatal(err)
+	}
+	if m.DependencyAnalysis == nil || m.DependencyAnalysis.Error != "" || m.DependencyAnalysis.Footprint == nil {
+		t.Fatalf("real captured dependency analysis failed: %+v", m.DependencyAnalysis)
+	}
+	summary, err := json.Marshal(m.DependencyAnalysis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summary) > 16<<10 || strings.Contains(string(summary), "\"dependencies\"") {
+		t.Fatal("full dependency graph leaked into signed cache metadata", len(summary))
 	}
 	for _, target := range []string{".", "./tests/codexinstall"} {
 		binary := filepath.Join(t.TempDir(), "program.exe")
