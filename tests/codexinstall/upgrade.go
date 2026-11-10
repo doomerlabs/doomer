@@ -89,7 +89,11 @@ func (j *journey) upgrade() error {
 		}
 	}
 	j.result.Turns++
-	turn, err := runAgent(j.ctx, j.c, j.repo, j.env, "Use the installed Doomer skill to prepare a new task and check for an available skill update. Do not apply the skill update yet. Keep the current update policy and reuse existing grants.", "", j.record)
+	prompt := "Use the installed Doomer skill to prepare a new task and check for an available skill update. Do not apply the skill update yet. Keep the current update policy and reuse existing grants."
+	if j.c.Scenario == "upgrade-repo-over-personal-npx" {
+		prompt = "Use the installed Doomer skill to prepare a new task and check for an available skill update. Ask me for approval before applying any skill update. Keep the current update policy and reuse existing grants."
+	}
+	turn, err := runAgent(j.ctx, j.c, j.repo, j.env, prompt, "", j.record)
 	if err != nil {
 		return err
 	}

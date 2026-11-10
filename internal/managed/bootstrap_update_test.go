@@ -10,7 +10,7 @@ import (
 func TestBootstrapUpgradeOffer(t *testing.T) {
 	project := BootstrapUpgradeOffer("project")
 	for _, text := range []string{
-		"A new version of the Doomer skill is available. Update this repository’s skill files now? Your current version still works.",
+		"A new version of the Doomer skill is available. Update this repository’s skill files now, using a skill-only pull request for committed files? Your current version still works.",
 		"‘Update skill (recommended)’, ‘Maybe later’",
 		"check which skill files exist in Git HEAD",
 		"open a pull request containing only those skill updates",

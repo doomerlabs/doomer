@@ -14,31 +14,33 @@ import (
 	"time"
 
 	"github.com/doomerlabs/doomer/internal/managed"
+	"go.yaml.in/yaml/v3"
 )
 
 type config struct {
-	PinnedStable     json.RawMessage   `json:"pinned_stable,omitempty"`
-	CodexAuthHome    string            `json:"codex_auth_home,omitempty"`
-	AgentVersion     string            `json:"agent_version,omitempty"`
-	ReviewApprovals  bool              `json:"review_approvals,omitempty"`
-	Harness          string            `json:"harness,omitempty"`
-	SkillsGuide      string            `json:"skills_guide,omitempty"`
-	SkillsInstaller  string            `json:"skills_installer,omitempty"`
-	RepoBootstraps   map[string]string `json:"repo_bootstraps,omitempty"`
-	SkillsBootstrap  string            `json:"skills_bootstrap,omitempty"`
-	AuthMode         string            `json:"auth_mode,omitempty"`
-	OAuthToken       string            `json:"oauth_token,omitempty"`
-	InstallGuide     string            `json:"install_guide"`
-	WorkRoot         string            `json:"work_root,omitempty"`
-	CandidateSource  string            `json:"candidate_source,omitempty"`
-	CandidateFile    string            `json:"candidate_file,omitempty"`
-	CandidateVersion string            `json:"candidate_version,omitempty"`
-	APIKey           string            `json:"api_key"`
-	Model            string            `json:"model"`
-	Budget           float64           `json:"budget_usd"`
-	Codex            string            `json:"codex"`
-	Scenario         string            `json:"scenario"`
-	LegacyBootstrap  string            `json:"legacy_bootstrap,omitempty"`
+	PinnedStable             json.RawMessage   `json:"pinned_stable,omitempty"`
+	CodexAuthHome            string            `json:"codex_auth_home,omitempty"`
+	AgentVersion             string            `json:"agent_version,omitempty"`
+	ReviewApprovals          bool              `json:"review_approvals,omitempty"`
+	Harness                  string            `json:"harness,omitempty"`
+	SkillsGuide              string            `json:"skills_guide,omitempty"`
+	SkillsInstaller          string            `json:"skills_installer,omitempty"`
+	RepoBootstraps           map[string]string `json:"repo_bootstraps,omitempty"`
+	SkillsBootstrap          string            `json:"skills_bootstrap,omitempty"`
+	AuthMode                 string            `json:"auth_mode,omitempty"`
+	OAuthToken               string            `json:"oauth_token,omitempty"`
+	InstallGuide             string            `json:"install_guide"`
+	WorkRoot                 string            `json:"work_root,omitempty"`
+	CandidateSource          string            `json:"candidate_source,omitempty"`
+	CandidateFile            string            `json:"candidate_file,omitempty"`
+	CandidateVersion         string            `json:"candidate_version,omitempty"`
+	APIKey                   string            `json:"api_key"`
+	Model                    string            `json:"model"`
+	Budget                   float64           `json:"budget_usd"`
+	Codex                    string            `json:"codex"`
+	Scenario                 string            `json:"scenario"`
+	LegacyBootstrap          string            `json:"legacy_bootstrap,omitempty"`
+	PersonalUpgradeBootstrap string            `json:"personal_upgrade_bootstrap,omitempty"`
 }
 
 type recordedEvent struct {
@@ -296,6 +298,18 @@ func main() {
 		}
 		c.LegacyBootstrap = string(raw)
 	}
+	if *scenario == "upgrade-personal-npx" || *scenario == "upgrade-repo-over-personal-npx" {
+		raw, err := os.ReadFile("internal/managed/bootstrap-2026.11.9.5.md")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		c.PersonalUpgradeBootstrap, err = historicalPersonalBootstrap(string(raw))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
 	cache, hit := openScenarioCache(ctx, captured, *noCache, *scenario, *output)
 	if hit {
 		return
@@ -351,4 +365,19 @@ func main() {
 		fmt.Fprintln(os.Stderr, redact(redact(r.Error, c.APIKey), c.OAuthToken))
 		os.Exit(1)
 	}
+}
+
+func historicalPersonalBootstrap(template string) (string, error) {
+	metadata, err := yaml.Marshal(map[string]string{
+		"doomer-protocol": "2", "doomer-update-policy": "stable",
+		"doomer-bootstrap-version": "2026.11.9.5", "doomer-cli-range": ">=2026.11.9.4",
+	})
+	if err != nil {
+		return "", err
+	}
+	lines := strings.Split(strings.TrimSpace(string(metadata)), "\n")
+	for i := range lines {
+		lines[i] = "  " + lines[i]
+	}
+	return strings.Replace(template, "{{metadata}}", strings.Join(lines, "\n"), 1), nil
 }

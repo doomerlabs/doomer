@@ -141,17 +141,19 @@ func BootstrapSupports(constraint, version string) (bool, error) {
 }
 
 type BootstrapUpdate struct {
-	Path             string   `json:"path"`
-	Scope            string   `json:"scope"`
-	UpgradeAvailable bool     `json:"upgrade_available"`
-	State            string   `json:"state"`
-	Installed        string   `json:"installed,omitempty"`
-	Available        string   `json:"available"`
-	CLIRange         string   `json:"cli_range"`
-	DeferCommand     []string `json:"defer_command,omitempty"`
-	UpgradeCommand   []string `json:"upgrade_command,omitempty"`
-	Action           string   `json:"action,omitempty"`
-	Compatible       *bool    `json:"compatible,omitempty"`
+	Path                string   `json:"path"`
+	Scope               string   `json:"scope"`
+	UpgradeAvailable    bool     `json:"upgrade_available"`
+	State               string   `json:"state"`
+	Installed           string   `json:"installed,omitempty"`
+	Available           string   `json:"available"`
+	CLIRange            string   `json:"cli_range"`
+	DeferCommand        []string `json:"defer_command,omitempty"`
+	UpgradeCommand      []string `json:"upgrade_command,omitempty"`
+	UpdateManager       string   `json:"update_manager,omitempty"`
+	ManualUpdateCommand []string `json:"manual_update_command,omitempty"`
+	Action              string   `json:"action,omitempty"`
+	Compatible          *bool    `json:"compatible,omitempty"`
 }
 
 func BootstrapUpgradeOffer(scope string) string {
@@ -162,10 +164,12 @@ func BootstrapUpgradeOffer(scope string) string {
 // instructions, keeping each actionable update small enough to read in full.
 func BootstrapUpgradeDecision(scope string) string {
 	location := "this repository’s"
+	workflow := ", using a skill-only pull request for committed files"
 	if scope == "personal" {
 		location = "your personal"
+		workflow = ""
 	}
-	offer := "If the checks above permit an offer, ask the user: ‘A new version of the Doomer skill is available. Update " + location + " skill files now? Your current version still works.’ Present choices in this order: ‘Update skill (recommended)’, ‘Maybe later’."
+	offer := "If the checks above permit an offer, ask the user: ‘A new version of the Doomer skill is available. Update " + location + " skill files now" + workflow + "? Your current version still works.’ Include the update workflow in the approval question. Present choices in this order: ‘Update skill (recommended)’, ‘Maybe later’."
 	if scope == "personal" {
 		return offer + " Apply an accepted personal update locally without creating a pull request."
 	}
