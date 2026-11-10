@@ -1,0 +1,20 @@
+cmd/help.go
+  h_aa44c3b5b60dec 1-162
+cmd/help_test.go
+  h_aa44c3b5b60dec 1-107
+cmd/managed.go
+  h_aa44c3b5b60dec 1117-1119,1138-1140
+cmd/root.go
+  h_aa44c3b5b60dec 157-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "24e81ffc356f8fdf1ccb6d20e72fed96da8bce50",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
