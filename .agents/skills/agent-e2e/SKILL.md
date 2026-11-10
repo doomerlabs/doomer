@@ -78,7 +78,10 @@ baseline, worker count, wall time and provider errors in PR validation notes.
 Cached reports retain historical usage but add cache-hit provenance; suite
 charges are zero for a hit. CI retains its existing retries and release gates.
 
-Incremental reuse is conservative. If the shared-runner scope audit changes,
-review the affected calls and scenario boundaries before updating its digest;
-never update the digest merely to silence a test failure. Uncertain dependencies
-remain shared and rerun.
+Incremental reuse is conservative. Scenario-specific runner bodies and helper
+calls are discovered automatically; there is no audit pin to refresh. Verify
+changes with the mutation tests in `scenario_dependencies_test.go` and inspect
+`scenario_hashes` in the captured manifest. Explicit entries in
+`e2e-extra-dependencies.yml` add whole-file inputs and override body exclusions.
+Uncertain identity or runtime behavior falls back to full runner inputs. CLI
+source remains shared because the agents choose commands dynamically.
