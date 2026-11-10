@@ -306,12 +306,51 @@ func TestReleasedNineThreeBootstrapOffersMetadataUpgrade(t *testing.T) {
 	if err := os.WriteFile(path, []byte(old), 0600); err != nil {
 		t.Fatal(err)
 	}
-	update, err := InspectBootstrap(path, "project", "2026.11.9.4")
+	update, err := InspectBootstrap(path, "project", BootstrapVersion)
 	if err != nil || update.State != "update_available" {
 		t.Fatalf("%+v %v", update, err)
 	}
 	blocked, err := InspectBootstrap(path, "project", "2026.11.9.3")
 	if err != nil || blocked.State != "incompatible" {
 		t.Fatalf("%+v %v", blocked, err)
+	}
+}
+
+func TestReleasedDiscoveryBootstrapsRemainUpgradable(t *testing.T) {
+	for _, policy := range []Policy{
+		{Protocol: Protocol, Channel: "stable"},
+		{Protocol: Protocol, Channel: "manual"},
+		{Protocol: Protocol, Channel: "delayed", DelayHours: 24},
+		{Protocol: Protocol, Channel: "pinned", Version: "2026.11.9.5"},
+	} {
+		for _, previous := range []struct{ scope, template, revision string }{
+			{"project", versionNineFourBootstrapTemplate, "2026.11.9.4"},
+			{"personal", versionNineFivePersonalBootstrapTemplate, "2026.11.9.5"},
+		} {
+			t.Run(policy.Channel+"/"+previous.scope, func(t *testing.T) {
+				old, err := bootstrapText(policy, previous.template, previous.revision, ">=2026.11.9.4")
+				if err != nil {
+					t.Fatal(err)
+				}
+				current, err := BootstrapTextForScope(policy, previous.scope)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if strings.SplitN(old, "---", 3)[2] != strings.SplitN(current, "---", 3)[2] {
+					t.Fatal("metadata upgrade changed instructions")
+				}
+				if !RecognizedBootstrap([]byte(old), policy) {
+					t.Fatal("previous discovery bootstrap is no longer recognized")
+				}
+				path := filepath.Join(t.TempDir(), "SKILL.md")
+				if err := os.WriteFile(path, []byte(old), 0600); err != nil {
+					t.Fatal(err)
+				}
+				update, err := InspectBootstrap(path, previous.scope, BootstrapVersion)
+				if err != nil || update.State != "update_available" {
+					t.Fatalf("%+v %v", update, err)
+				}
+			})
+		}
 	}
 }

@@ -144,6 +144,7 @@ func TestPersonalBootstrapUpgradeAddsDiscoveryAndPreservesPolicy(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			old = strings.ReplaceAll(old, managed.BootstrapVersion, "2026.11.9.4")
 			// A previous personal install may have only one agent's copy.
 			path := filepath.Join(home, ".agents/skills/doomer-review/SKILL.md")
 			if err = os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -219,6 +220,7 @@ func TestPersonalBootstrapRejectsUnsafeConfigWithoutPartialWrites(t *testing.T) 
 			old := ""
 			if operation == "upgrade" {
 				old, _ = managed.BootstrapText(managed.Policy{Protocol: managed.Protocol, Channel: "stable"})
+				old = strings.ReplaceAll(old, managed.BootstrapVersion, "2026.11.9.4")
 				if err := os.WriteFile(path, []byte(old), 0600); err != nil {
 					t.Fatal(err)
 				}
