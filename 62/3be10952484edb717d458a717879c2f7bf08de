@@ -1,0 +1,14 @@
+tests/codexinstall/npx_upgrade.go
+  h_aa44c3b5b60dec 151-155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "623be10952484edb717d458a717879c2f7bf08de",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
