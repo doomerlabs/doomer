@@ -34,8 +34,7 @@ func newManagedInstallCommand() *cobra.Command {
 	c.Flags().IntVar(&delay, "delay-hours", 0, "minimum release age for delayed policy")
 	c.RunE = func(c *cobra.Command, _ []string) error {
 		p := managed.Policy{Protocol: managed.Protocol, Channel: policy, Version: release, DelayHours: delay}
-		content, err := managed.BootstrapText(p)
-		if err != nil {
+		if err := p.Validate(); err != nil {
 			return err
 		}
 		base, err := os.UserHomeDir()
@@ -48,7 +47,14 @@ func newManagedInstallCommand() *cobra.Command {
 				return err
 			}
 		}
-		destinations := []string{filepath.Join(base, ".agents/skills/doomer-review/SKILL.md"), filepath.Join(base, ".claude/skills/doomer-review/SKILL.md")}
+		scope := "project"
+		if personal {
+			scope = "personal"
+		}
+		destinations, contents, expected, err := managedBootstrapFiles(base, p, scope)
+		if err != nil {
+			return err
+		}
 		// Inspect all destinations before replacing any. Unknown existing content
 		// requires explicit removal by the user; never overwrite custom instructions.
 		for _, path := range destinations {
@@ -60,7 +66,7 @@ func newManagedInstallCommand() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if string(data) != content {
+				if !bytes.Equal(data, contents[path]) {
 					return fmt.Errorf("existing bootstrap differs at %s; inspect it with doomer bootstrap status before offering an upgrade", path)
 				}
 			} else if !os.IsNotExist(err) {
@@ -88,11 +94,6 @@ func newManagedInstallCommand() *cobra.Command {
 				return err
 			}
 		}
-		contents := map[string][]byte{}
-		for _, path := range destinations {
-			contents[path] = []byte(content)
-		}
-		expected := map[string][]byte{}
 		if !personal {
 			for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
 				path := filepath.Join(base, name)
@@ -113,6 +114,38 @@ func newManagedInstallCommand() *cobra.Command {
 		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"state": "bootstrap_installed", "paths": destinations, "next": "Run doomer prepare in the target checkout. After repository approval, configure the active agent hooks through its normal trust controls. For team installation, include every returned path in the initial setup PR. Repository instructions distribute onboarding; each developer configures only their active agent."})
 	}
 	return c
+}
+
+const personalCodexSkillConfig = "policy:\n  allow_implicit_invocation: true\n"
+
+func managedBootstrapFiles(base string, policy managed.Policy, scope string) ([]string, map[string][]byte, map[string][]byte, error) {
+	content, err := managed.BootstrapTextForScope(policy, scope)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	paths := []string{filepath.Join(base, ".agents/skills/doomer-review/SKILL.md"), filepath.Join(base, ".claude/skills/doomer-review/SKILL.md")}
+	contents := map[string][]byte{paths[0]: []byte(content), paths[1]: []byte(content)}
+	expected := map[string][]byte{}
+	if scope == "personal" {
+		path := filepath.Join(base, ".agents/skills/doomer-review/agents/openai.yaml")
+		config := []byte(personalCodexSkillConfig)
+		if info, err := os.Lstat(path); err == nil {
+			if !info.Mode().IsRegular() {
+				return nil, nil, nil, fmt.Errorf("skill configuration is not a regular file: %s", path)
+			}
+			// Preserve user-specified invocation policy and interface metadata.
+			config, err = os.ReadFile(path)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			expected[path] = config
+		} else if !os.IsNotExist(err) {
+			return nil, nil, nil, err
+		}
+		paths = append(paths, path)
+		contents[path] = config
+	}
+	return paths, contents, expected, nil
 }
 
 func bindManagedSession(s managed.Store, t managed.Task) error {
