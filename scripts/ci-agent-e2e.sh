@@ -74,6 +74,9 @@ if [[ ! $release =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}\.[1-9][0-9]*$ ]]; then
   exit 1
 fi
 candidate_args=(--candidate-release "$release")
+if [[ -n ${E2E_NPX_SKILL_SOURCE:-} ]]; then
+  candidate_args+=(--npx-skill-source "$E2E_NPX_SKILL_SOURCE")
+fi
 if [[ -n ${E2E_CANDIDATE_SOURCE:-} ]]; then
   candidate_args+=(--candidate-source "$E2E_CANDIDATE_SOURCE")
 fi

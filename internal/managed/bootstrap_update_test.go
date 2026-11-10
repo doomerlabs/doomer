@@ -326,6 +326,8 @@ func TestReleasedDiscoveryBootstrapsRemainUpgradable(t *testing.T) {
 		for _, previous := range []struct{ scope, template, revision, cliRange string }{
 			{"project", versionNineFourBootstrapTemplate, "2026.11.9.4", ">=2026.11.9.4"},
 			{"personal", versionNineFivePersonalBootstrapTemplate, "2026.11.9.5", ">=2026.11.9.4"},
+			{"project", versionTenOneBootstrapTemplate, "2026.11.10.1", ">=2026.11.10.1"},
+			{"personal", personalBootstrapTemplate(versionTenOneBootstrapTemplate), "2026.11.10.1", ">=2026.11.10.1"},
 			{"project", versionNineSixBootstrapTemplate, "2026.11.9.6", ">=2026.11.9.6"},
 			{"personal", personalBootstrapTemplate(versionNineSixBootstrapTemplate), "2026.11.9.6", ">=2026.11.9.6"},
 		} {

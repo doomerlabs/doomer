@@ -12,7 +12,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/watch"
 )
 
-func installGlobalNpxSkill(ctx context.Context, home, repo string, env []string, record func(string, string)) error {
+func installGlobalNpxSkill(ctx context.Context, home, repo, source string, env []string, record func(string, string)) error {
 	for _, base := range []string{home, repo} {
 		for _, agent := range []string{".agents", ".claude"} {
 			if _, err := os.Stat(filepath.Join(base, agent, "skills/doomer-review")); !os.IsNotExist(err) {
@@ -21,10 +21,14 @@ func installGlobalNpxSkill(ctx context.Context, home, repo string, env []string,
 		}
 	}
 	// Target both supported agents even when the installer detects a Codex host.
-	args := []string{"--yes", "skills@1.5.18", "add", "doomerlabs/skills", "--skill", "doomer-review", "--global", "--agent", "codex", "claude-code", "--yes"}
-	cmd := exec.CommandContext(ctx, "/usr/local/bin/npx", args...)
+	args := []string{"--yes", "skills@1.5.18", "add", source, "--skill", "doomer-review", "--global", "--agent", "codex", "claude-code", "--yes"}
+	npx, err := exec.LookPath("npx")
+	if err != nil {
+		return fmt.Errorf("global npx discovery requires Node.js and npm: %w", err)
+	}
+	cmd := exec.CommandContext(ctx, npx, args...)
 	cmd.Dir = repo
-	cmd.Env = append(env, "CODEX_SANDBOX=seatbelt", "npm_config_cache="+filepath.Join(home, ".npm"), "PATH="+filepath.Join(home, ".local/bin")+":/usr/local/bin:/usr/bin:/bin")
+	cmd.Env = append(env, "CODEX_SANDBOX=seatbelt", "npm_config_cache="+filepath.Join(home, ".npm"), "PATH="+filepath.Join(home, ".local/bin")+":"+filepath.Dir(npx)+":/usr/local/bin:/usr/bin:/bin")
 	out, err := cmd.CombinedOutput()
 	record("Installer", "Real npx global installation for Codex and Claude Code\n"+string(out))
 	if err != nil {

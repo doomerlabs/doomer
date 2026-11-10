@@ -188,7 +188,7 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 	candidateInstalled := false
 	approvalLinkRetries := 0
 	if c.Scenario == "global-npx-discovery" {
-		if err := installGlobalNpxSkill(ctx, home, repo, env, record); err != nil {
+		if err := installGlobalNpxSkill(ctx, home, repo, c.NpxSkillSource, env, record); err != nil {
 			return fail(err)
 		}
 		if c.CandidateFile != "" {
@@ -206,7 +206,7 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 		}
 		// Exercise the published bootstrap and its own runtime installer unchanged.
 		candidateInstalled = true
-		prompt = "Complete Doomer setup using the already installed personal skill. Use its instructions, preserve the skill files, and ask for required approvals. This isolated test uses DOOMER_API_URL for its account service. Use --agent " + agentName(c) + ". Decline optional hooks; this installation uses per-call reviews."
+		prompt = "The CLI runtime and personal skill have been installed and checked. Read the installed personal Doomer skill and follow its setup-only instructions: use doomer prepare --agent " + agentName(c) + " --repo . without --prompt, then follow the returned managed approval flow. Do not run install again, replace the launcher, or use the legacy onboard/login flow. Preserve the skill files and ask for required approvals. This isolated test uses DOOMER_API_URL for its managed account service. Decline optional hooks; this installation uses per-call reviews."
 	} else if c.CandidateFile != "" || c.SkillsGuide != "" {
 		result.Turns++
 		software, err := runAgent(ctx, c, repo, env, prompt+" Install the verified runtime and skill files only in this turn. The team PR step belongs to later agent onboarding; this turn only authorizes local installation. Do not run doomer prepare or begin onboarding yet. Stop after the install command completes.", "", record)

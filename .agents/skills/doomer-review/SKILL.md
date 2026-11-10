@@ -1,8 +1,12 @@
 ---
 name: doomer-review
-description: Review edited source with Doomer and reuse approved setup.
+description: >-
+  Use Doomer for every coding task that creates or modifies source code, fixes
+  bugs, refactors code, or changes tests or build configuration. Start before
+  editing and complete the review workflow before delivering changes, even
+  when the user does not explicitly request code review.
 metadata:
-  doomer-bootstrap-version: 2026.11.10.1
+  doomer-bootstrap-version: 2026.11.10.2
   doomer-cli-range: '>=2026.11.10.1'
   doomer-protocol: "2"
   doomer-update-policy: stable

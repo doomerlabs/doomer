@@ -9,14 +9,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/doomerlabs/doomer/internal/managed"
 )
 
 func runLocal(ctx context.Context, c config, parent string) (result report) {
 	if c.Scenario == "global-npx-discovery" {
 		// The public npx skill requires the current bootstrap-compatible runtime.
-		c.CandidateVersion = managed.BootstrapVersion
+		c.CandidateVersion = "2026.11.10.1"
 	}
 	result.Execution = "local"
 	if parent == "" {
