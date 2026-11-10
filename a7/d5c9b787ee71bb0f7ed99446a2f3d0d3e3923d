@@ -1,0 +1,14 @@
+docs/agent-e2e-measurements.md
+  h_aa44c3b5b60dec 78-111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a7d5c9b787ee71bb0f7ed99446a2f3d0d3e3923d",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
