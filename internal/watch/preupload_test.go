@@ -193,7 +193,7 @@ func TestBaselineCompletionRetainsConcurrentReviewHead(t *testing.T) {
 		}
 	}}
 	r.Client = c
-	if err := r.uploadBaseline(context.Background(), "/repo", "repo", sourcesnapshot.Manifest{Blobs: map[string][]byte{}}); err != nil {
+	if err := r.uploadBaseline(context.Background(), "/repo", "org/repo", sourcesnapshot.Manifest{Blobs: map[string][]byte{}}); err != nil {
 		t.Fatal(err)
 	}
 	var cache uploadCache

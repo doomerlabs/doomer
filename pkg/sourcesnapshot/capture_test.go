@@ -505,3 +505,35 @@ func TestLocalReviewIdentityUsesRootNameAndKeepsDirectoriesDistinct(t *testing.T
 		t.Fatalf("remote baseline identity = %q, %v", baselineRepo, err)
 	}
 }
+
+func TestLocalReviewIdentityIgnoresPathSpelling(t *testing.T) {
+	dir, base := sourceRepo(t)
+	sourceFile(t, dir, "nested/change.go", "change\n")
+	want := LocalRepositoryIdentifier(dir)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	relative, err := filepath.Rel(cwd, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := LocalRepositoryIdentifier(relative); got != want {
+		t.Fatalf("relative identity = %q, want %q", got, want)
+	}
+	if got := capture(t, filepath.Join(dir, "nested"), base).Source.Repository; got != want {
+		t.Fatalf("nested capture identity = %q, want %q", got, want)
+	}
+	t.Run("symlink", func(t *testing.T) {
+		alias := filepath.Join(t.TempDir(), "other-name")
+		if err := os.Symlink(dir, alias); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		if got := LocalRepositoryIdentifier(alias); got != want {
+			t.Fatalf("symlink identity = %q, want %q", got, want)
+		}
+		if got := capture(t, filepath.Join(alias, "nested"), base).Source.Repository; got != want {
+			t.Fatalf("symlinked nested capture identity = %q, want %q", got, want)
+		}
+	})
+}
