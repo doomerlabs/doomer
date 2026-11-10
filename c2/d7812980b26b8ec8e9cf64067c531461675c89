@@ -1,0 +1,30 @@
+.agents/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 5-6
+.claude/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 5-6
+cmd/managed_bootstrap_skills.go
+  h_aa44c3b5b60dec 13,19-23,25-52,55,58,68,71,75,78,80
+cmd/managed_bootstrap_skills_test.go
+  h_aa44c3b5b60dec 7,178-256
+internal/managed/bootstrap-2026.11.9.6.md
+  h_aa44c3b5b60dec 1-194
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 16,18,30-33,194-195
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 326-330,333
+internal/managed/policy.go
+  h_aa44c3b5b60dec 162-166
+tests/codexinstall/npx_upgrade.go
+  h_aa44c3b5b60dec 151-155,158-160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c2d7812980b26b8ec8e9cf64067c531461675c89",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
