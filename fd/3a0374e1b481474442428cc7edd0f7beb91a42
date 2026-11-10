@@ -1,0 +1,18 @@
+internal/watch/preupload_test.go
+  h_aa44c3b5b60dec 196
+pkg/sourcesnapshot/capture_test.go
+  h_aa44c3b5b60dec 508-539
+tests/codexinstall/browser_onboarding.go
+  h_aa44c3b5b60dec 111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fd3a0374e1b481474442428cc7edd0f7beb91a42",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
