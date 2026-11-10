@@ -1,0 +1,18 @@
+cmd/managed_discovery_test.go
+  h_aa44c3b5b60dec 72
+tests/codexinstall/global_npx_discovery.go
+  h_aa44c3b5b60dec 83-91
+tests/codexinstall/impact.go
+  h_aa44c3b5b60dec 46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "73fde41dad5729402173ff78c00a93e783386397",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
