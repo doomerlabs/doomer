@@ -230,6 +230,12 @@ func TestManifestAddsDependenciesWithoutRemovingAutomaticOnes(t *testing.T) {
 }
 
 func TestManifestRejectsSilentTyposAndUnsafePaths(t *testing.T) {
+	for _, selector := range []string{"codex/[", "codex/*"} {
+		e := Extras{Version: 1, ExtraDependencies: map[string][]string{"a.go": {selector}}}
+		if _, err := e.Expand([]string{"a.go"}, nil); err == nil {
+			t.Fatal("selector accepted without a test inventory", selector)
+		}
+	}
 	for _, source := range []string{
 		"version: 2\nextra_dependencies: {}\n",
 		"version: 1\nremove_dependencies: {}\n",

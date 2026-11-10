@@ -277,14 +277,33 @@ func scenarioBodyInputs(ctx context.Context, root, snapshot string) (map[string]
 // dispatch. Typed checks catch aliases rather than just variables named c/j.
 func scenarioMutation(file *ast.File, checked e2eimpact.CheckedSyntax) bool {
 	protected := func(t types.Type) bool {
-		if pointer, ok := t.(*types.Pointer); ok {
-			t = pointer.Elem()
+		seen := map[types.Type]bool{}
+		for t != nil && !seen[t] {
+			seen[t] = true
+			t = types.Unalias(t)
+			if p, ok := t.(*types.Pointer); ok {
+				t = p.Elem()
+				continue
+			}
+			if named, ok := t.(*types.Named); ok {
+				if named.Obj().Pkg() == checked.Package && (named.Obj().Name() == "config" || named.Obj().Name() == "journey") {
+					return true
+				}
+				if p, ok := named.Underlying().(*types.Pointer); ok {
+					t = p.Elem()
+					continue
+				}
+			}
+			return false
 		}
-		named, ok := t.(*types.Named)
-		return ok && named.Obj().Pkg() == checked.Package && (named.Obj().Name() == "config" || named.Obj().Name() == "journey")
+		return false
 	}
 	pointer := func(expr ast.Expr) bool {
-		t, ok := checked.Info.TypeOf(expr).(*types.Pointer)
+		typeOf := types.Unalias(checked.Info.TypeOf(expr))
+		if named, ok := typeOf.(*types.Named); ok {
+			typeOf = named.Underlying()
+		}
+		t, ok := typeOf.(*types.Pointer)
 		return ok && protected(t.Elem())
 	}
 	field := func(expr ast.Expr) bool {
@@ -453,7 +472,7 @@ func scenarioMutation(file *ast.File, checked e2eimpact.CheckedSyntax) bool {
 				if known && function.Pkg() != nil && function.Pkg().Path() == "reflect" && function.Name() != "DeepEqual" {
 					opaque = true
 				}
-				for _, arg := range n.Args {
+				for index, arg := range n.Args {
 					if !pointer(arg) {
 						continue
 					}
@@ -462,6 +481,12 @@ func scenarioMutation(file *ast.File, checked e2eimpact.CheckedSyntax) bool {
 					initialDecode := main && known && function.Pkg() != nil && function.Pkg().Path() == "encoding/json" && function.Name() == "Decode"
 					if !initialDecode && (!known || function.Pkg() != checked.Package) {
 						opaque = true
+					}
+					if !initialDecode && known && function.Pkg() == checked.Package {
+						signature, _ := function.Type().(*types.Signature)
+						if signature == nil || signature.Variadic() || index >= signature.Params().Len() || !protected(signature.Params().At(index).Type()) {
+							opaque = true
+						}
 					}
 				}
 			}

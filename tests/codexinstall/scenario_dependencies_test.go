@@ -113,6 +113,7 @@ func TestAutomaticScenarioUncertaintyFallsBack(t *testing.T) {
 		"reflection":     "package main; import \"reflect\"; func mutate(j *journey) { _=reflect.ValueOf(j) }",
 		"conversion":     "package main; type other struct { c config }; func mutate(x other) { j:=journey(x); _=j.afterInstall() }",
 		"copy":           "package main; func mutate(c config) { copy:=c; copy.Scenario=\"install\" }",
+		"erased-pointer": "package main; import \"encoding/json\"; func erased(v any) { _=json.Unmarshal([]byte(`{}`),v) }; func mutate(c *config) { erased(c) }",
 	} {
 		t.Run(name, func(t *testing.T) {
 			root, snapshot := automaticFixture(t, map[string]string{"tests/codexinstall/mutation.go": source})
