@@ -452,6 +452,36 @@ func validateRelease(workflow *yaml.Node) {
 	requireNoPublicationCredentials(findStep(r2, "Verify exact R2 publication state"), "R2 pre-publication verification step")
 }
 
+func validateAgentRecordings(workflow *yaml.Node) {
+	plan := requiredValue(workflow, "jobs", "plan")
+	if scalar(requiredValue(plan, "outputs", "cache_artifact_name")) != "${{ steps.scenarios.outputs.cache_artifact_name }}" {
+		fail("E2E plan must expose the current attempt's unique verified artifact name")
+	}
+	if !nodeContains(findStep(plan, "Discover all lifecycle scenarios"), "uuid.uuid4().hex") {
+		fail("E2E plan must generate a fresh artifact name for each attempt")
+	}
+	if scalar(requiredValue(findStep(plan, "Save verified cached recordings"), "with", "name")) != "${{ steps.scenarios.outputs.cache_artifact_name }}" {
+		fail("E2E upload must use the current plan's unique artifact name")
+	}
+	report := requiredValue(workflow, "jobs", "report")
+	restore := findStep(report, "Restore verified cached recordings")
+	if scalar(requiredValue(restore, "with", "name")) != "${{ needs.plan.outputs.cache_artifact_name }}" {
+		fail("E2E report must restore the exact current verified artifact into its root")
+	}
+	seenRestore := false
+	for _, step := range steps(report) {
+		if step == restore {
+			seenRestore = true
+		}
+		if strings.HasPrefix(scalar(value(step, "uses")), "actions/download-artifact@") && step != restore {
+			pattern := scalar(requiredValue(step, "with", "pattern"))
+			if seenRestore || (pattern != "agent-e2e-codex-*" && pattern != "agent-e2e-claude-*") {
+				fail("E2E scenario downloads must precede verified restoration and exclude old galleries")
+			}
+		}
+	}
+}
+
 func main() {
 	ciPath := ".depot/workflows/ci.yml"
 	releasePath := ".depot/workflows/release.yml"
@@ -461,5 +491,6 @@ func main() {
 	validatePinnedActions(releasePath, release)
 	validateCI(ci)
 	validateRelease(release)
+	validateAgentRecordings(parse(".depot/workflows/agent-e2e.yml"))
 	fmt.Println("CI and release workflow dependency/privilege contract passed")
 }

@@ -19,3 +19,29 @@ for the current coding agent, including required permissions and hook setup.
 Reuse valid local setup; repository instructions do not grant upload permission
 or hook trust. If the skill is missing, report the missing installation.
 <!-- doomer-review:end -->
+
+## Agent lifecycle tests
+
+For changes affecting agent installation, onboarding, review, upgrades, policy,
+hooks, or the lifecycle runner, use `.agents/skills/agent-e2e/SKILL.md` to start
+relevant E2E early and report coverage for the final proposed source.
+
+Before opening or updating a PR, if Docker and Doppler project `doomer`, config
+`test`, are accessible, run the Linux E2E helper locally:
+
+```sh
+doppler run --project doomer --config test -- scripts/agent-e2e-local-linux.sh
+```
+
+Start this as soon as the changes stabilize, while review and PR preparation
+continue. Run it against the final proposed contents, investigate failures, and
+report the result before marking the PR ready. Successful Linux results populate
+the shared cache so CI can verify them instead of repeating agent calls. The
+cache accepts successes for six hours from their original execution. If results
+will be older than that when CI runs, repeat the helper before marking the PR
+ready when expecting cache reuse; a cache hit does not extend that window. The
+runner also reuses unaffected scenarios locally; report cache hits separately
+from newly executed tests. Native
+macOS runs do not populate the Linux CI cache. Check access without printing
+secrets. If Docker or Doppler access is unavailable, report that CI must execute
+the missing scenarios; do not copy credentials into the repository.

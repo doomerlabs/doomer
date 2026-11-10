@@ -71,7 +71,13 @@ func assembleCandidateInstallation(c config, home, repo string) error {
 				if err != nil {
 					return fmt.Errorf("read published bootstrap: %w", err)
 				}
-				content, err := managed.BootstrapTextForScope(installed.Policy, scope)
+				policy := installed.Policy
+				if len(c.PinnedStable) > 0 {
+					policy.Channel = "stable"
+					policy.Version = ""
+					policy.DelayHours = 0
+				}
+				content, err := managed.BootstrapTextForScope(policy, scope)
 				if err != nil {
 					return err
 				}
