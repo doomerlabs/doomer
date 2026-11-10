@@ -1,0 +1,28 @@
+.agents/skills/agent-e2e/SKILL.md
+  h_aa44c3b5b60dec 80-84
+AGENTS.md
+  h_aa44c3b5b60dec 39-41
+docs/agent-e2e-cache.md
+  h_aa44c3b5b60dec 19,25-28,42-75,103
+tests/codexinstall/cache.go
+  h_aa44c3b5b60dec 24-29,172,230
+tests/codexinstall/cache_test.go
+  h_aa44c3b5b60dec 42,124-128
+tests/codexinstall/impact.go
+  h_aa44c3b5b60dec 1-635
+tests/codexinstall/impact_test.go
+  h_aa44c3b5b60dec 1-303
+tests/codexinstall/snapshot.go
+  h_aa44c3b5b60dec 19,32-45,197,308-312
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ed63b32e598f6d50afc1bf4a7e4fc65e13a865e4",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
