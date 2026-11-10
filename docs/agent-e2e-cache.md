@@ -194,7 +194,9 @@ a $0.50 per-case API reservation and subscription-only Claude authentication.
 Reports default to `/tmp/doomer-agent-e2e-linux` (`E2E_LOCAL_REPORTS` overrides it).
 The host report directory is owner-only, and the container runs as the calling
 UID/GID. Its private temporary home is removed on exit. Go caches are kept under
-`${XDG_CACHE_HOME:-$HOME/.cache}/doomer-agent-e2e`.
+`${XDG_CACHE_HOME:-$HOME/.cache}/doomer-agent-e2e`. The same private directory
+also caches pinned agent downloads, rechecking their published SHA-256 before
+each reuse. Corrupt or incomplete downloads are never accepted.
 `E2E_SUITE_SCENARIOS` can select a comma-separated subset for parity experiments;
 omit it when priming the full required suite. Each failed local scenario retries
 once in a fresh home. A partial local run never satisfies missing CI checks.

@@ -19,8 +19,8 @@ fi
 chmod 700 "$reports"
 reports=$(cd "$reports" && pwd)
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/doomer-agent-e2e
-mkdir -p "$cache/go-build" "$cache/go-mod"
-chmod 700 "$cache" "$cache/go-build" "$cache/go-mod"
+mkdir -p "$cache/go-build" "$cache/go-mod" "$cache/agents"
+chmod 700 "$cache" "$cache/go-build" "$cache/go-mod" "$cache/agents"
 cache=$(cd "$cache" && pwd)
 runner_home=$(mktemp -d "${TMPDIR:-/tmp}/doomer-agent-e2e-home.XXXXXX")
 trap 'rm -rf -- "$runner_home"' EXIT
@@ -31,6 +31,7 @@ docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" \
   -v "$runner_home:/runner-home" -e HOME=/runner-home \
   -v "$cache/go-build:/runner-home/.cache/go-build" \
   -v "$cache/go-mod:/runner-home/go/pkg/mod" \
+  -v "$cache/agents:/agent-cache" -e E2E_AGENT_CACHE=/agent-cache \
   -e E2E_CANDIDATE_RELEASE="$release" \
   -e TEST_OPENAI_API_KEY -e TEST_CLAUDE_CODE_OAUTH_TOKEN \
   -e E2E_R2_ACCOUNT_ID -e E2E_R2_BUCKET -e E2E_R2_ACCESS_KEY_ID -e E2E_R2_SECRET_ACCESS_KEY \

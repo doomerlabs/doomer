@@ -10,6 +10,35 @@ export GOTOOLCHAIN=local CGO_ENABLED=1
 work=$(mktemp -d "${HOME}/doomer-agent-e2e.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/homes" "$work/agent"
+
+# Cached archives are accepted only after checking the same pinned digest used
+# for a fresh download. Publish atomically so concurrent runs never see a part.
+fetch_agent() {
+  local url=$1 digest=$2 target=$3 fallback=${4:-} cached='' staged=''
+  if [[ -n ${E2E_AGENT_CACHE:-} ]]; then
+    mkdir -p "$E2E_AGENT_CACHE"
+    cached="$E2E_AGENT_CACHE/$digest"
+    if [[ -f $cached ]] && printf '%s  %s\n' "$digest" "$cached" | sha256sum -c --status; then
+      cp "$cached" "$target" || return 1
+      echo "Reused verified agent download: $digest"
+      return
+    fi
+  fi
+  if ! curl -fsSL --retry 2 --connect-timeout 15 --max-time 600 "$url" -o "$target"; then
+    [[ -n $fallback ]] || return 1
+    curl -fsSL --retry 2 --connect-timeout 15 --max-time 600 -H 'Accept: application/octet-stream' "$fallback" -o "$target" || return 1
+  fi
+  printf '%s  %s\n' "$digest" "$target" | sha256sum -c - || return 1
+  if [[ -n $cached ]]; then
+    staged=$(mktemp "$E2E_AGENT_CACHE/.agent.XXXXXX") || return 1
+    if cp "$target" "$staged" && chmod 600 "$staged" && mv -f "$staged" "$cached"; then
+      :
+    else
+      rm -f "$staged"
+      return 1
+    fi
+  fi
+}
 if ! command -v aws >/dev/null 2>&1 && [[ -n ${E2E_R2_ACCOUNT_ID:-} ]]; then
   curl -fsSL --retry 3 https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.17.44.zip -o "$work/aws.zip"
   echo "ed46356f6358c0dfa30416899bf3efe0001689520ffce22c128f5bc617e8f4c3  $work/aws.zip" | sha256sum -c -
@@ -21,21 +50,17 @@ case "$harness" in
   codex)
     if [[ ${E2E_CACHE_ONLY:-0} != 1 ]]; then : "${TEST_OPENAI_API_KEY:?Codex API test credential is required}"; fi
     unset TEST_CLAUDE_CODE_OAUTH_TOKEN TEST_ANTHROPIC_API_KEY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
-    if ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 180 https://github.com/openai/codex/releases/download/rust-v0.167.0/codex-package-x86_64-unknown-linux-musl.tar.gz -o "$work/agent.tar.gz"; then
-      # This is the same pinned rust-v0.167.0 asset through GitHub's asset API.
-      # The release page can return gateway errors while the asset API works.
-      curl -fsSL --retry 3 --connect-timeout 15 --max-time 180 -H 'Accept: application/octet-stream' \
-        https://api.github.com/repos/openai/codex/releases/assets/715506641 -o "$work/agent.tar.gz"
-    fi
-    echo "3bbf75e83de6b58aed28f2cf6e33ad423ec31fd4700a1457b94be557ea5a7c6e  $work/agent.tar.gz" | sha256sum -c -
+    fetch_agent https://github.com/openai/codex/releases/download/rust-v0.167.0/codex-package-x86_64-unknown-linux-musl.tar.gz \
+      3bbf75e83de6b58aed28f2cf6e33ad423ec31fd4700a1457b94be557ea5a7c6e "$work/agent.tar.gz" \
+      https://api.github.com/repos/openai/codex/releases/assets/715506641
     tar -xzf "$work/agent.tar.gz" -C "$work/agent"
     agent_args=(--harness codex --auth api --local-codex "$work/agent/bin/codex")
     ;;
   claude)
     if [[ ${E2E_CACHE_ONLY:-0} != 1 ]]; then : "${TEST_CLAUDE_CODE_OAUTH_TOKEN:?Claude OAuth test credential is required; API fallback is forbidden}"; fi
     unset TEST_OPENAI_API_KEY TEST_ANTHROPIC_API_KEY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL
-    curl -fsSL --retry 3 https://downloads.claude.ai/claude-code-releases/2.1.319/linux-x64/claude -o "$work/agent/claude"
-    echo "dabafec82ca1319fa43d8be36a10fc61b1d11821cb98ad5df04ad95e199b8eed  $work/agent/claude" | sha256sum -c -
+    fetch_agent https://downloads.claude.ai/claude-code-releases/2.1.319/linux-x64/claude \
+      dabafec82ca1319fa43d8be36a10fc61b1d11821cb98ad5df04ad95e199b8eed "$work/agent/claude"
     chmod 700 "$work/agent/claude"
     agent_args=(--harness claude --auth subscription --local-claude "$work/agent/claude")
     ;;
