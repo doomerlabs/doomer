@@ -29,7 +29,8 @@ type scenarioFile struct {
 var fixtureScopes = map[string][]string{
 	"browser_onboarding.go":  {"browser-onboarding"},
 	"unconfigured_repo.go":   {"unconfigured-repo"},
-	"upgrade.go":             {"upgrade", "upgrade-defer", "upgrade-untracked", "upgrade-personal", "upgrade-custom", "upgrade-authorized-session"},
+	"upgrade.go":             {"upgrade", "upgrade-defer", "upgrade-untracked", "upgrade-personal", "upgrade-custom", "upgrade-authorized-session", "upgrade-personal-npx", "upgrade-repo-over-personal-npx"},
+	"npx_upgrade.go":         {"upgrade-personal-npx", "upgrade-repo-over-personal-npx"},
 	"recovery.go":            {"portable-invalid", "revoked-uploads", "interrupted-review"},
 	"portable.go":            {"portable-restart"},
 	"preflight.go":           {"review-preflight"},
@@ -42,7 +43,7 @@ var fixtureScopes = map[string][]string{
 // A mismatch safely falls back to shared fixture bodies until that audit occurs.
 // Personal/repository discovery remains shared; its new dispatch paths do not
 // call the existing scenario-scoped fixture helpers.
-const fixtureAuditSHA256 = "4e4befdfbe4157aac8abe3ce1ed76f60ba7c0d9d22d9203e025b17e6c021c71a"
+const fixtureAuditSHA256 = "1824f09b23fe519c2671df1607427582a0ca32f0048f244e0b9f1d441620eb23"
 
 func (m snapshotMetadata) fingerprintFiles(scenario string) []snapshotEntry {
 	if len(m.RuntimeFiles) == 0 {

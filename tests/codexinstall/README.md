@@ -52,6 +52,8 @@ go run ./tests/codexinstall --scenario list
 | `repository-discovery` | Candidate repository installer retains its original description and discovery instructions, creates no personal metadata, and a fresh Claude or Codex session completes a source-code review without hooks or a Doomer reminder |
 | `upgrade-untracked` | Updates untracked repository skill files without creating a PR |
 | `upgrade-personal` | Updates personal skill files without creating a PR |
+| `upgrade-personal-npx` | Fresh agent discovers the personal skill with hooks disabled, shows the manual npx update command, completes a review, and preserves installer-owned files and links |
+| `upgrade-repo-over-personal-npx` | Repository skill takes precedence over an outdated personal npx install, requests a skill PR before acceptance, and completes the repository upgrade while preserving the personal install |
 | `unconfigured-repo` | Installed profile hooks return no instructions in unrelated repositories and linked worktrees; ordinary real-agent edits complete without Doomer prompts, task creation, uploads, or settings changes |
 | `hooks-off` | Completes a review through per-call commands when hooks are absent |
 | `revoked-uploads` | Server-side revocation blocks subsequent content uploads |

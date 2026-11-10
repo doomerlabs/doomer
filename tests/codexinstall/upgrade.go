@@ -70,16 +70,23 @@ func (j *journey) upgrade() error {
 	if err = j.git(j.repo, "push", "-u", "origin", "main"); err != nil {
 		return err
 	}
+	if err = j.git(remote, "symbolic-ref", "HEAD", "refs/heads/main"); err != nil {
+		return err
+	}
 	bin := filepath.Join(j.home, "fixture-bin")
 	if err = os.MkdirAll(bin, 0700); err != nil {
 		return err
 	}
 	marker := filepath.Join(j.home, "pr-created")
 	oldLauncher := "#!/bin/sh\nexec '" + runtimeversion.Binary(j.home, "2026.11.6.9") + "' \"$@\"\n"
-	if err = os.WriteFile(filepath.Join(bin, "doomer"), []byte(oldLauncher), 0700); err != nil {
-		return err
+	// The precedence scenario must exercise the candidate's update routing. An
+	// ancient launcher can select a newer public release before the candidate runs.
+	if j.c.Scenario != "upgrade-repo-over-personal-npx" {
+		if err = os.WriteFile(filepath.Join(bin, "doomer"), []byte(oldLauncher), 0700); err != nil {
+			return err
+		}
 	}
-	shim := fmt.Sprintf("#!/bin/sh\ncase \"$*\" in\n *--help*) echo 'Usage: gh pr create [flags]'; exit 0 ;;\nesac\ncase \"$1 $2\" in\n 'pr create') printf 'created\\n' >> '%s'; git branch --show-current > '%s.branch'; echo https://example.invalid/pull/1 ;;\n 'pr list') echo '[]' ;;\n 'repo view') echo '{\"defaultBranchRef\":{\"name\":\"main\"}}' ;;\n 'auth status') exit 0 ;;\n *) exit 0 ;;\nesac\n", marker, marker)
+	shim := fmt.Sprintf("#!/bin/sh\ncase \"$*\" in\n *--help*) echo 'Usage: gh pr create [flags]'; exit 0 ;;\nesac\ncase \"$1 $2\" in\n 'pr create') printf 'created\\n' >> '%s'; git branch --show-current > '%s.branch'; echo https://example.invalid/pull/1 ;;\n 'pr list') echo '[]' ;;\n 'repo view') case \"$*\" in *--jq*|*' -q '*) echo main ;; *) echo '{\"defaultBranchRef\":{\"name\":\"main\"}}' ;; esac ;;\n 'auth status') exit 0 ;;\n *) exit 0 ;;\nesac\n", marker, marker)
 	if err = os.WriteFile(filepath.Join(bin, "gh"), []byte(shim), 0700); err != nil {
 		return err
 	}
@@ -89,7 +96,11 @@ func (j *journey) upgrade() error {
 		}
 	}
 	j.result.Turns++
-	turn, err := runAgent(j.ctx, j.c, j.repo, j.env, "Use the installed Doomer skill to prepare a new task and check for an available skill update. Do not apply the skill update yet. Keep the current update policy and reuse existing grants.", "", j.record)
+	prompt := "Use the installed Doomer skill to prepare a new task and check for an available skill update. Do not apply the skill update yet. Keep the current update policy and reuse existing grants."
+	if j.c.Scenario == "upgrade-repo-over-personal-npx" {
+		prompt = "Use the installed Doomer skill to prepare a new task and check for an available skill update. Ask me for approval before applying any skill update. Keep the current update policy and reuse existing grants."
+	}
+	turn, err := runAgent(j.ctx, j.c, j.repo, j.env, prompt, "", j.record)
 	if err != nil {
 		return err
 	}
