@@ -357,7 +357,7 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 	}
 	repo := capture.Source.Repository
 	if repo == "" {
-		repo = "local/" + filepath.Base(path)
+		repo = sourcesnapshot.LocalRepositoryIdentifier(path)
 	}
 	uploadStarted := time.Now()
 	uploadCtx, uploadCancel := context.WithTimeout(ctx, workspaceUploadTimeout)

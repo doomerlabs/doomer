@@ -274,7 +274,7 @@ func TestInstallRequiresConfiguredCodexPolicy(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			ready, checks := inspectInstall(context.Background(), repo, home, nil, false, "codex")
+			ready, checks := inspectInstall(context.Background(), repo, home, nil, false, "codex", true)
 			want := policyState == "configured"
 			if ready != want || checks["codex_policy_configured"] != want {
 				t.Fatalf("ready=%v checks=%v, expected configured=%v", ready, checks, want)
@@ -290,6 +290,17 @@ func TestReviewPreflightUsesRealReviewerWithoutBypass(t *testing.T) {
 	}
 	if !validScenario("review-preflight") {
 		t.Fatal("regression missing from CI discovery")
+	}
+}
+
+func TestSkillDiscoveryScenariosRunInBothAgentMatrices(t *testing.T) {
+	for _, scenario := range []string{"personal-discovery", "repository-discovery"} {
+		if !validScenario(scenario) {
+			t.Fatal("skill discovery missing from CI scenario list", scenario)
+		}
+	}
+	if !personalScenario("personal-discovery") || personalScenario("repository-discovery") {
+		t.Fatal("skill discovery scenarios use the wrong installation scope")
 	}
 }
 

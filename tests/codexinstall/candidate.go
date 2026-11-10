@@ -77,7 +77,7 @@ func assembleCandidateInstallation(c config, home, repo string) error {
 					policy.Version = ""
 					policy.DelayHours = 0
 				}
-				content, err := managed.BootstrapText(policy)
+				content, err := managed.BootstrapTextForScope(policy, scope)
 				if err != nil {
 					return err
 				}

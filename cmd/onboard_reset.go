@@ -750,4 +750,9 @@ func (p *resetPlan) discoverSkill(file string) {
 		return
 	}
 	p.remove("skill", file)
+	configPath := filepath.Join(filepath.Dir(file), "agents/openai.yaml")
+	config, _, err := resetReadFile(configPath)
+	if err == nil && string(config) == personalCodexSkillConfig {
+		p.remove("skill", configPath)
+	}
 }

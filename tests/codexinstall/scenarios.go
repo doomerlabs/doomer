@@ -15,7 +15,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/watch"
 )
 
-var scenarioNames = []string{"unconfigured-repo", "browser-onboarding", "install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-command-permissions", "upgrade-authorized-session", "policy-recovery", "policy-installed", "policy-declined", "hooks-upgrade", "hooks-declined", "hooks-trust", "policy-denied"}
+var scenarioNames = []string{"unconfigured-repo", "browser-onboarding", "install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "personal-discovery", "repository-discovery", "upgrade-untracked", "upgrade-personal", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-command-permissions", "upgrade-authorized-session", "policy-recovery", "policy-installed", "policy-declined", "hooks-upgrade", "hooks-declined", "hooks-trust", "policy-denied"}
 
 func validScenario(name string) bool {
 	if name == "ordinary-upgrade" || name == "policy-activation" {
@@ -183,6 +183,8 @@ func (j *journey) finish() error {
 }
 func (j *journey) afterInstall() error {
 	switch j.c.Scenario {
+	case "personal-discovery", "repository-discovery":
+		return j.skillDiscovery()
 	case "unconfigured-repo":
 		return j.unconfiguredRepo()
 	case "policy-denied":
@@ -388,7 +390,9 @@ func (j *journey) afterInstall() error {
 	return fmt.Errorf("unsupported post-install scenario")
 }
 
-func personalScenario(name string) bool { return name == "personal" || name == "upgrade-personal" }
+func personalScenario(name string) bool {
+	return name == "personal" || name == "personal-discovery" || name == "upgrade-personal"
+}
 
 func codexExecArgs(c config) []string {
 	if c.ReviewApprovals {

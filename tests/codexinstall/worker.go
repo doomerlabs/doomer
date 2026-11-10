@@ -197,6 +197,11 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 		if err := assembleCandidateInstallation(c, home, repo); err != nil {
 			return fail(err)
 		}
+		if c.Scenario == "personal-discovery" || c.Scenario == "repository-discovery" {
+			if err := reinstallDiscoverySkills(ctx, c, home, repo, env, record); err != nil {
+				return fail(err)
+			}
+		}
 		candidateInstalled = c.CandidateFile != ""
 		prompt = "The installed build has been checked. Continue onboarding Doomer in this repository using its existing installed files and original scope. This test home persists for the scenario, so use ordinary setup without --portable. Ask for the required user approvals. Use --agent " + agentName(c) + " when preparing Doomer and configuring this integration."
 	}
@@ -283,7 +288,13 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 			record("Scripted user", prompt)
 			continue
 		}
-		ready, checks := inspectInstall(ctx, repo, home, env, personalScenario(c.Scenario), c.Harness)
+		discovery := c.Scenario == "personal-discovery" || c.Scenario == "repository-discovery"
+		ready, checks := inspectInstall(ctx, repo, home, env, personalScenario(c.Scenario), c.Harness, !discovery)
+		if discovery && !ready && checks["authenticated"] && checks["upload_approved"] && !checks["hooks_configured"] {
+			prompt = "I decline optional Doomer hook installation. Record that choice, preserve my existing upload approval and reviewer settings, and finish verifying setup for per-call reviews."
+			record("Scripted user", prompt)
+			continue
+		}
 		if ready {
 			for name, ok := range checks {
 				result.Checks[name] = ok
@@ -378,7 +389,7 @@ type httpHandler func(http.ResponseWriter, *http.Request)
 
 func (h httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h(w, r) }
 
-func inspectInstall(ctx context.Context, repo, home string, env []string, personal bool, harness string) (bool, map[string]bool) {
+func inspectInstall(ctx context.Context, repo, home string, env []string, personal bool, harness string, requireHooks bool) (bool, map[string]bool) {
 	checks := map[string]bool{}
 	base := repo
 	if personal {
@@ -392,7 +403,9 @@ func inspectInstall(ctx context.Context, repo, home string, env []string, person
 	_, err := os.Stat(launcher)
 	checks["launcher"] = err == nil
 	hooks, _ := os.ReadFile(agentHooksPath(config{Harness: harness}, home))
-	checks["hooks_configured"] = bytes.Contains(hooks, []byte("--managed-task-adapter"))
+	if requireHooks {
+		checks["hooks_configured"] = bytes.Contains(hooks, []byte("--managed-task-adapter"))
+	}
 	if !checks["launcher"] {
 		return false, checks
 	}

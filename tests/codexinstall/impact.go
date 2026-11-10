@@ -40,7 +40,9 @@ var fixtureScopes = map[string][]string{
 
 // Updating shared runner control flow requires reviewing the scope boundaries.
 // A mismatch safely falls back to shared fixture bodies until that audit occurs.
-const fixtureAuditSHA256 = "d5b33132419638e06b5f504e46cb14f6467f1f946d0eafbb6e22c75d298cf979"
+// Personal/repository discovery remains shared; its new dispatch paths do not
+// call the existing scenario-scoped fixture helpers.
+const fixtureAuditSHA256 = "4e4befdfbe4157aac8abe3ce1ed76f60ba7c0d9d22d9203e025b17e6c021c71a"
 
 func (m snapshotMetadata) fingerprintFiles(scenario string) []snapshotEntry {
 	if len(m.RuntimeFiles) == 0 {

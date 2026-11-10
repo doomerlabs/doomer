@@ -272,7 +272,11 @@ func main() {
 	}
 	if *generatedBootstrap {
 		var err error
-		c.SkillsBootstrap, err = managed.BootstrapText(managed.Policy{Protocol: managed.Protocol, Channel: "stable"})
+		scope := "project"
+		if personalScenario(c.Scenario) {
+			scope = "personal"
+		}
+		c.SkillsBootstrap, err = managed.BootstrapTextForScope(managed.Policy{Protocol: managed.Protocol, Channel: "stable"}, scope)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)

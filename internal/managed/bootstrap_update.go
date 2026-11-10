@@ -13,12 +13,27 @@ import (
 // Bump the wrapper revision only when its generated content changes, using the
 // next monotonic bootstrap revision. Bootstrap and CLI release sequences are
 // independent; ordinary CLI releases keep the existing bootstrap revision.
-const BootstrapVersion = "2026.11.9.4"
+const BootstrapVersion = "2026.11.9.6"
+
+const personalBootstrapVersion = "2026.11.9.6"
+
+func BootstrapVersionForScope(scope string) string {
+	if scope == "personal" && VersionLess(BootstrapVersion, personalBootstrapVersion) {
+		return personalBootstrapVersion
+	}
+	return BootstrapVersion
+}
 
 // A linker override lets the disposable real-agent candidate (which is labelled
 // with the installed public release) advertise its actual injected compatibility.
 // Published release builds always use this source-defined default.
-var BootstrapCLIRange = ">=2026.11.9.4"
+var BootstrapCLIRange = ">=2026.11.9.6"
+
+//go:embed bootstrap-2026.11.9.4.md
+var versionNineFourBootstrapTemplate string
+
+//go:embed bootstrap-2026.11.9.5.md
+var versionNineFivePersonalBootstrapTemplate string
 
 //go:embed bootstrap-legacy.md
 var legacyBootstrapTemplate string
@@ -162,12 +177,15 @@ func RecognizedBootstrap(data []byte, policy Policy) bool {
 	if err != nil {
 		return false
 	}
-	return string(data) == current || recognizedPreviousBootstrap(data, policy)
+	personal, err := BootstrapTextForScope(policy, "personal")
+	return err == nil && (string(data) == current || string(data) == personal || recognizedPreviousBootstrap(data, policy))
 }
 
 func recognizedPreviousBootstrap(data []byte, policy Policy) bool {
 	for _, previous := range []struct{ template, revision, cliRange string }{
 		{legacyBootstrapTemplate, "", ""},
+		{versionNineFourBootstrapTemplate, "2026.11.9.4", ">=2026.11.9.4"},
+		{versionNineFivePersonalBootstrapTemplate, "2026.11.9.5", ">=2026.11.9.4"},
 		{versionNineThreeBootstrapTemplate, "2026.11.9.3", ">=2026.11.9.3"},
 		{versionNineTwoBootstrapTemplate, "2026.11.9.2", ">=2026.11.9.2"},
 		{versionNineOneBootstrapTemplate, "2026.11.9.1", ">=2026.11.9.1"},
@@ -198,7 +216,8 @@ func recognizedPreviousBootstrap(data []byte, policy Policy) bool {
 
 func InspectBootstrap(path, scope, version string) (BootstrapUpdate, error) {
 	b, err := ReadBootstrap(path, scope)
-	result := BootstrapUpdate{Path: path, Scope: scope, Installed: b.Revision, Available: BootstrapVersion, CLIRange: BootstrapCLIRange}
+	available := BootstrapVersionForScope(scope)
+	result := BootstrapUpdate{Path: path, Scope: scope, Installed: b.Revision, Available: available, CLIRange: BootstrapCLIRange}
 	if err != nil {
 		return result, err
 	}
@@ -215,7 +234,7 @@ func InspectBootstrap(path, scope, version string) (BootstrapUpdate, error) {
 			return result, nil
 		}
 	}
-	current, err := BootstrapText(b.Policy)
+	current, err := BootstrapTextForScope(b.Policy, scope)
 	if err != nil {
 		return result, err
 	}
@@ -227,13 +246,13 @@ func InspectBootstrap(path, scope, version string) (BootstrapUpdate, error) {
 		result.State = "current"
 		return result, nil
 	}
-	if b.Revision != "" && VersionLess(BootstrapVersion, b.Revision) {
+	if b.Revision != "" && VersionLess(available, b.Revision) {
 		result.State = "newer"
 		return result, nil
 	}
 	result.State = "modified"
 	result.Action = "Local skill content differs. Preserve local edits and report the difference; modified content alone is not an upgrade offer."
-	if recognizedPreviousBootstrap(data, b.Policy) && (b.Revision == "" || VersionLess(b.Revision, BootstrapVersion)) {
+	if RecognizedBootstrap(data, b.Policy) && (b.Revision == "" || VersionLess(b.Revision, available)) {
 		if runtimeversion.Release.MatchString(version) {
 			supported, err := BootstrapSupports(BootstrapCLIRange, version)
 			if err != nil {

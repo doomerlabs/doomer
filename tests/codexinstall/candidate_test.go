@@ -71,6 +71,12 @@ func testCandidateAssemblyAcceptsUnrecognizedBootstrap(t *testing.T, candidateVe
 				}
 				for _, agent := range []string{".agents", ".claude"} {
 					want := generated
+					if personalScenario(scenario) {
+						want, err = managed.BootstrapTextForScope(policy, "personal")
+						if err != nil {
+							t.Fatal(err)
+						}
+					}
 					if source == "skills" {
 						want = c.SkillsBootstrap
 					}

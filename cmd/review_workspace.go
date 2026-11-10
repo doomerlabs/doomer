@@ -34,7 +34,7 @@ func runWorkspaceReview(cmd *cobra.Command, clock application.Clock, api, profil
 	}
 	repository := capture.Source.Repository
 	if repository == "" {
-		repository = "local/checkout"
+		repository = sourcesnapshot.LocalRepositoryIdentifier(path)
 	}
 	if format == "text" {
 		if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "\n  %s · %s\n", reviewLine(repository), shortReviewDigest(capture.TargetTreeHash)); err != nil {

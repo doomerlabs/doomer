@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/doomerlabs/doomer/internal/managed"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestTeamInstallDistributesDiscoveryWithoutLocalActivation(t *testing.T) {
@@ -57,6 +60,17 @@ func TestTeamInstallDistributesDiscoveryWithoutLocalActivation(t *testing.T) {
 	for _, name := range []string{".codex/hooks.json", ".claude/settings.json"} {
 		if _, err := os.Stat(filepath.Join(repo, name)); !os.IsNotExist(err) {
 			t.Fatalf("team installation configured local hooks: %s", name)
+		}
+	}
+	for _, dir := range []string{".agents", ".claude"} {
+		skill := filepath.Join(repo, dir, "skills/doomer-review")
+		if _, err := os.Stat(filepath.Join(skill, "agents/openai.yaml")); !os.IsNotExist(err) {
+			t.Fatal("repository install wrote personal invocation metadata", dir, err)
+		}
+		data, err := os.ReadFile(filepath.Join(skill, "SKILL.md"))
+		want, _ := managed.BootstrapText(managed.Policy{Protocol: managed.Protocol, Channel: "stable"})
+		if err != nil || string(data) != want || !bytes.Contains(data, []byte("description: Review edited source with Doomer and reuse approved setup.\n")) {
+			t.Fatal("repository bootstrap changed", dir, err)
 		}
 	}
 	plan := &resetPlan{}
@@ -116,13 +130,74 @@ func TestPersonalInstallDoesNotWriteGlobalInstructions(t *testing.T) {
 	isolate(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if out, err := execute(t, "", "install", "--personal"); err != nil {
-		t.Fatal(out, err)
+	for i := 0; i < 2; i++ {
+		if out, err := execute(t, "", "install", "--personal"); err != nil {
+			t.Fatal(out, err)
+		}
 	}
 	for _, name := range []string{"AGENTS.md", "CLAUDE.md", ".codex/AGENTS.md", ".claude/CLAUDE.md"} {
 		if _, err := os.Stat(filepath.Join(home, name)); !os.IsNotExist(err) {
 			t.Fatalf("personal install wrote global instructions: %s", name)
 		}
+	}
+	for _, dir := range []string{".agents", ".claude"} {
+		path := filepath.Join(home, dir, "skills/doomer-review/SKILL.md")
+		update, err := managed.InspectBootstrap(path, "personal", "dev")
+		if err != nil || update.State != "current" || update.Installed != managed.BootstrapVersionForScope("personal") {
+			t.Fatal(update, err)
+		}
+		data, _ := os.ReadFile(path)
+		var header struct{ Description string }
+		wantDescription := "Use Doomer for every coding task that creates or modifies source code, fixes bugs, refactors code, or changes tests or build configuration. Start before editing and complete the review workflow before delivering changes, even when the user does not explicitly request code review."
+		if err := yaml.Unmarshal(bytes.SplitN(data, []byte("\n---\n"), 2)[0][4:], &header); err != nil || header.Description != wantDescription {
+			t.Fatal("personal trigger missing", header, err)
+		}
+	}
+	config, err := os.ReadFile(filepath.Join(home, ".agents/skills/doomer-review/agents/openai.yaml"))
+	var metadata struct {
+		Policy struct {
+			AllowImplicitInvocation bool `yaml:"allow_implicit_invocation"`
+		}
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = yaml.Unmarshal(config, &metadata); err != nil || !metadata.Policy.AllowImplicitInvocation {
+		t.Fatal("personal invocation policy missing", string(config), err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude/skills/doomer-review/agents/openai.yaml")); !os.IsNotExist(err) {
+		t.Fatal("wrote Codex metadata to Claude", err)
+	}
+	plan := &resetPlan{}
+	plan.discoverSkill(filepath.Join(home, ".agents/skills/doomer-review/SKILL.md"))
+	if len(plan.Entries) != 2 {
+		t.Fatal("reset did not recognize generated skill and metadata", plan.Entries)
+	}
+}
+
+func TestPersonalInstallPreservesInvocationCustomization(t *testing.T) {
+	isolate(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(home, ".agents/skills/doomer-review/agents/openai.yaml")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	custom := "interface:\n  display_name: My Doomer\npolicy:\n  allow_implicit_invocation: false\n"
+	if err := os.WriteFile(path, []byte(custom), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := execute(t, "", "install", "--personal"); err != nil {
+		t.Fatal(out, err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != custom {
+		t.Fatal("overwrote personal customization", string(data), err)
+	}
+	plan := &resetPlan{}
+	plan.discoverSkill(filepath.Join(home, ".agents/skills/doomer-review/SKILL.md"))
+	if len(plan.Entries) != 1 {
+		t.Fatal("reset selected customized metadata", plan.Entries)
 	}
 }
 
