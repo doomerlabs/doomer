@@ -288,3 +288,30 @@ func TestReleasedNineTwoBootstrapUpgradesForHooksInstall(t *testing.T) {
 		t.Fatalf("%+v %v", blocked, err)
 	}
 }
+
+func TestReleasedNineThreeBootstrapOffersMetadataUpgrade(t *testing.T) {
+	policy := Policy{Protocol: Protocol, Channel: "stable"}
+	old, err := bootstrapText(policy, versionNineThreeBootstrapTemplate, "2026.11.9.3", ">=2026.11.9.3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := BootstrapText(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.SplitN(old, "---", 3)[2] != strings.SplitN(current, "---", 3)[2] {
+		t.Fatal("metadata upgrade changed instructions")
+	}
+	path := filepath.Join(t.TempDir(), "SKILL.md")
+	if err := os.WriteFile(path, []byte(old), 0600); err != nil {
+		t.Fatal(err)
+	}
+	update, err := InspectBootstrap(path, "project", "2026.11.9.4")
+	if err != nil || update.State != "update_available" {
+		t.Fatalf("%+v %v", update, err)
+	}
+	blocked, err := InspectBootstrap(path, "project", "2026.11.9.3")
+	if err != nil || blocked.State != "incompatible" {
+		t.Fatalf("%+v %v", blocked, err)
+	}
+}
