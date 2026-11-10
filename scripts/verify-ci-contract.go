@@ -454,15 +454,18 @@ func validateRelease(workflow *yaml.Node) {
 
 func validateAgentRecordings(workflow *yaml.Node) {
 	plan := requiredValue(workflow, "jobs", "plan")
-	if scalar(requiredValue(plan, "outputs", "cache_artifact_id")) != "${{ steps.cached-recordings.outputs.artifact-id }}" {
-		fail("E2E plan must expose the current attempt's verified artifact ID")
+	if scalar(requiredValue(plan, "outputs", "cache_artifact_name")) != "${{ steps.scenarios.outputs.cache_artifact_name }}" {
+		fail("E2E plan must expose the current attempt's unique verified artifact name")
 	}
-	if scalar(value(findStep(plan, "Save verified cached recordings"), "id")) != "cached-recordings" {
-		fail("E2E verified artifact upload must identify its output")
+	if !nodeContains(findStep(plan, "Discover all lifecycle scenarios"), "uuid.uuid4().hex") {
+		fail("E2E plan must generate a fresh artifact name for each attempt")
+	}
+	if scalar(requiredValue(findStep(plan, "Save verified cached recordings"), "with", "name")) != "${{ steps.scenarios.outputs.cache_artifact_name }}" {
+		fail("E2E upload must use the current plan's unique artifact name")
 	}
 	report := requiredValue(workflow, "jobs", "report")
 	restore := findStep(report, "Restore verified cached recordings")
-	if scalar(requiredValue(restore, "with", "artifact-ids")) != "${{ needs.plan.outputs.cache_artifact_id }}" || scalar(requiredValue(restore, "with", "merge-multiple")) != "true" {
+	if scalar(requiredValue(restore, "with", "name")) != "${{ needs.plan.outputs.cache_artifact_name }}" {
 		fail("E2E report must restore the exact current verified artifact into its root")
 	}
 	seenRestore := false
