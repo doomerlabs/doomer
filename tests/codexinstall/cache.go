@@ -21,10 +21,12 @@ const maxCacheObject = 32 << 20
 var digestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 type cacheProvenance struct {
-	Fingerprint string `json:"fingerprint"`
-	Hit         bool   `json:"hit"`
-	Result      string `json:"result,omitempty"`
-	Origin      string `json:"origin_environment,omitempty"`
+	Fingerprint    string    `json:"fingerprint"`
+	Hit            bool      `json:"hit"`
+	Result         string    `json:"result,omitempty"`
+	Origin         string    `json:"origin_environment,omitempty"`
+	ExecutedCommit string    `json:"executed_commit,omitempty"`
+	ExecutedAt     time.Time `json:"executed_at,omitempty"`
 }
 type cacheArtifact struct {
 	Kind   string `json:"kind"`
@@ -167,7 +169,7 @@ func verifyCachedResult(raw []byte, m snapshotMetadata, scenario string, keys ma
 	if err != nil || !ed25519.Verify(key, payload, signature) {
 		return result, fmt.Errorf("result signature mismatch")
 	}
-	if json.Unmarshal(payload, &result) != nil || result.Schema != fingerprintSchema || result.KeyID != envelope.KeyID {
+	if json.Unmarshal(payload, &result) != nil || result.Schema != fingerprintSchema || result.Inputs.Schema != fingerprintSchema || m.Schema != fingerprintSchema || result.KeyID != envelope.KeyID {
 		return result, fmt.Errorf("invalid result schema")
 	}
 	if result.Fingerprint != m.fingerprint(scenario) || result.Inputs.fingerprint(scenario) != result.Fingerprint || result.Scenario != scenario || result.Harness != m.Settings["harness"] {
@@ -225,7 +227,7 @@ func reuseCachedResult(ctx context.Context, store cacheStore, m snapshotMetadata
 	if json.Unmarshal(artifacts["report"], &r) != nil || !cacheReportPassed(r, m) || (r.Execution == "local" && !r.LocalCleaned) || (r.Execution == "remote" && !r.Deleted) || r.Scenario != scenario || r.Harness != m.Settings["harness"] || r.AuthMode != m.Settings["auth"] {
 		return fmt.Errorf("invalid cached report")
 	}
-	r.Cache = &cacheProvenance{Fingerprint: m.fingerprint(scenario), Hit: true, Result: cacheResultKey(m, scenario), Origin: m.Environment}
+	r.Cache = &cacheProvenance{Fingerprint: m.fingerprint(scenario), Hit: true, Result: cacheResultKey(m, scenario), Origin: m.Environment, ExecutedCommit: result.Inputs.Commit, ExecutedAt: result.Ended}
 	encoded, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
 		return err

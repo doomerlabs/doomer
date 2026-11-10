@@ -16,14 +16,16 @@ verification errors print an explicit cache miss and execute the scenario.
 Every normal invocation copies tracked and nonignored untracked inputs into a
 private temporary snapshot. The runner itself is rebuilt from this snapshot;
 scenario builds, bootstrap reads and fixture reads run there. Added, modified,
-deleted and executable-bit changes affect identity. Edits to the original
+deleted and executable-bit changes to runtime dependencies affect identity. Edits to the original
 checkout after capture cannot alter test inputs. A changing checkout during
 capture is rejected. The snapshot is removed after the child exits, including
 on interruption. A private `OUTPUT.inputs.json` records the manifest and resolved
 inputs for PR validation. Use a fresh output path each time.
 
-The manifest conservatively covers repository contents and any explicitly
-selected candidate, bootstrap or skills repositories. It excludes private Git
+The captured inventory records repository contents and explicitly selected
+candidate, bootstrap or skills repositories. The runnable snapshot and cache key
+use compiler-reported sources and embedded files plus declared runtime fixtures;
+explicit installer/skills repositories retain their full inventory. It excludes private Git
 metadata, credentials (`.env*`, `.aws`, `auth.json`, `credentials*`, private key
 files), dependency/build caches, root binaries, report directories and run
 outputs. Symlinks and submodules fail capture until explicitly supported, rather
@@ -36,6 +38,40 @@ settings, pinned local agent package bytes, OS, architecture, execution class,
 scenario and external input identities. Commit SHA is provenance only. Worker
 count, suite-wide budget, temporary paths, report destination and credential
 values are excluded. Identical contents therefore survive commits and rebases.
+
+## Incremental scenario dependencies
+
+Each scenario hashes only its runtime dependencies. Documentation, `AGENTS.md`,
+unit tests and unrelated tooling do not invalidate agent runs unless compiled or
+embedded into the tested program. The runner asks Go for compiled sources and
+embedded resources, retains declared runtime fixture inputs, and removes unused
+files from the execution snapshot. An undeclared runtime file read therefore
+fails instead of silently depending on an unhashed file.
+
+Audited scenario fixture bodies have narrower scopes. For example, a body change
+in `upgrade.go` invalidates the six upgrade scenarios, while a cached `install`
+result remains usable. `hook_setup.go` affects the hook upgrade/decline/trust
+scenarios. Imports, signatures, global declarations, initialization, shared runner
+code, the CLI and dependencies remain shared. Any unexpected caller or opaque
+reflection makes a scoped fixture shared again. A pinned audit of shared runner
+control flow disables narrow scopes if that code changes; update that audit only
+after reviewing the dependency boundaries. New or uncertain dependencies
+therefore cause reruns rather than optimistic reuse.
+
+| Change | Invalidation |
+| --- | --- |
+| Ordinary documentation or development instructions | No agent rerun |
+| Audited scenario fixture body | Its declared dependent scenarios |
+| Fixture signature, imports, globals or unexpected caller | Shared rerun |
+| Shared CLI/runner source, toolchain, baseline or settings | Shared rerun |
+| New compiled source or embedded resource | Included automatically |
+
+The full inventory and selected runtime files are recorded in
+`OUTPUT.inputs.json`; `scenario_files` records narrower fixture scopes. Cached
+reports carry the original execution commit/time and origin environment, alongside
+the cache-hit marker for the current run. Schema 1 results are not reused after
+this dependency-contract change. The existing `v1/` storage prefix remains under
+the same seven-day retention rule.
 
 ## Baselines and freshness
 
@@ -64,7 +100,7 @@ coverage. Use the local Linux command below to populate CI-compatible results.
 
 ## Signed result contract
 
-Schema 1 stores an envelope with `key_id`, base64 `payload`, and base64
+Schema 2 stores an envelope with `key_id`, base64 `payload`, and base64
 `signature`. The signature is Ed25519 over exactly the decoded payload bytes;
 verification never reserializes them. The UTF-8 JSON payload records schema,
 fingerprint, scenario, harness, outcome, captured inputs/environment, commit,

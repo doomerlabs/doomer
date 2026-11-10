@@ -77,3 +77,8 @@ locations, cache hits versus executed scenarios, harness/model/auth mode,
 baseline, worker count, wall time and provider errors in PR validation notes.
 Cached reports retain historical usage but add cache-hit provenance; suite
 charges are zero for a hit. CI retains its existing retries and release gates.
+
+Incremental reuse is conservative. If the shared-runner scope audit changes,
+review the affected calls and scenario boundaries before updating its digest;
+never update the digest merely to silence a test failure. Uncertain dependencies
+remain shared and rerun.

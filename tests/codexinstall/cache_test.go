@@ -39,7 +39,7 @@ func (s *memoryCache) Put(_ context.Context, key string, raw []byte) error {
 	return nil
 }
 func testCacheMetadata() snapshotMetadata {
-	return snapshotMetadata{Schema: 1, Files: []snapshotEntry{{Path: "cli/main.go", SHA256: byteHash([]byte("source")), Mode: 0600}}, Settings: map[string]string{"harness": "codex", "auth": "api", "model": "gpt-6.1-terra"}, Environment: "local", OS: "darwin", Arch: "arm64", Baseline: "2026.11.9.3"}
+	return snapshotMetadata{Schema: fingerprintSchema, Files: []snapshotEntry{{Path: "cli/main.go", SHA256: byteHash([]byte("source")), Mode: 0600}}, Settings: map[string]string{"harness": "codex", "auth": "api", "model": "gpt-6.1-terra"}, Environment: "local", OS: "darwin", Arch: "arm64", Baseline: "2026.11.9.3"}
 }
 func testCacheKey(t *testing.T) map[string]ed25519.PublicKey {
 	t.Helper()
@@ -120,6 +120,11 @@ func TestCacheRejectsTamperingMissingArtifactsAndWrongInputs(t *testing.T) {
 	}
 	if _, err := verifyCachedResult(raw, m, "install", map[string]ed25519.PublicKey{}, time.Now()); err == nil {
 		t.Fatal("accepted unknown key")
+	}
+	oldSchema := m
+	oldSchema.Schema = 1
+	if _, err := verifyCachedResult(raw, oldSchema, "install", keys, time.Now()); err == nil {
+		t.Fatal("accepted old dependency schema")
 	}
 	changed := m
 	changed.Baseline = "2026.11.10.1"

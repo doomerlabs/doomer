@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const fingerprintSchema = 1
+const fingerprintSchema = 2
 
 type snapshotEntry struct {
 	Path   string `json:"path"`
@@ -29,18 +29,20 @@ type externalInput struct {
 	Version string `json:"catalog_release,omitempty"`
 }
 type snapshotMetadata struct {
-	Schema        int               `json:"schema"`
-	Files         []snapshotEntry   `json:"files"`
-	Settings      map[string]string `json:"settings"`
-	External      []externalInput   `json:"external"`
-	Environment   string            `json:"environment"`
-	OS            string            `json:"os"`
-	Arch          string            `json:"arch"`
-	Commit        string            `json:"commit,omitempty"`
-	Baseline      string            `json:"baseline,omitempty"`
-	Stable        json.RawMessage   `json:"stable,omitempty"`
-	Captured      time.Time         `json:"captured"`
-	CacheDisabled string            `json:"cache_disabled,omitempty"`
+	Schema        int                     `json:"schema"`
+	Files         []snapshotEntry         `json:"files"`
+	RuntimeFiles  []string                `json:"runtime_files,omitempty"`
+	ScenarioFiles map[string]scenarioFile `json:"scenario_files,omitempty"`
+	Settings      map[string]string       `json:"settings"`
+	External      []externalInput         `json:"external"`
+	Environment   string                  `json:"environment"`
+	OS            string                  `json:"os"`
+	Arch          string                  `json:"arch"`
+	Commit        string                  `json:"commit,omitempty"`
+	Baseline      string                  `json:"baseline,omitempty"`
+	Stable        json.RawMessage         `json:"stable,omitempty"`
+	Captured      time.Time               `json:"captured"`
+	CacheDisabled string                  `json:"cache_disabled,omitempty"`
 }
 
 type snapshotOptions struct {
@@ -192,7 +194,7 @@ func (m snapshotMetadata) fingerprint(scenario string) string {
 		Settings                                  map[string]string `json:"settings"`
 		External                                  []externalInput   `json:"external"`
 		Environment, OS, Arch, Baseline, Scenario string
-	}{m.Schema, m.Files, m.Settings, m.External, m.Environment, m.OS, m.Arch, m.Baseline, scenario})
+	}{m.Schema, m.fingerprintFiles(scenario), m.Settings, m.External, m.Environment, m.OS, m.Arch, m.Baseline, scenario})
 	return byteHash(raw)
 }
 
@@ -303,6 +305,11 @@ func runSnapshot(ctx context.Context, opts snapshotOptions, args []string) error
 		}
 	}
 	sort.Slice(metadata.Files, func(i, j int) bool { return metadata.Files[i].Path < metadata.Files[j].Path })
+	if opts.Local {
+		if err := prepareRuntimeInputs(ctx, dir, mapped, &metadata); err != nil {
+			return err
+		}
+	}
 	raw, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		return err
