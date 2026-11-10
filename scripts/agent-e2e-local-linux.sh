@@ -3,6 +3,7 @@
 set -euo pipefail
 umask 077
 root=$(git rev-parse --show-toplevel)
+git_common=$(git rev-parse --path-format=absolute --git-common-dir)
 image=doomer-agent-e2e:local
 release=$(cat "$root/tests/codexinstall/baseline-release.txt")
 if [[ ! $release =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}\.[1-9][0-9]*$ ]]; then
@@ -25,7 +26,7 @@ runner_home=$(mktemp -d "${TMPDIR:-/tmp}/doomer-agent-e2e-home.XXXXXX")
 trap 'rm -rf -- "$runner_home"' EXIT
 docker build --platform linux/amd64 -t "$image" -f "$root/tests/codexinstall/Dockerfile" "$root/tests/codexinstall"
 docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" \
-  -v "$root:/src:ro" -v "$reports:/reports" \
+  -v "$root:/src:ro" -v "$git_common:$git_common:ro" -v "$reports:/reports" \
   -v "$runner_home:/runner-home" -e HOME=/runner-home \
   -v "$cache/go-build:/runner-home/.cache/go-build" \
   -v "$cache/go-mod:/runner-home/go/pkg/mod" \
