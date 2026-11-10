@@ -148,6 +148,11 @@ func (j *journey) npxSkillUpgrade() error {
 		if task.Bootstrap.Scope != scope || !strings.HasPrefix(task.Bootstrap.Path, base+string(filepath.Separator)) {
 			return fmt.Errorf("task used the wrong skill scope: %+v", task.Bootstrap)
 		}
+		// A prepare attempt can stop at update approval before selecting a runtime.
+		// Only that pre-runtime state may lack a release, never a prepared task.
+		if task.Release == "" && (task.Stage != "preparing" || task.Submission != nil || task.Review != nil || task.InstallationID != "") {
+			return fmt.Errorf("task reached stage %s without a candidate runtime", task.Stage)
+		}
 		if task.Release != "" {
 			if j.c.CandidateVersion != "" && task.Release != j.c.CandidateVersion {
 				return fmt.Errorf("task used release %s instead of candidate %s", task.Release, j.c.CandidateVersion)
