@@ -119,6 +119,8 @@ jobs:
           TEST_CLAUDE_CODE_OAUTH_TOKEN: ${{ matrix.harness == 'claude' && secrets.TEST_CLAUDE_CODE_OAUTH_TOKEN || '' }}
           E2E_SCENARIO: ${{ matrix.scenario }}
           E2E_HARNESS: ${{ matrix.harness }}
+          # Install the candidate skill through npx; the public package is released separately.
+          E2E_NPX_SKILL_SOURCE: ${{ github.repository }}/.agents/skills/doomer-review#${{ github.head_ref || github.ref_name }}
         run: |
           report_root=$E2E_REPORT_DIR
           for attempt in 1 2; do
