@@ -1,0 +1,6 @@
+version: 1
+
+# File/glob -> stable test IDs or groups (for example, "codex/*").
+# These rules only add to automatically discovered dependencies.
+# Unmatched patterns/selectors are errors; they never silently omit inputs.
+extra_dependencies: {}
