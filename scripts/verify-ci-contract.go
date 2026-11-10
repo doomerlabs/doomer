@@ -452,6 +452,33 @@ func validateRelease(workflow *yaml.Node) {
 	requireNoPublicationCredentials(findStep(r2, "Verify exact R2 publication state"), "R2 pre-publication verification step")
 }
 
+func validateAgentRecordings(workflow *yaml.Node) {
+	plan := requiredValue(workflow, "jobs", "plan")
+	if scalar(requiredValue(plan, "outputs", "cache_artifact_id")) != "${{ steps.cached-recordings.outputs.artifact-id }}" {
+		fail("E2E plan must expose the current attempt's verified artifact ID")
+	}
+	if scalar(value(findStep(plan, "Save verified cached recordings"), "id")) != "cached-recordings" {
+		fail("E2E verified artifact upload must identify its output")
+	}
+	report := requiredValue(workflow, "jobs", "report")
+	restore := findStep(report, "Restore verified cached recordings")
+	if scalar(requiredValue(restore, "with", "artifact-ids")) != "${{ needs.plan.outputs.cache_artifact_id }}" || scalar(requiredValue(restore, "with", "merge-multiple")) != "true" {
+		fail("E2E report must restore the exact current verified artifact into its root")
+	}
+	seenRestore := false
+	for _, step := range steps(report) {
+		if step == restore {
+			seenRestore = true
+		}
+		if strings.HasPrefix(scalar(value(step, "uses")), "actions/download-artifact@") && step != restore {
+			pattern := scalar(requiredValue(step, "with", "pattern"))
+			if seenRestore || (pattern != "agent-e2e-codex-*" && pattern != "agent-e2e-claude-*") {
+				fail("E2E scenario downloads must precede verified restoration and exclude old galleries")
+			}
+		}
+	}
+}
+
 func main() {
 	ciPath := ".depot/workflows/ci.yml"
 	releasePath := ".depot/workflows/release.yml"
@@ -461,5 +488,6 @@ func main() {
 	validatePinnedActions(releasePath, release)
 	validateCI(ci)
 	validateRelease(release)
+	validateAgentRecordings(parse(".depot/workflows/agent-e2e.yml"))
 	fmt.Println("CI and release workflow dependency/privilege contract passed")
 }

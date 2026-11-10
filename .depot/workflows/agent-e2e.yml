@@ -23,6 +23,7 @@ jobs:
       release: ${{ steps.scenarios.outputs.release }}
       cached: ${{ steps.cache.outputs.cached }}
       regression: ${{ steps.cache.outputs.regression }}
+      cache_artifact_id: ${{ steps.cached-recordings.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -63,6 +64,7 @@ jobs:
           scripts/agent-e2e-baseline.sh "$E2E_BASELINE_SOURCE"
           python3 scripts/agent-e2e-cache-plan.py --jobs 8 --output "$RUNNER_TEMP/e2e-cache"
       - name: Save verified cached recordings
+        id: cached-recordings
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: agent-e2e-cached-results
@@ -215,15 +217,23 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - name: Collect Codex scenario recordings
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: agent-e2e-codex-*
+          path: e2e-artifacts
+      - name: Collect Claude scenario recordings
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: agent-e2e-claude-*
+          path: e2e-artifacts
+      # Download this plan attempt's verified reports last. Older scenario
+      # artifacts from a rerun must not replace their cache-hit provenance.
       - name: Restore verified cached recordings
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: agent-e2e-cached-results
-          path: e2e-artifacts
-      - name: Collect all scenario recordings
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          pattern: agent-e2e-*
+          artifact-ids: ${{ needs.plan.outputs.cache_artifact_id }}
+          merge-multiple: true
           path: e2e-artifacts
       - name: Summarize every scenario including failures
         if: always()
