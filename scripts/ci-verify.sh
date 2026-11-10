@@ -114,6 +114,8 @@ cross_build() {
 
 cli_smoke() {
   local tmp binary
+  log "bounded CLI command dependency proof"
+  go run ./tests/cliimpact
   tmp="$(make_temp_dir)"
   trap 'rm -rf -- "$tmp"' RETURN
   binary="$tmp/adversary"

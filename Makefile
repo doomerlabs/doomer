@@ -5,7 +5,7 @@ BUILD_DATE ?= unknown
 VERSION_PKG := github.com/doomerlabs/doomer/internal/version
 LDFLAGS := -X $(VERSION_PKG).Version=$(VERSION) -X $(VERSION_PKG).Commit=$(COMMIT) -X $(VERSION_PKG).BuildDate=$(BUILD_DATE)
 
-.PHONY: build test verify ci clean
+.PHONY: build test verify ci cli-impact clean
 
 # Builds are secret-free; release metadata is stamped explicitly.
 build:
@@ -14,6 +14,10 @@ build:
 
 test:
 	go test ./...
+
+# Bounded product-command dependency experiment; never publishes cache entries.
+cli-impact:
+	go run ./tests/cliimpact
 
 verify:
 	scripts/ci-verify.sh quality
