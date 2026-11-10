@@ -1,0 +1,52 @@
+.agents/skills/agent-e2e/SKILL.md
+  h_aa44c3b5b60dec 81-87
+docs/agent-e2e-cache.md
+  h_aa44c3b5b60dec 53-71,76-81,84-90
+docs/e2e-dependency-planner.md
+  h_aa44c3b5b60dec 1-73
+e2e-extra-dependencies.yml
+  h_aa44c3b5b60dec 1-6
+internal/e2eimpact/extra.go
+  h_aa44c3b5b60dec 1-144
+internal/e2eimpact/go.go
+  h_aa44c3b5b60dec 1-263
+internal/e2eimpact/load.go
+  h_aa44c3b5b60dec 1-111
+internal/e2eimpact/packages.go
+  h_aa44c3b5b60dec 1-108
+internal/e2eimpact/packages_test.go
+  h_aa44c3b5b60dec 1-103
+internal/e2eimpact/plan.go
+  h_aa44c3b5b60dec 1-165
+internal/e2eimpact/plan_test.go
+  h_aa44c3b5b60dec 1-288
+internal/e2eimpact/syntax.go
+  h_aa44c3b5b60dec 1-88
+tests/codexinstall/dependencies.go
+  h_aa44c3b5b60dec 1-90
+tests/codexinstall/dependencies_test.go
+  h_aa44c3b5b60dec 1-120
+tests/codexinstall/impact.go
+  h_aa44c3b5b60dec 39-47,53-58,68-70,129,150-155,163-169,173-177,253-255,265-273
+tests/codexinstall/impact_test.go
+  h_aa44c3b5b60dec 130,237-246
+tests/codexinstall/legacy_impact_test.go
+  h_aa44c3b5b60dec 1-303
+tests/codexinstall/scenario_dependencies.go
+  h_aa44c3b5b60dec 1-543
+tests/codexinstall/scenario_dependencies_test.go
+  h_aa44c3b5b60dec 1-365
+tests/codexinstall/snapshot.go
+  h_aa44c3b5b60dec 32-48,316-326
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2556d9b9225fa030f3a4edf7b2a6b24df3b3369b",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
