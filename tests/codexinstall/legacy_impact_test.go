@@ -18,7 +18,8 @@ import (
 var fixtureScopes = map[string][]string{
 	"browser_onboarding.go":  {"browser-onboarding"},
 	"unconfigured_repo.go":   {"unconfigured-repo"},
-	"upgrade.go":             {"upgrade", "upgrade-defer", "upgrade-untracked", "upgrade-personal", "upgrade-custom", "upgrade-authorized-session"},
+	"upgrade.go":             {"upgrade", "upgrade-defer", "upgrade-untracked", "upgrade-personal", "upgrade-custom", "upgrade-authorized-session", "upgrade-personal-npx", "upgrade-repo-over-personal-npx"},
+	"npx_upgrade.go":         {"upgrade-personal-npx", "upgrade-repo-over-personal-npx"},
 	"recovery.go":            {"portable-invalid", "revoked-uploads", "interrupted-review"},
 	"portable.go":            {"portable-restart"},
 	"preflight.go":           {"review-preflight"},

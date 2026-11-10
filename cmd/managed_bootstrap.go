@@ -50,12 +50,15 @@ func newManagedBootstrapCommand() *cobra.Command {
 				}
 				p := b.Policy
 				policy = &p
-				update, err := managed.InspectBootstrap(path, scope, version.Version)
+				update, err := inspectManagedBootstrap(path, scope, version.Version, base)
 				if err != nil {
 					return err
 				}
 				updates = append(updates, update)
 				if operation == "upgrade" && accept {
+					if update.UpdateManager == "skills" {
+						return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"state": "external_update_required", "bootstraps": updates, "action": update.Action, "acceptance_required": false})
+					}
 					if update.State != "current" && update.State != "update_available" {
 						return fmt.Errorf("cannot replace %s bootstrap at %s; reconcile it manually", update.State, path)
 					}
@@ -109,7 +112,7 @@ func newManagedBootstrapCommand() *cobra.Command {
 			}
 			hasUpgrade, safeUpgrade := false, true
 			for _, update := range updates {
-				hasUpgrade = hasUpgrade || update.UpgradeAvailable
+				hasUpgrade = hasUpgrade || (update.UpgradeAvailable && update.UpdateManager != "skills")
 				if update.State != "current" && update.State != "update_available" {
 					safeUpgrade = false
 				}
@@ -139,7 +142,7 @@ func managedBootstrapUpdates(task managed.Task) []managed.BootstrapUpdate {
 	var updates []managed.BootstrapUpdate
 	for _, agent := range []string{".agents", ".claude"} {
 		path := filepath.Join(base, agent, "skills/doomer-review/SKILL.md")
-		update, err := managed.InspectBootstrap(path, task.Bootstrap.Scope, task.Release)
+		update, err := inspectManagedBootstrap(path, task.Bootstrap.Scope, task.Release, base)
 		if os.IsNotExist(err) {
 			continue
 		}
@@ -165,6 +168,10 @@ func managedBootstrapUpdates(task managed.Task) []managed.BootstrapUpdate {
 				target = []string{"--personal"}
 			}
 			update.DeferCommand = append([]string{executable, "bootstrap", "defer"}, target...)
+			if update.UpdateManager == "skills" {
+				updates = append(updates, update)
+				continue
+			}
 			update.UpgradeCommand = append([]string{executable, "bootstrap", "upgrade", "--accept"}, target...)
 			update.Action = "If the user chooses Maybe later, execute defer_command and verify bootstrap_deferred before finishing; this suppresses this version's offer for 24 hours. Execute upgrade_command only after acceptance. Use these exact argument arrays because the PATH launcher may be older. Before offering, follow Skill upgrade decisions in instructions. " + managed.BootstrapUpgradeDecision(task.Bootstrap.Scope) + " The task keeps its release and update policy."
 		}

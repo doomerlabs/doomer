@@ -177,6 +177,22 @@ func TestRealRunnerAutomaticScenarioProjections(t *testing.T) {
 	if !different {
 		t.Fatal("real install and upgrade have identical projections")
 	}
+	// Main added these scenarios after the planner was implemented. They must
+	// acquire their helper dependency without a production mapping update.
+	foundNPX := false
+	for path, values := range hashes {
+		if strings.HasSuffix(path, "/npx_upgrade.go") {
+			foundNPX = true
+			for _, scenario := range []string{"upgrade-personal-npx", "upgrade-repo-over-personal-npx"} {
+				if values[scenario] == values["install"] {
+					t.Fatal("new scenario missed its automatically discovered helper", scenario)
+				}
+			}
+		}
+	}
+	if !foundNPX {
+		t.Fatal("new upstream NPX helper was not discovered")
+	}
 }
 
 func TestAutomaticScenarioSignedReuseAcrossLocalAndCI(t *testing.T) {

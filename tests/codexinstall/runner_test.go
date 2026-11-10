@@ -294,12 +294,12 @@ func TestReviewPreflightUsesRealReviewerWithoutBypass(t *testing.T) {
 }
 
 func TestSkillDiscoveryScenariosRunInBothAgentMatrices(t *testing.T) {
-	for _, scenario := range []string{"personal-discovery", "repository-discovery"} {
+	for _, scenario := range []string{"personal-discovery", "repository-discovery", "upgrade-personal-npx", "upgrade-repo-over-personal-npx"} {
 		if !validScenario(scenario) {
 			t.Fatal("skill discovery missing from CI scenario list", scenario)
 		}
 	}
-	if !personalScenario("personal-discovery") || personalScenario("repository-discovery") {
+	if !personalScenario("personal-discovery") || personalScenario("repository-discovery") || !personalScenario("upgrade-personal-npx") || personalScenario("upgrade-repo-over-personal-npx") {
 		t.Fatal("skill discovery scenarios use the wrong installation scope")
 	}
 }

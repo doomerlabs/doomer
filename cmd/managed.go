@@ -258,6 +258,15 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 	if c.Name() == "prepare" {
 		prepareAttention(&r)
 	}
+	if c.Name() == "finish" && r.State == "complete" {
+		for _, update := range managedBootstrapUpdates(t) {
+			if update.State == "update_available" && update.UpdateManager == "skills" {
+				r.BootstrapUpdates = append(r.BootstrapUpdates, update)
+				r.Action = update.Action
+				break
+			}
+		}
+	}
 	if r.State == "approval_required" {
 		binary, err := os.Executable()
 		if err != nil {
@@ -302,6 +311,10 @@ func prepareAttention(r *managedResult) {
 	if decision == "" {
 		for _, update := range r.BootstrapUpdates {
 			if update.State == "update_available" {
+				if update.UpdateManager == "skills" {
+					r.Action = update.Action
+					continue
+				}
 				decision = "Offer the Doomer skill upgrade from " + update.Installed + " to " + update.Available + " now. Check any existing skill PR's actual file revision; an older PR does not cover this update. Ask whether to create or update a separate skill-only PR (or apply a personal skill locally). Follow bootstrap_updates for the exact commands and preserve local edits. Do not apply without acceptance."
 				break
 			}

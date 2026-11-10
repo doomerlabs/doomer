@@ -13,9 +13,9 @@ import (
 // Bump the wrapper revision only when its generated content changes, using the
 // next monotonic bootstrap revision. Bootstrap and CLI release sequences are
 // independent; ordinary CLI releases keep the existing bootstrap revision.
-const BootstrapVersion = "2026.11.9.6"
+const BootstrapVersion = "2026.11.10.1"
 
-const personalBootstrapVersion = "2026.11.9.6"
+const personalBootstrapVersion = "2026.11.10.1"
 
 func BootstrapVersionForScope(scope string) string {
 	if scope == "personal" && VersionLess(BootstrapVersion, personalBootstrapVersion) {
@@ -27,7 +27,10 @@ func BootstrapVersionForScope(scope string) string {
 // A linker override lets the disposable real-agent candidate (which is labelled
 // with the installed public release) advertise its actual injected compatibility.
 // Published release builds always use this source-defined default.
-var BootstrapCLIRange = ">=2026.11.9.6"
+var BootstrapCLIRange = ">=2026.11.10.1"
+
+//go:embed bootstrap-2026.11.9.6.md
+var versionNineSixBootstrapTemplate string
 
 //go:embed bootstrap-2026.11.9.4.md
 var versionNineFourBootstrapTemplate string
@@ -141,17 +144,19 @@ func BootstrapSupports(constraint, version string) (bool, error) {
 }
 
 type BootstrapUpdate struct {
-	Path             string   `json:"path"`
-	Scope            string   `json:"scope"`
-	UpgradeAvailable bool     `json:"upgrade_available"`
-	State            string   `json:"state"`
-	Installed        string   `json:"installed,omitempty"`
-	Available        string   `json:"available"`
-	CLIRange         string   `json:"cli_range"`
-	DeferCommand     []string `json:"defer_command,omitempty"`
-	UpgradeCommand   []string `json:"upgrade_command,omitempty"`
-	Action           string   `json:"action,omitempty"`
-	Compatible       *bool    `json:"compatible,omitempty"`
+	Path                string   `json:"path"`
+	Scope               string   `json:"scope"`
+	UpgradeAvailable    bool     `json:"upgrade_available"`
+	State               string   `json:"state"`
+	Installed           string   `json:"installed,omitempty"`
+	Available           string   `json:"available"`
+	CLIRange            string   `json:"cli_range"`
+	DeferCommand        []string `json:"defer_command,omitempty"`
+	UpgradeCommand      []string `json:"upgrade_command,omitempty"`
+	UpdateManager       string   `json:"update_manager,omitempty"`
+	ManualUpdateCommand []string `json:"manual_update_command,omitempty"`
+	Action              string   `json:"action,omitempty"`
+	Compatible          *bool    `json:"compatible,omitempty"`
 }
 
 func BootstrapUpgradeOffer(scope string) string {
@@ -162,10 +167,12 @@ func BootstrapUpgradeOffer(scope string) string {
 // instructions, keeping each actionable update small enough to read in full.
 func BootstrapUpgradeDecision(scope string) string {
 	location := "this repository’s"
+	workflow := ", using a skill-only pull request for committed files"
 	if scope == "personal" {
 		location = "your personal"
+		workflow = ""
 	}
-	offer := "If the checks above permit an offer, ask the user: ‘A new version of the Doomer skill is available. Update " + location + " skill files now? Your current version still works.’ Present choices in this order: ‘Update skill (recommended)’, ‘Maybe later’."
+	offer := "If the checks above permit an offer, ask the user: ‘A new version of the Doomer skill is available. Update " + location + " skill files now" + workflow + "? Your current version still works.’ Include the update workflow in the approval question. Present choices in this order: ‘Update skill (recommended)’, ‘Maybe later’."
 	if scope == "personal" {
 		return offer + " Apply an accepted personal update locally without creating a pull request."
 	}
@@ -184,6 +191,8 @@ func RecognizedBootstrap(data []byte, policy Policy) bool {
 func recognizedPreviousBootstrap(data []byte, policy Policy) bool {
 	for _, previous := range []struct{ template, revision, cliRange string }{
 		{legacyBootstrapTemplate, "", ""},
+		{versionNineSixBootstrapTemplate, "2026.11.9.6", ">=2026.11.9.6"},
+		{personalBootstrapTemplate(versionNineSixBootstrapTemplate), "2026.11.9.6", ">=2026.11.9.6"},
 		{versionNineFourBootstrapTemplate, "2026.11.9.4", ">=2026.11.9.4"},
 		{versionNineFivePersonalBootstrapTemplate, "2026.11.9.5", ">=2026.11.9.4"},
 		{versionNineThreeBootstrapTemplate, "2026.11.9.3", ">=2026.11.9.3"},
