@@ -1,0 +1,18 @@
+docs/agent-e2e-cache.md
+  h_aa44c3b5b60dec 197-199
+scripts/agent-e2e-local-linux.sh
+  h_aa44c3b5b60dec 22-23,34
+scripts/ci-agent-e2e.sh
+  h_aa44c3b5b60dec 13-41,53-55,62-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a308bdd778cec2e58162e6836485540c7b1c20ae",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
