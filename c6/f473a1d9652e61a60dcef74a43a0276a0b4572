@@ -1,0 +1,34 @@
+.depot/workflows/ci.yml
+  h_aa44c3b5b60dec 125,137-141
+internal/e2eimpact/bounded.go
+  h_aa44c3b5b60dec 1-61
+internal/e2eimpact/bounded_test.go
+  h_aa44c3b5b60dec 1-38
+scripts/agent-e2e-local-linux.sh
+  h_aa44c3b5b60dec 40,44-48
+scripts/ci-verify.sh
+  h_aa44c3b5b60dec 116-118,121-124
+tests/cliimpact/README.md
+  h_aa44c3b5b60dec 9-11,56-107
+tests/codexinstall/cli_smoke.go
+  h_aa44c3b5b60dec 1-244
+tests/codexinstall/cli_smoke_cache.go
+  h_aa44c3b5b60dec 1-157
+tests/codexinstall/cli_smoke_proof_test.go
+  h_aa44c3b5b60dec 1-115
+tests/codexinstall/cli_smoke_test.go
+  h_aa44c3b5b60dec 1-71
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 77,105-113,130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c6f473a1d9652e61a60dcef74a43a0276a0b4572",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
