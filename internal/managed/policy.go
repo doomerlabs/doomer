@@ -153,9 +153,21 @@ func BootstrapText(p Policy) (string, error) {
 	return bootstrapText(p, bootstrapTemplate, BootstrapVersion, BootstrapCLIRange)
 }
 
+// Personal installs carry their own discovery trigger without changing the
+// repository bootstrap distributed alongside AGENTS.md and CLAUDE.md.
+func BootstrapTextForScope(p Policy, scope string) (string, error) {
+	if scope != "personal" {
+		return BootstrapText(p)
+	}
+	template := strings.Replace(bootstrapTemplate,
+		"description: Review edited source with Doomer and reuse approved setup.",
+		"description: >-\n  Use Doomer for every coding task that creates or modifies source code, fixes\n  bugs, refactors code, or changes tests or build configuration. Start before\n  editing and complete the review workflow before delivering changes, even\n  when the user does not explicitly request code review.", 1)
+	return bootstrapText(p, template, BootstrapVersionForScope(scope), BootstrapCLIRange)
+}
+
 func bootstrapText(p Policy, template, revision, cliRange string) (string, error) {
 	// Historical wrappers must retain the instructions users actually installed.
-	if revision != BootstrapVersion {
+	if revision != BootstrapVersion && revision != personalBootstrapVersion {
 		template = strings.ReplaceAll(template, "{{upgrade_prompt_rules}}", strings.TrimSpace(legacyUpgradePromptRules))
 		template = strings.ReplaceAll(template, "{{final_review_rules}}", strings.TrimSpace(legacyFinalReviewRules))
 	}

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -129,6 +130,156 @@ func TestBootstrapUpgradeDetectsRacesAndRollsBack(t *testing.T) {
 	data, _ = os.ReadFile(second)
 	if string(data) != "concurrent edit" {
 		t.Fatal("concurrent edit overwritten")
+	}
+}
+
+func TestPersonalBootstrapUpgradeAddsDiscoveryAndPreservesPolicy(t *testing.T) {
+	for _, customConfig := range []bool{false, true} {
+		t.Run(fmt.Sprint("custom-config-", customConfig), func(t *testing.T) {
+			isolate(t)
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			policy := managed.Policy{Protocol: managed.Protocol, Channel: "manual"}
+			old, err := managed.BootstrapText(policy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// A previous personal install may have only one agent's copy.
+			path := filepath.Join(home, ".agents/skills/doomer-review/SKILL.md")
+			if err = os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err = os.WriteFile(path, []byte(old), 0600); err != nil {
+				t.Fatal(err)
+			}
+			configPath := filepath.Join(filepath.Dir(path), "agents/openai.yaml")
+			wantConfig := personalCodexSkillConfig
+			if customConfig {
+				wantConfig = "interface:\n  display_name: Custom\npolicy:\n  allow_implicit_invocation: false\n"
+				if err = os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err = os.WriteFile(configPath, []byte(wantConfig), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			out, err := execute(t, "", "bootstrap", "upgrade", "--personal")
+			if err != nil || !strings.Contains(out, `"acceptance_required":true`) {
+				t.Fatal(out, err)
+			}
+			before, err := os.ReadFile(path)
+			if err != nil || string(before) != old {
+				t.Fatal("upgrade changed skill without acceptance", err)
+			}
+			for i := 0; i < 2; i++ {
+				out, err = execute(t, "", "bootstrap", "upgrade", "--personal", "--accept")
+				if err != nil {
+					t.Fatal(out, err)
+				}
+			}
+			want, _ := managed.BootstrapTextForScope(policy, "personal")
+			for _, dir := range []string{".agents", ".claude"} {
+				path := filepath.Join(home, dir, "skills/doomer-review/SKILL.md")
+				data, err := os.ReadFile(path)
+				if err != nil || string(data) != want {
+					t.Fatal("upgrade lost policy or personal trigger", dir, err)
+				}
+				update, err := managed.InspectBootstrap(path, "personal", "dev")
+				if err != nil || update.State != "current" {
+					t.Fatal(update, err)
+				}
+			}
+			config, err := os.ReadFile(configPath)
+			if err != nil || string(config) != wantConfig {
+				t.Fatal("upgrade lost invocation metadata", string(config), err)
+			}
+		})
+	}
+}
+
+func TestPersonalBootstrapRejectsUnsafeConfigWithoutPartialWrites(t *testing.T) {
+	for _, operation := range []string{"install", "upgrade"} {
+		t.Run(operation, func(t *testing.T) {
+			isolate(t)
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			path := filepath.Join(home, ".agents/skills/doomer-review/SKILL.md")
+			configPath := filepath.Join(filepath.Dir(path), "agents/openai.yaml")
+			if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+				t.Fatal(err)
+			}
+			outside := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(outside, []byte("custom"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(outside, configPath); err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"install", "--personal"}
+			old := ""
+			if operation == "upgrade" {
+				old, _ = managed.BootstrapText(managed.Policy{Protocol: managed.Protocol, Channel: "stable"})
+				if err := os.WriteFile(path, []byte(old), 0600); err != nil {
+					t.Fatal(err)
+				}
+				args = []string{"bootstrap", "upgrade", "--personal", "--accept"}
+			}
+			if out, err := execute(t, "", args...); err == nil {
+				t.Fatal("accepted symlinked metadata", out)
+			}
+			data, err := os.ReadFile(path)
+			if operation == "install" && !os.IsNotExist(err) || operation == "upgrade" && (err != nil || string(data) != old) {
+				t.Fatal("partially wrote the skill", string(data), err)
+			}
+			if _, err := os.Stat(filepath.Join(home, ".claude/skills/doomer-review/SKILL.md")); !os.IsNotExist(err) {
+				t.Fatal("partially created sibling skill", err)
+			}
+			data, err = os.ReadFile(outside)
+			if err != nil || string(data) != "custom" {
+				t.Fatal("changed symlink target", err)
+			}
+		})
+	}
+}
+
+func TestPersonalBootstrapConfigRaceRollsBackSkills(t *testing.T) {
+	for _, deleted := range []bool{false, true} {
+		t.Run(fmt.Sprint("deleted-", deleted), func(t *testing.T) {
+			isolate(t)
+			home := t.TempDir()
+			policy := managed.Policy{Protocol: managed.Protocol, Channel: "manual"}
+			configPath := filepath.Join(home, ".agents/skills/doomer-review/agents/openai.yaml")
+			if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(configPath, []byte(personalCodexSkillConfig), 0600); err != nil {
+				t.Fatal(err)
+			}
+			paths, contents, expected, err := managedBootstrapFiles(home, policy, "personal")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if deleted {
+				err = os.Remove(configPath)
+			} else {
+				err = os.WriteFile(configPath, []byte("concurrent edit"), 0600)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := writeManagedFiles(home, paths, contents, expected); err == nil {
+				t.Fatal("accepted concurrent config change")
+			}
+			for _, path := range paths[:2] {
+				if _, err := os.Stat(path); !os.IsNotExist(err) {
+					t.Fatal("failed to roll back skill", path, err)
+				}
+			}
+			data, err := os.ReadFile(configPath)
+			if deleted && !os.IsNotExist(err) || !deleted && (err != nil || string(data) != "concurrent edit") {
+				t.Fatal("overwrote concurrent config change", string(data), err)
+			}
+		})
 	}
 }
 

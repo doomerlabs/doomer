@@ -81,17 +81,20 @@ func newManagedBootstrapCommand() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if err = s.DeferBootstrap(identity, managed.BootstrapVersion, time.Now()); err != nil {
+				if err = s.DeferBootstrap(identity, managed.BootstrapVersionForScope(scope), time.Now()); err != nil {
 					return err
 				}
 				state = "bootstrap_deferred"
 			}
 			if operation == "upgrade" && accept {
-				content, err := managed.BootstrapText(*policy)
+				destinations, contents, configPreimages, err := managedBootstrapFiles(base, *policy, scope)
 				if err != nil {
 					return err
 				}
-				if err = writeBootstrapFiles(base, paths, []byte(content), expected); err != nil {
+				for path, content := range configPreimages {
+					expected[path] = content
+				}
+				if err = writeManagedFiles(base, destinations, contents, expected); err != nil {
 					return err
 				}
 				state = "bootstrap_upgraded"
@@ -131,7 +134,8 @@ func managedBootstrapUpdates(task managed.Task) []managed.BootstrapUpdate {
 	executable, executableErr := os.Executable()
 	identity, identityErr := bootstrapDeferralIdentity(context.Background(), task.Bootstrap.Scope, base)
 	store, storeErr := managedStoreLocation()
-	deferred := identityErr == nil && storeErr == nil && store.BootstrapDeferred(identity, managed.BootstrapVersion, time.Now())
+	available := managed.BootstrapVersionForScope(task.Bootstrap.Scope)
+	deferred := identityErr == nil && storeErr == nil && store.BootstrapDeferred(identity, available, time.Now())
 	var updates []managed.BootstrapUpdate
 	for _, agent := range []string{".agents", ".claude"} {
 		path := filepath.Join(base, agent, "skills/doomer-review/SKILL.md")
@@ -140,7 +144,7 @@ func managedBootstrapUpdates(task managed.Task) []managed.BootstrapUpdate {
 			continue
 		}
 		if err != nil {
-			updates = append(updates, managed.BootstrapUpdate{Path: path, Scope: task.Bootstrap.Scope, State: "inspection_failed", Available: managed.BootstrapVersion, CLIRange: managed.BootstrapCLIRange, Action: "Could not inspect this wrapper. Run doomer bootstrap status in its installation scope and reconcile it manually. The current task can continue."})
+			updates = append(updates, managed.BootstrapUpdate{Path: path, Scope: task.Bootstrap.Scope, State: "inspection_failed", Available: available, CLIRange: managed.BootstrapCLIRange, Action: "Could not inspect this wrapper. Run doomer bootstrap status in its installation scope and reconcile it manually. The current task can continue."})
 			continue
 		}
 		if update.State == "current" {

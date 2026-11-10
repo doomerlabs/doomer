@@ -48,6 +48,8 @@ go run ./tests/codexinstall --scenario list
 | `repeat-onboarding` | Repeated setup reuses approval, avoids repeated settings offers, and leaves no failed review |
 | `read-only` | A clean, read-only task uploads nothing and finishes without a review failure |
 | `personal` | Personal installation is discovered and completes a coding review |
+| `personal-discovery` | Candidate personal installer writes the broader description and Codex invocation metadata only in the home directory; a fresh Claude or Codex session loads the skill and completes a source-code review without hooks, repository instructions, or a Doomer reminder |
+| `repository-discovery` | Candidate repository installer retains its original description and discovery instructions, creates no personal metadata, and a fresh Claude or Codex session completes a source-code review without hooks or a Doomer reminder |
 | `upgrade-untracked` | Updates untracked repository skill files without creating a PR |
 | `upgrade-personal` | Updates personal skill files without creating a PR |
 | `unconfigured-repo` | Installed profile hooks return no instructions in unrelated repositories and linked worktrees; ordinary real-agent edits complete without Doomer prompts, task creation, uploads, or settings changes |
