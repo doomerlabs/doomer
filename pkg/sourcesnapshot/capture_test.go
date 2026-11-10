@@ -477,3 +477,31 @@ func TestSymlinkChangesDoNotCreateReviewChanges(t *testing.T) {
 		t.Fatalf("committed link change should not produce a review: %v", err)
 	}
 }
+
+func TestLocalReviewIdentityUsesRootNameAndKeepsDirectoriesDistinct(t *testing.T) {
+	dir, base := sourceRepo(t)
+	sourceFile(t, dir, "nested/change.go", "change\n")
+	root := capture(t, dir, base)
+	nested := capture(t, filepath.Join(dir, "nested"), base)
+	want := LocalRepositoryIdentifier(dir)
+	if root.Source.Repository != want || nested.Source.Repository != want {
+		t.Fatalf("inconsistent local repository: root=%q nested=%q want=%q", root.Source.Repository, nested.Source.Repository, want)
+	}
+	_, baselineRepo, err := CaptureBaseline(context.Background(), CaptureOptions{Path: filepath.Join(dir, "nested"), Base: base})
+	if err != nil || baselineRepo != want {
+		t.Fatalf("baseline identity = %q, %v; want %q", baselineRepo, err, want)
+	}
+	first := LocalRepositoryIdentifier(filepath.Join(t.TempDir(), "My App"))
+	second := LocalRepositoryIdentifier(filepath.Join(t.TempDir(), "My App"))
+	if first == second || !strings.HasPrefix(first, "local/My%20App/") {
+		t.Fatalf("local names or directory separation lost: %q, %q", first, second)
+	}
+	git(t, dir, "remote", "add", "origin", "git@github.com:org/my-app.git")
+	if got := capture(t, dir, base).Source.Repository; got != "github.com/org/my-app" {
+		t.Fatalf("remote identity did not take precedence: %q", got)
+	}
+	_, baselineRepo, err = CaptureBaseline(context.Background(), CaptureOptions{Path: dir, Base: base})
+	if err != nil || baselineRepo != "github.com/org/my-app" {
+		t.Fatalf("remote baseline identity = %q, %v", baselineRepo, err)
+	}
+}

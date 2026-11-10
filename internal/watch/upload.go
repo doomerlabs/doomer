@@ -18,8 +18,8 @@ type incrementalUploader interface {
 }
 type uploadCache struct{ Base, Head adversarylabs.WorkspaceTree }
 
-func (r Runner) uploadCachePath(path string) string {
-	return filepath.Join(r.Root, "uploads", Key(r.Config.API+"\x00"+r.Config.Profile+"\x00"+r.Token+"\x00"+path)+".json")
+func (r Runner) uploadCachePath(path, repository string) string {
+	return filepath.Join(r.Root, "uploads", Key(r.Config.API+"\x00"+r.Config.Profile+"\x00"+r.Token+"\x00"+path+"\x00"+repository)+".json")
 }
 
 func (r Runner) uploadBaseline(ctx context.Context, path, repository string, manifest sourcesnapshot.Manifest) error {
@@ -28,7 +28,7 @@ func (r Runner) uploadBaseline(ctx context.Context, path, repository string, man
 		// Older clients still upload at review time.
 		return nil
 	}
-	cachePath := r.uploadCachePath(path)
+	cachePath := r.uploadCachePath(path, repository)
 	var cache uploadCache
 	_ = Read(cachePath, &cache)
 	display := uploadProgressDisplay{log: r.logf, label: filepath.Base(path), lastReport: time.Now()}
@@ -65,9 +65,9 @@ func (r Runner) UploadSnapshots(ctx context.Context, path, repository string, ma
 		}
 		return repo, base, head, nil
 	}
-	// Isolate cached manifests by destination, profile, login, and checkout. A
-	// token replacement must never inherit another account's remote snapshot IDs.
-	cachePath := r.uploadCachePath(path)
+	// Isolate cached manifests by destination, profile, login, checkout, and
+	// repository identity. Adding a remote starts a separate review history.
+	cachePath := r.uploadCachePath(path, repository)
 	var cache uploadCache
 	_ = Read(cachePath, &cache)
 	uploadedFiles, uploadedBytes, completedReports := 0, 0, 0

@@ -77,7 +77,7 @@ func (e Engine) Submit(ctx context.Context, task *Task, token string) error {
 	}
 	repository := capture.Source.Repository
 	if repository == "" {
-		repository = "local/checkout"
+		repository = sourcesnapshot.LocalRepositoryIdentifier(task.Repo)
 	}
 	repo, base, head, err := e.Upload(ctx, *task, token, repository, manifest)
 	if err != nil {

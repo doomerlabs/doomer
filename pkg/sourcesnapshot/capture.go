@@ -261,12 +261,14 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 	result.Digest = Digest(result.Bytes)
 	result.BaseTreeHash = TreeHash(m.Base)
 	result.TargetTreeHash = TreeHash(m.Target)
-	result.Source = SourceMetadata{HeadSHA: head, Dirty: dirty}
+	result.Source = SourceMetadata{Repository: LocalRepositoryIdentifier(top), HeadSHA: head, Dirty: dirty}
 	if branch, err := g.text("symbolic-ref", "--quiet", "--short", "HEAD"); err == nil {
 		result.Source.Branch = branch
 	}
 	if remote, err := g.text("config", "--get", "remote.origin.url"); err == nil {
-		result.Source.Repository = repositoryIdentity(remote)
+		if repository := repositoryIdentity(remote); repository != "" {
+			result.Source.Repository = repository
+		}
 	}
 	result.GitIdentity = g.gitIdentity()
 	return result, nil
@@ -523,6 +525,20 @@ func (g gitReader) readTree(commit string, blobs map[string][]byte) ([]Entry, er
 
 // RepositoryIdentifier strips credentials and rejects local filesystem remotes.
 func RepositoryIdentifier(remote string) string { return repositoryIdentity(remote) }
+
+// LocalRepositoryIdentifier includes a display name and an opaque checkout key.
+// Only the directory name is transmitted, while same-named checkouts stay distinct.
+func LocalRepositoryIdentifier(directory string) string {
+	if absolute, err := filepath.Abs(directory); err == nil {
+		directory = absolute
+	}
+	if resolved, err := filepath.EvalSymlinks(directory); err == nil {
+		directory = resolved
+	}
+	directory = filepath.Clean(directory)
+	name := filepath.Base(directory)
+	return "local/" + url.PathEscape(name) + "/" + Digest([]byte(directory))
+}
 
 func repositoryIdentity(remote string) string {
 	if !strings.Contains(remote, "://") {
