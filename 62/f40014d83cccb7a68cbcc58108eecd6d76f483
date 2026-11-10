@@ -1,0 +1,18 @@
+internal/e2eimpact/plan_test.go
+  h_aa44c3b5b60dec 233-238
+tests/codexinstall/scenario_dependencies.go
+  h_aa44c3b5b60dec 280-297,299,302-306,475,485-490
+tests/codexinstall/scenario_dependencies_test.go
+  h_aa44c3b5b60dec 116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "62f40014d83cccb7a68cbcc58108eecd6d76f483",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
