@@ -1,0 +1,86 @@
+.agents/skills/agent-e2e/SKILL.md
+  h_aa44c3b5b60dec 1-70,71-73,74-79,80-84
+AGENTS.md
+  h_aa44c3b5b60dec 22-27,28-38,39,40-42,43-44,45-47
+docs/agent-e2e-cache.md
+  h_aa44c3b5b60dec 1-4,5,6-18,19,20-24,25-28,29-34,35-38,39-43,44-61,62-64,65-80,81-82,83-85,86-90,91-92,93-100,101-104,105-107,108,109-113,114-120,121-148,149-154,155-158,159-161,162-169,170-185,186-187,188-199,200-201,202-204,205-212,213-222
+docs/agent-e2e-measurements.md
+  h_aa44c3b5b60dec 1-77,78-111
+scripts/provision-agent-e2e-cache.py
+  h_aa44c3b5b60dec 1-156
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 196-197,201,206-237,295,327-332,333-335
+tests/codexinstall/cache-keys.json
+  h_aa44c3b5b60dec 1-3
+tests/codexinstall/cache.go
+  h_aa44c3b5b60dec 1-23,24-29,30-171,172,173-226,227,228-229,230,231-263,264,265-288,289,290-326,327-331,332-351,352-378
+tests/codexinstall/cache_inputs.go
+  h_aa44c3b5b60dec 1-69,70,71-73,74-90,91-100,101,102-107,108-117,118,119,120-142,143,144-163,164-166,167-195,196-201,202-207,208-230,231-266
+tests/codexinstall/cache_test.go
+  h_aa44c3b5b60dec 1-9,10,11-41,42,43-123,124-128,129-183,184,185-307,308-388,389-464,465-532
+tests/codexinstall/local.go
+  h_aa44c3b5b60dec 41-46,53
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 10-11,13,20,51-71,92,93-94,95-97,110-117,118,119-172,174-179,213,241,243-252,254-256,299-302,303-306,321-323,335-337,347-349
+tests/codexinstall/snapshot.go
+  h_aa44c3b5b60dec 1-18,19,20-26,27-29,30-31,32-45,46-76,77-94,95-107,108-118,119,120-127,128-154,155-156,157-176,177,178-196,197,198-253,254,255-307,308-312,313-434
+tests/codexinstall/suite.go
+  h_aa44c3b5b60dec 4,7,11,13,19-20,22-24,28-40,42-55,60-88,90-94,96,98-99,101-103,105-160,164-170,173-246,248-249,251
+tests/codexinstall/suite_test.go
+  h_aa44c3b5b60dec 1-290
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 19-23,67,148-153,154-159,160-161
+.depot/workflows/agent-e2e.yml
+  h_aa44c3b5b60dec 19-20,24-25,48,55-69,71-73,85,94,96-102,105-106,110,112-117,142,148,165-169,173,179-180,184,186-191,196,199,203,220,223-228,226-227,229,230-232
+scripts/agent-e2e-baseline.sh
+  h_aa44c3b5b60dec 1-8
+scripts/agent-e2e-cache-plan.py
+  h_aa44c3b5b60dec 1-14,15-16,17-97,98-104
+scripts/agent-e2e-local-linux.sh
+  h_aa44c3b5b60dec 1-3,4,5,6,7,8-12,13-14,15-21,22-23,24-26,27,28,29,30,31-33,34,35,36-41,42,43-44,45-46
+scripts/ci-agent-e2e-report.py
+  h_aa44c3b5b60dec 32-34,49,58
+scripts/ci-agent-e2e.sh
+  h_aa44c3b5b60dec 9,13-41,42-48,51,53-55,60,62-63,85-92,95,98
+scripts/ci-verify.sh
+  h_aa44c3b5b60dec 61,68-69
+scripts/test-agent-e2e-cache-plan.py
+  h_aa44c3b5b60dec 1-29,30-32,33-72
+tests/codexinstall/Dockerfile
+  h_aa44c3b5b60dec 1,2-19
+tests/codexinstall/baseline-release.txt
+  h_aa44c3b5b60dec 1
+tests/codexinstall/build_pin.go
+  h_aa44c3b5b60dec 1-43
+tests/codexinstall/candidate.go
+  h_aa44c3b5b60dec 74-79
+tests/codexinstall/impact.go
+  h_aa44c3b5b60dec 1-42,46-637
+tests/codexinstall/impact_test.go
+  h_aa44c3b5b60dec 1-303,304-332
+scripts/verify-ci-contract.go
+  h_aa44c3b5b60dec 455-456,459,465-467,469-484,494
+docs/e2e-dependency-planner.md
+  h_aa44c3b5b60dec 1-51
+e2e-extra-dependencies.yml
+  h_aa44c3b5b60dec 1-6
+internal/e2eimpact/extra.go
+  h_aa44c3b5b60dec 1-144
+internal/e2eimpact/go.go
+  h_aa44c3b5b60dec 1-231
+internal/e2eimpact/plan.go
+  h_aa44c3b5b60dec 1-165
+internal/e2eimpact/plan_test.go
+  h_aa44c3b5b60dec 1-265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b8a636e1044103fd891d15663feb5558c78be448",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
