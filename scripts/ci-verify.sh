@@ -113,21 +113,15 @@ cross_build() {
 }
 
 cli_smoke() {
-  local tmp binary
-  log "bounded CLI command dependency proof"
-  go run ./tests/cliimpact
+  local tmp
+  log "real CLI cache mutation proof"
+  E2E_CLI_SMOKE_PROOF=1 go test ./tests/codexinstall -run '^TestCLISmokeReuseProof$' -count=1
   tmp="$(make_temp_dir)"
   trap 'rm -rf -- "$tmp"' RETURN
-  binary="$tmp/adversary"
-  log "build and execute CLI version/profile/auth smoke"
-  go build -trimpath -ldflags='-X github.com/doomerlabs/doomer/internal/version.Version=ci-smoke' -o "$binary" .
-  "$binary" version | grep -Fq 'ci-smoke' || fail "version smoke failed"
-  DOOMER_CONFIG_DIR="$tmp/config" "$binary" profile add smoke --endpoint https://doomer.ai/api
-  DOOMER_CONFIG_DIR="$tmp/config" "$binary" profile use smoke
-  printf '%s\n' 'smoke-token' | DOOMER_CONFIG_DIR="$tmp/config" "$binary" login --token-stdin
-  DOOMER_CONFIG_DIR="$tmp/config" "$binary" profile ls | grep -Fq '* smoke' || fail "profile selection smoke failed"
-  DOOMER_CONFIG_DIR="$tmp/config" "$binary" logout --local-only
-  if grep -Fq 'smoke-token' "$tmp/config/config.json"; then fail "logout retained token"; fi
+  log "CLI version/profile/auth smoke with verified cache reuse"
+  CGO_ENABLED=0 go run -trimpath -buildvcs=false -ldflags=-buildid= ./tests/codexinstall \
+    --cli-smoke --output "$tmp/cli-smoke.json"
+  cat "$tmp/cli-smoke.json"
   rm -rf -- "$tmp"
   trap - RETURN
 }

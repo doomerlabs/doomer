@@ -74,6 +74,7 @@ type report struct {
 }
 
 func main() {
+	cliSmoke := flag.Bool("cli-smoke", false, "run the bounded version/profile/login/logout smoke test with signed cache reuse")
 	authHome := flag.String("codex-auth-home", "", "reuse a local Codex sign-in inside disposable test homes")
 	harness := flag.String("harness", "codex", "agent harness: codex or claude")
 	auth := flag.String("auth", "api", "authentication mode: api or subscription (local Codex sign-in or Claude)")
@@ -101,6 +102,15 @@ func main() {
 	budget := flag.Float64("budget", .20, "maximum reserved API spend for this run, USD")
 	output := flag.String("output", "codex-install-report.json", "sanitized JSON report")
 	flag.Parse()
+	if *cliSmoke {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := runCLISmoke(ctx, *candidateSource, *output, *noCache, *cacheOnly); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if *scenario == "list" {
 		fmt.Println(strings.Join(scenarioNames, "\n"))
 		return
@@ -117,7 +127,7 @@ func main() {
 	defer stopSignals()
 	if !*worker && *render == "" && *snapshotInput == "" {
 		settings := map[string]string{}
-		excluded := map[string]bool{"output": true, "local-root": true, "local-codex": true, "local-claude": true, "codex-auth-home": true, "candidate-source": true, "bootstrap-source": true, "skills-source": true, "install-guide": true, "scenario": true, "suite-scenarios": true, "jobs": true, "suite-budget": true, "no-cache": true, "cache-only": true, "snapshot-input": true, "render-report": true, "worker": true}
+		excluded := map[string]bool{"cli-smoke": true, "output": true, "local-root": true, "local-codex": true, "local-claude": true, "codex-auth-home": true, "candidate-source": true, "bootstrap-source": true, "skills-source": true, "install-guide": true, "scenario": true, "suite-scenarios": true, "jobs": true, "suite-budget": true, "no-cache": true, "cache-only": true, "snapshot-input": true, "render-report": true, "worker": true}
 		flag.VisitAll(func(f *flag.Flag) {
 			if !excluded[f.Name] {
 				settings[f.Name] = f.Value.String()
