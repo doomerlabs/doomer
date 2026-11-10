@@ -108,7 +108,7 @@ func (j *journey) browserOnboarding() error {
 	}
 	j.c.ReviewApprovals = true
 	j.result.Turns++
-	onboarding, err := runAgent(j.ctx, j.c, j.repo, j.env, "Set up Doomer review in this repository using its existing installation. I allow automatic Doomer software updates and their version metadata reporting. Ask for repository upload approval on its browser page. Do not install hooks; I will use explicit reviews in new coding chats. This task is setup only; do not change or review source.", "", record)
+	onboarding, err := runAgent(j.ctx, j.c, j.repo, j.env, "Set up Doomer review in this repository using its existing installation. This is an isolated test: DOOMER_API_URL points at its local account service; preserve that setting. I allow automatic Doomer software updates and reporting of version and task-state metadata to that service. Ask for repository upload approval on its browser page. Do not install hooks; I will use explicit reviews in new coding chats. This task is setup only; do not change or review source.", "", record)
 	if err != nil {
 		return err
 	}

@@ -37,7 +37,7 @@ func TestPromptPreparesCommittedBaselineOnlyAfterConsent(t *testing.T) {
 		t.Fatal("baseline did not warm without starting a review")
 	}
 	var cache uploadCache
-	if err := Read(runner.uploadCachePath(path), &cache); err != nil {
+	if err := Read(runner.uploadCachePath(path, sourcesnapshot.LocalRepositoryIdentifier(path)), &cache); err != nil {
 		t.Fatal(err)
 	}
 	if len(cache.Base.Entries) != 1 || cache.Base.Entries[0].Hash != sourcesnapshot.Digest([]byte("one\ntwo\n")) {
@@ -55,7 +55,7 @@ func TestPromptPreparesCommittedBaselineOnlyAfterConsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err = runner.UploadSnapshots(context.Background(), path, "org/repo", decoded); err != nil {
+	if _, _, _, err = runner.UploadSnapshots(context.Background(), path, manifest.Source.Repository, decoded); err != nil {
 		t.Fatal(err)
 	}
 	if client.previous[1] != "s1" {
@@ -185,7 +185,7 @@ func (c *overlappingBaselineClient) UploadWorkspaceIncremental(ctx context.Conte
 }
 func TestBaselineCompletionRetainsConcurrentReviewHead(t *testing.T) {
 	r := Runner{Root: t.TempDir()}
-	path := r.uploadCachePath("/repo")
+	path := r.uploadCachePath("/repo", "org/repo")
 	c := &overlappingBaselineClient{during: func() {
 		head := adversarylabs.WorkspaceTree{RepositoryID: "repo", SnapshotID: "new-head"}
 		if err := mergeUploadCache(path, nil, &head); err != nil {
@@ -193,7 +193,7 @@ func TestBaselineCompletionRetainsConcurrentReviewHead(t *testing.T) {
 		}
 	}}
 	r.Client = c
-	if err := r.uploadBaseline(context.Background(), "/repo", "repo", sourcesnapshot.Manifest{Blobs: map[string][]byte{}}); err != nil {
+	if err := r.uploadBaseline(context.Background(), "/repo", "org/repo", sourcesnapshot.Manifest{Blobs: map[string][]byte{}}); err != nil {
 		t.Fatal(err)
 	}
 	var cache uploadCache
@@ -202,5 +202,19 @@ func TestBaselineCompletionRetainsConcurrentReviewHead(t *testing.T) {
 	}
 	if cache.Head.SnapshotID != "new-head" || cache.Base.SnapshotID == "" {
 		t.Fatalf("lost completed uploads: %+v", cache)
+	}
+}
+
+func TestAddingRemoteUsesSeparateUploadCache(t *testing.T) {
+	client := &incrementalFake{}
+	runner := Runner{Root: t.TempDir(), Client: client}
+	manifest := sourcesnapshot.Manifest{Blobs: map[string][]byte{}}
+	for _, repository := range []string{sourcesnapshot.LocalRepositoryIdentifier("/my-app"), "github.com/org/my-app"} {
+		if _, _, _, err := runner.UploadSnapshots(context.Background(), "/my-app", repository, manifest); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(client.previous) != 4 || client.previous[0] != "" || client.previous[2] != "" {
+		t.Fatalf("remote review inherited the local snapshot cache: %v", client.previous)
 	}
 }

@@ -15,6 +15,11 @@ func CaptureBaseline(ctx context.Context, opts CaptureOptions) (Manifest, string
 		return Manifest{}, "", err
 	}
 	g := gitReader{ctx: ctx, dir: path, workspace: true}
+	top, err := g.text("rev-parse", "--show-toplevel")
+	if err != nil {
+		return Manifest{}, "", err
+	}
+	g.dir = top
 	head, err := g.commit("HEAD")
 	if err != nil {
 		return Manifest{}, "", err
@@ -35,7 +40,7 @@ func CaptureBaseline(ctx context.Context, opts CaptureOptions) (Manifest, string
 	if total > MaxWorkspaceBytes {
 		return Manifest{}, "", fmt.Errorf("baseline exceeds workspace limit")
 	}
-	repo := "local/" + filepath.Base(path)
+	repo := LocalRepositoryIdentifier(top)
 	if remote, e := g.text("config", "--get", "remote.origin.url"); e == nil {
 		if id := repositoryIdentity(remote); id != "" {
 			repo = id
