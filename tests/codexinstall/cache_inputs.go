@@ -67,7 +67,7 @@ func freezeExternalInputs(ctx context.Context, dir string, opts snapshotOptions,
 	capture := func(address string) ([]byte, error) {
 		data, err := fetchInput(ctx, address)
 		if err == nil {
-			m.External = append(m.External, externalInput{address, byteHash(data)})
+			m.External = append(m.External, externalInput{URL: address, SHA256: byteHash(data)})
 		}
 		return data, err
 	}
@@ -98,12 +98,22 @@ func freezeExternalInputs(ctx context.Context, dir string, opts snapshotOptions,
 	}
 	m.Baseline = channel.Version
 	m.Stable = stable
-	catalog, err := capture(managed.CatalogURL)
+	catalog, err := fetchInput(ctx, managed.CatalogURL)
 	if err != nil {
 		return "", err
 	}
 	if _, err = managed.VerifyCatalog(catalog, managed.ReleasePublicKey, time.Now()); err != nil {
 		return "", err
+	}
+	if version != "" {
+		identity, err := projectCatalogRelease(catalog, version)
+		if err != nil {
+			return "", err
+		}
+		m.External = append(m.External, externalInput{URL: managed.CatalogURL, SHA256: byteHash(identity), Version: version})
+	} else {
+		m.External = append(m.External, externalInput{URL: managed.CatalogURL, SHA256: byteHash(catalog)})
+		m.CacheDisabled = "shared cache requires an explicit candidate release"
 	}
 	// Published historical runtimes are immutable, but include their exact manifests.
 	for _, version := range []string{"2026.11.6.9"} {
@@ -130,7 +140,7 @@ func freezeExternalInputs(ctx context.Context, dir string, opts snapshotOptions,
 	if u, _ := url.Parse(address); u != nil && u.Scheme == "file" {
 		guide, err = os.ReadFile(u.Path)
 		if err == nil {
-			m.External = append(m.External, externalInput{"local-install-guide", byteHash(guide)})
+			m.External = append(m.External, externalInput{URL: "local-install-guide", SHA256: byteHash(guide)})
 		}
 	} else {
 		guide, err = capture(address)
@@ -151,6 +161,9 @@ func freezeExternalInputs(ctx context.Context, dir string, opts snapshotOptions,
 		return "", fmt.Errorf("installer checksum mismatch")
 	}
 	installer, err = pinInstaller(installer, stable)
+	if err == nil && version != "" {
+		installer, err = pinInstallerRuntime(installer, version)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -180,6 +193,12 @@ func unchangedExternalInputs(ctx context.Context, m snapshotMetadata) error {
 		if err != nil {
 			return err
 		}
+		if input.Version != "" {
+			raw, err = projectCatalogRelease(raw, input.Version)
+			if err != nil {
+				return err
+			}
+		}
 		if byteHash(raw) != input.SHA256 {
 			return fmt.Errorf("external input changed during execution: %s", input.URL)
 		}
@@ -208,4 +227,40 @@ func channelFromManifest(raw []byte, version string) ([]byte, error) {
 		assets[platform] = map[string]string{"url": "https://downloads.doomer.ai/cli/releases/" + version + "/" + name, "sha256": digest}
 	}
 	return json.Marshal(map[string]any{"schema_version": 1, "version": version, "assets": assets})
+}
+
+func pinInstallerRuntime(raw []byte, version string) ([]byte, error) {
+	const command = "command = [str(binary), 'install', '--runtime']"
+	if strings.Count(string(raw), command) != 1 {
+		return nil, fmt.Errorf("installer runtime command cannot be pinned")
+	}
+	replacement := "command = [str(binary), 'install', '--runtime', '--policy', 'pinned', '--version', " + strconv.Quote(version) + "]"
+	return []byte(strings.Replace(string(raw), command, replacement, 1)), nil
+}
+func projectCatalogRelease(raw []byte, version string) ([]byte, error) {
+	catalog, err := managed.VerifyCatalog(raw, managed.ReleasePublicKey, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	return catalogReleaseIdentity(catalog, version)
+}
+func catalogReleaseIdentity(catalog managed.Catalog, version string) ([]byte, error) {
+	var eligible []managed.Release
+	found := false
+	for _, release := range catalog.Releases {
+		if release.Version == version {
+			if release.Withdrawn {
+				return nil, fmt.Errorf("pinned baseline release is withdrawn")
+			}
+			found = true
+		}
+		if !managed.VersionLess(version, release.Version) {
+			eligible = append(eligible, release)
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("pinned baseline is absent from the signed catalog")
+	}
+	sort.Slice(eligible, func(i, j int) bool { return managed.VersionLess(eligible[i].Version, eligible[j].Version) })
+	return json.Marshal(eligible)
 }

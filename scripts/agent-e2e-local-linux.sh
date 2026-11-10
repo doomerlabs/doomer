@@ -19,6 +19,6 @@ docker run --rm --platform linux/amd64 \
     set -euo pipefail
     export E2E_BASELINE_SOURCE="$HOME/baseline"
     scripts/agent-e2e-baseline.sh "$E2E_BASELINE_SOURCE"
-    export E2E_CANDIDATE_RELEASE=$(curl -fsSL https://downloads.doomer.ai/cli/stable.json | python3 -c '\''import json,sys;print(json.load(sys.stdin)["version"])'\'')
+    export E2E_CANDIDATE_RELEASE=$(cat tests/codexinstall/baseline-release.txt)
     python3 scripts/agent-e2e-cache-plan.py --populate --jobs 8 --output /reports
   '

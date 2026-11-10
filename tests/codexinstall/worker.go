@@ -151,6 +151,12 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 		if err != nil {
 			return fail(err)
 		}
+		if c.CandidateVersion != "" {
+			pinned, err = pinInstallerRuntime(pinned, c.CandidateVersion)
+			if err != nil {
+				return fail(err)
+			}
+		}
 		c.SkillsInstaller = string(pinned)
 	}
 	if c.SkillsGuide != "" {

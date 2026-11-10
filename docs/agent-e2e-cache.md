@@ -154,3 +154,13 @@ once in a fresh home. A partial local run never satisfies missing CI checks.
 It fails on a miss, allowing the plan to choose the ordinary execution path.
 The plan's `cache-plan.json` records required and verified counts, the separate
 regression result, and elapsed verification time.
+
+CI and the local Linux helper select the explicit published baseline in
+`tests/codexinstall/baseline-release.txt`. The captured installer pins its
+runtime install to that version. Candidate builds use a private Go overlay that
+limits release selection to that baseline and older releases, preserving stable
+policy and normal signed-catalog verification. The captured source itself is
+unchanged. Cache identity includes the signed catalog's eligible releases;
+a newly published later release does not invalidate a run, while changes to an
+eligible release do. Advancing the baseline requires changing the checked-in
+version and rerunning the suite.

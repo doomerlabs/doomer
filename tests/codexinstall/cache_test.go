@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"github.com/doomerlabs/doomer/internal/managed"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -175,7 +176,7 @@ func TestFingerprintIgnoresCommitButIncludesAllBehaviorInputs(t *testing.T) {
 		func(m *snapshotMetadata) { m.Files = nil }, func(m *snapshotMetadata) { m.Files[0].SHA256 = "modified" },
 		func(m *snapshotMetadata) { m.Settings["model"] = "other" }, func(m *snapshotMetadata) { m.Environment = "ci" },
 		func(m *snapshotMetadata) { m.OS = "linux" }, func(m *snapshotMetadata) { m.Arch = "amd64" },
-		func(m *snapshotMetadata) { m.Baseline = "different" }, func(m *snapshotMetadata) { m.External = []externalInput{{"url", "different"}} },
+		func(m *snapshotMetadata) { m.Baseline = "different" }, func(m *snapshotMetadata) { m.External = []externalInput{{URL: "url", SHA256: "different"}} },
 	} {
 		m := testCacheMetadata()
 		change(&m)
@@ -454,5 +455,73 @@ func TestPinnedReleaseDoesNotFollowMovingStable(t *testing.T) {
 	raw, _ = json.Marshal(map[string]any{"schemaVersion": 1, "version": version, "artifacts": artifacts})
 	if _, err = channelFromManifest(raw, version); err == nil {
 		t.Fatal("accepted missing artifact digest")
+	}
+}
+
+func TestCatalogIdentityIgnoresOnlyReleasesAboveBaseline(t *testing.T) {
+	catalog := managed.Catalog{Releases: []managed.Release{{Version: "2026.11.9.4"}, {Version: "2026.11.9.5"}}}
+	first, err := catalogReleaseIdentity(catalog, "2026.11.9.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog.Releases = append(catalog.Releases, managed.Release{Version: "2026.11.9.6"})
+	next, err := catalogReleaseIdentity(catalog, "2026.11.9.5")
+	if err != nil || string(first) != string(next) {
+		t.Fatal("unrelated new release invalidated pinned horizon")
+	}
+	catalog.Releases[0].Withdrawn = true
+	next, err = catalogReleaseIdentity(catalog, "2026.11.9.5")
+	if err != nil || string(first) == string(next) {
+		t.Fatal("changed eligible release did not invalidate")
+	}
+	catalog.Releases[1].Withdrawn = true
+	if _, err = catalogReleaseIdentity(catalog, "2026.11.9.5"); err == nil {
+		t.Fatal("withdrawn baseline was accepted")
+	}
+}
+
+func TestCandidateOverlayBuildsWithoutMutatingSource(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "internal/managed/releases.go")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := t.TempDir()
+	overlay, err := candidateReleaseOverlay(root, output, "2026.11.9.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "go", "build", "-buildvcs=false", "-overlay", overlay, "-o", filepath.Join(output, "candidate"), ".")
+	cmd.Dir = root
+	if raw, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build pinned candidate: %v: %s", err, raw)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(before) != string(after) {
+		t.Fatal("overlay changed source")
+	}
+	derived, err := os.ReadFile(filepath.Join(output, "pinned-releases.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(derived), `if VersionLess("2026.11.9.5", r.Version)`) {
+		t.Fatal("release horizon was not pinned")
+	}
+}
+
+func TestPinnedInstallerPinsTheDelegatedRuntime(t *testing.T) {
+	raw := []byte("command = [str(binary), 'install', '--runtime']")
+	pinned, err := pinInstallerRuntime(raw, "2026.11.9.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(pinned), "'--policy', 'pinned', '--version', \"2026.11.9.5\"") {
+		t.Fatal(string(pinned))
 	}
 }

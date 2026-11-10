@@ -24,8 +24,9 @@ type snapshotEntry struct {
 	Mode   uint32 `json:"mode"`
 }
 type externalInput struct {
-	URL    string `json:"url"`
-	SHA256 string `json:"sha256"`
+	URL     string `json:"url"`
+	SHA256  string `json:"sha256"`
+	Version string `json:"catalog_release,omitempty"`
 }
 type snapshotMetadata struct {
 	Schema        int               `json:"schema"`
