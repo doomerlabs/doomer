@@ -1,0 +1,50 @@
+.agents/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 5-6
+.claude/skills/doomer-review/SKILL.md
+  h_aa44c3b5b60dec 5-6
+cmd/managed.go
+  h_aa44c3b5b60dec 261-269,314-317
+cmd/managed_bootstrap.go
+  h_aa44c3b5b60dec 53,59-61,115,145,171-174
+cmd/managed_bootstrap_skills.go
+  h_aa44c3b5b60dec 1-81
+cmd/managed_bootstrap_skills_test.go
+  h_aa44c3b5b60dec 1-256
+internal/managed/bootstrap-2026.11.9.6.md
+  h_aa44c3b5b60dec 1-194
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 16,18,30-33,147-159,170,173,175,194-195
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 13,326-330,333
+internal/managed/policy.go
+  h_aa44c3b5b60dec 162-166
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 55-56
+tests/codexinstall/legacy_impact_test.go
+  h_aa44c3b5b60dec 21-22
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 17,21-43,301-312,369-383
+tests/codexinstall/npx_upgrade.go
+  h_aa44c3b5b60dec 1-176
+tests/codexinstall/npx_upgrade_test.go
+  h_aa44c3b5b60dec 1-28
+tests/codexinstall/runner_test.go
+  h_aa44c3b5b60dec 297,302
+tests/codexinstall/scenario_dependencies_test.go
+  h_aa44c3b5b60dec 180-195
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 18,186-187,396
+tests/codexinstall/upgrade.go
+  h_aa44c3b5b60dec 73-75,82-87,89,99-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e0b63de3afa3a7495d018de2913180025599e634",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
