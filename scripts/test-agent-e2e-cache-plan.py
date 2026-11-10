@@ -27,8 +27,9 @@ class CachePlanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'report.json'
             self.assertEqual(plan.read_report(path), {})
-            path.write_text('{truncated')
-            self.assertEqual(plan.read_report(path), {})
+            for value in ('{truncated', '[]', 'null', '42', '"text"'):
+                path.write_text(value)
+                self.assertEqual(plan.read_report(path), {})
 
     def test_one_worker_never_runs_harnesses_concurrently(self):
         active = peak = 0

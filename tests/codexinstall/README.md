@@ -328,3 +328,6 @@ executes only misses with the existing fresh-home retry. Use
 `scripts/agent-e2e-local-linux.sh` through Doppler to populate matching Linux
 results from a local checkout. macOS results never substitute for Linux coverage.
 See `docs/agent-e2e-cache.md` for the acceptance and credential boundaries.
+
+The repository quality check (`scripts/ci-verify.sh quality`, also included in
+`all`) requires Python 3 for the cache planner and report unit tests.

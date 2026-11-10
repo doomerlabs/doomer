@@ -12,7 +12,8 @@ import time
 
 def read_report(path):
     try:
-        return json.loads(path.read_text())
+        data = json.loads(path.read_text())
+        return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
 

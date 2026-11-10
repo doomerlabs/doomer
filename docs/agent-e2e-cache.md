@@ -70,7 +70,13 @@ verification never reserializes them. The UTF-8 JSON payload records schema,
 fingerprint, scenario, harness, outcome, captured inputs/environment, commit,
 start/end/duration, attempts and artifact references. A result is reusable only
 when its signature, trusted key, expected fingerprint, successful outcome,
-execution times and all referenced artifacts verify.
+execution times and all referenced artifacts verify. The historical regression
+uses a separate fingerprinted assertion kind: `expect-policy-regression=true`.
+For that kind, a successful outcome means the exact missing-policy failure was
+observed and the local fixture was cleaned. Its signed envelope still records
+`outcome: passed`; the original report retains `passed: false`. The flag is part
+of the fingerprint, so this witness cannot satisfy an ordinary lifecycle check.
+All other failures stay under `v1/failures/` and cannot replace a success.
 
 Object layout:
 
@@ -99,7 +105,12 @@ credentials, generates an independent Ed25519 key, and saves secrets through
 Doppler stdin. Only public verification keys enter the repository. No public
 bucket domain is enabled. A token scoped only to existing bucket objects can
 provision the narrower credentials without bucket administration; in that case
-configure the seven-day `v1/` lifecycle rule in the dashboard. For this setup the
+configure the seven-day `v1/` lifecycle rule in the dashboard. Before enabling
+publication, reopen the bucket's lifecycle settings and verify that the rule is
+enabled, matches prefix `v1/`, and deletes objects after seven days. Do not enable
+publisher credentials if that verification is unavailable. Object-scoped runtime
+credentials cannot inspect or alter lifecycle settings; this verification is a
+provisioning prerequisite. For this setup the
 bucket and lifecycle rule were created in the dashboard and the dedicated
 credentials were provisioned with the account token. The setup token can be
 revoked afterward.
@@ -146,6 +157,9 @@ pinned harnesses and the historical regression with bounded concurrency, and
 publishes successful results. It uses the same execution script as CI, including
 a $0.50 per-case API reservation and subscription-only Claude authentication.
 Reports default to `/tmp/doomer-agent-e2e-linux` (`E2E_LOCAL_REPORTS` overrides it).
+The host report directory is owner-only, and the container runs as the calling
+UID/GID. Its private temporary home is removed on exit. Go caches are kept under
+`${XDG_CACHE_HOME:-$HOME/.cache}/doomer-agent-e2e`.
 `E2E_SUITE_SCENARIOS` can select a comma-separated subset for parity experiments;
 omit it when priming the full required suite. Each failed local scenario retries
 once in a fresh home. A partial local run never satisfies missing CI checks.
