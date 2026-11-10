@@ -1,0 +1,42 @@
+cmd/managed_bootstrap.go
+  h_aa44c3b5b60dec 84,90,94-97,137-138,147
+cmd/managed_bootstrap_test.go
+  h_aa44c3b5b60dec 6,136-285
+cmd/managed_discovery_test.go
+  h_aa44c3b5b60dec 9-11,65-75,133-136,143-201
+cmd/managed_install.go
+  h_aa44c3b5b60dec 37,50-57,69,119-150
+cmd/onboard_reset.go
+  h_aa44c3b5b60dec 753-757
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 18-26,174-175,211-212,229,241,247
+internal/managed/policy.go
+  h_aa44c3b5b60dec 156-167,170
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 51-52
+tests/codexinstall/candidate.go
+  h_aa44c3b5b60dec 74
+tests/codexinstall/candidate_test.go
+  h_aa44c3b5b60dec 74-79
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 183-187
+tests/codexinstall/runner_test.go
+  h_aa44c3b5b60dec 277,296-306
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 18,186-187,393-395
+tests/codexinstall/skill_discovery.go
+  h_aa44c3b5b60dec 1-138
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 182-186,273-279,374,388-390
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4fb38a50732d5257f02d31525af739daa1e6c6d4",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
