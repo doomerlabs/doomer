@@ -1,0 +1,19 @@
+internal/managed/bootstrap_update_test.go
+  s_6d4e70fc699741::t_acfbee74589a5f 329-330
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e198eaac8038fccad9910ef62c37346664c57855",
+  "prompts": {},
+  "sessions": {
+    "s_6d4e70fc699741": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4d67742d-9c1b-4b9c-8055-d1391a3afffa",
+        "model": "unknown"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
