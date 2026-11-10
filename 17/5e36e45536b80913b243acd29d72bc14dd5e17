@@ -1,0 +1,68 @@
+cmd/managed_bootstrap.go
+  h_aa44c3b5b60dec 84,90,94-97,137-138,147
+cmd/managed_bootstrap_test.go
+  h_aa44c3b5b60dec 6,136-287
+cmd/managed_discovery_test.go
+  h_aa44c3b5b60dec 9-11,65-75,133-136,143-201
+cmd/managed_install.go
+  h_aa44c3b5b60dec 37,50-57,69,119-150
+cmd/onboard_reset.go
+  h_aa44c3b5b60dec 753-757
+cmd/review_workspace.go
+  h_aa44c3b5b60dec 37
+internal/managed/bootstrap-2026.11.9.4.md
+  h_aa44c3b5b60dec 1-194
+internal/managed/bootstrap-2026.11.9.5.md
+  h_aa44c3b5b60dec 1-198
+internal/managed/bootstrap_update.go
+  h_aa44c3b5b60dec 16-25,30-36,180-181,187-188,219-220,237,249,255
+internal/managed/bootstrap_update_test.go
+  h_aa44c3b5b60dec 309,318-356
+internal/managed/operations.go
+  h_aa44c3b5b60dec 80
+internal/managed/policy.go
+  h_aa44c3b5b60dec 156-167,170
+internal/watch/preupload_test.go
+  h_aa44c3b5b60dec 40,58,188,196,207-220
+internal/watch/runner.go
+  h_aa44c3b5b60dec 360
+internal/watch/upload.go
+  h_aa44c3b5b60dec 21-22,31,68-70
+pkg/sourcesnapshot/baseline.go
+  h_aa44c3b5b60dec 18-22,43
+pkg/sourcesnapshot/capture.go
+  h_aa44c3b5b60dec 264,269-271,529-542
+pkg/sourcesnapshot/capture_test.go
+  h_aa44c3b5b60dec 480-539
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 51-52
+tests/codexinstall/browser_onboarding.go
+  h_aa44c3b5b60dec 111
+tests/codexinstall/candidate.go
+  h_aa44c3b5b60dec 80
+tests/codexinstall/candidate_test.go
+  h_aa44c3b5b60dec 74-79
+tests/codexinstall/impact.go
+  h_aa44c3b5b60dec 43-45
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 275-279
+tests/codexinstall/runner_test.go
+  h_aa44c3b5b60dec 277,296-306
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 18,186-187,393-395
+tests/codexinstall/skill_discovery.go
+  h_aa44c3b5b60dec 1-138
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 200-204,291-297,392,406-408
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "175e36e45536b80913b243acd29d72bc14dd5e17",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
