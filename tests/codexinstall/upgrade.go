@@ -70,6 +70,9 @@ func (j *journey) upgrade() error {
 	if err = j.git(j.repo, "push", "-u", "origin", "main"); err != nil {
 		return err
 	}
+	if err = j.git(remote, "symbolic-ref", "HEAD", "refs/heads/main"); err != nil {
+		return err
+	}
 	bin := filepath.Join(j.home, "fixture-bin")
 	if err = os.MkdirAll(bin, 0700); err != nil {
 		return err
@@ -79,7 +82,7 @@ func (j *journey) upgrade() error {
 	if err = os.WriteFile(filepath.Join(bin, "doomer"), []byte(oldLauncher), 0700); err != nil {
 		return err
 	}
-	shim := fmt.Sprintf("#!/bin/sh\ncase \"$*\" in\n *--help*) echo 'Usage: gh pr create [flags]'; exit 0 ;;\nesac\ncase \"$1 $2\" in\n 'pr create') printf 'created\\n' >> '%s'; git branch --show-current > '%s.branch'; echo https://example.invalid/pull/1 ;;\n 'pr list') echo '[]' ;;\n 'repo view') echo '{\"defaultBranchRef\":{\"name\":\"main\"}}' ;;\n 'auth status') exit 0 ;;\n *) exit 0 ;;\nesac\n", marker, marker)
+	shim := fmt.Sprintf("#!/bin/sh\ncase \"$*\" in\n *--help*) echo 'Usage: gh pr create [flags]'; exit 0 ;;\nesac\ncase \"$1 $2\" in\n 'pr create') printf 'created\\n' >> '%s'; git branch --show-current > '%s.branch'; echo https://example.invalid/pull/1 ;;\n 'pr list') echo '[]' ;;\n 'repo view') case \"$*\" in *--jq*|*' -q '*) echo main ;; *) echo '{\"defaultBranchRef\":{\"name\":\"main\"}}' ;; esac ;;\n 'auth status') exit 0 ;;\n *) exit 0 ;;\nesac\n", marker, marker)
 	if err = os.WriteFile(filepath.Join(bin, "gh"), []byte(shim), 0700); err != nil {
 		return err
 	}
