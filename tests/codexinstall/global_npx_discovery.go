@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,16 +35,7 @@ func installGlobalNpxSkill(ctx context.Context, home, repo, source string, env [
 	if err != nil {
 		return fmt.Errorf("global npx installation: %w: %s", err, out)
 	}
-	originals := map[string][]byte{}
-	for _, agent := range []string{".agents", ".claude"} {
-		path := filepath.Join(home, agent, "skills/doomer-review/SKILL.md")
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		originals[path] = data
-	}
-	snapshot, err := json.Marshal(originals)
+	snapshot, err := snapshotNpxInstall(home)
 	if err != nil {
 		return err
 	}
@@ -51,23 +43,18 @@ func installGlobalNpxSkill(ctx context.Context, home, repo, source string, env [
 }
 
 func (j *journey) globalNpxDiscovery() error {
-	originals := map[string][]byte{}
 	snapshot, err := os.ReadFile(filepath.Join(j.home, "npx-skill-snapshot.json"))
 	if err != nil {
 		return err
 	}
-	if err := json.Unmarshal(snapshot, &originals); err != nil {
+	current, err := snapshotNpxInstall(j.home)
+	if err != nil {
 		return err
 	}
+	if !bytes.Equal(current, snapshot) {
+		return fmt.Errorf("onboarding changed npx-owned installation")
+	}
 	for _, agent := range []string{".agents", ".claude"} {
-		path := filepath.Join(j.home, agent, "skills/doomer-review/SKILL.md")
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if !bytes.Equal(data, originals[path]) {
-			return fmt.Errorf("onboarding changed npx-owned skill %s", path)
-		}
 		if _, err := os.Stat(filepath.Join(j.repo, agent, "skills/doomer-review")); !os.IsNotExist(err) {
 			return fmt.Errorf("global install wrote a repository skill")
 		}
@@ -95,11 +82,12 @@ func (j *journey) globalNpxDiscovery() error {
 	if err := j.tui(); err != nil {
 		return err
 	}
-	for path, original := range originals {
-		data, err := os.ReadFile(path)
-		if err != nil || !bytes.Equal(data, original) {
-			return fmt.Errorf("agent changed npx-owned skill %s", path)
-		}
+	current, err = snapshotNpxInstall(j.home)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(current, snapshot) {
+		return fmt.Errorf("agent changed npx-owned installation")
 	}
 	j.result.Checks["npx_skill_preserved"] = true
 	tasks, err := savedTasks(j.home)
@@ -116,4 +104,48 @@ func (j *journey) globalNpxDiscovery() error {
 	}
 	j.result.Checks["personal_skill_invoked_in_tui"] = true
 	return nil
+}
+
+// Capture only installer-owned roots, including links and package metadata.
+func snapshotNpxInstall(home string) ([]byte, error) {
+	type entry struct {
+		Mode   fs.FileMode
+		Target string
+		Data   []byte
+	}
+	entries := map[string]entry{}
+	for _, root := range []string{".agents/skills/doomer-review", ".claude/skills/doomer-review", ".agents/.skill-lock.json"} {
+		err := filepath.WalkDir(filepath.Join(home, root), func(path string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+			value := entry{Mode: info.Mode()}
+			switch {
+			case info.Mode()&os.ModeSymlink != 0:
+				value.Target, err = os.Readlink(path)
+			case info.Mode().IsRegular():
+				value.Data, err = os.ReadFile(path)
+			case info.IsDir():
+			default:
+				return fmt.Errorf("unsupported npx package entry %s", path)
+			}
+			if err != nil {
+				return err
+			}
+			relative, err := filepath.Rel(home, path)
+			if err != nil {
+				return err
+			}
+			entries[relative] = value
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(entries)
 }

@@ -135,7 +135,7 @@ func managedBootstrapFiles(base string, policy managed.Policy, scope string) ([]
 			}
 			// npx owns the skill files, their agent links, and invocation metadata.
 			// A first-use runtime installation must leave that installation intact.
-			return nil, nil, nil, nil
+			return []string{}, nil, nil, nil
 		}
 	}
 	content, err := managed.BootstrapTextForScope(policy, scope)

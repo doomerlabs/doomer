@@ -300,6 +300,15 @@ func TestPersonalInstallPreservesNpxOwnedSkill(t *testing.T) {
 				if err != nil {
 					t.Fatal(out, err)
 				}
+				var result struct {
+					Paths []string `json:"paths"`
+				}
+				if err := json.Unmarshal([]byte(out), &result); err != nil || result.Paths == nil {
+					t.Fatal("install paths must be an array", out, err)
+				}
+			}
+			if out, err := execute(t, "", "install", "--personal", "--policy", "manual"); err == nil || !strings.Contains(err.Error(), "npx-managed skill policy differs") {
+				t.Fatal("expected policy conflict", out, err)
 			}
 			for _, path := range []string{canonical, claude, lockPath} {
 				want := []byte(content)
@@ -319,9 +328,6 @@ func TestPersonalInstallPreservesNpxOwnedSkill(t *testing.T) {
 			}
 			if _, err := os.Stat(filepath.Join(filepath.Dir(canonical), "agents/openai.yaml")); !os.IsNotExist(err) {
 				t.Fatal("added metadata to npx-owned skill", err)
-			}
-			if out, err := execute(t, "", "install", "--personal", "--policy", "manual"); err == nil {
-				t.Fatal("replaced installer-owned policy", out)
 			}
 		})
 	}
