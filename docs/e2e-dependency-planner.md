@@ -48,7 +48,9 @@ allows a matching Linux local result to satisfy CI. They do not invoke a model
 or publish shared results.
 
 Every local/CI captured manifest includes `dependency_analysis` with `mode:
-shadow`, a footprint and fallback explanations (or an analysis error). This
+shadow`, file/fallback counts and up to five examples (or an analysis error).
+The full footprint is saved beside the output as `OUTPUT.dependencies.json`,
+so thousands of explanations do not inflate each signed cache record. This
 diagnostic never replaces the current conservative key. For agent E2E, an agent
 can choose commands dynamically, so the CLI process boundary remains shared.
 

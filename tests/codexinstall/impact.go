@@ -43,7 +43,7 @@ var fixtureScopes = map[string][]string{
 // Personal/repository discovery remains shared; its new dispatch paths do not
 // call the existing scenario-scoped fixture helpers. Dependency capture and
 // shadow analysis add no calls to scenario-scoped journey methods.
-const fixtureAuditSHA256 = "690b88bece9c86f8a0e0ece533c4b257ae0f99ade7b8a8cc7ed8c565611ddb1c"
+const fixtureAuditSHA256 = "e2908371e01ff2b9eba20a4b488421f7e50857ab60cffbadff4d035d0f225382"
 
 func (m snapshotMetadata) fingerprintFiles(scenario string) []snapshotEntry {
 	if len(m.RuntimeFiles) == 0 {

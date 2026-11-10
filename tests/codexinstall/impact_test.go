@@ -244,6 +244,13 @@ func TestPrunedRuntimeBuildsRealCLIAndRunner(t *testing.T) {
 	if m.DependencyAnalysis == nil || m.DependencyAnalysis.Error != "" || m.DependencyAnalysis.Footprint == nil {
 		t.Fatalf("real captured dependency analysis failed: %+v", m.DependencyAnalysis)
 	}
+	summary, err := json.Marshal(m.DependencyAnalysis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summary) > 16<<10 || strings.Contains(string(summary), "\"dependencies\"") {
+		t.Fatal("full dependency graph leaked into signed cache metadata", len(summary))
+	}
 	for _, target := range []string{".", "./tests/codexinstall"} {
 		binary := filepath.Join(t.TempDir(), "program.exe")
 		cmd := exec.Command("go", "build", "-mod=readonly", "-buildvcs=false", "-o", binary, target)

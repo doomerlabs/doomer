@@ -312,6 +312,17 @@ func runSnapshot(ctx context.Context, opts snapshotOptions, args []string) error
 			return err
 		}
 	}
+	if analysis := metadata.DependencyAnalysis; analysis != nil && analysis.Footprint != nil {
+		// Keep the complete graph available without copying its thousands of
+		// explanations into every signed cache record.
+		graph, err := json.MarshalIndent(analysis.Footprint, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(output+".dependencies.json", append(graph, '\n'), 0600); err != nil {
+			return err
+		}
+	}
 	raw, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		return err

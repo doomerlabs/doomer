@@ -14,7 +14,10 @@ import (
 // Agent-selected CLI commands still require the conservative source boundary.
 type dependencyAnalysis struct {
 	Mode      string               `json:"mode"`
-	Footprint *e2eimpact.Footprint `json:"footprint,omitempty"`
+	Files     int                  `json:"files,omitempty"`
+	Fallbacks int                  `json:"fallbacks,omitempty"`
+	Examples  []string             `json:"examples,omitempty"`
+	Footprint *e2eimpact.Footprint `json:"-"`
 	Error     string               `json:"error,omitempty"`
 }
 
@@ -26,6 +29,9 @@ func analyzeDependencyShadow(ctx context.Context, root string) *dependencyAnalys
 		footprint, err = graph.Trace(e2eimpact.Entry{ID: "shared-agent-runtime", Roots: roots}, nil)
 		if err == nil {
 			result.Footprint = &footprint
+			result.Files = len(footprint.Dependencies)
+			result.Fallbacks = len(footprint.Fallback)
+			result.Examples = footprint.Fallback[:min(5, len(footprint.Fallback))]
 		}
 	}
 	if err != nil {
