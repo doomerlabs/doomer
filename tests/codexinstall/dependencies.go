@@ -13,12 +13,14 @@ import (
 // Shadow results explain the graph but never narrow the signed cache key.
 // Agent-selected CLI commands still require the conservative source boundary.
 type dependencyAnalysis struct {
-	Mode      string               `json:"mode"`
-	Files     int                  `json:"files,omitempty"`
-	Fallbacks int                  `json:"fallbacks,omitempty"`
-	Examples  []string             `json:"examples,omitempty"`
-	Footprint *e2eimpact.Footprint `json:"-"`
-	Error     string               `json:"error,omitempty"`
+	Mode               string               `json:"mode"`
+	Files              int                  `json:"files,omitempty"`
+	Fallbacks          int                  `json:"fallbacks,omitempty"`
+	Examples           []string             `json:"examples,omitempty"`
+	ScenarioProjection string               `json:"scenario_projection,omitempty"`
+	ScenarioFiles      int                  `json:"scenario_files,omitempty"`
+	Footprint          *e2eimpact.Footprint `json:"-"`
+	Error              string               `json:"error,omitempty"`
 }
 
 func analyzeDependencyShadow(ctx context.Context, root string) *dependencyAnalysis {

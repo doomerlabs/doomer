@@ -50,33 +50,44 @@ embedded resources, retains declared runtime fixture inputs, and removes unused
 files from the execution snapshot. An undeclared runtime file read therefore
 fails instead of silently depending on an unhashed file.
 
-Audited scenario fixture bodies have narrower scopes. For example, a body change
-in `upgrade.go` invalidates the six upgrade scenarios, while a cached `install`
-result remains usable. `hook_setup.go` affects the hook upgrade/decline/trust
-scenarios. Imports, signatures, global declarations, initialization, shared runner
-code, the CLI and dependencies remain shared. Any unexpected caller or opaque
-reflection makes a scoped fixture shared again. A pinned audit of shared runner
-control flow disables narrow scopes if that code changes; update that audit only
-after reviewing the dependency boundaries. New or uncertain dependencies
-therefore cause reruns rather than optimistic reuse.
-The audit pin itself is in shared `impact.go`, whose complete bytes are hashed;
-updating the pin also invalidates every scenario. Re-enabling narrow scopes never
-restores results from before a shared runner or audit-pin change.
+The runner automatically follows function references from executable roots and
+scenario dispatch. It hashes the function bodies reachable by each scenario,
+including transitive helper calls. Unrelated bodies and unreachable dispatch
+branches are omitted from that scenario's projection; imports, declarations,
+global initialization and compiler directives stay included. For example,
+changing `reviewPreflight` invalidates `review-preflight`, while an unchanged
+`install` result remains reusable. Adding a new helper call adds that dependency
+automatically. No hand-maintained file-to-test list is used for this selection.
+
+Function values that can escape direct calls are shared. Scenario mutation,
+unsafe/reflection paths, native code, and unsupported identity flow disable
+projection. Unknown scenario names retain the full inputs. The production CLI
+remains shared because an agent can choose CLI commands dynamically; these
+projections narrow the E2E runner and fixture code, not arbitrary CLI paths.
+
+`e2e-extra-dependencies.yml` adds whole-file dependencies by file/glob and stable
+test ID (`codex/review-preflight`, `claude/*`, or `*`). An explicit dependency
+always overrides an automatic body exclusion. Invalid or unmatched rules fail
+snapshot preparation. It cannot remove automatically discovered dependencies.
 
 | Change | Invalidation |
 | --- | --- |
 | Ordinary documentation or development instructions | No agent rerun |
-| Audited scenario fixture body | Its declared dependent scenarios |
-| Fixture signature, imports, globals or unexpected caller | Shared rerun |
-| Shared CLI/runner source, toolchain, baseline or settings | Shared rerun |
-| New compiled source or embedded resource | Included automatically |
+| Scenario-specific runner/helper body | Automatically discovered dependent scenarios |
+| New helper call | Its callers acquire the new dependency |
+| Imports, declarations, globals or shared helper body | Shared rerun |
+| CLI source, toolchain, baseline or settings | Shared rerun |
+| Explicit extra dependency | Every test selected by its rule |
+| Uncertain scenario identity or unsafe runtime behavior | Full runner inputs |
 
 The full inventory and selected runtime files are recorded in
-`OUTPUT.inputs.json`; `scenario_files` records narrower fixture scopes. Cached
-reports carry the original execution commit/time and origin environment, alongside
-the cache-hit marker for the current run. Schema 1 results are not reused after
-this dependency-contract change. The existing `v1/` storage prefix remains under
-the same seven-day retention rule.
+`OUTPUT.inputs.json`; `scenario_hashes` contains the per-scenario runner
+projections. `dependency_analysis.scenario_projection` says whether they are
+enabled or the runner used conservative inputs. The general cross-package
+analysis remains diagnostic, with its full graph in `OUTPUT.dependencies.json`.
+Cached reports preserve the original execution commit/time and origin
+environment, alongside the cache-hit marker for the current run. The existing
+`v1/` storage prefix retains its seven-day retention rule.
 
 ## Baselines and freshness
 

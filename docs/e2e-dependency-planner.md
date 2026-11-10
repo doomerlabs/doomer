@@ -1,9 +1,9 @@
-# Per-test dependency planner work in progress
+# Per-test dependency planning
 
 This branch starts the follow-up to signed E2E result reuse. Both local runs and
-CI use the same captured-source runner. Explicit extra dependencies now enter
-its real cache keys. Automatic product-code analysis runs in shadow mode: it
-does not yet authorize narrower product-code reuse.
+CI use the same captured-source runner. Automatically discovered scenario-specific runner/helper bodies and explicit
+extra dependencies enter its real cache keys. General product-code analysis
+remains in shadow mode: the CLI is still shared.
 
 `internal/e2eimpact` traces resolved Go declarations across captured packages,
 includes package initialization, and produces a source footprint with an
@@ -13,8 +13,9 @@ external call, or external initialization broadens the footprint to all supplied
 inputs. Invalid source fails analysis instead of producing an empty footprint.
 The build-aware loader asks `go list` for selected source files, embedded assets,
 and export data; inactive build-tag files and unit tests are excluded. It finds
-the selected command entry points automatically. Scenario-specific dispatch
-still needs analysis before those common entry points can become narrower roots.
+the selected command entry points automatically. The runner separately follows its scenario dispatchers and function references
+to compute executable per-scenario projections, with typed checks protecting
+scenario identity. This runtime selection has no manual file-to-test list.
 
 `e2e-extra-dependencies.yml` is the one repository-root file for manual additions:
 
@@ -54,17 +55,19 @@ so thousands of explanations do not inflate each signed cache record. This
 diagnostic never replaces the current conservative key. For agent E2E, an agent
 can choose commands dynamically, so the CLI process boundary remains shared.
 
-Before this can control agent E2E reuse, the remaining work is:
+Automatic runner projections now control E2E reuse in both local runs and CI.
+They preserve declarations, global initialization, compiler directives, and
+escaped callbacks. Typed checks reject scenario mutation, unsafe aliases and
+external writes. Unsupported identity flow falls back to full runner inputs.
+Explicit extras always retain a whole file, overriding an automatic exclusion.
 
-1. Derive scenario-specific roots from the runner's dispatch while retaining
-   common initialization and conservative dynamic-call handling.
-2. Model the process boundary between the test runner, agent, and Doomer CLI.
-   Observed commands alone cannot bound what an agent might do on another run.
-3. Extend capture for implicit file reads, configuration and external fixtures.
-   Source fingerprints alone never authorize reuse; the existing signed-result
-   and frozen execution-context checks remain required.
-4. Compare shadow analysis with full runs,
-   inspect every false negative, then enable only justified dependency boundaries.
+Real-repository mutation tests edit `reviewPreflight` and prove that install,
+upgrade and policy-recovery retain their keys, then edit CLI code and prove
+that every scenario invalidates. Signed-cache tests prove the same selective
+acceptance in both local and CI environments. The historical manual scope
+implementation is retained only in tests as a comparison baseline.
 
-The full source snapshot remains useful for provenance. It need not become every
-test's key, but unresolved behavior continues to require broad invalidation.
+Further narrowing of product CLI paths requires a justified bound on which
+commands an agent might choose. An observed successful command trace alone is
+not that bound. Until one exists, all CLI code remains a dependency and the
+full source inventory remains useful for provenance.
