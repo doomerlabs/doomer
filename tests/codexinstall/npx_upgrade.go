@@ -150,7 +150,7 @@ func (j *journey) npxSkillUpgrade() error {
 		}
 		// A prepare attempt can stop at update approval before selecting a runtime.
 		// Only that pre-runtime state may lack a release, never a prepared task.
-		if task.Release == "" && (task.Stage != "preparing" || task.Submission != nil || task.Review != nil || task.InstallationID != "") {
+		if task.Release == "" && (task.Stage != "preparing" || task.Submission != nil || task.Review != nil) {
 			return fmt.Errorf("task reached stage %s without a candidate runtime", task.Stage)
 		}
 		if task.Release != "" {
