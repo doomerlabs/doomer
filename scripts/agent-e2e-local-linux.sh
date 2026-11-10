@@ -24,6 +24,7 @@ chmod 700 "$cache" "$cache/go-build" "$cache/go-mod"
 cache=$(cd "$cache" && pwd)
 runner_home=$(mktemp -d "${TMPDIR:-/tmp}/doomer-agent-e2e-home.XXXXXX")
 trap 'rm -rf -- "$runner_home"' EXIT
+mkdir -p "$runner_home/.cache/go-build" "$runner_home/go/pkg/mod"
 docker build --platform linux/amd64 -t "$image" -f "$root/tests/codexinstall/Dockerfile" "$root/tests/codexinstall"
 docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" \
   -v "$root:/src:ro" -v "$git_common:$git_common:ro" -v "$reports:/reports" \
