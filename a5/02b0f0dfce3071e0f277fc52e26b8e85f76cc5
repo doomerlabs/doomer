@@ -1,0 +1,16 @@
+AGENTS.md
+  h_aa44c3b5b60dec 28-42
+scripts/agent-e2e-local-linux.sh
+  h_aa44c3b5b60dec 6,29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a502b0f0dfce3071e0f277fc52e26b8e85f76cc5",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
