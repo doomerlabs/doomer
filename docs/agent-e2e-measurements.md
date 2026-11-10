@@ -75,3 +75,37 @@ the expanded PR's final source.
 Private JSON reports,
 HTML conversations, runner logs and the source manifest are retained outside
 Git at `/private/tmp/doomer-phase1-measurements/` on the measurement host.
+
+## Incremental reuse proof
+
+Measured on November 9, 2026, using the Linux amd64 local helper on the same
+macOS host, source `a308bdd`, baseline `2026.11.9.5`, Codex API authentication
+and Claude subscription authentication. A clean run executed `install` and
+`review-preflight` for both agents. A separate checkout then changed only the
+body of `reviewPreflight` (a harmless `_ = 0`) and appended documentation to
+`AGENTS.md`. No probe changes were included in the PR.
+
+| Scenario | First execution | Changed checkout | Changed checkout result |
+| --- | --- | --- | --- |
+| Codex install | 201.0s | 8.5s | Signed cache hit |
+| Claude install | 117.9s | 8.2s | Signed cache hit |
+| Codex review-preflight | 233.1s | 166.2s | Executed and passed |
+| Claude review-preflight | 144.5s | 108.0s | Executed and passed |
+
+The install fingerprints stayed identical; both preflight fingerprints changed.
+Reused reports retained the original execution commit and timestamp. The
+historical missing-policy regression witness also remained a cache hit. The
+changed-checkout invocation completed in 209.0 seconds, including setup and
+verification, with two reused scenarios and two newly executed scenarios.
+
+The first invocation took 791.0 seconds including initial agent downloads and
+the uncached regression witness. These are different workloads, so that total
+is not a controlled speedup comparison. Downloaded agent archives are reused
+only after verification against their pinned SHA-256 digest.
+
+This proves the audited fixture boundary and documentation exclusion. Shared
+CLI or runner changes still invalidate all affected inputs conservatively; this
+does not claim arbitrary product code-path coverage analysis. Private reports
+are retained at `/private/tmp/doomer-incremental-base-v3/` and
+`/private/tmp/doomer-incremental-variant/`; the fingerprint comparison is at
+`/private/tmp/pr134-incremental-proof.json` on the measurement host.
