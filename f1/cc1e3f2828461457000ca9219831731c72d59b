@@ -1,0 +1,24 @@
+docs/e2e-dependency-planner.md
+  h_aa44c3b5b60dec 1-51
+e2e-extra-dependencies.yml
+  h_aa44c3b5b60dec 1-6
+internal/e2eimpact/extra.go
+  h_aa44c3b5b60dec 1-144
+internal/e2eimpact/go.go
+  h_aa44c3b5b60dec 1-231
+internal/e2eimpact/plan.go
+  h_aa44c3b5b60dec 1-165
+internal/e2eimpact/plan_test.go
+  h_aa44c3b5b60dec 1-265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f1cc1e3f2828461457000ca9219831731c72d59b",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
