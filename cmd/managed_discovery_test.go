@@ -69,7 +69,7 @@ func TestTeamInstallDistributesDiscoveryWithoutLocalActivation(t *testing.T) {
 		}
 		data, err := os.ReadFile(filepath.Join(skill, "SKILL.md"))
 		want, _ := managed.BootstrapText(managed.Policy{Protocol: managed.Protocol, Channel: "stable"})
-		if err != nil || string(data) != want || !bytes.Contains(data, []byte("description: Review edited source with Doomer and reuse approved setup.\n")) {
+		if err != nil || string(data) != want || !bytes.Contains(data, []byte("description: >-\n  Use Doomer for every coding task")) {
 			t.Fatal("repository bootstrap changed", dir, err)
 		}
 	}

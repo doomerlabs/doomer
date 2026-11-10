@@ -80,6 +80,15 @@ func (j *journey) globalNpxDiscovery() error {
 	if err := watch.Install(agentHooksPath(j.c, j.home), "", "--managed-task-adapter", true); err != nil {
 		return err
 	}
+	setupTasks, err := savedTasks(j.home)
+	if err != nil || len(setupTasks) != 1 {
+		return fmt.Errorf("expected one setup task before npx discovery: %v", err)
+	}
+	decline := exec.CommandContext(j.ctx, filepath.Join(j.home, ".local/bin/doomer"), "task", "hook-setup", setupTasks[0].Handle, "--decline")
+	decline.Env = j.env
+	if out, err := decline.CombinedOutput(); err != nil {
+		return fmt.Errorf("record optional-hook decline: %w: %s", err, out)
+	}
 	j.result.Checks["real_global_npx_install"] = true
 	j.result.Checks["no_repository_skill_or_instructions"] = true
 	j.result.Checks["discovery_hooks_disabled"] = true
