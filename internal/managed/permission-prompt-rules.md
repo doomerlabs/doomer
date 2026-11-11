@@ -29,6 +29,10 @@ recovery command. Do not invent a reason or re-request a refused approval.
 Preserve any task handle and baseline so the user can run the command in their
 terminal and ask you to resume. A recovery command requiring stdin is incomplete
 without its original payload; say so without exposing it in shell arguments.
+If the host denies execution before the CLI can return recovery details, record
+`git rev-parse HEAD` before editing. Include that exact commit as `--base` inside
+the complete terminal recovery command, with the original agent, repository,
+prompt, service, and profile; do not leave a separate instruction to add it.
 During onboarding, complete any accepted Codex policy installation and inspect
 `codex_policy_status`. `configured` means saved, not active. Reload/restart Codex
 as needed and verify a permitted Doomer operation in a fresh reviewer session

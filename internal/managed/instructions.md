@@ -7,9 +7,12 @@ or compaction. If the pinned executable is missing, use `doomer task repair
 HANDLE` to restore that exact release. Never create a replacement task to recover an existing review.
 
 Attempt preparation at the start of a coding task to retain its starting revision.
-For exploration-only or read-only requests, do not prepare or offer setup/upgrades
-merely because the skill or a hook is present. Explicit setup/review requests
-remain in scope.
+For exploration-only or read-only requests, do not run preflight, prepare, or
+offer setup/upgrades merely because the skill or a hook is present. Explicit
+setup/review requests remain in scope. Before any authorized source edit,
+including a fix identified during investigation, run the review workflow.
+Respect explicit requests not to edit. Use the current harness consistently:
+`codex` for Codex and `claude` for Claude Code; never switch agents after a denial.
 
 When a result contains advisories in `notices` with `notify_user=true`, display
 all severities in the chat as separate blockquotes with bold headings using

@@ -341,9 +341,13 @@ func (j *journey) afterInstall() error {
 			j.result.Checks["no_read_only_task_created"] = len(tasks) == len(prior)
 			j.result.Checks["no_read_only_hook_offer"] = !turn.HooksOffered
 			j.result.Checks["no_read_only_prepare_attempt"] = true
+			j.result.Checks["no_read_only_preflight_attempt"] = true
 			for _, command := range turn.Commands {
 				if strings.Contains(command, "doomer") && strings.Contains(command, "prepare") {
 					j.result.Checks["no_read_only_prepare_attempt"] = false
+				}
+				if strings.Contains(command, "doomer") && strings.Contains(command, "preflight") {
+					j.result.Checks["no_read_only_preflight_attempt"] = false
 				}
 			}
 		}

@@ -52,9 +52,11 @@ func TestStateAccessErrorDoesNotMisclassifyOtherFailures(t *testing.T) {
 		&os.PathError{Op: "open", Path: root + "-other/file", Err: syscall.EACCES},
 		errors.New("permission denied by approval reviewer"),
 	} {
-		var out bytes.Buffer
-		if writeManagedStateAccess(&out, err, root, nil, "", "", false) || out.Len() != 0 {
-			t.Fatalf("misclassified %v: %s", err, &out)
+		for _, candidate := range []error{err, &managedTaskFailure{err: err, handle: "existing-task", base: "original-base"}} {
+			var out bytes.Buffer
+			if writeManagedStateAccess(&out, candidate, root, nil, "", "", false) || out.Len() != 0 {
+				t.Fatalf("misclassified %v: %s", candidate, &out)
+			}
 		}
 	}
 }

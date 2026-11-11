@@ -71,10 +71,12 @@ func (j *journey) reviewPreflight() error {
 	}
 	j.result.Checks["no_repeated_policy_offer"] = !turn.PolicyOffered
 	j.result.Checks["local_preflight_observed"] = false
+	j.result.Checks["local_preflight_reuses_agent_consent"] = false
 	j.mu.Lock()
 	for _, event := range j.result.Events[eventStart:] {
 		if event.Kind == "Command" && strings.Contains(event.Text, `"local_only":true`) && strings.Contains(event.Text, `"account_verified":false`) {
 			j.result.Checks["local_preflight_observed"] = true
+			j.result.Checks["local_preflight_reuses_agent_consent"] = strings.Contains(event.Text, `"state":"saved_consent_found"`)
 		}
 	}
 	j.mu.Unlock()
@@ -83,7 +85,11 @@ func (j *journey) reviewPreflight() error {
 		return err
 	}
 	prepared := false
+	j.result.Checks["coding_task_uses_current_agent"] = true
 	for _, task := range tasks {
+		if !seen[task.Handle] && task.Agent != j.c.Harness {
+			j.result.Checks["coding_task_uses_current_agent"] = false
+		}
 		if !seen[task.Handle] && task.Stage == "ready" && task.Purpose == "coding" {
 			prepared = true
 		}
