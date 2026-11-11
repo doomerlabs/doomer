@@ -1,0 +1,14 @@
+AGENTS.md
+  h_aa44c3b5b60dec 72-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf6bb89c50918892577c9741fa3ea7eb02e6d266",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
