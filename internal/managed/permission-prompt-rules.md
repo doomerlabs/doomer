@@ -34,6 +34,8 @@ any existing task handle with `--task HANDLE`; never add or replace its baseline
 Only when no task handle exists, record `git rev-parse HEAD` before editing and
 include that exact commit as `--base` inside the complete terminal recovery
 command. Preserve the original agent, repository, prompt, service, and profile.
+Identify the checkout with an absolute `--repo` path or an explicit `cd` to its
+absolute working directory; `--repo .` alone is not a complete recovery location.
 Use the CLI-provided quoted command when available; otherwise safely shell-quote
 every argument, including embedded quotes and dollar signs, without interpolation.
 Keep original stdin payloads on stdin, not in arguments. Do not leave a separate
