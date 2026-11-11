@@ -1,0 +1,22 @@
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 3
+tests/codexinstall/claude.go
+  h_aa44c3b5b60dec 57,59
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 150
+tests/codexinstall/policy_recovery.go
+  h_aa44c3b5b60dec 72-74,116,119-122
+tests/codexinstall/scenarios.go
+  h_aa44c3b5b60dec 127-137,249,254,259-260,262,264,267-270,293,303-308
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "64ffc9f9e8149126fcab73d8b63c7fb93e5f74bf",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
