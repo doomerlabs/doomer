@@ -110,6 +110,17 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 		f.mu.Unlock()
 	}()
 	env := []string{"HOME=" + home, "PATH=" + filepath.Join(home, ".local/bin") + ":/usr/bin:/bin:/usr/sbin:/sbin", "DOOMER_API_URL=" + server.URL, "DOOMER_CONFIG_DIR=" + filepath.Join(home, ".config/doomer"), "NO_COLOR=1", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
+	browserPath := filepath.Join(home, "opened-browser-url")
+	browserScript := fmt.Sprintf("#!/usr/bin/env python3\nimport pathlib, sys\npathlib.Path(%q).write_text(sys.argv[1])\n", browserPath)
+	if err := os.MkdirAll(filepath.Join(home, ".local/bin"), 0700); err != nil {
+		return fail(err)
+	}
+	for _, name := range []string{"open", "xdg-open"} {
+		if err := os.WriteFile(filepath.Join(home, ".local/bin", name), []byte(browserScript), 0700); err != nil {
+			return fail(err)
+		}
+	}
+	env = append(env, "DISPLAY=fixture")
 	configuration, err := configureAgent(c, home, proxyURL)
 	if err != nil {
 		return fail(err)
@@ -235,10 +246,38 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 	for turn := 0; turn < 8; turn++ {
 		result.Turns++
 		waitCapable := false
+		approvalPresented := result.Checks["presented_approval_link"]
+		presentedThisTurn := false
+		var presentationError error
 		observed, err := runAgent(ctx, c, repo, env, prompt, session, func(kind, text string) {
 			record(kind, text)
+			if opened, err := os.ReadFile(browserPath); err == nil && observeBrowserDecision(f, server.URL, "Browser", string(opened), c.Scenario == "decline-uploads") {
+				approvalPresented, presentedThisTurn = true, true
+				result.Checks["presented_approval_link"] = true
+				result.Checks["approval_page_opened"] = true
+				declined = c.Scenario == "decline-uploads"
+				record("Browser decision", "The simulated user answered on the verified page opened by the CLI.")
+			}
+			if kind == "Claude" || kind == "Codex" {
+				f.mu.Lock()
+				presentedNow := f.Request != "" && strings.Contains(text, server.URL+"/cli/setup#request="+f.Request)
+				approvalPresented = approvalPresented || presentedNow
+				presentedThisTurn = presentedThisTurn || presentedNow
+				f.mu.Unlock()
+			}
+			if presentedThisTurn && approvalWaitBeforePresentation(kind, text, false) {
+				result.Checks["same_turn_approval_wait"] = true
+			}
+			if approvalWaitBeforePresentation(kind, text, approvalPresented) {
+				presentationError = fmt.Errorf("agent waited for browser approval before presenting the complete approval URL or opening the approval page")
+				cancel()
+				return
+			}
 			if kind == "Command" && strings.Contains(text, `"wait_command"`) {
 				waitCapable = true
+				if _, exists := result.Checks["same_turn_approval_wait"]; !exists {
+					result.Checks["same_turn_approval_wait"] = false
+				}
 			}
 			if waitCapable && observeBrowserDecision(f, server.URL, kind, text, c.Scenario == "decline-uploads") {
 				result.Checks["presented_approval_link"] = true
@@ -248,6 +287,12 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 				record("Browser decision", "The simulated user answered on the displayed approval page while the agent turn remained active.")
 			}
 		})
+		if presentationError != nil {
+			return fail(presentationError)
+		}
+		if presentedThisTurn && waitCapable && !result.Checks["same_turn_approval_wait"] && c.Scenario != "decline-uploads" {
+			return fail(fmt.Errorf("agent ended its turn after presenting the approval URL without continuing the wait"))
+		}
 		if err != nil {
 			return fail(err)
 		}
@@ -304,7 +349,7 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 		}
 		if c.Harness == "claude" && (observed.PolicyOffered || observed.SetupPending) && !approvedPolicy {
 			approvedPolicy = true
-			prompt = "I approve account verification and installing the displayed scoped Claude reviewer settings and hooks as part of the requested onboarding. Preserve unrelated settings and native hook trust. Still ask for any missing repository upload and software-update approval."
+			prompt = "I approve account verification and installing the displayed scoped Claude reviewer settings, including the six Doomer command rules, the consent-scoped autoMode.allow classifier policy, and hooks as part of the requested onboarding. Preserve unrelated settings, existing deny rules, and native hook trust. Still ask for any missing repository upload and software-update approval."
 			record("Scripted user", prompt)
 			continue
 		}
@@ -485,7 +530,7 @@ func redact(text, key string) string {
 // found in tool output. Older agents may end the turn; the fallback below the
 // runAgent call still resumes those installs using the same browser decision.
 func observeBrowserDecision(f *fixture, baseURL, kind, text string, decline bool) bool {
-	if kind != "Codex" && kind != "Claude" {
+	if kind != "Codex" && kind != "Claude" && kind != "Browser" {
 		return false
 	}
 	f.mu.Lock()
@@ -502,4 +547,24 @@ func observeBrowserDecision(f *fixture, baseURL, kind, text string, decline bool
 		f.Approved = true
 	}
 	return true
+}
+
+// Only invocation events count here; command output may quote a wait without running it.
+func approvalWaitBeforePresentation(kind, text string, presented bool) bool {
+	if presented {
+		return false
+	}
+	command := text
+	if kind == "Command" && strings.HasPrefix(text, "Bash ") {
+		var input struct {
+			Command string `json:"command"`
+		}
+		if json.Unmarshal([]byte(strings.TrimPrefix(text, "Bash ")), &input) != nil {
+			return false
+		}
+		command = input.Command
+	} else if kind != "Command started" {
+		return false
+	}
+	return (strings.Contains(command, "task login") && strings.Contains(command, "--wait")) || strings.Contains(command, "wait_command")
 }

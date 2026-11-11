@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -51,6 +52,10 @@ func (j *journey) revokedUploads() error {
 			baseURL = strings.TrimPrefix(value, "DOOMER_API_URL=")
 		}
 	}
+	// A prepare call can open the page and wait without emitting another
+	// transcript event. Answer the simulated browser independently of output.
+	stopBrowser := watchRevokedApproval(j.ctx, j.f, filepath.Join(j.home, "opened-browser-url"), baseURL, j.record)
+	defer stopBrowser()
 	record := func(kind, text string) {
 		j.record(kind, text)
 		if observeBrowserDecision(j.f, baseURL, kind, text, true) {
@@ -58,6 +63,7 @@ func (j *journey) revokedUploads() error {
 		}
 	}
 	_, err := runAgent(j.ctx, j.c, j.repo, j.env, "Create hello.txt containing hello. Follow the installed Doomer skill and complete its review.", "", record)
+	stopBrowser()
 	if err != nil {
 		return err
 	}
@@ -68,6 +74,32 @@ func (j *journey) revokedUploads() error {
 		return fmt.Errorf("revoked repository still uploaded content")
 	}
 	return nil
+}
+
+func watchRevokedApproval(ctx context.Context, f *fixture, path, baseURL string, record func(string, string)) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(25 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				opened, err := os.ReadFile(path)
+				if err == nil && observeBrowserDecision(f, baseURL, "Browser", string(opened), true) {
+					record("Browser decision", "The user cancelled the new approval page opened after revocation; access remains revoked.")
+					return
+				}
+			}
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 func (j *journey) interruptedReview() error {

@@ -21,16 +21,23 @@ Preserve existing software-update permissions.
 
 ## Complete first-time onboarding before review
 
-When approval_required returns wait_command, show the full approval URL and
-explain that choosing Allow permits the listed uploads and remembers that same
+When approval_required returns wait_command, first send a chat message with the
+full approval URL as a clickable link before calling any tool. Tool output and
+internal reasoning do not count as showing the link. Explain that choosing Allow permits the listed uploads and remembers that same
 permission in Codex through a scoped reviewer policy. This does not install or
-trust hooks. Immediately run wait_command and keep the turn open, repeating while
-approval_required for up to ten minutes. The browser decision is the answer;
+trust hooks. After sending the message, run wait_command once and keep the turn
+open. If approval is still pending, repeat the clickable link in chat before the
+next wait, for up to ten minutes. Run each wait separately, never in a shell loop. The browser decision is the answer;
 do not require a second chat reply. The CLI completes the approved policy before
 returning ready. Do not submit source or present the whole task as finished while
 onboarding is pending. On cancellation stop; on timeout report setup pending.
 Hook installation requires its separate setup acceptance, and native hook trust
 remains user controlled.
+
+When `browser_opened` is true, the CLI has opened the verified approval page on
+this desktop. Tell the user to complete that page and continue `wait_command`
+in the same turn. Remote sessions and failed browser launches retain the link
+presentation above.
 
 {{permission_prompt_rules}}
 
