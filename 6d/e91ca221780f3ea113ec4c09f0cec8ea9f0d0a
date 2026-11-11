@@ -1,0 +1,20 @@
+docs/agent-e2e-cache.md
+  h_aa44c3b5b60dec 206,210-212
+scripts/agent-e2e-local-linux.sh
+  h_aa44c3b5b60dec 15-16
+scripts/test-agent-e2e-cache-plan.py
+  h_aa44c3b5b60dec 3,7,31-48
+scripts/test-agent-e2e-selector.py
+  h_aa44c3b5b60dec 145,150-152,199-228
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6de91ca221780f3ea113ec4c09f0cec8ea9f0d0a",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
