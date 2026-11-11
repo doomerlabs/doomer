@@ -9,7 +9,7 @@ runtime or wrappers with the selected checkout for the remaining scenario.
 
 ## Run
 
-From the repository root, with Go and OpenSSH tools installed, provide
+From the repository root, with Go, Python 3 (`python3`), and OpenSSH tools installed, provide
 `TEST_OPENAI_API_KEY` and `TEST_EXE_SSH_PRIVATE_KEY` through Doppler `doomer/test`.
 The SSH public key must be registered in exe.dev.
 
