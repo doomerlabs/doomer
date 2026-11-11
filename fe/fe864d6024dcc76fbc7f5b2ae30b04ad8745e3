@@ -1,0 +1,16 @@
+tests/codexinstall/claude_test.go
+  h_aa44c3b5b60dec 61-68
+tests/codexinstall/hook_setup.go
+  h_aa44c3b5b60dec 163,167-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fefe864d6024dcc76fbc7f5b2ae30b04ad8745e3",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
