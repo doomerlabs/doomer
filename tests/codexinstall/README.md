@@ -9,7 +9,7 @@ runtime or wrappers with the selected checkout for the remaining scenario.
 
 ## Run
 
-From the repository root, with Go and OpenSSH tools installed, provide
+From the repository root, with Go, Python 3 (`python3`), and OpenSSH tools installed, provide
 `TEST_OPENAI_API_KEY` and `TEST_EXE_SSH_PRIVATE_KEY` through Doppler `doomer/test`.
 The SSH public key must be registered in exe.dev.
 
@@ -30,7 +30,8 @@ go run ./tests/codexinstall --scenario list
 | `install` | Both skill files, launcher, hooks configured, authenticated readiness, one grant, no content uploads |
 | `first-review` | An ordinary coding prompt with no Doomer reminder completes an account-linked review and records a finding response |
 | `review-command-permissions` | Fresh process with hooks disabled completes per-call review; Claude uses real auto mode with the onboarding command rules, Codex uses its approval reviewer |
-| `review-preflight` | Per-call preparation with automatic hooks removed; saved consent and local preflight in a fresh session; local coding continues if preparation is blocked; Codex uses workspace-write and auto-review |
+| `review-preflight` | Fresh-session preparation must succeed with saved consent; automatic hooks are removed and Codex uses workspace-write and auto-review |
+| `review-preflight-denied` | Denied preparation leaves local coding available, creates no new task or upload, and reports an exact terminal recovery command |
 | `hooks-upgrade` | Missing owned hooks are offered again, accepted, and installed while preserving existing consent and unrelated settings |
 | `hooks-declined` | A hook-installation refusal persists across fresh sessions without reinstalling or re-offering |
 | `hooks-trust` | Codex native trust reminders recur until trusted; Claude native callbacks prove activation separately from installation |
@@ -46,7 +47,7 @@ go run ./tests/codexinstall --scenario list
 | `upgrade` | Historical skill and signed runtime fixture upgrades with preserved policy/grant and one simulated PR |
 | `upgrade-defer` | Deferring the upgrade leaves files alone and suppresses a repeat offer on preparation |
 | `repeat-onboarding` | Repeated setup reuses approval, avoids repeated settings offers, and leaves no failed review |
-| `read-only` | A clean, read-only task uploads nothing and finishes without a review failure |
+| `read-only` | A clean, read-only task never attempts preparation, creates no task, offers no setup, and uploads nothing |
 | `personal` | Personal installation is discovered and completes a coding review |
 | `personal-discovery` | Candidate personal installer writes the broader description and Codex invocation metadata only in the home directory; a fresh Claude or Codex session loads the skill and completes a source-code review without hooks, repository instructions, or a Doomer reminder |
 | `repository-discovery` | Candidate repository installer retains its original description and discovery instructions, creates no personal metadata, and a fresh Claude or Codex session completes a source-code review without hooks or a Doomer reminder |
@@ -81,9 +82,9 @@ Most scenarios bypass command approvals inside isolated test processes. The
 post-onboarding `review-preflight` Codex session uses workspace-write, on-request
 approvals and `approvals_reviewer=auto_review`, with no bypass flag. It must
 observe local-only preflight, complete a local edit, reuse the original grant and
-upload no content. It requires either prepared state or an explicit blocker
-report; a refusal of Doomer preparation stops that operation while independently
-authorized local edits remain permitted. Automatic hooks are removed for this
+upload no content. It requires prepared state; reporting a blocker does not pass this positive case.
+The separate `review-preflight-denied` case preserves independently authorized
+local edits and checks for actionable recovery without task creation or uploads. Automatic hooks are removed for this
 preparation-only scenario. Claude exercises the same local-preflight flow with its usual
 fixture permissions. This covers a fresh CLI session, not desktop policy reload
 or organization overrides. Doomer's own permissions apply in every scenario.

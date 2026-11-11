@@ -69,7 +69,9 @@ func (j *journey) policyRecovery() error {
 			attemptedPrepare = true
 		}
 	}
-	turn, err := runAgent(j.ctx, c, j.repo, j.env, "Create recovered.txt containing recovered followed by a newline.", "", record)
+	// This request probes the missing-policy gate. Completion is tested in a
+	// separate fresh source task after the policy and hooks are repaired below.
+	turn, err := runAgent(j.ctx, c, j.repo, j.env, "Create recovered.py containing print('recovered') followed by a newline.", "", record)
 	if err != nil {
 		return err
 	}
@@ -111,9 +113,13 @@ func (j *journey) policyRecovery() error {
 	// A separate reviewer process must load the repaired policy and complete a
 	// real submission without another upload grant or settings prompt.
 	j.c.ReviewApprovals = true
-	if err := j.coding(j.repo, "Create finished.txt containing finished followed by a newline."); err != nil {
+	if err := j.coding(j.repo, "Create finished.py containing print('finished') followed by a newline."); err != nil {
 		return err
 	}
+	if err := j.verifyPythonProgram(filepath.Join(j.repo, "finished.py"), "finished\n"); err != nil {
+		return err
+	}
+	j.result.Checks["fresh_source_program_runs"] = true
 	j.result.Checks["fresh_reviewer_completed_after_policy_repair"] = true
 	return j.finish()
 }

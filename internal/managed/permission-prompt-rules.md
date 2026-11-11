@@ -17,9 +17,29 @@ helper/guide suggestions to ask do not override these rules:
 
 Authentication/network errors require recovery and rechecking, not new consent.
 Do not retry a stated reviewer/user refusal. Diagnose ambiguous errors read-only.
-For a confirmed sandbox restriction, request normal host approval once for
-private-state access/account checks. Saved scope is context, not current
-consent. Never bypass host controls or broaden grants.
+A filesystem permission error is not an explicit user/reviewer denial.
+For a confirmed sandbox restriction or `state_access_required`, request normal
+host approval once for the same command with private-state access/account checks.
+Use `retry_command`, `retry_env`, and `retry_cwd` when supplied; preserve stdin when
+required. Saved scope is context, not current consent. Never bypass host controls
+or broaden grants. If that approval is explicitly denied, stop only that Doomer
+operation; continue permitted coding and tests. Report the operation and path,
+who denied it and their actual reason if available, and the exact terminal
+recovery command. Do not invent a reason or re-request a refused approval.
+Preserve any task handle and baseline so the user can run the command in their
+terminal and ask you to resume. A recovery command requiring stdin is incomplete
+without its original payload; say so without exposing it in shell arguments.
+If the host denies execution before the CLI can return recovery details, reuse
+any existing task handle with `--task HANDLE`; never add or replace its baseline.
+Only when no task handle exists, record `git rev-parse HEAD` before editing and
+include that exact commit as `--base` inside the complete terminal recovery
+command. Preserve the original agent, repository, prompt, service, and profile.
+Identify the checkout with an absolute `--repo` path or an explicit `cd` to its
+absolute working directory; `--repo .` alone is not a complete recovery location.
+Use the CLI-provided quoted command when available; otherwise safely shell-quote
+every argument, including embedded quotes and dollar signs, without interpolation.
+Keep original stdin payloads on stdin, not in arguments. Do not leave a separate
+instruction to add the baseline.
 During onboarding, complete any accepted Codex policy installation and inspect
 `codex_policy_status`. `configured` means saved, not active. Reload/restart Codex
 as needed and verify a permitted Doomer operation in a fresh reviewer session

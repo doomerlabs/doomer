@@ -357,9 +357,8 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 				return fmt.Errorf("hook state must be absolute")
 			}
 			s = managed.Store{Root: statePath}
-			err = s.Init()
 		} else {
-			s, err = managedStore()
+			s, err = managedStoreLocation()
 		}
 		if err != nil {
 			return err
@@ -370,15 +369,15 @@ func newManagedAgentHookCommand(app *application.App, api, profile *string) *cob
 			if event.Event == "Stop" {
 				return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{})
 			}
-			message := "Doomer task is not prepared for this session. If the user supplied an existing task handle, first resume it with doomer prepare --task HANDLE --session " + watch.Quote(event.Session) + ". Do not create a replacement task for recovery. For a new task, read the installed bootstrap and attempt doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " early. Include the actual user request with --prompt."
+			message := "Apply Doomer only to coding tasks or explicitly requested setup/review. For exploration-only or read-only requests, do not run preflight, prepare a task, or offer setup/upgrades merely because this hook fired. Before any authorized source edit, including a fix discovered during investigation, run the review workflow; honor explicit no-edit requests. For a coding task, Doomer is not prepared for this session. If the user supplied an existing task handle, first resume it with doomer prepare --task HANDLE --session " + watch.Quote(event.Session) + ". Do not create a replacement task for recovery. For a new coding task, read the installed bootstrap and attempt doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " early. Include the actual user request with --prompt."
 			pending, lookupErr := pendingManagedSetup(s, *api, *profile, agent, repo)
 			if lookupErr != nil {
 				return lookupErr
 			}
 			if pending != "" {
-				message = "For an installation or approval reply, continue the existing setup with doomer prepare --task " + watch.Quote(pending) + " --session " + watch.Quote(event.Session) + ". For a new coding request, start its own task with doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " --prompt USER_REQUEST. Keep setup-only tasks separate from coding reviews."
+				message = "For exploration-only or read-only requests, do not run preflight, prepare a task, or offer setup/upgrades merely because this hook fired. Before any authorized source edit, including a fix discovered during investigation, run the review workflow; honor explicit no-edit requests. For an installation or approval reply, continue the existing setup with doomer prepare --task " + watch.Quote(pending) + " --session " + watch.Quote(event.Session) + ". For a new coding request, start its own task with doomer prepare --agent " + agent + " --session " + watch.Quote(event.Session) + " --repo " + watch.Quote(repo) + " --prompt USER_REQUEST. Keep setup-only tasks separate from coding reviews."
 			}
-			message += " If Doomer is blocked, continue already-authorized local edits and tests unless the user explicitly required review first or asked to wait. Stop the denied operation, preserve host controls, and report incomplete review coverage. Do not ask whether to continue."
+			message += " A private-state filesystem restriction is not a user/reviewer denial: request normal host approval once for the same command when sandbox access is needed. If that request is explicitly denied, stop only the Doomer operation and continue already-authorized coding and tests unless the user required review first. Report the operation, actual denial reason, and exact terminal recovery command; preserve the task and baseline. Do not retry an explicit refusal. Do not ask whether to continue coding."
 			return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event.Event, "additionalContext": message}})
 		} else if err != nil {
 			return err

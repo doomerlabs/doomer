@@ -338,7 +338,21 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 	var allowUpdates bool
 	var portable bool
 	c := &cobra.Command{Use: "prepare", Short: "Prepare or resume a version-pinned managed review task", Args: cobra.NoArgs}
-	c.RunE = func(c *cobra.Command, _ []string) error {
+	c.RunE = func(c *cobra.Command, _ []string) (runErr error) {
+		var task managed.Task
+		defer func() {
+			// If preparation saved a task before a later state write failed,
+			// recovery must resume that handle rather than create another task.
+			if runErr != nil && task.Base != "" {
+				failure := &managedTaskFailure{err: runErr, base: task.Base}
+				if s, err := managedStoreLocation(); err == nil {
+					if _, err := s.Load(task.Handle); err == nil {
+						failure.handle = task.Handle
+					}
+				}
+				runErr = failure
+			}
+		}()
 		if !c.Flags().Changed("session") && agent == "claude" && strings.TrimSpace(prompt) != "" {
 			if actual := os.Getenv("CLAUDE_CODE_SESSION_ID"); actual != "" {
 				if err := c.Flags().Set("session", actual); err != nil {
@@ -368,7 +382,6 @@ func newPrepareCommand(app *application.App, api, profile *string) *cobra.Comman
 				return err
 			}
 		}
-		var task managed.Task
 		if handle != "" {
 			task, err = s.Load(handle)
 			if err != nil {
@@ -1158,11 +1171,11 @@ func dispatchManaged(ctx context.Context, args []string, in io.Reader, out, stde
 	}
 	s, err := managedStore()
 	if err != nil {
-		return true, err
+		return true, managedDispatchStateError(out, err, s.Root, args, handle)
 	}
 	task, err := s.Load(handle)
 	if err != nil {
-		return true, err
+		return true, managedDispatchStateError(out, err, s.Root, args, handle)
 	}
 	// The explicit local override also applies to tasks created before the
 	// development build was installed. Prepare saves the selection under its lock.

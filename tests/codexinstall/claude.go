@@ -188,6 +188,14 @@ func readClaudeTurn(reader io.Reader, record func(string, string)) (codexTurn, e
 					record("Claude", block.Text)
 				}
 			case "tool_use":
+				if block.Name == "Bash" {
+					var input struct {
+						Command string `json:"command"`
+					}
+					if json.Unmarshal(block.Input, &input) == nil {
+						turn.Commands = append(turn.Commands, input.Command)
+					}
+				}
 				record("Command", block.Name+" "+string(block.Input))
 			case "tool_result":
 				text := claudeContentText(block.Content)

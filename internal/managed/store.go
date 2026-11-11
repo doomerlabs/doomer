@@ -132,5 +132,8 @@ func (s Store) Init() error {
 	if !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("managed state must be a private directory")
 	}
+	if st.Mode()&(os.ModePerm|os.ModeSetuid|os.ModeSetgid|os.ModeSticky) == 0700 {
+		return nil
+	}
 	return os.Chmod(s.Root, 0700)
 }

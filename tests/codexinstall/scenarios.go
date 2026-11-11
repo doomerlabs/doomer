@@ -15,7 +15,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/watch"
 )
 
-var scenarioNames = []string{"unconfigured-repo", "browser-onboarding", "install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "personal-discovery", "global-npx-discovery", "repository-discovery", "upgrade-untracked", "upgrade-personal", "upgrade-personal-npx", "upgrade-repo-over-personal-npx", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-command-permissions", "upgrade-authorized-session", "policy-recovery", "policy-installed", "policy-declined", "hooks-upgrade", "hooks-declined", "hooks-trust", "policy-denied"}
+var scenarioNames = []string{"unconfigured-repo", "browser-onboarding", "install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "personal-discovery", "global-npx-discovery", "repository-discovery", "upgrade-untracked", "upgrade-personal", "upgrade-personal-npx", "upgrade-repo-over-personal-npx", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-preflight-denied", "review-command-permissions", "upgrade-authorized-session", "policy-recovery", "policy-installed", "policy-declined", "hooks-upgrade", "hooks-declined", "hooks-trust", "policy-denied"}
 
 func validScenario(name string) bool {
 	if name == "ordinary-upgrade" || name == "policy-activation" {
@@ -47,6 +47,9 @@ func runAgent(ctx context.Context, c config, repo string, env []string, prompt, 
 	}
 	record("Scripted user", prompt)
 	args := codexExecArgs(c)
+	if c.Scenario == "review-preflight-denied" {
+		args = append(args, "-c", `approval_policy="never"`)
+	}
 	if c.ReviewApprovals {
 		record("Reviewer configuration", strings.Join(args, " "))
 	}
@@ -121,6 +124,17 @@ func (j *journey) coding(repo, prompt string) error {
 	}
 	return fmt.Errorf("coding task did not reach a completed review")
 }
+
+func (j *journey) verifyPythonProgram(path, expected string) error {
+	program := exec.CommandContext(j.ctx, "python3", path)
+	program.Dir, program.Env = filepath.Dir(path), j.env
+	output, err := program.Output()
+	if err != nil || string(output) != expected {
+		return fmt.Errorf("program %s returned %q: %v", path, output, err)
+	}
+	return nil
+}
+
 func savedTasks(home string) ([]managed.Task, error) {
 	files, err := filepath.Glob(filepath.Join(home, ".config/doomer/managed/tasks/*.json"))
 	if err != nil {
@@ -205,7 +219,7 @@ func (j *journey) afterInstall() error {
 		return j.policyRecovery()
 	case "review-command-permissions":
 		return j.reviewCommandPermissions()
-	case "review-preflight":
+	case "review-preflight", "review-preflight-denied":
 		return j.reviewPreflight()
 	case "install", "interrupted":
 		return nil
@@ -232,24 +246,28 @@ func (j *journey) afterInstall() error {
 		j.f.Findings = j.c.Scenario == "first-review" || j.c.Scenario == "new-chat"
 		j.f.Deep = j.c.Scenario == "deep-review"
 		j.f.mu.Unlock()
-		prompt := "Create hello.txt containing hello followed by a newline."
+		prompt := "Create a Python source file hello.txt that prints hello followed by a newline."
 		if j.c.Scenario == "hooks-off" {
 			prompt += " Do not install hooks for this task; complete the review through explicit Doomer commands."
 		}
 		if personalScenario(j.c.Scenario) {
-			prompt = "Create hello.txt containing hello followed by a newline. Use the installed Doomer skill and complete the task."
+			prompt = "Create a Python source file hello.txt that prints hello followed by a newline. Use the installed Doomer skill and complete the task."
 		}
 		if err := j.coding(j.repo, prompt); err != nil {
 			return err
 		}
-		content, readErr := os.ReadFile(filepath.Join(j.repo, "hello.txt"))
-		if readErr != nil || string(content) != "hello\n" {
-			return fmt.Errorf("greeting content mismatch")
+		if err := j.verifyPythonProgram(filepath.Join(j.repo, "hello.txt"), "hello\n"); err != nil {
+			return err
 		}
+		j.result.Checks["greeting_program_runs"] = true
 		if j.c.Scenario == "new-chat" {
-			if err := j.coding(j.repo, "Create second.txt containing second followed by a newline."); err != nil {
+			if err := j.coding(j.repo, "Create a Python source file second.txt that prints second followed by a newline."); err != nil {
 				return err
 			}
+			if err := j.verifyPythonProgram(filepath.Join(j.repo, "second.txt"), "second\n"); err != nil {
+				return err
+			}
+			j.result.Checks["second_program_runs"] = true
 		}
 		return j.finish()
 	case "worktrees":
@@ -272,7 +290,7 @@ func (j *journey) afterInstall() error {
 			wg.Add(1)
 			go func(i int, root string) {
 				defer wg.Done()
-				errors <- j.coding(root, fmt.Sprintf("Create task-%d.txt containing worktree %d followed by a newline. Follow the repository's installed instructions and complete the task.", i, i))
+				errors <- j.coding(root, fmt.Sprintf("Create a Python source file task-%d.txt that prints worktree %d followed by a newline. Follow the repository's installed instructions and complete the task.", i, i))
 			}(i, root)
 		}
 		wg.Wait()
@@ -283,11 +301,11 @@ func (j *journey) afterInstall() error {
 			}
 		}
 		for i, root := range roots {
-			raw, err := os.ReadFile(filepath.Join(root, fmt.Sprintf("task-%d.txt", i)))
-			if err != nil || string(raw) != fmt.Sprintf("worktree %d\n", i) {
-				return fmt.Errorf("worktree content mismatch")
+			if err := j.verifyPythonProgram(filepath.Join(root, fmt.Sprintf("task-%d.txt", i)), fmt.Sprintf("worktree %d\n", i)); err != nil {
+				return err
 			}
 		}
+		j.result.Checks["worktree_programs_run"] = true
 		j.f.mu.Lock()
 		groups := map[string]bool{}
 		matched := map[string]bool{}
@@ -304,6 +322,10 @@ func (j *journey) afterInstall() error {
 		j.f.mu.Unlock()
 		return j.finish()
 	case "repeat-onboarding", "read-only":
+		prior, err := savedTasks(j.home)
+		if err != nil {
+			return err
+		}
 		if err := j.git(j.repo, "add", "."); err != nil {
 			return err
 		}
@@ -313,6 +335,7 @@ func (j *journey) afterInstall() error {
 		prompt := "Set up Doomer in this repository again. Reuse existing setup and permissions. Do not change code."
 		if j.c.Scenario == "read-only" {
 			prompt = "Tell me the current branch and whether the working tree is clean. Do not edit files or start coding."
+			j.c.ReviewApprovals = j.c.Harness != "claude"
 		}
 		j.result.Turns++
 		turn, err := runAgent(j.ctx, j.c, j.repo, j.env, prompt, "", j.record)
@@ -328,6 +351,20 @@ func (j *journey) afterInstall() error {
 		tasks, err := savedTasks(j.home)
 		if err != nil {
 			return err
+		}
+		if j.c.Scenario == "read-only" {
+			j.result.Checks["no_read_only_task_created"] = len(tasks) == len(prior)
+			j.result.Checks["no_read_only_hook_offer"] = !turn.HooksOffered
+			j.result.Checks["no_read_only_prepare_attempt"] = true
+			j.result.Checks["no_read_only_preflight_attempt"] = true
+			for _, command := range turn.Commands {
+				if strings.Contains(command, "doomer") && strings.Contains(command, "prepare") {
+					j.result.Checks["no_read_only_prepare_attempt"] = false
+				}
+				if invokesDoomerPreflight(command) {
+					j.result.Checks["no_read_only_preflight_attempt"] = false
+				}
+			}
 		}
 		j.result.Checks["no_read_only_failure"] = true
 		for _, task := range tasks {
@@ -346,7 +383,7 @@ func (j *journey) afterInstall() error {
 		j.f.FailSubmit = true
 		j.f.mu.Unlock()
 		j.result.Turns++
-		_, err := runAgent(j.ctx, j.c, j.repo, j.env, "Create hello.txt containing hello followed by a newline.", "", j.record)
+		_, err := runAgent(j.ctx, j.c, j.repo, j.env, "Create a Python source file hello.txt that prints hello followed by a newline.", "", j.record)
 		if err != nil {
 			return err
 		}
