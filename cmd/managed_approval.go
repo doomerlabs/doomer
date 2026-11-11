@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -26,6 +27,7 @@ type pendingManagedApproval struct {
 	Verifier      string                            `json:"verifier"`
 	URL           string                            `json:"url"`
 	InstallPolicy bool                              `json:"install_policy,omitempty"`
+	BrowserOpened bool                              `json:"browser_opened,omitempty"`
 	Expires       time.Time                         `json:"expires"`
 }
 
@@ -142,6 +144,17 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 	if err != nil {
 		return managed.NetworkError("repository_approval", err)
 	}
+	if result.State == "pending" && t.Agent == "claude" && !pending.BrowserOpened && defaultSetupBrowser() {
+		launch, cancel := context.WithTimeout(c.Context(), 10*time.Second)
+		opened := openSetupBrowser(launch, pending.URL) == nil
+		cancel()
+		if opened {
+			pending.BrowserOpened = true
+			if err := watch.Write(file, pending); err != nil {
+				return err
+			}
+		}
+	}
 	if c.Flags().Lookup("wait") != nil {
 		duration, err := c.Flags().GetDuration("wait")
 		if err != nil {
@@ -173,16 +186,8 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 	r.Authenticated = identityErr == nil
 	switch result.State {
 	case "pending":
-		r.State, r.URL = "approval_required", pending.URL
-		scope := "this repository and its linked worktrees"
-		if pending.Input.AllRepositories {
-			scope = "all current and future repositories used by this coding agent with the displayed Doomer account, service, and profile"
-		}
-		r.Action = "Show the complete approval URL, including #request, and say: Allow Doomer to review " + scope + ". It sends repository snapshots, task context and review responses to " + displayManagedService(t.API) + "."
-		if pending.InstallPolicy {
-			r.Action += " Choosing Allow also remembers this same permission in Codex by installing its scoped reviewer policy, preserving unrelated settings. Hook installation and trust are separate."
-		}
-		r.Action += " Keep this chat waiting with wait_command while the user chooses on the page; after Allow, the CLI completes setup automatically."
+		r.State = "approval_required"
+		pendingApprovalMessage(&r, pending, *t)
 
 	case "cancelled":
 		r.State, r.Action = "approval_declined", "Repository approval was cancelled. Doomer uploads remain disabled."
@@ -259,6 +264,22 @@ func managedApproval(c *cobra.Command, app *application.App, s managed.Store, t 
 		return err
 	}
 	return outputManaged(c, s, *t, r)
+}
+
+func pendingApprovalMessage(r *managedResult, pending pendingManagedApproval, task managed.Task) {
+	r.URL = pending.URL
+	r.BrowserOpened = pending.BrowserOpened
+	scope := "this repository and its linked worktrees"
+	if pending.Input.AllRepositories {
+		scope = "all current and future repositories used by this coding agent with the displayed Doomer account, service, and profile"
+	}
+	r.Action = "Show the complete approval URL, including #request, and say: Allow Doomer to review " + scope + ". It sends repository snapshots, task context and review responses to " + displayManagedService(task.API) + "."
+	r.DisplayMarkdown = "Doomer needs your approval. Open this link and choose Allow or Cancel:\n\n[" + r.URL + "](" + r.URL + ")\n\nAllow lets Doomer review " + scope + ". It sends repository snapshots, task context and review responses to " + displayManagedService(task.API) + "."
+	if pending.InstallPolicy {
+		r.Action += " Choosing Allow also remembers this same permission in Codex by installing its scoped reviewer policy, preserving unrelated settings. Hook installation and trust are separate."
+		r.DisplayMarkdown += " Choosing Allow also remembers this permission in Codex through its scoped reviewer policy. Hook installation and trust are separate."
+	}
+	r.Action += " Keep this chat waiting with wait_command while the user chooses on the page; after Allow, the CLI completes setup automatically."
 }
 
 func managedApprovalRepositories(s managed.Store, t managed.Task) ([]adversarylabs.ManagedSetupRepository, error) {
