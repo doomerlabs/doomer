@@ -1,0 +1,16 @@
+.depot/workflows/agent-e2e.yml
+  h_aa44c3b5b60dec 38,41,291
+tests/codexinstall/workflow_test.go
+  h_aa44c3b5b60dec 1-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a5e5f77de867626e3b19e8f2e50706250d5857e8",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
