@@ -1,0 +1,33 @@
+cmd/managed.go
+  s_e13d3d361e95b5::t_4dccb069f52224 339-353,1172,1176
+cmd/managed_feedback.go
+  s_e13d3d361e95b5::t_663b879039afb2 14-21
+cmd/managed_hook_scope_test.go
+  s_e13d3d361e95b5::t_2844727eb7a448 8,52-53,67-72
+cmd/managed_state_access.go
+  s_e13d3d361e95b5::t_081438ae036398 1-205
+internal/managed/instructions.go
+  s_e13d3d361e95b5::t_2417a04e7a4734 21-23
+internal/managed/permission-prompt-rules-legacy.md
+  s_e13d3d361e95b5::t_76a33672504988 1-36
+internal/managed/policy.go
+  s_e13d3d361e95b5::t_d66e231361bc42 174
+tests/codexinstall/preflight.go
+  s_e13d3d361e95b5::t_83bf877eda9110 4,7,23-46,56-59,61,63-66,68,94-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c3e9cb84d2e3d9559c90d979f8d489fe6566d629",
+  "prompts": {},
+  "sessions": {
+    "s_e13d3d361e95b5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c82d-1b6f-7763-9c02-3457da768e3d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
