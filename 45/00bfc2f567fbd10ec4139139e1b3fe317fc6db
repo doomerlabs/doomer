@@ -1,0 +1,24 @@
+.agents/skills/agent-e2e/SKILL.md
+  h_aa44c3b5b60dec 70-71
+AGENTS.md
+  h_aa44c3b5b60dec 60-62
+docs/agent-e2e-cache.md
+  h_aa44c3b5b60dec 106-109,140,176-177,186
+tests/codexinstall/cache.go
+  h_aa44c3b5b60dec 180-181
+tests/codexinstall/cache_inputs.go
+  h_aa44c3b5b60dec 184-186
+tests/codexinstall/cache_test.go
+  h_aa44c3b5b60dec 134-135,149-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4500bfc2f567fbd10ec4139139e1b3fe317fc6db",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
