@@ -13,6 +13,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  selector-shadow:
+    name: model selection experiment
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    environment: agent-e2e
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Predict affected tests
+        env:
+          E2E_CONCENTRATE_API_KEY: ${{ secrets.E2E_CONCENTRATE_API_KEY }}
+          SELECTOR_BASE: ${{ github.event.pull_request.base.sha }}
+          SELECTOR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 scripts/agent-e2e-selector.py predict \
+            --base "$SELECTOR_BASE" --head "$SELECTOR_HEAD" --output "$RUNNER_TEMP/e2e-selection"
+      - name: Retain selection evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agent-e2e-selection-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/e2e-selection
+          retention-days: 14
+
   plan:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
@@ -248,3 +274,31 @@ jobs:
           retention-days: 14
           overwrite: true
           if-no-files-found: error
+
+  selector-comparison:
+    name: compare model selection with full results
+    needs: [selector-shadow, report]
+    if: always() && needs.selector-shadow.result == 'success' && !cancelled()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: agent-e2e-selection-${{ github.run_attempt }}
+          path: e2e-selection
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: agent-e2e-all-recordings
+          path: e2e-results
+      - name: Compare recommendation and observed failures
+        run: |
+          python3 scripts/agent-e2e-selector.py compare \
+            --prediction e2e-selection/prediction.json --results e2e-results --output e2e-selection
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agent-e2e-selection-comparison-${{ github.run_attempt }}
+          path: e2e-selection
+          retention-days: 14

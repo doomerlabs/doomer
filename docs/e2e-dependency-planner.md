@@ -71,3 +71,42 @@ Further narrowing of product CLI paths requires a justified bound on which
 commands an agent might choose. An observed successful command trace alone is
 not that bound. Until one exists, all CLI code remains a dependency and the
 full source inventory remains useful for provenance.
+
+## Model selection experiment
+
+The `model selection experiment` CI job asks `typesafe/jev` through Concentrate
+for the probability that each test's assertions could be affected by the PR
+diff. Its input includes the current scenario implementations and changed
+source. The default threshold is 0.5 and can be set with `--threshold`. Every
+probability, the threshold, and the resolved model version are recorded. New
+scenarios are always included. Changes to `main.go`, `cmd/root.go`, module files
+or the extra dependency manifest require the full catalog. Missing credentials,
+unsupported inputs and invalid responses produce a full-catalog recommendation.
+
+All lifecycle scenarios run through their existing workflow. After completion,
+`compare model selection with full results` records failures outside the
+recommendation and missing results. Those failures need investigation for
+product regressions, provider errors and flakes before estimating selection
+quality. Passing runs alone provide limited evidence about missed regressions.
+
+The Concentrate secret is scoped to this repository, the `agent-e2e` environment
+and `agent-e2e.yml`. Requests contain repository source and diffs. The client
+uses the long-context header for the captured source context. Artifacts retain
+recommendations, probabilities, input hashes and usage metadata. The threshold
+is experimental and needs validation against observed failures.
+
+Run the predictor locally from a checkout with both revisions available:
+
+```sh
+doppler run --project doomer --config test -- \
+  python3 scripts/agent-e2e-selector.py predict \
+  --base origin/main --head HEAD --output /tmp/e2e-selection
+```
+
+Compare with the combined CI artifact layout:
+
+```sh
+python3 scripts/agent-e2e-selector.py compare \
+  --prediction /tmp/e2e-selection/prediction.json \
+  --results /path/to/e2e-artifacts --output /tmp/e2e-selection
+```
