@@ -160,10 +160,10 @@ func (j *journey) hookTrustRecovery() error {
 	return nil
 }
 
-var hookDisabledWord = regexp.MustCompile(`\b(disable|disabled|off|enable)\b`)
+var hookDisabledWord = regexp.MustCompile(`\b(disable|disabled|disabling|off|enable|enabling)\b|\b(not|never|isn't|aren't)(\s+\w+){0,3}\s+enabled\b`)
 
 func claudeDisabledHookReminder(message string) bool {
-	message = strings.ToLower(message)
+	message = strings.ReplaceAll(strings.ToLower(message), "’", "'")
 	// Line wrapping does not change a reminder, but a status from a different
 	// sentence (for example, updates being off) must not qualify hooks.
 	for _, sentence := range strings.FieldsFunc(message, func(r rune) bool {
