@@ -114,7 +114,7 @@ func (j *journey) skillDiscovery() error {
 	record := j.record
 	j.record = func(kind, text string) {
 		record(kind, text)
-		if kind == "Command" && ((strings.Contains(text, "# Doomer review") && strings.Contains(text, "At task start")) || (strings.HasPrefix(text, "Skill ") && strings.Contains(text, "doomer-review"))) {
+		if loadedDoomerSkill(kind, text) {
 			loaded = true
 		}
 	}
@@ -135,4 +135,9 @@ func (j *journey) skillDiscovery() error {
 	j.result.Checks["skill_loaded_without_reminder"] = true
 	j.result.Checks["ordinary_source_task_reviewed"] = true
 	return j.finish()
+}
+
+// Identify the skill by its metadata and heading, not changeable instruction prose.
+func loadedDoomerSkill(kind, text string) bool {
+	return kind == "Command" && ((strings.Contains(text, "# Doomer review") && strings.Contains(text, "name: doomer-review")) || (strings.HasPrefix(text, "Skill ") && strings.Contains(text, "doomer-review")))
 }
