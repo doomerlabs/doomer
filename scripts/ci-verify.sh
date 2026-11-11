@@ -67,6 +67,7 @@ quality() {
   go vet ./...
   log "E2E cache planning and reporting tests"
   python3 scripts/test-agent-e2e-cache-plan.py
+  python3 scripts/test-agent-e2e-selector.py
   log "CI and release workflow contract"
   go run ./scripts/verify-ci-contract.go
 }
