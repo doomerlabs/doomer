@@ -1,0 +1,34 @@
+cmd/managed.go
+  h_aa44c3b5b60dec 32,276
+cmd/managed_approval.go
+  h_aa44c3b5b60dec 176-185
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 30-31,33-34
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 173-174,181,197
+tests/codexinstall/claude.go
+  h_aa44c3b5b60dec 83-87
+tests/codexinstall/claude_proxy.go
+  h_aa44c3b5b60dec 15,90,155
+tests/codexinstall/claude_test.go
+  h_aa44c3b5b60dec 33,50,66,74,89,98,105,124,151,175
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 131,137-139,231,260
+tests/codexinstall/runner_test.go
+  h_aa44c3b5b60dec 402
+tests/codexinstall/tui.go
+  h_aa44c3b5b60dec 91
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 488
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "36b685a78f868f9d14299794e64874ccf31d9a74",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
