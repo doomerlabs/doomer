@@ -160,7 +160,8 @@ func (j *journey) hookTrustRecovery() error {
 	return nil
 }
 
-var hookDisabledWord = regexp.MustCompile(`\b(disable|disabled|disabling|off|enable|enabling)\b|\b(not|never|isn't|aren't)(\s+\w+){0,3}\s+enabled\b`)
+var hookDisabledWord = regexp.MustCompile(`\b(disable|disabled|disabling|off|enable|enabling)\b`)
+var hooksNotEnabled = regexp.MustCompile(`\bhooks?\b(?:\s+(?:are|is|remain|remains|were|was|have|has|been|still|currently|yet))*\s+(?:not|never|isn't|aren't)(?:\s+(?:yet|currently|been))*\s+enabled\b`)
 
 func claudeDisabledHookReminder(message string) bool {
 	message = strings.ReplaceAll(strings.ToLower(message), "’", "'")
@@ -169,7 +170,7 @@ func claudeDisabledHookReminder(message string) bool {
 	for _, sentence := range strings.FieldsFunc(message, func(r rune) bool {
 		return r == '.' || r == '!' || r == '?'
 	}) {
-		if strings.Contains(sentence, "hook") && hookDisabledWord.MatchString(sentence) {
+		if (strings.Contains(sentence, "hook") && hookDisabledWord.MatchString(sentence)) || hooksNotEnabled.MatchString(sentence) {
 			return true
 		}
 	}

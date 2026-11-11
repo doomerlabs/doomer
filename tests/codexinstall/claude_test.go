@@ -69,6 +69,8 @@ func TestClaudeDisabledHookReminderWording(t *testing.T) {
 		"Updates are off. Hooks are installed.",
 		"Updates are off.\nHooks are installed.",
 		"Hooks are enabled.",
+		"Auto-updates are not enabled, but hooks are installed.",
+		"Hooks are installed, but auto-updates are not enabled.",
 	} {
 		if claudeDisabledHookReminder(message) {
 			t.Errorf("accepted unrelated message: %s", message)
