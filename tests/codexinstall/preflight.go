@@ -74,9 +74,10 @@ func (j *journey) reviewPreflight() error {
 	j.result.Checks["local_preflight_reuses_agent_consent"] = false
 	j.mu.Lock()
 	for _, event := range j.result.Events[eventStart:] {
-		if event.Kind == "Command" && strings.Contains(event.Text, `"local_only":true`) && strings.Contains(event.Text, `"account_verified":false`) {
+		localOnly, reused := preflightEvidence(event.Text)
+		if event.Kind == "Command" && localOnly {
 			j.result.Checks["local_preflight_observed"] = true
-			j.result.Checks["local_preflight_reuses_agent_consent"] = strings.Contains(event.Text, `"state":"saved_consent_found"`)
+			j.result.Checks["local_preflight_reuses_agent_consent"] = j.result.Checks["local_preflight_reuses_agent_consent"] || reused
 		}
 	}
 	j.mu.Unlock()
@@ -121,4 +122,23 @@ func (j *journey) reviewPreflight() error {
 	}
 	// The user explicitly prohibited content submission for this smoke test.
 	return nil
+}
+
+// Tool transcripts can prefix the JSON with the command or format its whitespace.
+func preflightEvidence(text string) (localOnly, reused bool) {
+	for start := 0; start < len(text); start++ {
+		if text[start] != '{' {
+			continue
+		}
+		var result struct {
+			LocalOnly       bool   `json:"local_only"`
+			AccountVerified *bool  `json:"account_verified"`
+			State           string `json:"state"`
+		}
+		if json.NewDecoder(strings.NewReader(text[start:])).Decode(&result) == nil && result.LocalOnly && result.AccountVerified != nil && !*result.AccountVerified {
+			localOnly = true
+			reused = reused || result.State == "saved_consent_found"
+		}
+	}
+	return
 }

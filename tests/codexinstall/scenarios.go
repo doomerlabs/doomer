@@ -346,7 +346,7 @@ func (j *journey) afterInstall() error {
 				if strings.Contains(command, "doomer") && strings.Contains(command, "prepare") {
 					j.result.Checks["no_read_only_prepare_attempt"] = false
 				}
-				if strings.Contains(command, "doomer") && strings.Contains(command, "preflight") {
+				if invokesDoomerPreflight(command) {
 					j.result.Checks["no_read_only_preflight_attempt"] = false
 				}
 			}
