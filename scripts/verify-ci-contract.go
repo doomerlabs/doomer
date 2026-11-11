@@ -454,6 +454,20 @@ func validateRelease(workflow *yaml.Node) {
 
 func validateAgentRecordings(workflow *yaml.Node) {
 	plan := requiredValue(workflow, "jobs", "plan")
+	selection := findStep(plan, "Select lifecycle scenarios")
+	if !nodeContains(selection, "--pr-event") || !nodeContains(selection, "GITHUB_EVENT_PATH") {
+		fail("E2E selection must read the PR author's description from the event file")
+	}
+	if !nodeContains(requiredValue(workflow, "on", "pull_request", "types"), "edited") {
+		fail("Editing a PR description must refresh its E2E selection")
+	}
+	lifecycle := requiredValue(workflow, "jobs", "lifecycle")
+	if !nodeContains(requiredValue(findStep(lifecycle, "Run lifecycle scenario"), "if"), "needs.plan.outputs.selected") {
+		fail("E2E lifecycle execution must honor the selected tests")
+	}
+	if findStep(lifecycle, "Record unselected scenario") == nil {
+		fail("E2E checks must explain unselected scenarios")
+	}
 	if scalar(requiredValue(plan, "outputs", "cache_artifact_name")) != "${{ steps.scenarios.outputs.cache_artifact_name }}" {
 		fail("E2E plan must expose the current attempt's unique verified artifact name")
 	}
@@ -464,6 +478,9 @@ func validateAgentRecordings(workflow *yaml.Node) {
 		fail("E2E upload must use the current plan's unique artifact name")
 	}
 	report := requiredValue(workflow, "jobs", "report")
+	if scalar(requiredValue(report, "env", "E2E_SELECTED_TESTS")) != "${{ needs.plan.outputs.selected }}" {
+		fail("E2E gallery must distinguish selected and unselected tests")
+	}
 	restore := findStep(report, "Restore verified cached recordings")
 	if scalar(requiredValue(restore, "with", "name")) != "${{ needs.plan.outputs.cache_artifact_name }}" {
 		fail("E2E report must restore the exact current verified artifact into its root")

@@ -47,7 +47,8 @@ hooks, or the lifecycle runner, use `.agents/skills/agent-e2e/SKILL.md` to start
 relevant E2E early and report coverage for the final proposed source.
 
 Before opening or updating a PR, if Docker and Doppler project `doomer`, config
-`test`, are accessible, run the Linux E2E helper locally:
+`test`, are accessible, run the Linux E2E helper locally. It selects scenarios
+from the current working tree and runs them from a frozen snapshot:
 
 ```sh
 doppler run --project doomer --config test -- scripts/agent-e2e-local-linux.sh
@@ -61,7 +62,11 @@ cache accepts successes for six hours from their original execution. If results
 will be older than that when CI runs, repeat the helper before marking the PR
 ready when expecting cache reuse; a cache hit does not extend that window. The
 runner also reuses unaffected scenarios locally; report cache hits separately
-from newly executed tests. Native
+from newly executed tests. Supply the PR description with
+`E2E_PR_DESCRIPTION_FILE=/path/to/description.txt` to use its requested scope
+locally. An author can request the complete suite in that description using any
+natural language. Inspect the retained selection evidence before reporting
+coverage. Native
 macOS runs do not populate the Linux CI cache. Check access without printing
 secrets. If Docker or Doppler access is unavailable, report that CI must execute
 the missing scenarios; do not copy credentials into the repository.

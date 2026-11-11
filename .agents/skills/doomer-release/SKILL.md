@@ -50,6 +50,19 @@ Create an annotated tag at the verified **explicit commit SHA**, then push only
 that tag. Do not tag whichever commit happens to be checked out. Record the tag
 and commit in the release status.
 
+## Requesting complete E2E coverage
+
+PR validation normally runs the agent E2E scenarios selected for the changes.
+Request the complete suite in the PR description when broader lifecycle coverage
+is needed. The author can express that request naturally in any language or
+wording, such as asking CI to exercise every agent lifecycle scenario.
+
+For a release PR that needs complete E2E coverage, include that request in its
+description and verify the selection artifact shows the full catalog. Ordinary
+release preparation uses the successful checks for the exact release commit.
+The local Linux helper accepts the same description through
+`E2E_PR_DESCRIPTION_FILE`, so local validation can match the PR's requested scope.
+
 ## Follow publication through completion
 
 Monitor the tag's Depot `release.yml` run and its individual jobs. The expected
