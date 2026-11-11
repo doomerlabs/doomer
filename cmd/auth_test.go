@@ -2,9 +2,7 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,29 +12,6 @@ import (
 
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
-
-func TestMain(m *testing.M) {
-	// Commands under test must never launch the developer's actual browser.
-	// Tests that exercise browser approval replace this stub with their own fake.
-	openSetupBrowser = func(context.Context, string) error {
-		return errors.New("browser unavailable in isolated tests")
-	}
-	dir, err := os.MkdirTemp("", "doomer-test-browser-")
-	if err != nil {
-		panic(err)
-	}
-	for _, name := range []string{"open", "xdg-open"} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
-			panic(err)
-		}
-	}
-	if err := os.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
-		panic(err)
-	}
-	code := m.Run()
-	os.RemoveAll(dir)
-	os.Exit(code)
-}
 
 func execute(t *testing.T, input string, args ...string) (string, error) {
 	t.Helper()

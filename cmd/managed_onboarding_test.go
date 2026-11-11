@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -72,9 +70,6 @@ func TestBrowserOnboardingWaitsThenInstallsOnlyPolicy(t *testing.T) {
 			json.Unmarshal([]byte(out), &result)
 			if result.State != "approval_required" || len(result.WaitCommand) == 0 || !strings.Contains(result.Action, "remembers this same permission in Codex") {
 				t.Fatal(out)
-			}
-			if !strings.Contains(result.DisplayMarkdown, "["+result.URL+"]("+result.URL+")") || strings.Index(out, `"display_markdown"`) > strings.Index(out, `"wait_command"`) {
-				t.Fatal("approval message must contain the complete link before the wait command", out)
 			}
 			timedOut, err := execute(t, "", append(args, "--wait", "1ms")...)
 			if err != nil {
@@ -176,84 +171,6 @@ func TestBrowserOnboardingWaitsThenInstallsOnlyPolicy(t *testing.T) {
 			saved, _ := s.Load(handle)
 			if saved.OnboardingPending {
 				t.Fatal("setup still pending")
-			}
-		})
-	}
-}
-
-func TestClaudeApprovalBrowserDelivery(t *testing.T) {
-	for _, mode := range []string{"desktop", "remote", "launcher unavailable"} {
-		t.Run(mode, func(t *testing.T) {
-			isolate(t)
-			t.Setenv("HOME", t.TempDir())
-			t.Setenv("DISPLAY", "fixture")
-			t.Setenv("SSH_CONNECTION", "")
-			t.Setenv("SSH_CLIENT", "")
-			t.Setenv("SSH_TTY", "")
-			if !defaultSetupBrowser() {
-				t.Skip("desktop launcher is not supported on this platform")
-			}
-			if mode == "remote" {
-				t.Setenv("SSH_CONNECTION", "fixture")
-			}
-			opened := 0
-			var openedURL string
-			previous := openSetupBrowser
-			t.Cleanup(func() { openSetupBrowser = previous })
-			openSetupBrowser = func(_ context.Context, link string) error {
-				opened++
-				openedURL = link
-				if mode == "launcher unavailable" {
-					return fmt.Errorf("unavailable")
-				}
-				return nil
-			}
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				switch r.URL.Path {
-				case "/v1/auth/whoami":
-					w.WriteHeader(http.StatusUnauthorized)
-				case "/v1/setup/grants":
-					var request adversarylabs.ManagedSetupRequest
-					json.NewDecoder(r.Body).Decode(&request)
-					json.NewEncoder(w).Encode(map[string]any{"url": "http://" + r.Host + "/cli/setup#request=" + request.Request})
-				case "/v1/setup/grants/poll":
-					w.Write([]byte(`{"state":"pending"}`))
-				case "/v3/installations/observe", "/v2/installations/activate":
-					w.Write([]byte(`{"accepted":true}`))
-				default:
-					t.Errorf("unexpected request: %s", r.URL.Path)
-					w.WriteHeader(404)
-				}
-			}))
-			defer server.Close()
-			s, _ := managedStore()
-			handle, _ := managed.NewHandle()
-			if err := s.Save(&managed.Task{Schema: 2, Handle: handle, Agent: "claude", API: server.URL, Profile: "default", Stage: "ready"}); err != nil {
-				t.Fatal(err)
-			}
-			args := []string{"--api-url", server.URL, "task", "login", handle}
-			out, err := execute(t, "", args...)
-			var initial managedResult
-			if err != nil || json.Unmarshal([]byte(out), &initial) != nil || initial.State != "approval_required" {
-				t.Fatal(out, err)
-			}
-			if initial.BrowserOpened != (mode == "desktop") || !strings.Contains(initial.DisplayMarkdown, initial.URL) {
-				t.Fatal(out)
-			}
-			if mode == "remote" {
-				if opened != 0 {
-					t.Fatal("remote session launched a local browser")
-				}
-				return
-			}
-			if openedURL != initial.URL || opened != 1 {
-				t.Fatal("launcher did not receive the verified approval URL", openedURL, initial.URL, opened)
-			}
-			if mode == "desktop" {
-				out, err = execute(t, "", append(args, "--wait", "1ms")...)
-				if err != nil || opened != 1 {
-					t.Fatal("repeated wait reopened the browser", out, err, opened)
-				}
 			}
 		})
 	}

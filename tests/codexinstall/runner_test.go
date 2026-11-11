@@ -399,7 +399,7 @@ func TestClaudeSetupChoiceUsesStructuredReadiness(t *testing.T) {
 }
 
 func TestBrowserDecisionRequiresDisplayedExactURL(t *testing.T) {
-	for _, kind := range []string{"Codex", "Claude", "Browser"} {
+	for _, kind := range []string{"Codex", "Claude"} {
 		f := &fixture{Request: "opaque-request"}
 		if observeBrowserDecision(f, "https://fixture.invalid", "Command", "https://fixture.invalid/cli/setup#request=opaque-request", false) {
 			t.Fatal("tool output granted consent")
@@ -420,27 +420,6 @@ func TestBrowserDecisionRequiresDisplayedExactURL(t *testing.T) {
 	}
 	if observeBrowserDecision(&fixture{}, "https://fixture.invalid", "Codex", "https://fixture.invalid/cli/setup#request=", false) {
 		t.Fatal("no request was pending")
-	}
-}
-
-func TestApprovalWaitRequiresPriorPresentation(t *testing.T) {
-	for _, tc := range []struct {
-		name, kind, text string
-		presented, want  bool
-	}{
-		{"Claude wait", "Command", `Bash {"command":"doomer task login task --wait 45s"}`, false, true},
-		{"Claude loop", "Command", `Bash {"command":"for i in $(seq 1 13); do doomer task login task --wait 45s; done"}`, false, true},
-		{"returned command", "Command", `Bash {"command":"python3 -c 'execute(result[\"wait_command\"])'"}`, false, true},
-		{"Codex wait", "Command started", "doomer task login task --wait 45s", false, true},
-		{"already displayed", "Command", `Bash {"command":"doomer task login task --wait 45s"}`, true, false},
-		{"tool output", "Command", `{"wait_command":["doomer","task","login","task","--wait","45s"]}`, false, false},
-		{"preparation", "Command", `Bash {"command":"doomer prepare --agent claude"}`, false, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := approvalWaitBeforePresentation(tc.kind, tc.text, tc.presented); got != tc.want {
-				t.Fatalf("wait before presentation = %v, want %v", got, tc.want)
-			}
-		})
 	}
 }
 

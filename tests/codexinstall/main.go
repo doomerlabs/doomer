@@ -22,7 +22,6 @@ type config struct {
 	CodexAuthHome            string            `json:"codex_auth_home,omitempty"`
 	AgentVersion             string            `json:"agent_version,omitempty"`
 	ReviewApprovals          bool              `json:"review_approvals,omitempty"`
-	ClaudePermissionMode     string            `json:"claude_permission_mode,omitempty"`
 	Harness                  string            `json:"harness,omitempty"`
 	SkillsGuide              string            `json:"skills_guide,omitempty"`
 	SkillsInstaller          string            `json:"skills_installer,omitempty"`
@@ -78,7 +77,6 @@ type report struct {
 func main() {
 	authHome := flag.String("codex-auth-home", "", "reuse a local Codex sign-in inside disposable test homes")
 	harness := flag.String("harness", "codex", "agent harness: codex or claude")
-	claudeMode := flag.String("claude-permission-mode", "auto", "Claude permission mode: auto or bypassPermissions")
 	auth := flag.String("auth", "api", "authentication mode: api or subscription (local Codex sign-in or Claude)")
 	localClaude := flag.String("local-claude", "", "dedicated pinned Claude executable for an isolated local run")
 	npxSkillSource := flag.String("npx-skill-source", "doomerlabs/skills", "Git source for the actual global npx installer")
@@ -105,13 +103,6 @@ func main() {
 	budget := flag.Float64("budget", .20, "maximum reserved API spend for this run, USD")
 	output := flag.String("output", "codex-install-report.json", "sanitized JSON report")
 	flag.Parse()
-	if *harness == "claude" {
-		budgetSpecified := false
-		flag.Visit(func(f *flag.Flag) { budgetSpecified = budgetSpecified || f.Name == "budget" })
-		if !budgetSpecified {
-			*budget = 1
-		}
-	}
 	if *scenario == "list" {
 		fmt.Println(strings.Join(scenarioNames, "\n"))
 		return
@@ -122,10 +113,6 @@ func main() {
 	}
 	if *localClaude != "" && *harness != "claude" {
 		fmt.Fprintln(os.Stderr, "--local-claude requires --harness claude")
-		os.Exit(1)
-	}
-	if *claudeMode != "auto" && *claudeMode != "bypassPermissions" {
-		fmt.Fprintln(os.Stderr, "Claude permission mode must be auto or bypassPermissions")
 		os.Exit(1)
 	}
 	signalCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -141,16 +128,13 @@ func main() {
 		if settings["model"] == "" {
 			settings["model"] = "gpt-6.1-terra"
 			if *harness == "claude" {
-				settings["model"] = "claude-opus-5-5"
+				settings["model"] = "claude-haiku-5-5"
 			}
 			if *authHome != "" {
 				settings["model"] = "gpt-6.1-sol"
 			}
 		}
 		settings["reasoning"] = "low"
-		if *harness == "claude" {
-			settings["reasoning"] = claudeEffort
-		}
 		settings["bootstrap-source-selected"] = fmt.Sprint(*bootstrapSource != "")
 		settings["skills-source-selected"] = fmt.Sprint(*skillsSource != "")
 		settings["candidate-source-selected"] = fmt.Sprint(*candidateSource != "")
@@ -241,7 +225,7 @@ func main() {
 	expectedModel := "gpt-6.1-terra"
 	keyName := "TEST_OPENAI_API_KEY"
 	if *harness == "claude" {
-		expectedModel = "claude-opus-5-5"
+		expectedModel = "claude-haiku-5-5"
 		keyName = "TEST_ANTHROPIC_API_KEY"
 	}
 	if *authHome != "" {
@@ -270,7 +254,7 @@ func main() {
 		}
 		captured = &m
 	}
-	c := config{NpxSkillSource: *npxSkillSource, CodexAuthHome: *authHome, AgentVersion: *version, Harness: *harness, ClaudePermissionMode: *claudeMode, AuthMode: *auth, APIKey: os.Getenv(keyName), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate, CandidateSource: *candidateSource, InstallGuide: *guide}
+	c := config{NpxSkillSource: *npxSkillSource, CodexAuthHome: *authHome, AgentVersion: *version, Harness: *harness, AuthMode: *auth, APIKey: os.Getenv(keyName), Model: *model, Budget: *budget, Scenario: *scenario, CandidateVersion: *candidate, CandidateSource: *candidateSource, InstallGuide: *guide}
 	if captured != nil {
 		c.PinnedStable = captured.Stable
 	}
