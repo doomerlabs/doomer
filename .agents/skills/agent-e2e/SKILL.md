@@ -17,9 +17,9 @@ matches the final proposed contents and explain any missing coverage.
 
 Use dedicated pinned agent executables and a writable disposable-home parent
 outside `/tmp` and outside the agent package directory. Never use the developer's
-installed Doomer as the candidate. Use `--candidate-release VERSION` with the
-currently published version with `--candidate-source . --generated-bootstrap` to exercise this checkout's
-embedded bootstrap.
+installed Doomer as the candidate. Use `--candidate-source . --generated-bootstrap`
+to test this checkout and its embedded bootstrap. Set `--candidate-release VERSION`
+to the currently published version used to label the disposable candidate.
 For local tests, `--candidate-source PATH` selects a different CLI checkout.
 
 Example from the repository root, replacing the executable, home parent and
