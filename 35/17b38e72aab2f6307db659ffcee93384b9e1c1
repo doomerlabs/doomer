@@ -1,0 +1,23 @@
+cmd/managed.go
+  s_e13d3d361e95b5::t_34c0849e02d457 32-33,53,278
+internal/managed/instructions.md
+  s_e13d3d361e95b5::t_535e40e38f83e9 24-26,28-30,37-41
+tests/codexinstall/claude_test.go
+  s_e13d3d361e95b5::t_f742d080a2f65c 32-48,50,67,76-82,90,98,113,122,129,148,175,199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3517b38e72aab2f6307db659ffcee93384b9e1c1",
+  "prompts": {},
+  "sessions": {
+    "s_e13d3d361e95b5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c82d-1b6f-7763-9c02-3457da768e3d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
