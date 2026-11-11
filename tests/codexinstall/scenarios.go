@@ -389,7 +389,7 @@ func (j *journey) afterInstall() error {
 		j.f.FailSubmit = true
 		j.f.mu.Unlock()
 		j.result.Turns++
-		_, err := runAgent(j.ctx, j.c, j.repo, j.env, "Create hello.txt containing hello followed by a newline.", "", j.record)
+		_, err := runAgent(j.ctx, j.c, j.repo, j.env, "Create a Python source file hello.txt that prints hello followed by a newline.", "", j.record)
 		if err != nil {
 			return err
 		}

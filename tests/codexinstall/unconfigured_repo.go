@@ -48,7 +48,7 @@ func (j *journey) unconfiguredRepo() error {
 	j.f.mu.Unlock()
 	for i, repo := range []string{plain, linked} {
 		for _, event := range []string{"UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"} {
-			input, _ := json.Marshal(watch.HookInput{CWD: repo, Session: fmt.Sprintf("unconfigured-%d", i), Event: event, Prompt: "Create hello.txt containing hello followed by a newline."})
+			input, _ := json.Marshal(watch.HookInput{CWD: repo, Session: fmt.Sprintf("unconfigured-%d", i), Event: event, Prompt: "Create a Python source file hello.txt that prints hello followed by a newline."})
 			cmd := exec.CommandContext(j.ctx, filepath.Join(j.home, ".local/bin/doomer"), "agent-hook", "--agent", agentName(j.c), "--managed-task-adapter")
 			cmd.Dir = repo
 			cmd.Env = j.env
@@ -63,13 +63,12 @@ func (j *journey) unconfiguredRepo() error {
 			}
 		}
 		j.result.Turns++
-		turn, err := runAgent(j.ctx, j.c, repo, j.env, "Create hello.txt containing hello followed by a newline.", "", j.record)
+		turn, err := runAgent(j.ctx, j.c, repo, j.env, "Create a Python source file hello.txt that prints hello followed by a newline.", "", j.record)
 		if err != nil {
 			return err
 		}
-		content, err := os.ReadFile(filepath.Join(repo, "hello.txt"))
-		if err != nil || string(content) != "hello\n" {
-			return fmt.Errorf("ordinary coding task did not complete")
+		if err := j.verifyPythonProgram(filepath.Join(repo, "hello.txt"), "hello\n"); err != nil {
+			return fmt.Errorf("ordinary coding task did not complete: %w", err)
 		}
 		// Fixture paths contain "doomer"; a link to the created file is not a setup offer.
 		messages := strings.ReplaceAll(strings.Join(turn.Messages, " "), repo, "<repo>")
