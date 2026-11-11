@@ -169,25 +169,15 @@ Sources
 ## Claude Code
 
 Use `--harness claude` to run the same journeys with Claude Code 2.1.319 and
-`claude-opus-5-5` at its default medium effort. Claude turns use auto permission
-mode by default; `--claude-permission-mode bypassPermissions` selects an explicit
-comparison run. Scenarios testing native approvals always retain auto mode.
-The runner requires delivery of the complete approval link or opening the
-verified approval page before waiting in the same turn. Desktop browser launches
-are captured by a fixture; no real browser is opened. Remote or unavailable
-browser launchers retain the chat-link flow. Supply `TEST_ANTHROPIC_API_KEY`
-instead of the OpenAI key.
-The Anthropic metering proxy retains the real key, enforces a short
+`claude-haiku-5-5` at low effort. Supply `TEST_ANTHROPIC_API_KEY` instead of the
+OpenAI key. The Anthropic metering proxy retains the real key, enforces a short
 context and output cap, reserves each request before inference, and records
 cache-read and cache-write usage. Agent processes receive a dummy credential.
-Claude defaults to a $1 API cap per scenario. Opus accounting uses $4/M input,
-$0.20/M cache reads, $5/M five-minute cache writes, $8/M one-hour cache writes,
-and $20/M output. Subscription runs use the existing subscription allowance.
 
 ```sh
 doppler run --project doomer --config test -- \
   go run ./tests/codexinstall --harness claude --scenario first-review \
-  --budget 1 --output /tmp/claude-first-review.json
+  --budget 0.20 --output /tmp/claude-first-review.json
 ```
 
 For macOS use `--local-claude /path/to/dedicated/claude --local-root /path/to/test-homes`.
@@ -203,7 +193,7 @@ Sources
 - https://code.claude.com/docs/en/headless
 - https://code.claude.com/docs/en/cli-reference
 - https://code.claude.com/docs/en/hooks
-- https://platform.claude.com/docs/en/models/opus-5-5/overview
+- https://platform.claude.com/docs/en/models/haiku-5-5/overview
 
 Run all scenarios with a per-case cap and an aggregate cap. The default is
 serial (`--jobs 1`); opt into bounded concurrency with `--jobs 4`:

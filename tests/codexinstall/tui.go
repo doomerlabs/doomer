@@ -88,7 +88,7 @@ func (j *journey) tui() error {
 	j.f.mu.Unlock()
 	args := []string{"-c", terminalDriver, j.c.Codex, "--no-alt-screen", "--dangerously-bypass-approvals-and-sandbox", "-C", j.repo, prompt}
 	if j.c.Harness == "claude" {
-		args = []string{"-c", terminalDriver, j.c.Codex, "--permission-mode", claudePermissionMode(j.c), "--model", j.c.Model, "--effort", claudeEffort, "--append-system-prompt", "The active harness is Claude Code. Its Doomer agent identifier is claude."}
+		args = []string{"-c", terminalDriver, j.c.Codex, "--permission-mode", "bypassPermissions", "--model", j.c.Model, "--effort", "low", "--append-system-prompt", "The active harness is Claude Code. Its Doomer agent identifier is claude."}
 		if j.c.Scenario == "tui-hooks-denied" {
 			args = append(args, "--settings", `{"disableAllHooks":true}`)
 		}
