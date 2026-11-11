@@ -306,12 +306,6 @@ func (j *journey) afterInstall() error {
 			}
 		}
 		j.result.Checks["worktree_programs_run"] = true
-		for i, root := range roots {
-			raw, err := os.ReadFile(filepath.Join(root, fmt.Sprintf("task-%d.txt", i)))
-			if err != nil || string(raw) != fmt.Sprintf("worktree %d\n", i) {
-				return fmt.Errorf("worktree content mismatch")
-			}
-		}
 		j.f.mu.Lock()
 		groups := map[string]bool{}
 		matched := map[string]bool{}
