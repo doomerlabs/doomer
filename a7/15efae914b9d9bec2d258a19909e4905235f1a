@@ -1,0 +1,19 @@
+tests/codexinstall/scenarios.go
+  s_e13d3d361e95b5::t_b5d61b554ea17b 344,349-351
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a715efae914b9d9bec2d258a19909e4905235f1a",
+  "prompts": {},
+  "sessions": {
+    "s_e13d3d361e95b5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c82d-1b6f-7763-9c02-3457da768e3d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
