@@ -57,6 +57,7 @@ func TestClaudeDisabledHookReminderWording(t *testing.T) {
 		"The hooks are not yet enabled.",
 		"The hooks aren't currently enabled.",
 		"The hooks aren’t enabled.",
+		"Doomer's hooks are installed in `~/.claude/settings.json`, but your Claude Code settings currently turn them off.",
 	} {
 		if !claudeDisabledHookReminder(message) {
 			t.Errorf("missed hook reminder: %s", message)
