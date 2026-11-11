@@ -114,8 +114,7 @@ func (j *journey) hookTrustRecovery() error {
 			if err != nil {
 				return err
 			}
-			message := strings.ToLower(strings.Join(turn.Messages, " "))
-			j.result.Checks[fmt.Sprintf("claude_disabled_hook_reminder_%d", attempt)] = strings.Contains(message, "hook") && (strings.Contains(message, "disabled") || strings.Contains(message, "enable"))
+			j.result.Checks[fmt.Sprintf("claude_disabled_hook_reminder_%d", attempt)] = claudeDisabledHookReminder(strings.Join(turn.Messages, " "))
 			after, err := os.ReadFile(path)
 			if err != nil {
 				return err
@@ -158,4 +157,9 @@ func (j *journey) hookTrustRecovery() error {
 		}
 	}
 	return nil
+}
+
+func claudeDisabledHookReminder(message string) bool {
+	message = strings.ToLower(message)
+	return strings.Contains(message, "hook") && (strings.Contains(message, "disabled") || strings.Contains(message, "enable") || strings.Contains(message, "turned off") || strings.Contains(message, "switched off"))
 }

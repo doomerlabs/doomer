@@ -46,6 +46,23 @@ func TestClaudePermissionModes(t *testing.T) {
 	}
 }
 
+func TestClaudeDisabledHookReminderWording(t *testing.T) {
+	for _, message := range []string{
+		"Doomer hooks are disabled. Enable them in /hooks.",
+		"The hooks are installed, but your settings currently disable hooks. They are switched off.",
+		"Hooks: they're installed but turned off by Claude Code's own settings.",
+	} {
+		if !claudeDisabledHookReminder(message) {
+			t.Errorf("missed hook reminder: %s", message)
+		}
+	}
+	for _, message := range []string{"Doomer is ready.", "Automatic updates are turned off.", "The hooks are installed."} {
+		if claudeDisabledHookReminder(message) {
+			t.Errorf("accepted unrelated message: %s", message)
+		}
+	}
+}
+
 func TestClaudeMeterCountsCacheWritesAndPreservesBudget(t *testing.T) {
 	m := newMeter(config{Harness: "claude", APIKey: "private-key", Model: "claude-opus-5-5", Budget: .20})
 	m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {

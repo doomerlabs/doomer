@@ -423,6 +423,46 @@ func TestBrowserDecisionRequiresDisplayedExactURL(t *testing.T) {
 	}
 }
 
+func TestRevokedApprovalObservesBrowserWithoutAgentOutput(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "opened-browser-url")
+	f := &fixture{Request: "renewed-request"}
+	observed := make(chan string, 1)
+	stop := watchRevokedApproval(context.Background(), f, path, "https://fixture.invalid", func(kind, text string) {
+		observed <- kind
+	})
+	defer stop()
+	if err := os.WriteFile(path, []byte("https://fixture.invalid/cli/setup#request=renewed-request"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case kind := <-observed:
+		if kind != "Browser decision" {
+			t.Fatal(kind)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("opened approval page was not cancelled without agent output")
+	}
+	stop()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.Cancelled || f.Approved || f.Uploads != 0 {
+		t.Fatalf("revocation decision changed upload access: cancelled=%v approved=%v uploads=%d", f.Cancelled, f.Approved, f.Uploads)
+	}
+}
+
+func TestRevokedApprovalWatcherStopsWithoutBrowser(t *testing.T) {
+	stop := watchRevokedApproval(context.Background(), &fixture{}, filepath.Join(t.TempDir(), "missing"), "https://fixture.invalid", func(string, string) {
+		t.Error("unexpected browser decision")
+	})
+	done := make(chan struct{})
+	go func() { stop(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("browser watcher did not stop")
+	}
+}
+
 func TestApprovalWaitRequiresPriorPresentation(t *testing.T) {
 	for _, tc := range []struct {
 		name, kind, text string
