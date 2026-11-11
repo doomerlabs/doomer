@@ -18,7 +18,8 @@ matches the final proposed contents and explain any missing coverage.
 Use dedicated pinned agent executables and a writable disposable-home parent
 outside `/tmp` and outside the agent package directory. Never use the developer's
 installed Doomer as the candidate. Use `--candidate-release VERSION` with the
-currently published version and `--generated-bootstrap` to exercise this checkout's embedded bootstrap.
+currently published version with `--candidate-source . --generated-bootstrap` to exercise this checkout's
+embedded bootstrap.
 For local tests, `--candidate-source PATH` selects a different CLI checkout.
 
 Example from the repository root, replacing the executable, home parent and
@@ -30,7 +31,7 @@ doppler run --project doomer --config test -- \
   --suite-scenarios first-review,upgrade,policy-installed,tui \
   --local-codex /path/to/dedicated/codex \
   --local-root /path/to/disposable-homes \
-  --candidate-release VERSION --generated-bootstrap \
+  --candidate-release VERSION --candidate-source . --generated-bootstrap \
   --budget 0.50 --suite-budget 2 --output /tmp/e2e-review.json
 ```
 
