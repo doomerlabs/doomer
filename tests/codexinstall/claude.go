@@ -15,15 +15,7 @@ import (
 )
 
 const claudeVersion = "2.1.319"
-const claudeEffort = "medium"
 const codexEffort = "medium"
-
-func claudePermissionMode(c config) string {
-	if c.ReviewApprovals || c.ClaudePermissionMode == "" {
-		return "auto"
-	}
-	return c.ClaudePermissionMode
-}
 
 const claudeRemoteInstall = `set -eu
 mkdir -p /tmp/doomer-codex-e2e
@@ -88,12 +80,15 @@ func writeAgentConfig(c config, home, configuration string) error {
 }
 func runClaude(ctx context.Context, c config, repo string, env []string, prompt, session string, record func(string, string)) (codexTurn, error) {
 	record("Scripted user", prompt)
-	args := []string{"--print", "--verbose", "--output-format", "stream-json", "--permission-mode", claudePermissionMode(c), "--model", c.Model, "--effort", claudeEffort, "--max-turns", "60", "--append-system-prompt", "The active harness is Claude Code. Its Doomer agent identifier is claude."}
+	mode := "bypassPermissions"
+	if c.ReviewApprovals {
+		mode = "auto"
+	}
+	args := []string{"--print", "--verbose", "--output-format", "stream-json", "--permission-mode", mode, "--model", c.Model, "--effort", "low", "--max-turns", "60", "--append-system-prompt", "The active harness is Claude Code. Its Doomer agent identifier is claude."}
 	if session != "" {
 		args = append(args, "--resume", session)
 	}
 	cmd := exec.CommandContext(ctx, c.Codex, args...)
-	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
 	cmd.WaitDelay = 5 * time.Second
 	cmd.Dir = repo
 	cmd.Env = env

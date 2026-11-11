@@ -11,10 +11,8 @@ import (
 	"time"
 )
 
-// Opus 5.5 standard API rates per million tokens, including five-minute cache writes.
-// https://platform.claude.com/docs/en/about-claude/pricing
 func claudeTokenCost(input, cached, created, output int64) float64 {
-	return (float64(input-cached-created)*4 + float64(cached)*.20 + float64(created)*5 + float64(output)*20) / 1e6
+	return (float64(input-cached-created)*.10 + float64(cached)*.01 + float64(created)*.125 + float64(output)*.50) / 1e6
 }
 func (m *meter) claudeRequest(ctx context.Context, path string, body any, original *http.Request) (*http.Response, error) {
 	raw, err := json.Marshal(body)
@@ -89,7 +87,7 @@ func (m *meter) serveClaude(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "short-context limit exceeded", 413)
 		return
 	}
-	reserve := (float64(count.Input+1024)*8 + 4096*20) / 1e6
+	reserve := (float64(count.Input+1024)*.20 + 4096*.5) / 1e6
 	m.mu.Lock()
 	if m.usage.Reserved+reserve > m.limit {
 		m.usage.BudgetRejections++
@@ -154,7 +152,7 @@ func (m *meter) serveClaude(w http.ResponseWriter, r *http.Request) {
 				}
 				if event.Type == "message_stop" && !recorded && observed.Input+observed.Cached+observed.Created > 0 {
 					input := observed.Input + observed.Cached + observed.Created
-					cost := claudeTokenCost(input, observed.Cached, observed.Created, observed.Output) + float64(observed.Creation.Hour)*3/1e6
+					cost := claudeTokenCost(input, observed.Cached, observed.Created, observed.Output) + float64(observed.Creation.Hour)*.075/1e6
 					m.mu.Lock()
 					m.usage.Input += input
 					m.usage.Cached += observed.Cached

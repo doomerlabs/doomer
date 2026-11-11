@@ -29,8 +29,7 @@ import (
 )
 
 type managedResult struct {
-	DisplayMarkdown      string                         `json:"display_markdown,omitempty"`
-	BrowserOpened        bool                           `json:"browser_opened,omitempty"`
+	WaitCommand          []string                       `json:"wait_command,omitempty"`
 	PolicyResumeCommand  []string                       `json:"policy_resume_command,omitempty"`
 	LocalSetup           *preflightResult               `json:"local_setup,omitempty"`
 	AttentionRequired    bool                           `json:"attention_required,omitempty"`
@@ -50,7 +49,6 @@ type managedResult struct {
 	Task                 string                         `json:"task,omitempty"`
 	Release              string                         `json:"release,omitempty"`
 	Instructions         string                         `json:"instructions,omitempty"`
-	WaitCommand          []string                       `json:"wait_command,omitempty"`
 	ReviewInstructions   string                         `json:"review_instructions,omitempty"`
 	Review               *adversarylabs.WorkspaceReview `json:"review,omitempty"`
 	URL                  string                         `json:"url,omitempty"`
@@ -275,7 +273,7 @@ func outputManaged(c *cobra.Command, s managed.Store, t managed.Task, r managedR
 			return err
 		}
 		r.WaitCommand = []string{binary, "--api-url", t.API, "--profile", t.Profile, "task", "login", t.Handle, "--wait", "45s"}
-		r.Instructions = "If browser_opened is true, the CLI has opened the verified approval page on this desktop. Tell the user to complete that page and execute wait_command in this same turn. Otherwise send display_markdown as a visible chat message before executing wait_command. Keep this turn open while the user decides on the page. If approval is still pending, send display_markdown again before the next wait_command, for up to ten minutes. Execute each wait separately; never put waits in a shell loop. Do not ask for a separate chat answer, infer approval, or end the task while waiting. On approval the CLI saves and returns consent evidence without installing policy in the wait command. Execute the returned policy_resume_command to finish authorized setup without another user question. Hooks are a separate decision. On cancellation stop waiting; on timeout report onboarding pending without claiming completion."
+		r.Instructions = "Display the complete approval URL and action to the user, then immediately execute wait_command. Keep this turn open while the user decides on the page; repeat wait_command while approval_required, for up to ten minutes. Do not ask for a separate chat answer, infer approval, or end the task while waiting. On approval the CLI saves and returns consent evidence without installing policy in the wait command. Execute the returned policy_resume_command to finish authorized setup without another user question. Hooks are a separate decision. On cancellation stop waiting; on timeout report onboarding pending without claiming completion."
 	}
 	if t.Handle != "" {
 		if err := s.Observe(t, r.State); err != nil {
