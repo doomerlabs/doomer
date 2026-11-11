@@ -27,7 +27,7 @@ func BootstrapVersionForScope(scope string) string {
 // A linker override lets the disposable real-agent candidate (which is labelled
 // with the installed public release) advertise its actual injected compatibility.
 // Published release builds always use this source-defined default.
-var BootstrapCLIRange = ">=2026.11.10.1"
+var BootstrapCLIRange = ">=2026.11.10.3"
 
 //go:embed bootstrap-2026.11.10.2.md
 var versionTenTwoBootstrapTemplate string

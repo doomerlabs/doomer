@@ -359,3 +359,17 @@ func TestReleasedDiscoveryBootstrapsRemainUpgradable(t *testing.T) {
 		}
 	}
 }
+
+func TestRecoveryBootstrapRequiresSupportingCLI(t *testing.T) {
+	for _, tc := range []struct {
+		version   string
+		supported bool
+	}{
+		{"2026.11.10.2", false}, {"2026.11.10.3", true},
+	} {
+		supported, err := BootstrapSupports(BootstrapCLIRange, tc.version)
+		if err != nil || supported != tc.supported {
+			t.Fatalf("version %s: supported=%t err=%v", tc.version, supported, err)
+		}
+	}
+}
