@@ -1,0 +1,14 @@
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 352
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "36cd508902079d088ff913b3651d209e7bc74ed9",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
