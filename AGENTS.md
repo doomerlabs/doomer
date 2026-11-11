@@ -1,3 +1,20 @@
+## Pull request ownership and monitoring
+
+Doomer owns pull request merging in this repository. Never run `gh pr merge`,
+enable GitHub auto-merge, call a merge API, or otherwise merge a PR unless the
+user explicitly authorizes merging that specific PR. Authorization for one PR
+does not apply to another. A request to monitor a PR until it merges does not
+authorize merging it.
+
+Start monitoring immediately after opening a PR and continue until Doomer merges
+it. Fix all CI failures, address and resolve every Doomer review comment, and
+resolve merge conflicts. Inspect each finding and record a reason when dismissing
+it. Recheck after every push and leave no Doomer comment unresolved.
+
+`gh pr merge --auto` can merge immediately when no required check or rule blocks
+the merge. It does not guarantee that all CI or Doomer review has finished, so
+never use it as a monitoring or waiting command.
+
 # CLI releases
 
 For requests to prepare, publish, verify, or recover a CLI release, read and
