@@ -1,0 +1,16 @@
+go.mod
+  h_aa44c3b5b60dec 3
+tests/codexinstall/Dockerfile
+  h_aa44c3b5b60dec 12,15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "df904364c8ae007824ca32b6ee1a35719bede33c",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
