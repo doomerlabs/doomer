@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -159,7 +160,13 @@ func (j *journey) hookTrustRecovery() error {
 	return nil
 }
 
+var hookOffWord = regexp.MustCompile(`\boff\b`)
+
 func claudeDisabledHookReminder(message string) bool {
-	message = strings.ToLower(message)
-	return strings.Contains(message, "hook") && (strings.Contains(message, "disabled") || strings.Contains(message, "enable") || strings.Contains(message, "turned off") || strings.Contains(message, "switched off"))
+	for _, line := range strings.Split(strings.ToLower(message), "\n") {
+		if strings.Contains(line, "hook") && (strings.Contains(line, "disabled") || strings.Contains(line, "enable") || hookOffWord.MatchString(line)) {
+			return true
+		}
+	}
+	return false
 }

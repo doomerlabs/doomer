@@ -51,12 +51,13 @@ func TestClaudeDisabledHookReminderWording(t *testing.T) {
 		"Doomer hooks are disabled. Enable them in /hooks.",
 		"The hooks are installed, but your settings currently disable hooks. They are switched off.",
 		"Hooks: they're installed but turned off by Claude Code's own settings.",
+		"Doomer's hooks are installed, but your Claude settings turn them off.",
 	} {
 		if !claudeDisabledHookReminder(message) {
 			t.Errorf("missed hook reminder: %s", message)
 		}
 	}
-	for _, message := range []string{"Doomer is ready.", "Automatic updates are turned off.", "The hooks are installed."} {
+	for _, message := range []string{"Doomer is ready.", "Automatic updates are turned off.", "The hooks are installed.", "Updates are off.\nHooks are installed."} {
 		if claudeDisabledHookReminder(message) {
 			t.Errorf("accepted unrelated message: %s", message)
 		}
