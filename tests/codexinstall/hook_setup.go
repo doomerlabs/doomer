@@ -163,10 +163,6 @@ func (j *journey) hookTrustRecovery() error {
 var hookOffWord = regexp.MustCompile(`\boff\b`)
 
 func claudeDisabledHookReminder(message string) bool {
-	for _, line := range strings.Split(strings.ToLower(message), "\n") {
-		if strings.Contains(line, "hook") && (strings.Contains(line, "disabled") || strings.Contains(line, "enable") || hookOffWord.MatchString(line)) {
-			return true
-		}
-	}
-	return false
+	message = strings.ToLower(message)
+	return strings.Contains(message, "hook") && (strings.Contains(message, "disabled") || strings.Contains(message, "enable") || hookOffWord.MatchString(message))
 }
