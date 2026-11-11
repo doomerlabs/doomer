@@ -1,0 +1,20 @@
+tests/codexinstall/claude_test.go
+  h_aa44c3b5b60dec 49-65
+tests/codexinstall/hook_setup.go
+  h_aa44c3b5b60dec 117,161-165
+tests/codexinstall/recovery.go
+  h_aa44c3b5b60dec 6,55-58,66,79-104
+tests/codexinstall/runner_test.go
+  h_aa44c3b5b60dec 426-465
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a9e2e676f51ece514fb6f2d36a98ec66f1d764ce",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
