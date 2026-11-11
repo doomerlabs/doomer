@@ -203,7 +203,7 @@ To populate matching Linux results from the current local checkout:
 doppler run --project doomer --config test -- scripts/agent-e2e-local-linux.sh
 ```
 
-This builds an Ubuntu 24.04 / linux-amd64 container with Go 1.26.10, runs both
+This builds an Ubuntu 24.04 / linux-amd64 container with Go 1.26.11, runs both
 pinned harnesses and the historical regression with bounded concurrency, and
 publishes successful results. It uses the same execution script as CI, including
 a $0.50 per-case API reservation and subscription-only Claude authentication.
