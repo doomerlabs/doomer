@@ -131,8 +131,8 @@ func TestCacheRejectsTamperingMissingArtifactsAndWrongInputs(t *testing.T) {
 	if _, err := verifyCachedResult(raw, changed, "install", keys, time.Now()); err == nil {
 		t.Fatal("accepted wrong baseline")
 	}
-	if _, err := verifyCachedResult(raw, m, "install", keys, time.Now().Add(7*time.Hour)); err == nil {
-		t.Fatal("accepted expired success")
+	if _, err := verifyCachedResult(raw, m, "install", keys, time.Now().Add(-10*time.Minute)); err == nil {
+		t.Fatal("accepted future execution timing")
 	}
 	artifact := store.puts[0]
 	original := store.objects[artifact]
@@ -146,6 +146,24 @@ func TestCacheRejectsTamperingMissingArtifactsAndWrongInputs(t *testing.T) {
 		t.Fatal("accepted incomplete upload")
 	}
 }
+
+func TestCacheAcceptsOlderMatchingSuccess(t *testing.T) {
+	keys := testCacheKey(t)
+	m := testCacheMetadata()
+	store := &memoryCache{objects: map[string][]byte{}}
+	path := filepath.Join(t.TempDir(), "report.json")
+	writeCacheReport(t, path, true)
+	if err := publishCachedResult(context.Background(), store, m, "install", path, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	raw := store.objects[cacheResultKey(m, "install")]
+	for _, age := range []time.Duration{7 * time.Hour, 8 * 24 * time.Hour} {
+		if _, err := verifyCachedResult(raw, m, "install", keys, time.Now().Add(age)); err != nil {
+			t.Fatalf("rejected matching success after %s: %v", age, err)
+		}
+	}
+}
+
 func TestFailedAndInterruptedPublicationsDoNotCreateSuccess(t *testing.T) {
 	testCacheKey(t)
 	m := testCacheMetadata()

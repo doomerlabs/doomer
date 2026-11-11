@@ -57,10 +57,9 @@ doppler run --project doomer --config test -- scripts/agent-e2e-local-linux.sh
 Start this as soon as the changes stabilize, while review and PR preparation
 continue. Run it against the final proposed contents, investigate failures, and
 report the result before marking the PR ready. Successful Linux results populate
-the shared cache so CI can verify them instead of repeating agent calls. The
-cache accepts successes for six hours from their original execution. If results
-will be older than that when CI runs, repeat the helper before marking the PR
-ready when expecting cache reuse; a cache hit does not extend that window. The
+the shared cache so CI can verify them instead of repeating agent calls. Matching
+signed successes remain reusable while their result and artifacts are present.
+The bucket deletes cached objects after seven days. The
 runner also reuses unaffected scenarios locally; report cache hits separately
 from newly executed tests. Supply the PR description with
 `E2E_PR_DESCRIPTION_FILE=/path/to/description.txt` to use its requested scope

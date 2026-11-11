@@ -103,11 +103,10 @@ The selected candidate release remains the installation baseline even if a new
 stable release is published while jobs are queued.
 
 The signed managed catalog and relevant immutable release manifests also enter
-identity. The released CLI still fetches the live managed catalog, so reuse is
-limited to six hours from execution start. Publication re-fetches every captured
-HTTPS input and is skipped if any changed or cannot be verified. This is an
-explicit freshness policy for remaining external mutability, not a promise that
-all external services are immutable. Unsupported installer layouts disable reuse.
+identity. Publication re-fetches every captured HTTPS input and is skipped if
+any changed or cannot be verified. Matching signed results remain reusable while
+their result and artifacts are present. The bucket's seven-day lifecycle rule
+controls retention. Unsupported installer layouts disable reuse.
 
 `local` and `ci` execution classes remain explicit provenance. Linux results can
 be accepted across those two classes only with every other fingerprinted input
@@ -138,7 +137,7 @@ Object layout:
 - `v1/failures/FINGERPRINT/TIMESTAMP.json` — signed diagnostic failure.
 
 Artifacts upload before the result. Missing/truncated/tampered artifacts, unknown
-keys, malformed payloads and expired results are misses. Failures never replace
+keys and malformed payloads are misses. Failures never replace
 a discoverable success. Downloaded reports retain original usage and a cache-hit
 provenance field; suite budget charges are zero for reused scenarios because no
 new provider calls occurred. Local JSON and HTML are written only after both
@@ -174,7 +173,8 @@ dedicated signing key; stronger provenance attestations are outside this phase.
 
 To rotate, create a new independent signing key and ID, add its public key to the
 keyring, distribute the new signing secret and ID to approved publishers, and
-retain the old public key for at least six hours. Then remove/revoke the old key.
+retain the old public key until results signed with it have left the bucket,
+normally seven days after its last publication. Then remove/revoke the old key.
 Remove a compromised public key immediately: cached results using it become
 misses. Rotate bucket-scoped storage tokens independently. Never substitute the
 public release key or copy release credentials into the test configuration.
@@ -183,7 +183,7 @@ public release key or copy release credentials into the test configuration.
 
 The E2E plan job verifies every required signed result and both report artifacts
 before classifying a scenario as cached. Cached matrix jobs retain their existing
-check names and complete without an agent process. Missing, expired, malformed,
+check names and complete without an agent process. Missing, malformed,
 or unavailable results run through the existing fresh-home retry path and publish
 new signed results. The combined gallery includes both cached and executed
 recordings, labels their origin, and charges zero new provider spend for hits.

@@ -15,7 +15,6 @@ import (
 	"time"
 )
 
-const cacheMaxAge = 6 * time.Hour
 const maxCacheObject = 32 << 20
 
 var digestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
@@ -178,8 +177,8 @@ func verifyCachedResult(raw []byte, m snapshotMetadata, scenario string, keys ma
 	if result.Outcome != "passed" {
 		return result, fmt.Errorf("cached failure is not reusable")
 	}
-	if result.Started.IsZero() || result.Ended.Before(result.Started) || result.Ended.After(now.Add(5*time.Minute)) || now.Sub(result.Started) > cacheMaxAge || result.Duration < 0 || result.Attempts != 1 {
-		return result, fmt.Errorf("result expired or invalid execution timing")
+	if result.Started.IsZero() || result.Ended.Before(result.Started) || result.Ended.After(now.Add(5*time.Minute)) || result.Duration < 0 || result.Attempts != 1 {
+		return result, fmt.Errorf("invalid execution timing")
 	}
 	if len(result.Artifacts) != 2 {
 		return result, fmt.Errorf("result is missing artifacts")
