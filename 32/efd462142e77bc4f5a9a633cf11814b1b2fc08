@@ -1,0 +1,44 @@
+AGENTS.md
+  h_aa44c3b5b60dec 1-20
+cmd/auth_test.go
+  h_aa44c3b5b60dec 5,7,18-40
+cmd/managed.go
+  h_aa44c3b5b60dec 32-33,53,278
+cmd/managed_approval.go
+  h_aa44c3b5b60dec 4,30,147-157,189-190,269-284
+cmd/managed_onboarding_test.go
+  h_aa44c3b5b60dec 4,6,76-78,183-260
+internal/managed/instructions.md
+  h_aa44c3b5b60dec 30-32,34-36,43-47
+tests/codexinstall/README.md
+  h_aa44c3b5b60dec 173-181,184-186,191,207
+tests/codexinstall/claude.go
+  h_aa44c3b5b60dec 19-26,91,96
+tests/codexinstall/claude_proxy.go
+  h_aa44c3b5b60dec 14-15,17,92,157
+tests/codexinstall/claude_test.go
+  h_aa44c3b5b60dec 32-81,83,100,109-115,123,131,146,155,162,181,208,232
+tests/codexinstall/hook_setup.go
+  h_aa44c3b5b60dec 11,118,162-178
+tests/codexinstall/main.go
+  h_aa44c3b5b60dec 25,81,108-114,127-130,144,150-152,244,273
+tests/codexinstall/recovery.go
+  h_aa44c3b5b60dec 6,55-58,66,79-104
+tests/codexinstall/runner_test.go
+  h_aa44c3b5b60dec 402,426-486
+tests/codexinstall/tui.go
+  h_aa44c3b5b60dec 91
+tests/codexinstall/worker.go
+  h_aa44c3b5b60dec 113-123,249-251,254-275,278-280,290-295,352,533,551-570
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "32efd462142e77bc4f5a9a633cf11814b1b2fc08",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
