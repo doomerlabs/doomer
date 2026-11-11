@@ -203,11 +203,13 @@ To populate matching Linux results from the current local checkout:
 doppler run --project doomer --config test -- scripts/agent-e2e-local-linux.sh
 ```
 
-This builds an Ubuntu 24.04 / linux-amd64 container with Go 1.26.10, runs both
+This builds an Ubuntu 24.04 / linux-amd64 container with the pinned Go toolchain, runs both
 pinned harnesses and the historical regression with bounded concurrency, and
 publishes successful results. It uses the same execution script as CI, including
 a $0.50 per-case API reservation and subscription-only Claude authentication.
-Reports default to `/tmp/doomer-agent-e2e-linux` (`E2E_LOCAL_REPORTS` overrides it).
+Each invocation creates and prints a private `run.XXXXXX` report directory under
+`/tmp/doomer-agent-e2e-linux` (`E2E_LOCAL_REPORTS` overrides the parent directory).
+Concurrent and repeated invocations retain independent selections and reports.
 The host report directory is owner-only, and the container runs as the calling
 UID/GID. Its private temporary home is removed on exit. Go caches are kept under
 `${XDG_CACHE_HOME:-$HOME/.cache}/doomer-agent-e2e`. The same private directory

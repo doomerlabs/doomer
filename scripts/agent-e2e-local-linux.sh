@@ -12,6 +12,8 @@ if [[ ! -O $reports || -L $reports ]]; then
 fi
 chmod 700 "$reports"
 reports=$(cd "$reports" && pwd)
+reports=$(mktemp -d "$reports/run.XXXXXX")
+printf 'E2E reports: %s\n' "$reports"
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/doomer-agent-e2e
 mkdir -p "$cache/go-build" "$cache/go-mod" "$cache/agents"
 chmod 700 "$cache" "$cache/go-build" "$cache/go-mod" "$cache/agents"

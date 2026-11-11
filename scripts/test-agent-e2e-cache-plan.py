@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import importlib.util
+import concurrent.futures
 import json
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import sys
 import threading
@@ -26,6 +28,24 @@ reporter = load('reporter', 'ci-agent-e2e-report.py')
 
 
 class CachePlanTests(unittest.TestCase):
+    def test_local_helper_allocates_independent_report_directories(self):
+        helper = Path(__file__).with_name('agent-e2e-local-linux.sh')
+        allocation = helper.read_text().split('\ncache=', 1)[0]
+        command = ['bash', '-c', allocation + '\nprintf "%s\\n" "$reports"\n']
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory) / 'reports'
+            env = dict(os.environ, E2E_LOCAL_REPORTS=str(parent))
+            def allocate(_):
+                output = subprocess.check_output(command, env=env, cwd=helper.parent.parent, text=True)
+                return Path(output.splitlines()[-1])
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                directories = list(pool.map(allocate, range(2)))
+            self.assertNotEqual(directories[0], directories[1])
+            for result in directories:
+                self.assertEqual(parent, result.parent)
+                self.assertTrue(result.is_dir())
+                self.assertEqual(0o700, result.stat().st_mode & 0o777)
+
     def test_malformed_selection_stops_before_execution(self):
         for selection in ('', '{', '{}', '["unknown/test"]'):
             with self.subTest(selection=selection), tempfile.TemporaryDirectory() as directory:

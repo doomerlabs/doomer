@@ -142,11 +142,14 @@ class SelectorTests(unittest.TestCase):
         tests = selector.catalog(self.root.joinpath("tests/codexinstall/scenarios.go").read_text())
         answers = [{"probabilities": {"full-suite": 0.02}},
                    {"probabilities": {test: 0.1 for test in tests}}]
-        with patch.dict(os.environ, {"E2E_CONCENTRATE_API_KEY": "fixture"}), patch.object(selector, "request_probabilities", side_effect=answers):
+        with patch.dict(os.environ, {"E2E_CONCENTRATE_API_KEY": "fixture"}), patch.object(selector, "request_probabilities", side_effect=answers) as call:
             selector.predict(args)
         result = json.loads((self.root / "output/prediction.json").read_text())
         self.assertFalse(result["full_suite_requested"])
         self.assertEqual([], result["selected"])
+        description = json.loads(event.read_text())["pull_request"]["body"]
+        self.assertEqual(description, call.call_args_list[0].args[0])
+        self.assertNotIn(description, call.call_args_list[1].args[0])
 
     def test_manual_selection_does_not_require_a_model_key(self):
         self.write(".env.test", "TOKEN=fixture\n")
@@ -192,6 +195,36 @@ class SelectorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary, patch.object(selector.shutil, "copyfile", side_effect=racing_copy):
             with self.assertRaisesRegex(ValueError, "changed during"):
                 selector.freeze_worktree(self.root, self.base, Path(temporary) / "snapshot")
+
+    def test_local_snapshot_preserves_detached_head(self):
+        self.write("cmd/root.go", "package cmd\n// newer branch tip\n")
+        self.commit()
+        self.git("checkout", "--detach", self.base)
+        self.write("main.go", "package main\n// detached edit\n")
+        with tempfile.TemporaryDirectory() as temporary:
+            frozen = Path(temporary) / "snapshot"
+            selector.freeze_worktree(self.root, self.base, frozen)
+            self.assertEqual(self.base, selector.resolve(frozen, "HEAD^"))
+            self.assertIn("detached edit", (frozen / "main.go").read_text())
+            self.assertNotIn("newer branch tip", (frozen / "cmd/root.go").read_text())
+
+    def test_local_snapshot_preserves_linked_worktree_head(self):
+        original_branch = self.git("symbolic-ref", "--short", "HEAD").strip()
+        self.git("checkout", "-qb", "linked")
+        self.write("cmd/root.go", "package cmd\n// linked branch\n")
+        self.commit()
+        linked_head = self.git("rev-parse", "HEAD").strip()
+        self.git("checkout", original_branch)
+        self.write("cmd/root.go", "package cmd\n// original branch\n")
+        self.commit()
+        with tempfile.TemporaryDirectory() as temporary:
+            linked, frozen = Path(temporary) / "linked", Path(temporary) / "snapshot"
+            self.git("worktree", "add", str(linked), "linked")
+            (linked / "main.go").write_text("package main\n// linked edit\n")
+            selector.freeze_worktree(linked, self.base, frozen)
+            self.assertEqual(linked_head, selector.resolve(frozen, "HEAD^"))
+            self.assertIn("linked branch", (frozen / "cmd/root.go").read_text())
+            self.assertIn("linked edit", (frozen / "main.go").read_text())
 
     def test_local_snapshot_does_not_follow_a_replaced_symlink(self):
         source = self.root / "added.txt"
