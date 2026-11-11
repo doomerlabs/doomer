@@ -124,6 +124,17 @@ func (j *journey) coding(repo, prompt string) error {
 	}
 	return fmt.Errorf("coding task did not reach a completed review")
 }
+
+func (j *journey) verifyPythonProgram(path, expected string) error {
+	program := exec.CommandContext(j.ctx, "python3", path)
+	program.Dir, program.Env = filepath.Dir(path), j.env
+	output, err := program.Output()
+	if err != nil || string(output) != expected {
+		return fmt.Errorf("program %s returned %q: %v", path, output, err)
+	}
+	return nil
+}
+
 func savedTasks(home string) ([]managed.Task, error) {
 	files, err := filepath.Glob(filepath.Join(home, ".config/doomer/managed/tasks/*.json"))
 	if err != nil {
@@ -235,24 +246,28 @@ func (j *journey) afterInstall() error {
 		j.f.Findings = j.c.Scenario == "first-review" || j.c.Scenario == "new-chat"
 		j.f.Deep = j.c.Scenario == "deep-review"
 		j.f.mu.Unlock()
-		prompt := "Create hello.txt containing hello followed by a newline."
+		prompt := "Create a Python source file hello.txt that prints hello followed by a newline."
 		if j.c.Scenario == "hooks-off" {
 			prompt += " Do not install hooks for this task; complete the review through explicit Doomer commands."
 		}
 		if personalScenario(j.c.Scenario) {
-			prompt = "Create hello.txt containing hello followed by a newline. Use the installed Doomer skill and complete the task."
+			prompt = "Create a Python source file hello.txt that prints hello followed by a newline. Use the installed Doomer skill and complete the task."
 		}
 		if err := j.coding(j.repo, prompt); err != nil {
 			return err
 		}
-		content, readErr := os.ReadFile(filepath.Join(j.repo, "hello.txt"))
-		if readErr != nil || string(content) != "hello\n" {
-			return fmt.Errorf("greeting content mismatch")
+		if err := j.verifyPythonProgram(filepath.Join(j.repo, "hello.txt"), "hello\n"); err != nil {
+			return err
 		}
+		j.result.Checks["greeting_program_runs"] = true
 		if j.c.Scenario == "new-chat" {
-			if err := j.coding(j.repo, "Create second.txt containing second followed by a newline."); err != nil {
+			if err := j.coding(j.repo, "Create a Python source file second.txt that prints second followed by a newline."); err != nil {
 				return err
 			}
+			if err := j.verifyPythonProgram(filepath.Join(j.repo, "second.txt"), "second\n"); err != nil {
+				return err
+			}
+			j.result.Checks["second_program_runs"] = true
 		}
 		return j.finish()
 	case "worktrees":
@@ -275,7 +290,7 @@ func (j *journey) afterInstall() error {
 			wg.Add(1)
 			go func(i int, root string) {
 				defer wg.Done()
-				errors <- j.coding(root, fmt.Sprintf("Create task-%d.txt containing worktree %d followed by a newline. Follow the repository's installed instructions and complete the task.", i, i))
+				errors <- j.coding(root, fmt.Sprintf("Create a Python source file task-%d.txt that prints worktree %d followed by a newline. Follow the repository's installed instructions and complete the task.", i, i))
 			}(i, root)
 		}
 		wg.Wait()
@@ -285,6 +300,12 @@ func (j *journey) afterInstall() error {
 				return err
 			}
 		}
+		for i, root := range roots {
+			if err := j.verifyPythonProgram(filepath.Join(root, fmt.Sprintf("task-%d.txt", i)), fmt.Sprintf("worktree %d\n", i)); err != nil {
+				return err
+			}
+		}
+		j.result.Checks["worktree_programs_run"] = true
 		for i, root := range roots {
 			raw, err := os.ReadFile(filepath.Join(root, fmt.Sprintf("task-%d.txt", i)))
 			if err != nil || string(raw) != fmt.Sprintf("worktree %d\n", i) {

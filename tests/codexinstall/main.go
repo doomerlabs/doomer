@@ -147,7 +147,7 @@ func main() {
 				settings["model"] = "gpt-6.1-sol"
 			}
 		}
-		settings["reasoning"] = codexEffort
+		settings["reasoning"] = "low"
 		if *harness == "claude" {
 			settings["reasoning"] = claudeEffort
 		}
