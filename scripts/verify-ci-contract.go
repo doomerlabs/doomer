@@ -458,6 +458,9 @@ func validateAgentRecordings(workflow *yaml.Node) {
 	if !nodeContains(selection, "--pr-event") || !nodeContains(selection, "GITHUB_EVENT_PATH") {
 		fail("E2E selection must read the PR author's description from the event file")
 	}
+	if !nodeContains(selection, `base=$(git merge-base "${SELECTOR_BASE:-origin/main}" "$head")`) {
+		fail("E2E selection must compare from the PR merge base")
+	}
 	if !nodeContains(requiredValue(workflow, "on", "pull_request", "types"), "edited") {
 		fail("Editing a PR description must refresh its E2E selection")
 	}

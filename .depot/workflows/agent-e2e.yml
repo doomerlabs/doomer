@@ -44,8 +44,8 @@ jobs:
           SELECTOR_HEAD: ${{ github.event.pull_request.head.sha }}
           SELECTOR_EVENT: ${{ github.event_name }}
         run: |
-          base=${SELECTOR_BASE:-$(git merge-base HEAD origin/main)}
           head=${SELECTOR_HEAD:-HEAD}
+          base=$(git merge-base "${SELECTOR_BASE:-origin/main}" "$head")
           extra=()
           if [[ $SELECTOR_EVENT == workflow_dispatch ]]; then extra+=(--full-suite); fi
           python3 scripts/agent-e2e-selector.py predict \
