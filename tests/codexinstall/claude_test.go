@@ -58,7 +58,14 @@ func TestClaudeDisabledHookReminderWording(t *testing.T) {
 			t.Errorf("missed hook reminder: %s", message)
 		}
 	}
-	for _, message := range []string{"Doomer is ready.", "Automatic updates are turned off.", "The hooks are installed."} {
+	for _, message := range []string{
+		"Doomer is ready.",
+		"Automatic updates are turned off.",
+		"The hooks are installed.",
+		"Updates are off. Hooks are installed.",
+		"Updates are off.\nHooks are installed.",
+		"Hooks are enabled.",
+	} {
 		if claudeDisabledHookReminder(message) {
 			t.Errorf("accepted unrelated message: %s", message)
 		}

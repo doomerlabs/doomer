@@ -160,9 +160,18 @@ func (j *journey) hookTrustRecovery() error {
 	return nil
 }
 
-var hookOffWord = regexp.MustCompile(`\boff\b`)
+var hookDisabledWord = regexp.MustCompile(`\b(disable|disabled|off|enable)\b`)
 
 func claudeDisabledHookReminder(message string) bool {
 	message = strings.ToLower(message)
-	return strings.Contains(message, "hook") && (strings.Contains(message, "disabled") || strings.Contains(message, "enable") || hookOffWord.MatchString(message))
+	// Line wrapping does not change a reminder, but a status from a different
+	// sentence (for example, updates being off) must not qualify hooks.
+	for _, sentence := range strings.FieldsFunc(message, func(r rune) bool {
+		return r == '.' || r == '!' || r == '?'
+	}) {
+		if strings.Contains(sentence, "hook") && hookDisabledWord.MatchString(sentence) {
+			return true
+		}
+	}
+	return false
 }
