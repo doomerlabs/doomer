@@ -1,0 +1,22 @@
+.depot/workflows/agent-e2e.yml
+  h_aa44c3b5b60dec 16-41,277-304
+docs/e2e-dependency-planner.md
+  h_aa44c3b5b60dec 74-112
+scripts/agent-e2e-selector.py
+  h_aa44c3b5b60dec 1-269
+scripts/ci-verify.sh
+  h_aa44c3b5b60dec 70
+scripts/test-agent-e2e-selector.py
+  h_aa44c3b5b60dec 1-152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dcb213454050a3956b26cb10cd88bf8800a7940f",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
