@@ -11,6 +11,14 @@ import (
 // Hook feedback is visible in the coding chat. Structured review details stay
 // available through task status rather than being copied into every hook.
 func managedHookFeedback(event string, output []byte, operationErr error) map[string]any {
+	var access managedStateAccess
+	if json.Unmarshal(output, &access) == nil && access.State == "state_access_required" {
+		if event == "Stop" {
+			return map[string]any{} // Never loop on a blocked state operation.
+		}
+		message := fmt.Sprintf("Doomer could not %s %s: %s\n%s\nRecovery command (run from %s): %s", access.Operation, access.Path, access.Error, access.Action, access.RetryCWD, access.RetryCommandDisplay)
+		return map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event, "additionalContext": message}}
+	}
 	var result managedResult
 	message := "Doomer could not check the review. Resume the prepared task and inspect its status."
 	noticeMessage := ""

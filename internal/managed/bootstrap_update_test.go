@@ -289,7 +289,7 @@ func TestReleasedNineTwoBootstrapUpgradesForHooksInstall(t *testing.T) {
 	}
 }
 
-func TestReleasedNineThreeBootstrapOffersMetadataUpgrade(t *testing.T) {
+func TestReleasedNineThreeBootstrapRemainsUpgradable(t *testing.T) {
 	policy := Policy{Protocol: Protocol, Channel: "stable"}
 	old, err := bootstrapText(policy, versionNineThreeBootstrapTemplate, "2026.11.9.3", ">=2026.11.9.3")
 	if err != nil {
@@ -299,8 +299,8 @@ func TestReleasedNineThreeBootstrapOffersMetadataUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.SplitN(old, "---", 3)[2] != strings.SplitN(current, "---", 3)[2] {
-		t.Fatal("metadata upgrade changed instructions")
+	if !strings.Contains(current, "state_access_required") || strings.Contains(old, "state_access_required") {
+		t.Fatal("recovery update changed historical instructions")
 	}
 	path := filepath.Join(t.TempDir(), "SKILL.md")
 	if err := os.WriteFile(path, []byte(old), 0600); err != nil {
@@ -324,6 +324,7 @@ func TestReleasedDiscoveryBootstrapsRemainUpgradable(t *testing.T) {
 		{Protocol: Protocol, Channel: "pinned", Version: "2026.11.9.5"},
 	} {
 		for _, previous := range []struct{ scope, template, revision, cliRange string }{
+			{"project", versionTenTwoBootstrapTemplate, "2026.11.10.2", ">=2026.11.10.1"},
 			{"project", versionNineFourBootstrapTemplate, "2026.11.9.4", ">=2026.11.9.4"},
 			{"personal", versionNineFivePersonalBootstrapTemplate, "2026.11.9.5", ">=2026.11.9.4"},
 			{"project", versionTenOneBootstrapTemplate, "2026.11.10.1", ">=2026.11.10.1"},
@@ -340,8 +341,8 @@ func TestReleasedDiscoveryBootstrapsRemainUpgradable(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if strings.SplitN(old, "---", 3)[2] != strings.SplitN(current, "---", 3)[2] {
-					t.Fatal("metadata upgrade changed instructions")
+				if !strings.Contains(current, "state_access_required") || strings.Contains(old, "state_access_required") {
+					t.Fatal("recovery update changed historical instructions")
 				}
 				if !RecognizedBootstrap([]byte(old), policy) {
 					t.Fatal("previous discovery bootstrap is no longer recognized")

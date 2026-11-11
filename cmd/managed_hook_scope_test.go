@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -48,6 +49,8 @@ func TestManagedHooksRequireApplicableSkill(t *testing.T) {
 					}
 				}
 				for _, event := range []string{"UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"} {
+					state, _ := managedStoreLocation()
+					before := preflightTree(t, state.Root)
 					raw, _ := json.Marshal(watch.HookInput{CWD: repo, Event: event, Session: "unprepared"})
 					output, err := execute(t, string(raw), "agent-hook", "--agent", agent, "--managed-task-adapter")
 					if err != nil {
@@ -60,6 +63,12 @@ func TestManagedHooksRequireApplicableSkill(t *testing.T) {
 						}
 					} else if !strings.Contains(output, "prepare") {
 						t.Fatalf("configured hook lost activation: %s", output)
+					}
+					if after := preflightTree(t, state.Root); !reflect.DeepEqual(before, after) {
+						t.Fatal("unprepared hook mutated private state")
+					}
+					if strings.Contains(output, "prepare") && !strings.Contains(output, "exploration-only") {
+						t.Fatal("unprepared hook lost task scope", output)
 					}
 				}
 			})

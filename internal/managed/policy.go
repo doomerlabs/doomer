@@ -171,6 +171,7 @@ func personalBootstrapTemplate(template string) string {
 func bootstrapText(p Policy, template, revision, cliRange string) (string, error) {
 	// Historical wrappers must retain the instructions users actually installed.
 	if revision != BootstrapVersion && revision != personalBootstrapVersion {
+		template = strings.ReplaceAll(template, "{{permission_prompt_rules}}", strings.TrimSpace(legacyPermissionPromptRules))
 		template = strings.ReplaceAll(template, "{{upgrade_prompt_rules}}", strings.TrimSpace(legacyUpgradePromptRules))
 		template = strings.ReplaceAll(template, "{{final_review_rules}}", strings.TrimSpace(legacyFinalReviewRules))
 	}

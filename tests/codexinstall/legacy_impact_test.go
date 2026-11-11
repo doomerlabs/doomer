@@ -22,7 +22,7 @@ var fixtureScopes = map[string][]string{
 	"npx_upgrade.go":         {"upgrade-personal-npx", "upgrade-repo-over-personal-npx"},
 	"recovery.go":            {"portable-invalid", "revoked-uploads", "interrupted-review"},
 	"portable.go":            {"portable-restart"},
-	"preflight.go":           {"review-preflight"},
+	"preflight.go":           {"review-preflight", "review-preflight-denied"},
 	"command_permissions.go": {"review-command-permissions", "policy-installed"},
 	"policy_recovery.go":     {"policy-recovery", "policy-declined"},
 	"hook_setup.go":          {"hooks-upgrade", "hooks-declined", "hooks-trust"},

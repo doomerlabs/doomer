@@ -18,6 +18,9 @@ var bootstrapTemplate string
 //go:embed permission-prompt-rules.md
 var PermissionPromptRules string
 
+//go:embed permission-prompt-rules-legacy.md
+var legacyPermissionPromptRules string
+
 //go:embed upgrade-prompt-rules.md
 var UpgradePromptRules string
 

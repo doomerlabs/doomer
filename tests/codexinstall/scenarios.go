@@ -15,7 +15,7 @@ import (
 	"github.com/doomerlabs/doomer/internal/watch"
 )
 
-var scenarioNames = []string{"unconfigured-repo", "browser-onboarding", "install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "personal-discovery", "global-npx-discovery", "repository-discovery", "upgrade-untracked", "upgrade-personal", "upgrade-personal-npx", "upgrade-repo-over-personal-npx", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-command-permissions", "upgrade-authorized-session", "policy-recovery", "policy-installed", "policy-declined", "hooks-upgrade", "hooks-declined", "hooks-trust", "policy-denied"}
+var scenarioNames = []string{"unconfigured-repo", "browser-onboarding", "install", "first-review", "new-chat", "worktrees", "decline-updates", "decline-uploads", "interrupted", "upgrade", "upgrade-defer", "service-failure", "repeat-onboarding", "read-only", "personal", "personal-discovery", "global-npx-discovery", "repository-discovery", "upgrade-untracked", "upgrade-personal", "upgrade-personal-npx", "upgrade-repo-over-personal-npx", "tui", "hooks-off", "revoked-uploads", "interrupted-review", "tui-hooks-denied", "portable-invalid", "upgrade-custom", "deep-review", "portable-restart", "review-preflight", "review-preflight-denied", "review-command-permissions", "upgrade-authorized-session", "policy-recovery", "policy-installed", "policy-declined", "hooks-upgrade", "hooks-declined", "hooks-trust", "policy-denied"}
 
 func validScenario(name string) bool {
 	if name == "ordinary-upgrade" || name == "policy-activation" {
@@ -47,6 +47,9 @@ func runAgent(ctx context.Context, c config, repo string, env []string, prompt, 
 	}
 	record("Scripted user", prompt)
 	args := codexExecArgs(c)
+	if c.Scenario == "review-preflight-denied" {
+		args = append(args, "-c", `approval_policy="never"`)
+	}
 	if c.ReviewApprovals {
 		record("Reviewer configuration", strings.Join(args, " "))
 	}
@@ -205,7 +208,7 @@ func (j *journey) afterInstall() error {
 		return j.policyRecovery()
 	case "review-command-permissions":
 		return j.reviewCommandPermissions()
-	case "review-preflight":
+	case "review-preflight", "review-preflight-denied":
 		return j.reviewPreflight()
 	case "install", "interrupted":
 		return nil
@@ -304,6 +307,10 @@ func (j *journey) afterInstall() error {
 		j.f.mu.Unlock()
 		return j.finish()
 	case "repeat-onboarding", "read-only":
+		prior, err := savedTasks(j.home)
+		if err != nil {
+			return err
+		}
 		if err := j.git(j.repo, "add", "."); err != nil {
 			return err
 		}
@@ -313,6 +320,7 @@ func (j *journey) afterInstall() error {
 		prompt := "Set up Doomer in this repository again. Reuse existing setup and permissions. Do not change code."
 		if j.c.Scenario == "read-only" {
 			prompt = "Tell me the current branch and whether the working tree is clean. Do not edit files or start coding."
+			j.c.ReviewApprovals = j.c.Harness != "claude"
 		}
 		j.result.Turns++
 		turn, err := runAgent(j.ctx, j.c, j.repo, j.env, prompt, "", j.record)
@@ -328,6 +336,16 @@ func (j *journey) afterInstall() error {
 		tasks, err := savedTasks(j.home)
 		if err != nil {
 			return err
+		}
+		if j.c.Scenario == "read-only" {
+			j.result.Checks["no_read_only_task_created"] = len(tasks) == len(prior)
+			j.result.Checks["no_read_only_hook_offer"] = !turn.HooksOffered
+			j.result.Checks["no_read_only_prepare_attempt"] = true
+			for _, command := range turn.Commands {
+				if strings.Contains(command, "doomer") && strings.Contains(command, "prepare") {
+					j.result.Checks["no_read_only_prepare_attempt"] = false
+				}
+			}
 		}
 		j.result.Checks["no_read_only_failure"] = true
 		for _, task := range tasks {

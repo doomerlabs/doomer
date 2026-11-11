@@ -11,6 +11,11 @@ metadata:
 
 # Doomer review
 
+Apply this workflow to coding tasks or explicitly requested Doomer setup/review.
+For exploration-only or read-only requests, do not prepare a task or offer
+setup/upgrades merely because the skill or a hook is present. If the user later
+asks for edits, prepare before making them.
+
 At task start, run `doomer preflight --agent AGENT --repo .` for local-only
 readiness evidence. Saved receipts do not verify the current
 account or authorize uploads. If it returns `setup_decision_required`, present
