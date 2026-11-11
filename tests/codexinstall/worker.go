@@ -349,7 +349,7 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 		}
 		if c.Harness == "claude" && (observed.PolicyOffered || observed.SetupPending) && !approvedPolicy {
 			approvedPolicy = true
-			prompt = "I approve account verification and installing the displayed scoped Claude reviewer settings and hooks as part of the requested onboarding. Preserve unrelated settings and native hook trust. Still ask for any missing repository upload and software-update approval."
+			prompt = "I approve account verification and installing the displayed scoped Claude reviewer settings, including the six Doomer command rules, the consent-scoped autoMode.allow classifier policy, and hooks as part of the requested onboarding. Preserve unrelated settings, existing deny rules, and native hook trust. Still ask for any missing repository upload and software-update approval."
 			record("Scripted user", prompt)
 			continue
 		}
