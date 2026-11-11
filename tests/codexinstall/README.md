@@ -1,6 +1,6 @@
 # Agent lifecycle E2E tests
 
-Run real Codex CLI 0.167.0 with GPT-6.1 Terra at low reasoning in disposable
+Run real Codex CLI 0.167.0 with GPT-6.1 Terra at medium reasoning in disposable
 Linux exe.dev VMs or isolated local macOS test homes. Depot runs all scenarios for both harnesses on pull requests. Manual runs remain available.
 The local fixture supplies Doomer account, approval and review responses.
 By default, installation uses the public guide and published, verified Doomer

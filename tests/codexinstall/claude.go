@@ -16,6 +16,7 @@ import (
 
 const claudeVersion = "2.1.319"
 const claudeEffort = "medium"
+const codexEffort = "medium"
 
 func claudePermissionMode(c config) string {
 	if c.ReviewApprovals || c.ClaudePermissionMode == "" {
@@ -54,9 +55,9 @@ func validAgentVersion(c config, version string) bool {
 	return version == "codex-cli 0.167.0"
 }
 func configureAgent(c config, home, proxyURL string) (string, error) {
-	configuration := fmt.Sprintf("model = %q\nmodel_provider = \"fixture\"\nmodel_reasoning_effort = \"low\"\n[model_providers.fixture]\nname = \"Budgeted test proxy\"\nbase_url = %q\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\n", c.Model, proxyURL+"/v1")
+	configuration := fmt.Sprintf("model = %q\nmodel_provider = \"fixture\"\nmodel_reasoning_effort = %q\n[model_providers.fixture]\nname = \"Budgeted test proxy\"\nbase_url = %q\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\n", c.Model, codexEffort, proxyURL+"/v1")
 	if c.CodexAuthHome != "" {
-		configuration = fmt.Sprintf("model = %q\nmodel_reasoning_effort = \"medium\"\n", c.Model)
+		configuration = fmt.Sprintf("model = %q\nmodel_reasoning_effort = %q\n", c.Model, codexEffort)
 		auth, err := os.ReadFile(filepath.Join(c.CodexAuthHome, "auth.json"))
 		if err != nil {
 			return "", err
