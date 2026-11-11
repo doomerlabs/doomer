@@ -1,0 +1,37 @@
+.agents/skills/doomer-release/SKILL.md
+  s_2e844bb16a43d3::t_f58f54c39a2915 53-65
+.depot/workflows/agent-e2e.yml
+  s_2e844bb16a43d3::t_2d9a9235a56758 6,17-18,20,22-30,36-40,45,47-50,52-60,92,129-131,137,141,146,180,186,198,253,260,266
+AGENTS.md
+  s_2e844bb16a43d3::t_23ac5a58a76d02 30-31,45-49
+scripts/agent-e2e-cache-plan.py
+  s_2e844bb16a43d3::t_1108c51f487e34 44-53,56-58,93-102,107-109,117
+scripts/agent-e2e-local-linux.sh
+  s_2e844bb16a43d3::t_e084293d5784b9 22-38,49-50
+scripts/agent-e2e-selector.py
+  s_2e844bb16a43d3::t_3f395f9d268120 10,12,35-40,56-100,117,184,187,242-246,248-254,257-258,262-283,285-294,298,345-349
+scripts/ci-agent-e2e-report.py
+  s_2e844bb16a43d3::t_4f10b3b09541a6 29,51-52,60-63,66,73-74,95-105,109
+scripts/test-agent-e2e-cache-plan.py
+  s_2e844bb16a43d3::t_fb295f02546c26 7,15-16,29-78
+scripts/test-agent-e2e-selector.py
+  s_2e844bb16a43d3::t_cf4fbb9100fcb9 121-214
+scripts/verify-ci-contract.go
+  s_2e844bb16a43d3::t_6bcb0b40e9dc9a 457-470,481-483
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9088a7d73f93b38f2e624aaf6a412fd557b0dba9",
+  "prompts": {},
+  "sessions": {
+    "s_2e844bb16a43d3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c825-ff0a-7983-b09e-23bccf584b0e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
