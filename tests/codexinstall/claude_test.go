@@ -29,8 +29,58 @@ func TestClaudeTranscriptKeepsOnlyVisibleContent(t *testing.T) {
 		t.Fatal(records)
 	}
 }
+
+func TestClaudePermissionModes(t *testing.T) {
+	for _, tc := range []struct {
+		config config
+		want   string
+	}{
+		{config{}, "auto"},
+		{config{ClaudePermissionMode: "auto"}, "auto"},
+		{config{ClaudePermissionMode: "bypassPermissions"}, "bypassPermissions"},
+		{config{ClaudePermissionMode: "bypassPermissions", ReviewApprovals: true}, "auto"},
+	} {
+		if got := claudePermissionMode(tc.config); got != tc.want {
+			t.Fatalf("permission mode = %q, want %q", got, tc.want)
+		}
+	}
+}
+
+func TestClaudeDisabledHookReminderWording(t *testing.T) {
+	for _, message := range []string{
+		"Doomer hooks are disabled. Enable them in /hooks.",
+		"The hooks are installed, but your settings currently disable hooks. They are switched off.",
+		"Hooks: they're installed but turned off by Claude Code's own settings.",
+		"Doomer's hooks are installed, but your Claude settings turn them off.",
+		"Doomer hooks:\nDisabled in Claude Code settings. Open /hooks to turn them on.",
+		"The hooks are not enabled until you approve.",
+		"The hooks are not yet enabled.",
+		"The hooks aren't currently enabled.",
+		"The hooks aren’t enabled.",
+		"Doomer's hooks are installed in `~/.claude/settings.json`, but your Claude Code settings currently turn them off.",
+	} {
+		if !claudeDisabledHookReminder(message) {
+			t.Errorf("missed hook reminder: %s", message)
+		}
+	}
+	for _, message := range []string{
+		"Doomer is ready.",
+		"Automatic updates are turned off.",
+		"The hooks are installed.",
+		"Updates are off. Hooks are installed.",
+		"Updates are off.\nHooks are installed.",
+		"Hooks are enabled.",
+		"Auto-updates are not enabled, but hooks are installed.",
+		"Hooks are installed, but auto-updates are not enabled.",
+	} {
+		if claudeDisabledHookReminder(message) {
+			t.Errorf("accepted unrelated message: %s", message)
+		}
+	}
+}
+
 func TestClaudeMeterCountsCacheWritesAndPreservesBudget(t *testing.T) {
-	m := newMeter(config{Harness: "claude", APIKey: "private-key", Model: "claude-haiku-5-5", Budget: .20})
+	m := newMeter(config{Harness: "claude", APIKey: "private-key", Model: "claude-opus-5-5", Budget: .20})
 	m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
 		if r.Header.Get("x-api-key") != "private-key" {
 			t.Fatal("missing authentication")
@@ -47,12 +97,19 @@ func TestClaudeMeterCountsCacheWritesAndPreservesBudget(t *testing.T) {
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(response))}, nil
 	})}
 	out := httptest.NewRecorder()
-	m.serve(out, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-haiku-5-5"}`)))
+	m.serve(out, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-opus-5-5"}`)))
 	if out.Code != 200 || m.usage.Input != 1000 || m.usage.Cached != 500 || m.usage.CacheCreated != 300 || m.usage.Output != 100 || m.usage.Unknown != 0 || math.Abs(m.usage.Reserved-claudeTokenCost(1000, 500, 300, 100)) > 1e-10 {
 		t.Fatal(out.Code, m.usage)
 	}
 	if strings.Contains(out.Body.String(), "private-key") {
 		t.Fatal("credential leak")
+	}
+}
+
+func TestClaudeOpusTokenRates(t *testing.T) {
+	// 200 uncached, 500 cached, 300 cache-write, and 100 output tokens.
+	if got := claudeTokenCost(1000, 500, 300, 100); math.Abs(got-.0044) > 1e-10 {
+		t.Fatalf("Opus token cost = %f, want 0.0044", got)
 	}
 }
 
@@ -63,7 +120,7 @@ func TestClaudeMeterRefusesOverBudgetAndLongContext(t *testing.T) {
 		budget float64
 	}{{"budget", 1000, .0001}, {"context", 98001, .20}} {
 		t.Run(tc.name, func(t *testing.T) {
-			m := newMeter(config{Harness: "claude", Model: "claude-haiku-5-5", Budget: tc.budget})
+			m := newMeter(config{Harness: "claude", Model: "claude-opus-5-5", Budget: tc.budget})
 			m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
 				if r.URL.Path != "/v1/messages/count_tokens" {
 					t.Fatal("inference must not start")
@@ -71,7 +128,7 @@ func TestClaudeMeterRefusesOverBudgetAndLongContext(t *testing.T) {
 				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{"input_tokens":%d}`, tc.input)))}, nil
 			})}
 			out := httptest.NewRecorder()
-			m.serve(out, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-haiku-5-5"}`)))
+			m.serve(out, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-opus-5-5"}`)))
 			if out.Code == 200 || m.usage.Requests != 0 {
 				t.Fatal(out.Code, m.usage)
 			}
@@ -86,7 +143,7 @@ func TestClaudeMeterRefusesOverBudgetAndLongContext(t *testing.T) {
 }
 
 func TestClaudeMeterRetainsReservationForIncompleteStream(t *testing.T) {
-	m := newMeter(config{Harness: "claude", Model: "claude-haiku-5-5", Budget: .20})
+	m := newMeter(config{Harness: "claude", Model: "claude-opus-5-5", Budget: .20})
 	m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
 		body := `{"input_tokens":1000}`
 		if r.URL.Path == "/v1/messages" {
@@ -95,14 +152,14 @@ func TestClaudeMeterRetainsReservationForIncompleteStream(t *testing.T) {
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
 	})}
 	out := httptest.NewRecorder()
-	m.serve(out, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-haiku-5-5"}`)))
+	m.serve(out, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-opus-5-5"}`)))
 	if m.usage.Unknown != 1 || m.usage.Reserved <= 0 || m.usage.Cost != 0 {
 		t.Fatal(m.usage)
 	}
 }
 
 func TestClaudeMeterDoesNotHoldBudgetLockDuringInference(t *testing.T) {
-	m := newMeter(config{Harness: "claude", Model: "claude-haiku-5-5", Budget: .20})
+	m := newMeter(config{Harness: "claude", Model: "claude-opus-5-5", Budget: .20})
 	started, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -121,7 +178,7 @@ func TestClaudeMeterDoesNotHoldBudgetLockDuringInference(t *testing.T) {
 	})}
 	go func() {
 		defer close(done)
-		m.serve(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-haiku-5-5"}`)).WithContext(ctx))
+		m.serve(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-opus-5-5"}`)).WithContext(ctx))
 	}()
 	select {
 	case <-started:
@@ -148,7 +205,7 @@ func TestClaudeMeterDoesNotHoldBudgetLockDuringInference(t *testing.T) {
 func TestClaudeMeterRetainsReservationOnCancellation(t *testing.T) {
 	for _, phase := range []string{"before_headers", "after_message_start"} {
 		t.Run(phase, func(t *testing.T) {
-			m := newMeter(config{Harness: "claude", Model: "claude-haiku-5-5", Budget: .20})
+			m := newMeter(config{Harness: "claude", Model: "claude-opus-5-5", Budget: .20})
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			started, done := make(chan struct{}), make(chan struct{})
@@ -172,7 +229,7 @@ func TestClaudeMeterRetainsReservationOnCancellation(t *testing.T) {
 			})}
 			go func() {
 				defer close(done)
-				m.serve(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-haiku-5-5"}`)).WithContext(ctx))
+				m.serve(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-opus-5-5"}`)).WithContext(ctx))
 			}()
 			select {
 			case <-started:

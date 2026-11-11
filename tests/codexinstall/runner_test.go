@@ -399,7 +399,7 @@ func TestClaudeSetupChoiceUsesStructuredReadiness(t *testing.T) {
 }
 
 func TestBrowserDecisionRequiresDisplayedExactURL(t *testing.T) {
-	for _, kind := range []string{"Codex", "Claude"} {
+	for _, kind := range []string{"Codex", "Claude", "Browser"} {
 		f := &fixture{Request: "opaque-request"}
 		if observeBrowserDecision(f, "https://fixture.invalid", "Command", "https://fixture.invalid/cli/setup#request=opaque-request", false) {
 			t.Fatal("tool output granted consent")
@@ -420,6 +420,67 @@ func TestBrowserDecisionRequiresDisplayedExactURL(t *testing.T) {
 	}
 	if observeBrowserDecision(&fixture{}, "https://fixture.invalid", "Codex", "https://fixture.invalid/cli/setup#request=", false) {
 		t.Fatal("no request was pending")
+	}
+}
+
+func TestRevokedApprovalObservesBrowserWithoutAgentOutput(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "opened-browser-url")
+	f := &fixture{Request: "renewed-request"}
+	observed := make(chan string, 1)
+	stop := watchRevokedApproval(context.Background(), f, path, "https://fixture.invalid", func(kind, text string) {
+		observed <- kind
+	})
+	defer stop()
+	if err := os.WriteFile(path, []byte("https://fixture.invalid/cli/setup#request=renewed-request"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case kind := <-observed:
+		if kind != "Browser decision" {
+			t.Fatal(kind)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("opened approval page was not cancelled without agent output")
+	}
+	stop()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.Cancelled || f.Approved || f.Uploads != 0 {
+		t.Fatalf("revocation decision changed upload access: cancelled=%v approved=%v uploads=%d", f.Cancelled, f.Approved, f.Uploads)
+	}
+}
+
+func TestRevokedApprovalWatcherStopsWithoutBrowser(t *testing.T) {
+	stop := watchRevokedApproval(context.Background(), &fixture{}, filepath.Join(t.TempDir(), "missing"), "https://fixture.invalid", func(string, string) {
+		t.Error("unexpected browser decision")
+	})
+	done := make(chan struct{})
+	go func() { stop(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("browser watcher did not stop")
+	}
+}
+
+func TestApprovalWaitRequiresPriorPresentation(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind, text string
+		presented, want  bool
+	}{
+		{"Claude wait", "Command", `Bash {"command":"doomer task login task --wait 45s"}`, false, true},
+		{"Claude loop", "Command", `Bash {"command":"for i in $(seq 1 13); do doomer task login task --wait 45s; done"}`, false, true},
+		{"returned command", "Command", `Bash {"command":"python3 -c 'execute(result[\"wait_command\"])'"}`, false, true},
+		{"Codex wait", "Command started", "doomer task login task --wait 45s", false, true},
+		{"already displayed", "Command", `Bash {"command":"doomer task login task --wait 45s"}`, true, false},
+		{"tool output", "Command", `{"wait_command":["doomer","task","login","task","--wait","45s"]}`, false, false},
+		{"preparation", "Command", `Bash {"command":"doomer prepare --agent claude"}`, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := approvalWaitBeforePresentation(tc.kind, tc.text, tc.presented); got != tc.want {
+				t.Fatalf("wait before presentation = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 
