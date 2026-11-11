@@ -181,9 +181,9 @@ func freezeExternalInputs(ctx context.Context, dir string, opts snapshotOptions,
 	return (&url.URL{Scheme: "file", Path: guidePath}).String(), nil
 }
 
-// The live signed catalog cannot be injected into the released CLI. Give such
-// inputs a six-hour freshness limit and reject publication if they changed
-// during execution. The stable installer itself uses the captured baseline.
+// The live signed catalog cannot be injected into the released CLI. Reject
+// publication if captured external inputs changed during execution. The stable
+// installer itself uses the captured baseline.
 func unchangedExternalInputs(ctx context.Context, m snapshotMetadata) error {
 	for _, input := range m.External {
 		if input.URL == "local-install-guide" {
