@@ -1,0 +1,63 @@
+cmd/auth_test.go
+  s_2e844bb16a43d3::t_1070de10065c5d 5,7,18-40
+cmd/managed.go
+  s_2e844bb16a43d3::t_b3b76d459f7a80 32-33,53,278
+  s_e13d3d361e95b5::t_34c0849e02d457 32-33,53,278
+cmd/managed_approval.go
+  s_2e844bb16a43d3::t_9f71f4351438f9 4,30,147-157,189-190,269-284
+cmd/managed_onboarding_test.go
+  s_2e844bb16a43d3::t_94bdc5b73425f4 4,6,76-78,183-260
+internal/managed/instructions.md
+  s_2e844bb16a43d3::t_466f98db477a0a 24-26,28-30,37-41
+  s_e13d3d361e95b5::t_535e40e38f83e9 24-26,28-30,37-41
+tests/codexinstall/README.md
+  s_2e844bb16a43d3::t_69e56813f67655 172-180,183-185,190,206
+tests/codexinstall/claude.go
+  s_2e844bb16a43d3::t_39a9acee301f9c 18-26,90,95
+tests/codexinstall/claude_proxy.go
+  s_2e844bb16a43d3::t_caa97eced240a5 14-15,17,92,157
+tests/codexinstall/claude_test.go
+  s_2e844bb16a43d3::t_83d5ba47672acd 32-48,50,67,76-82,90,98,113,122,129,148,175,199
+  s_e13d3d361e95b5::t_f742d080a2f65c 32-48,50,67,76-82,90,98,113,122,129,148,175,199
+tests/codexinstall/main.go
+  s_2e844bb16a43d3::t_3b3db90f4d3bf3 25,81,108-114,127-130,144,151-153,244,273
+tests/codexinstall/runner_test.go
+  s_2e844bb16a43d3::t_692a2c04f58eb5 402,426-446
+tests/codexinstall/tui.go
+  s_2e844bb16a43d3::t_f0cffe20f83ef6 91
+tests/codexinstall/worker.go
+  s_2e844bb16a43d3::t_5b6187e20ba9fa 113-123,249-251,254-275,278-280,290-295,533,551-570
+go.mod
+  h_aa44c3b5b60dec 3
+tests/codexinstall/Dockerfile
+  h_aa44c3b5b60dec 12,15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aad6ba44bd470f5ecacef5e77e1df5721525131f",
+  "prompts": {},
+  "humans": {
+    "h_aa44c3b5b60dec": {
+      "author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_2e844bb16a43d3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c825-ff0a-7983-b09e-23bccf584b0e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    },
+    "s_e13d3d361e95b5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c82d-1b6f-7763-9c02-3457da768e3d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Marc Campbell <marc.e.campbell@gmail.com>"
+    }
+  }
+}
