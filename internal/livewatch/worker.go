@@ -35,6 +35,7 @@ type control struct {
 	cancel     bool
 	checkpoint bool
 	finish     bool
+	results    bool
 	feedback   []Feedback
 	reply      chan Response
 	sent       chan struct{}
@@ -117,10 +118,10 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 						_ = json.NewEncoder(conn).Encode(Response{Ready: true, API: cfg.API, Directory: cfg.Directory})
 						return
 					}
-					if req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" {
+					if req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" {
 						return
 					}
-					command := control{cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, reply: make(chan Response, 1), sent: make(chan struct{})}
+					command := control{results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, reply: make(chan Response, 1), sent: make(chan struct{})}
 					select {
 					case w.controls <- command:
 					case <-ctx.Done():
@@ -428,6 +429,10 @@ func (w *worker) run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case command := <-w.controls:
+			if command.results {
+				finish(command, w.response(false))
+				continue
+			}
 			if len(command.feedback) > 0 {
 				bounded, stop := context.WithTimeout(ctx, 20*time.Second)
 				err := w.recordFeedback(bounded, command.feedback)

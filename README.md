@@ -60,16 +60,17 @@ for policies, recovery, adapter behavior, and deployment visibility.
 For the Node-managed integration, `doomer watch` reviews settled source changes,
 including manual edits, without pre/post-tool attribution. The prompt hook starts
 watch; the Stop hook waits for Quick results. If there are findings, the agent
-investigates them and records each decision using the hook's supplied
-`doomer watch respond` command. Decisions are sent to the existing workspace
-review feedback API as `fixed`, `dismissed`, or `deferred`, with agreement and a
+retrieves the details with the hook's supplied `doomer watch instructions`
+command, then records each decision using `doomer watch respond`. Decisions are
+sent to the existing workspace review feedback API as `fixed`, `dismissed`, or `deferred`, with agreement and a
 reason. An unanswered finding stays unanswered until the service confirms the
 response was saved.
 
 A blocked Stop keeps watch available while the agent responds. After every
 finding has a recorded response, the final Stop closes watch and gives the agent
-a summary with the fixed/disagreed/deferred counts, details of fixes, and review
-links. It asks for a concise user-facing summary rather than a dump of findings.
+a short user-readable status and review links. Detailed counts, fix descriptions,
+and agent guidance are returned in the CLI tool responses rather than the visible
+Stop reason. Tool responses remain inspectable in the agent UI.
 Runtime state stays in memory; feedback is stored with the review in Doomer.
 
 The CLI uses the same workspace review API as the Mac app. Without a login,

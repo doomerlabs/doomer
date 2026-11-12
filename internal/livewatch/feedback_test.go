@@ -50,6 +50,14 @@ func TestWatchRecordsFeedbackBeforeFinalStop(t *testing.T) {
 	if _, live := Available(ctx, cfg.ControlKey); !live {
 		t.Fatal("watch exited before feedback")
 	}
+	read, err := Call(ctx, cfg.ControlKey, "results")
+	if err != nil || len(read.Findings) != 2 {
+		t.Fatalf("read-only finding retrieval: %+v %v", read, err)
+	}
+	if _, live := Available(ctx, cfg.ControlKey); !live {
+		t.Fatal("reading findings stopped watch")
+	}
+
 	agrees, disagrees := true, false
 	entries := []Feedback{{ReviewID: result.Findings[0].ReviewID, LeadID: strings.Repeat("a", 64), Status: "fixed", Agrees: &agrees, Reason: "Added the missing check."}, {ReviewID: result.Findings[0].ReviewID, LeadID: strings.Repeat("b", 64), Status: "dismissed", Agrees: &disagrees, Reason: "Existing validation covers it."}}
 	client.mu.Lock()
