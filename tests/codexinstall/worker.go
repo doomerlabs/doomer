@@ -21,6 +21,7 @@ func runWorker(c config) report {
 }
 
 func runWorkerContext(parent context.Context, c config) (result report) {
+	c = stableUpgradeFixture(c)
 	start := time.Now()
 	result.Model = c.Model
 	result.AuthMode = authenticationMode(c)
@@ -204,7 +205,11 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 		}
 		if c.CandidateFile != "" {
 			// Exercise first-use runtime installation without touching the npx skill.
-			install := exec.CommandContext(ctx, c.CandidateFile, "install", "--runtime", "--personal")
+			args, err := globalRuntimeInstallArgs(home)
+			if err != nil {
+				return fail(err)
+			}
+			install := exec.CommandContext(ctx, c.CandidateFile, args...)
 			install.Dir, install.Env = repo, env
 			output, err := install.CombinedOutput()
 			record("Runtime installation", string(output))
