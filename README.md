@@ -57,6 +57,13 @@ for policies, recovery, adapter behavior, and deployment visibility.
 
 ## Watch repositories while you code
 
+For the Node-managed integration, `doomer watch --all-changes` reviews all
+settled source changes during a prompted task, including edits made manually or
+by another process. This opt-in mode needs only `UserPromptSubmit` and `Stop`
+hooks; it does not require pre/post-tool attribution. Reviews cover the full
+current diff against the Git baseline and request Quick results only. The
+default watcher and existing integrations retain their attribution behavior.
+
 The CLI uses the same workspace review API as the Mac app. Without a login,
 it runs free Look Closer reviews with no account needed and returns an unlisted review link.
 A signed-in profile can also run Deep review. The Mac app is not required.

@@ -339,7 +339,7 @@ func initialWatchDirectories(ctx context.Context, cfg watching.Config, cwd strin
 
 func newWatchCommand(app *application.App, api, profile *string) *cobra.Command {
 	var config, base string
-	var debug bool
+	var debug, allChanges bool
 	var managedSession string
 	var interval time.Duration
 	c := &cobra.Command{Use: "watch [directories...]", Short: "Set up and watch repositories with your coding agent", Args: cobra.ArbitraryArgs, RunE: func(c *cobra.Command, args []string) error {
@@ -383,6 +383,25 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			return err
 		}
 
+		if c.Flags().Changed("all-changes") && cfg.AllChanges != allChanges {
+			lock, err := lifecycleLock(c.Context(), root)
+			if err != nil {
+				return err
+			}
+			var current watching.Config
+			if err = watching.Read(file, &current); err == nil && (!watching.ConsentValid(current, *api, *profile, auth.Token) || !current.ConsentedAt.Equal(cfg.ConsentedAt)) {
+				err = fmt.Errorf("upload approval changed; retry after checking setup")
+			}
+			if err == nil {
+				current.AllChanges = allChanges
+				err = watching.Write(file, current)
+				cfg = current
+			}
+			_ = lock.Close()
+			if err != nil {
+				return err
+			}
+		}
 		cfg.RuntimeVersion = activeRuntimeVersion()
 		dirs := cfg.Directories
 		if len(args) == 0 {
@@ -438,7 +457,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 		if err != nil {
 			return err
 		}
-		process := watchProcess{WorkingDirectory: workingDirectory, PID: os.Getpid(), Session: watchSession, ManagedSession: managedSession, ConsentedAt: cfg.ConsentedAt, Directories: args}
+		process := watchProcess{WorkingDirectory: workingDirectory, PID: os.Getpid(), Session: watchSession, ManagedSession: managedSession, AllChanges: cfg.AllChanges, ConsentedAt: cfg.ConsentedAt, Directories: args}
 		if err := watching.Write(filepath.Join(root, "process.json"), process); err != nil {
 			return err
 		}
@@ -631,6 +650,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	c.Flags().StringVar(&managedSession, "managed-session", "", "internal background startup identity")
 	_ = c.Flags().MarkHidden("managed-session")
 	c.Flags().BoolVar(&debug, "debug", false, "show repository discovery, scans, uploads, and review status (no source contents)")
+	c.Flags().BoolVar(&allChanges, "all-changes", false, "review all settled source changes during a prompted task, without tool attribution")
 	c.Flags().StringVar(&config, "config", "", "JSON file listing already-approved directories")
 	c.Flags().StringVar(&base, "base", "", "local baseline ref")
 	c.Flags().DurationVar(&interval, "interval", time.Minute, "fallback scan interval when filesystem events are missed")

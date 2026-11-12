@@ -197,6 +197,20 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 	if owner.Turn == "" {
 		owner.Turn = turn.Owner.Turn
 	}
+	if cfg.AllChanges && input.Event == "Stop" && allowed {
+		capture, err := captureForReview(ctx, root, path, "")
+		if err != nil {
+			if !strings.Contains(err.Error(), "snapshot contains no changes") {
+				response["systemMessage"] = "Doomer could not capture the current source; review is incomplete: " + err.Error()
+			}
+			return
+		}
+		if _, err := (Runner{Root: root, Config: cfg}).queueAllChanges(ctx, path, capture); err != nil {
+			response["systemMessage"] = "Doomer could not queue the current source; review is incomplete: " + err.Error()
+			return
+		}
+		_ = Read(turnFile, &turn)
+	}
 	if input.Event == "PostToolUse" {
 		reconcileUnresolvedOperation(ctx, root, turnFile, owner, input)
 	}
@@ -577,7 +591,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		// A commit or external change can invalidate edit ownership without
 		// invalidating a completed review of this turn. Deliver it as an older snapshot;
 		// never restore edit ownership or claim that the new baseline was reviewed.
-		olderSnapshot := ownedFeed && feed.AssessmentStatus == "ready" &&
+		olderSnapshot := !cfg.AllChanges && ownedFeed && feed.AssessmentStatus == "ready" &&
 			(state.Owner == owner || state.Owner == (Owner{})) &&
 			(state.Owner == (Owner{}) || state.Ambiguous || state.Fingerprint != feed.Fingerprint)
 		if !olderSnapshot && (state.Owner != owner || state.Ambiguous) {

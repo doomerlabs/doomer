@@ -21,6 +21,7 @@ type Config struct {
 	RuntimeVersion        string    `json:"-"`
 	ExplicitConsent       bool      `json:"explicit_consent,omitempty"`
 	AllRepositories       bool      `json:"all_repositories,omitempty"`
+	AllChanges            bool      `json:"all_changes,omitempty"`
 	Version               int       `json:"version"`
 	AccountKey            string    `json:"account_key"`
 	API                   string    `json:"api_url"`

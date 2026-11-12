@@ -23,6 +23,7 @@ type watchProcess struct {
 	PID              int       `json:"pid"`
 	Session          string    `json:"session"`
 	ManagedSession   string    `json:"managed_session,omitempty"`
+	AllChanges       bool      `json:"all_changes,omitempty"`
 	ConsentedAt      time.Time `json:"consented_at"`
 	Directories      []string  `json:"directories,omitempty"`
 	WorkingDirectory string    `json:"working_directory,omitempty"`
@@ -37,6 +38,7 @@ type watchStatus struct {
 	HooksInstalled   map[string]bool `json:"hooks_installed"`
 	HookTrust        string          `json:"hook_trust"`
 	Running          bool            `json:"running"`
+	AllChanges       bool            `json:"all_changes"`
 	RepositoryStatus string          `json:"repository_status"`
 	Log              string          `json:"log"`
 }
@@ -175,7 +177,9 @@ func inspectWatch(app *application.App, api, profile, path string) (watchStatus,
 		}
 		s.HooksInstalled[agent] = installed
 	}
-	_, s.Running, err = runningWatch(root)
+	process, running, processErr := runningWatch(root)
+	s.Running, err = running, processErr
+	s.AllChanges = running && process.AllChanges
 	if err != nil {
 		return s, err
 	}

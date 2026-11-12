@@ -175,7 +175,8 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 		}
 		r.flush(ctx)
 		r.refreshUnavailableReview(ctx, path)
-		if !once && !captureRequested(r.Root, path, started, last) {
+		_, _, filesystemTask := allChangesTask(r.Root, path)
+		if !once && !captureRequested(r.Root, path, started, last) && !(r.Config.AllChanges && filesystemTask) {
 			if retryRequest != nil {
 				nextWake = time.Until(nextRetry)
 			}
@@ -219,8 +220,14 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 				}
 				return err
 			}
-		} else if capture.Source.Dirty || once {
-			resumed, recoveryErr := resumeCompletedEdit(ctx, r.Root, path, capture, started)
+		} else if capture.Source.Dirty || once || r.Config.AllChanges {
+			var resumed bool
+			var recoveryErr error
+			if r.Config.AllChanges {
+				_, recoveryErr = r.queueAllChanges(ctx, path, capture)
+			} else {
+				resumed, recoveryErr = resumeCompletedEdit(ctx, r.Root, path, capture, started)
+			}
 			if errors.Is(recoveryErr, errCaptureEditScope) {
 				r.logf("%s: edit capture recovery failed: %s", filepath.Base(path), recoveryErr)
 			} else if recoveryErr != nil {
@@ -231,6 +238,9 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 			}
 			r.debugf("%s: snapshot captured in %s", path, time.Since(scanStarted).Round(time.Millisecond))
 			requested := agentReviewRequested(r.Root, path, capture.Digest, started)
+			if r.Config.AllChanges {
+				requested = agentReviewRequested(r.Root, path, capture.Digest, time.Time{})
+			}
 			if retryRequest != nil {
 				var current State
 				if Read(StatePath(r.Root, path), &current) != nil || !sameReviewRequest(current, *retryRequest) {
@@ -242,7 +252,11 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 			}
 			if observed != capture.Digest {
 				if requested {
-					r.logf("%s: agent change detected.", filepath.Base(path))
+					if r.Config.AllChanges {
+						r.logf("%s: source change detected.", filepath.Base(path))
+					} else {
+						r.logf("%s: agent change detected.", filepath.Base(path))
+					}
 				} else {
 					r.debugf("%s: local snapshot recorded; waiting for an agent edit", path)
 				}
@@ -391,6 +405,10 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 	}
 	hostname, _ := os.Hostname()
 	input := adversarylabs.WorkspaceSubmission{GitIdentity: capture.GitIdentity, Hypotheses: requestState.Hypotheses, AgentDiff: requestState.AgentDiff, RepositoryID: baseRepo, SnapshotID: headID, BaseSnapshotID: baseID, ReviewID: rev.ID, GroupID: rev.Group, Revision: rev.Number, Repository: repo, Branch: capture.Source.Branch, Diff: diff, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "hostname": hostname, "agent": requestState.Agent}}
+	if r.Config.AllChanges {
+		look, deep := true, false
+		input.LookCloser, input.FullReview, input.ReviewScope = &look, &deep, "diff"
+	}
 	if r.Config.ActivationReporting {
 		input.Client["installation_id"] = r.Config.InstallationID
 		if r.Config.InstallationAttemptID != "" {
