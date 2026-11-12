@@ -700,6 +700,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	hook.Flags().StringVar(&state, "state", "", "private watch state directory")
 	hook.Flags().StringVar(&hookAgent, "agent", "other", "coding agent identity")
 	c.AddCommand(hook)
+	c.AddCommand(newAgentWatchHookCommand())
 	var hypothesisState, hypothesisID string
 	hypotheses := &cobra.Command{Use: "hypotheses", Hidden: true, Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
 		expected, _, err := watchPaths(*api, *profile)
