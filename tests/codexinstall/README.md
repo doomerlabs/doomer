@@ -292,8 +292,9 @@ repositories, the `agent-e2e` environment, and `agent-e2e.yml`. Fork pull reques
 receive no secrets and cannot run the authenticated suite.
 
 The CLI job builds the proposed checkout after exercising public installation.
-The CLI job uses `--bootstrap-source` to install each agent's wrapper from the PR
-checkout in the disposable fixture, so changes to either committed copy are tested.
+The CLI job uses `--generated-bootstrap` to exercise the candidate CLI's embedded
+bootstrap in the disposable fixture. Global npx installation uses the canonical
+`doomerlabs/skills` source; this repository does not carry installed review skills.
 The skills job pairs its pinned CLI source with `--skills-source` to exercise that PR's `INSTALL.md`, installer
 (with a fixture-local URL and recomputed checksum), and wrapper. Runtime downloads
 retain their normal HTTPS and checksum verification. Skills' runner dependency is
