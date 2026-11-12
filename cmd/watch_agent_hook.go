@@ -22,6 +22,7 @@ import (
 // The manager owns installation and approval. Hooks read that data directly;
 // neither starting a watcher nor delivering a result requires Node at runtime.
 type agentHookState struct {
+	Version    int               `json:"version"`
 	API        string            `json:"api"`
 	Identities map[string]string `json:"identities"`
 	Grants     []struct {
