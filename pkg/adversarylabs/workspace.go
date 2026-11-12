@@ -3,7 +3,6 @@ package adversarylabs
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -169,8 +168,16 @@ func (c Client) ReportWorkspaceLead(ctx context.Context, token, id, lead, status
 	if !workspaceID(id) || len(lead) != 64 {
 		return fmt.Errorf("invalid feedback identity")
 	}
-	var out json.RawMessage
-	return c.postJSON(ctx, "/v1/reviews/workspace/"+id+"/feedback", map[string]any{"lead_id": lead, "status": status, "reason": reason, "agrees": agrees}, token, &out)
+	var out struct {
+		Recorded bool `json:"recorded"`
+	}
+	if err := c.postJSON(ctx, "/v1/reviews/workspace/"+id+"/feedback", map[string]any{"lead_id": lead, "status": status, "reason": reason, "agrees": agrees}, token, &out); err != nil {
+		return err
+	}
+	if !out.Recorded {
+		return fmt.Errorf("service did not confirm the finding response was recorded")
+	}
+	return nil
 }
 
 type WorkspaceUpgrade struct {

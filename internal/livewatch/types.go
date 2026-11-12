@@ -32,6 +32,7 @@ type Client interface {
 	UploadWorkspaceTree(context.Context, string, string, []sourcesnapshot.Entry, map[string][]byte) (string, string, error)
 	StartWorkspace(context.Context, string, adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error)
 	GetWorkspace(context.Context, string, string) (adversarylabs.WorkspaceReview, error)
+	ReportWorkspaceLead(context.Context, string, string, string, string, string, *bool) error
 }
 
 type Result struct {
@@ -43,15 +44,33 @@ type Result struct {
 	Error      string                        `json:"error,omitempty"`
 }
 
+type Feedback struct {
+	ReviewID string `json:"review_id"`
+	LeadID   string `json:"lead_id"`
+	Status   string `json:"status"`
+	Reason   string `json:"reason"`
+	Agrees   *bool  `json:"agrees"`
+}
+
+type Finding struct {
+	Repository  string                      `json:"repository"`
+	ReviewID    string                      `json:"review_id"`
+	URL         string                      `json:"url,omitempty"`
+	Lead        adversarylabs.WorkspaceLead `json:"lead"`
+	Disposition *Feedback                   `json:"disposition,omitempty"`
+}
+
 type Response struct {
-	Ready     bool     `json:"ready"`
-	API       string   `json:"api,omitempty"`
-	Directory string   `json:"directory,omitempty"`
-	Results   []Result `json:"results,omitempty"`
-	Error     string   `json:"error,omitempty"`
+	Ready     bool      `json:"ready"`
+	API       string    `json:"api,omitempty"`
+	Directory string    `json:"directory,omitempty"`
+	Results   []Result  `json:"results,omitempty"`
+	Findings  []Finding `json:"findings,omitempty"`
+	Error     string    `json:"error,omitempty"`
 }
 
 type request struct {
-	Key       string `json:"key"`
-	Operation string `json:"operation"`
+	Key       string     `json:"key"`
+	Operation string     `json:"operation"`
+	Feedback  []Feedback `json:"feedback,omitempty"`
 }

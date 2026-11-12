@@ -127,7 +127,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	id := hookIdentity{Namespace: home, Agent: agent, Session: input.Session, Turn: turn}
 	switch input.Event {
 	case "Stop", "Interrupt", "SessionEnd":
-		operation := "stop"
+		operation := "finish"
 		wait := 55 * time.Second
 		if input.Event != "Stop" {
 			operation = "cancel"
@@ -142,7 +142,13 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 		if err != nil {
 			return empty, err
 		}
-		return turnHookResult(result), nil
+		if operation == "finish" {
+			if feedback := pendingFeedbackHook(result, id.Key()); feedback != nil {
+				return feedback, nil
+			}
+			return finalFeedbackHook(result), nil
+		}
+		return empty, nil
 	case "UserPromptSubmit":
 		if input.CWD == "" {
 			return empty, nil

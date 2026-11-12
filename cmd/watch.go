@@ -409,25 +409,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	hypotheses.Flags().StringVar(&hypothesisState, "state", "", "private integration state directory")
 	hypotheses.Flags().StringVar(&hypothesisID, "request", "", "single-use edit request")
 	c.AddCommand(hypotheses)
-	var responseState, responseSession, responseRequest string
-	respond := &cobra.Command{Use: "respond", Hidden: true, Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
-		expected, _, err := watchPaths(*api, *profile)
-		if err != nil || responseState != expected {
-			return fmt.Errorf("invalid integration state")
-		}
-		var cfg watching.Config
-		if err = readWatchConfig(*api, *profile, &cfg); err != nil {
-			return err
-		}
-		if cfg.AccountKey == "" || cfg.API != *api || cfg.Profile != *profile || cfg.ConsentedAt.IsZero() {
-			return fmt.Errorf("integration authorization unavailable")
-		}
-		return watching.EmitResponses(expected, responseSession, responseRequest, c.InOrStdin(), c.OutOrStdout())
-	}}
-	respond.Flags().StringVar(&responseState, "state", "", "private integration state directory")
-	respond.Flags().StringVar(&responseSession, "session", "", "owning conversation")
-	respond.Flags().StringVar(&responseRequest, "request", "", "turn-scoped response request")
-	c.AddCommand(respond)
+	c.AddCommand(newWatchRespondCommand())
 
 	var taskRepository, taskSession string
 	task := &cobra.Command{Use: "task", Short: "Preserve the original task across a coding-agent restart (stdin)", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {

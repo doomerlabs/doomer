@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,15 +32,19 @@ type completion struct {
 	result  Result
 }
 type control struct {
-	cancel bool
-	reply  chan Response
-	sent   chan struct{}
+	cancel     bool
+	checkpoint bool
+	finish     bool
+	feedback   []Feedback
+	reply      chan Response
+	sent       chan struct{}
 }
 type worker struct {
 	cfg           Config
 	client        Client
 	allowed       func(context.Context, string) bool
 	repos         map[string]*repository
+	findings      map[string]Finding
 	direct        string
 	watcher       *fsnotify.Watcher
 	controls      chan control
@@ -67,7 +72,7 @@ func Serve(ctx context.Context, cfg Config, client Client, allowed func(context.
 func serve(ctx context.Context, listener net.Listener, cfg Config, client Client, allowed func(context.Context, string) bool) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	w := &worker{cfg: cfg, client: client, allowed: allowed, repos: map[string]*repository{}, controls: make(chan control), completed: make(chan completion, 64), slots: make(chan struct{}, 4)}
+	w := &worker{cfg: cfg, client: client, allowed: allowed, repos: map[string]*repository{}, findings: map[string]Finding{}, controls: make(chan control), completed: make(chan completion, 64), slots: make(chan struct{}, 4)}
 	w.closeListener = func() error { return nil }
 	if listener != nil {
 		w.closeListener = listener.Close
@@ -101,17 +106,21 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 					}
 					_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 					var req request
-					if json.NewDecoder(io.LimitReader(conn, 4096)).Decode(&req) != nil || req.Key != cfg.ControlKey {
+					if json.NewDecoder(io.LimitReader(conn, 256<<10)).Decode(&req) != nil || req.Key != cfg.ControlKey {
+						return
+					}
+					if req.Operation == "feedback" && len(req.Feedback) == 0 {
+						_ = json.NewEncoder(conn).Encode(Response{Error: "at least one finding response is required"})
 						return
 					}
 					if req.Operation == "status" {
 						_ = json.NewEncoder(conn).Encode(Response{Ready: true, API: cfg.API, Directory: cfg.Directory})
 						return
 					}
-					if req.Operation != "stop" && req.Operation != "cancel" {
+					if req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" {
 						return
 					}
-					command := control{cancel: req.Operation == "cancel", reply: make(chan Response, 1), sent: make(chan struct{})}
+					command := control{cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, reply: make(chan Response, 1), sent: make(chan struct{})}
 					select {
 					case w.controls <- command:
 					case <-ctx.Done():
@@ -281,7 +290,80 @@ func (w *worker) response(timeout bool) Response {
 		}
 	}
 	sort.Slice(response.Results, func(i, j int) bool { return response.Results[i].Repository < response.Results[j].Repository })
+	for _, finding := range w.findings {
+		response.Findings = append(response.Findings, finding)
+	}
+	sort.Slice(response.Findings, func(i, j int) bool {
+		a, b := response.Findings[i], response.Findings[j]
+		return a.ReviewID+a.Lead.ID < b.ReviewID+b.Lead.ID
+	})
 	return response
+}
+
+func (w *worker) collectFindings() {
+	for _, repo := range w.repos {
+		if repo.result != nil {
+			for _, lead := range repo.result.Leads {
+				key := repo.result.ID + "/" + lead.ID
+				if _, seen := w.findings[key]; !seen {
+					w.findings[key] = Finding{Repository: repo.result.Repository, ReviewID: repo.result.ID, URL: repo.result.URL, Lead: lead}
+				}
+			}
+		}
+	}
+}
+
+func (w *worker) hasPendingFeedback() bool {
+	for _, finding := range w.findings {
+		if finding.Disposition == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *worker) recordFeedback(ctx context.Context, entries []Feedback) error {
+	if len(entries) > 64 {
+		return fmt.Errorf("at most 64 finding responses per call")
+	}
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		key := entry.ReviewID + "/" + entry.LeadID
+		if _, known := w.findings[key]; !known || seen[key] {
+			return fmt.Errorf("unknown or duplicate finding response")
+		}
+		seen[key] = true
+		if strings.TrimSpace(entry.Reason) == "" || len(entry.Reason) > 2000 {
+			return fmt.Errorf("each finding needs a reason of 1–2000 bytes")
+		}
+		switch entry.Status {
+		case "fixed":
+			if entry.Agrees == nil || !*entry.Agrees {
+				return fmt.Errorf("fixed requires agrees=true")
+			}
+		case "dismissed":
+			if entry.Agrees == nil || *entry.Agrees {
+				return fmt.Errorf("dismissed requires agrees=false")
+			}
+		case "deferred":
+		default:
+			return fmt.Errorf("status must be fixed, dismissed, or deferred")
+		}
+	}
+	for _, entry := range entries {
+		key := entry.ReviewID + "/" + entry.LeadID
+		finding := w.findings[key]
+		if !w.allowed(ctx, finding.Repository) {
+			return fmt.Errorf("upload approval was revoked")
+		}
+		if err := w.client.ReportWorkspaceLead(ctx, w.cfg.Token, entry.ReviewID, entry.LeadID, entry.Status, entry.Reason, entry.Agrees); err != nil {
+			return fmt.Errorf("record finding response: %w", err)
+		}
+		entry.Reason = strings.TrimSpace(entry.Reason)
+		finding.Disposition = &entry
+		w.findings[key] = finding
+	}
+	return nil
 }
 
 func (w *worker) run(ctx context.Context) error {
@@ -306,7 +388,6 @@ func (w *worker) run(ctx context.Context) error {
 	}()
 	var closing []control
 	finish := func(command control, response Response) {
-		_ = w.closeListener()
 		command.reply <- response
 		select {
 		case <-command.sent:
@@ -321,18 +402,45 @@ func (w *worker) run(ctx context.Context) error {
 				busy = busy || r.running || r.pending
 			}
 			if !busy {
+				w.collectFindings()
 				response := w.response(false)
+				stop := false
+				for _, command := range closing {
+					stop = stop || !command.checkpoint || (command.finish && !w.hasPendingFeedback())
+				}
+				if stop {
+					_ = w.closeListener()
+				}
 				for _, command := range closing {
 					finish(command, response)
 				}
-				return nil
+				if stop {
+					return nil
+				}
+				closing = nil
+				if drain != nil {
+					drain.Stop()
+				}
+				deadline = nil
 			}
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case command := <-w.controls:
+			if len(command.feedback) > 0 {
+				bounded, stop := context.WithTimeout(ctx, 20*time.Second)
+				err := w.recordFeedback(bounded, command.feedback)
+				stop()
+				response := w.response(false)
+				if err != nil {
+					response.Error = err.Error()
+				}
+				finish(command, response)
+				continue
+			}
 			if command.cancel {
+				_ = w.closeListener()
 				finish(command, w.response(true))
 				return nil
 			}
@@ -354,11 +462,23 @@ func (w *worker) run(ctx context.Context) error {
 			closing = append(closing, command)
 			w.schedule(ctx)
 		case <-deadline:
+			w.collectFindings()
 			response := w.response(true)
+			stop := false
+			for _, command := range closing {
+				stop = stop || !command.checkpoint || (command.finish && !w.hasPendingFeedback())
+			}
+			if stop {
+				_ = w.closeListener()
+			}
 			for _, command := range closing {
 				finish(command, response)
 			}
-			return nil
+			if stop {
+				return nil
+			}
+			closing = nil
+			deadline = nil
 		case done := <-w.completed:
 			if r := w.repos[done.path]; r != nil && r.version == done.version {
 				r.running = false

@@ -47,6 +47,9 @@ func (f *fakeClient) StartWorkspace(ctx context.Context, _ string, in adversaryl
 	}
 	return adversarylabs.WorkspaceReview{ID: in.ReviewID, Status: "completed", Early: &adversarylabs.WorkspaceAssessment{Status: "ready"}}, nil
 }
+func (f *fakeClient) ReportWorkspaceLead(context.Context, string, string, string, string, string, *bool) error {
+	return nil
+}
 func (f *fakeClient) GetWorkspace(context.Context, string, string) (adversarylabs.WorkspaceReview, error) {
 	panic("unexpected poll")
 }
@@ -74,7 +77,7 @@ func makeRepository(t *testing.T, parent, relative string) string {
 	return path
 }
 
-func startWorker(t *testing.T, directory string, client *fakeClient, drain time.Duration, allowed func(context.Context, string) bool, identity ...string) (Config, <-chan error) {
+func startWorker(t *testing.T, directory string, client Client, drain time.Duration, allowed func(context.Context, string) bool, identity ...string) (Config, <-chan error) {
 	t.Helper()
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("Unix IPC")

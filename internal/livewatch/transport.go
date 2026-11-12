@@ -10,6 +10,14 @@ import (
 )
 
 func Call(ctx context.Context, key string, operation string) (Response, error) {
+	return call(ctx, key, request{Key: key, Operation: operation})
+}
+
+func SubmitFeedback(ctx context.Context, key string, feedback []Feedback) (Response, error) {
+	return call(ctx, key, request{Key: key, Operation: "feedback", Feedback: feedback})
+}
+
+func call(ctx context.Context, key string, input request) (Response, error) {
 	var out Response
 	address, err := endpoint(key)
 	if err != nil {
@@ -29,7 +37,7 @@ func Call(ctx context.Context, key string, operation string) (Response, error) {
 	} else {
 		_ = conn.SetDeadline(time.Now().Add(45 * time.Second))
 	}
-	if err := json.NewEncoder(conn).Encode(request{Key: key, Operation: operation}); err != nil {
+	if err := json.NewEncoder(conn).Encode(input); err != nil {
 		return out, err
 	}
 	if err := json.NewDecoder(io.LimitReader(conn, 4<<20)).Decode(&out); err != nil {
