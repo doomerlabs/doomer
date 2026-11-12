@@ -1,11 +1,10 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,10 +13,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/doomerlabs/doomer/internal/turnwatch"
 	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
+	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 	"github.com/spf13/cobra"
 )
+
+var turnExecutable = os.Executable
 
 // The manager owns installation and approval. Hooks read that data directly;
 // neither starting a watcher nor delivering a result requires Node at runtime.
@@ -50,7 +53,7 @@ func agentHookAPI(explicit, environment, saved string) (string, error) {
 }
 
 func agentHookConsent(state agentHookState, api, agent, repo string) (watching.Config, error) {
-	cfg := watching.Config{Version: 1, API: api, Profile: "node-" + agent, ExplicitConsent: true, AllChanges: true, PromptScoped: true}
+	cfg := watching.Config{Version: 1, API: api, Profile: "node-" + agent, ExplicitConsent: true, AllChanges: true}
 	for _, grant := range state.Grants {
 		if grant.API != api || grant.ApprovedAt.IsZero() {
 			continue
@@ -75,44 +78,18 @@ func agentHookConsent(state agentHookState, api, agent, repo string) (watching.C
 	return cfg, nil
 }
 
-func agentHookEnv(config string) []string {
-	var env []string
-	for _, value := range os.Environ() {
-		if !strings.HasPrefix(value, "DOOMER_CONFIG_DIR=") {
-			env = append(env, value)
-		}
-	}
-	return append(env, "DOOMER_CONFIG_DIR="+config)
-}
-
-// Match the installer's directory lock so uninstall cannot remove private state
-// between approval validation and detached watcher startup.
-func agentInstallationLock(ctx context.Context, home string) (func(), error) {
-	path := filepath.Join(home, "install.lock")
-	for {
-		if err := os.Mkdir(path, 0700); err == nil {
-			return func() { _ = os.Remove(path) }, nil
-		} else if !os.IsExist(err) {
-			return nil, err
-		}
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("installer is busy")
-		case <-time.After(100 * time.Millisecond):
-		}
-	}
-}
-
 func newAgentWatchHookCommand() *cobra.Command {
 	var home, agent, owner string
-	c := &cobra.Command{Use: "agent-hook", Short: "Handle installed agent hooks directly in Go", Args: cobra.NoArgs}
+	c := &cobra.Command{Use: "agent-hook", Short: "Handle installed agent hooks with an in-memory turn worker", Args: cobra.NoArgs}
+	// Hook execution must not load or create legacy watcher state as a side effect.
+	c.PersistentPreRunE = func(*cobra.Command, []string) error { return nil }
+	c.PersistentPostRun = func(*cobra.Command, []string) {}
 	c.RunE = func(c *cobra.Command, _ []string) error {
-		err := runAgentWatchHook(c, home, agent)
+		result, err := runTurnHook(c, home, agent)
 		if err != nil {
-			// Infrastructure failures are visible but never represented as a review.
-			_ = json.NewEncoder(c.OutOrStdout()).Encode(map[string]string{"systemMessage": "Doomer Quick review was not completed: " + err.Error()})
+			result = map[string]any{"systemMessage": "Doomer Quick review was not completed: " + err.Error()}
 		}
-		return nil
+		return json.NewEncoder(c.OutOrStdout()).Encode(result)
 	}
 	c.Flags().StringVar(&home, "manager-home", "", "installer state directory")
 	c.Flags().StringVar(&agent, "agent", "", "coding agent identity")
@@ -120,40 +97,62 @@ func newAgentWatchHookCommand() *cobra.Command {
 	return c
 }
 
-func runAgentWatchHook(c *cobra.Command, home, agent string) error {
-	if !filepath.IsAbs(home) || (agent != "codex" && agent != "claude") {
-		return fmt.Errorf("invalid installed hook configuration")
+func turnToken(api string, state agentHookState) (string, error) {
+	if token := os.Getenv("DOOMER_TOKEN"); token != "" {
+		return token, nil
 	}
-	if _, err := os.Stat(filepath.Join(home, "uninstalling.json")); err == nil {
-		fmt.Fprint(c.OutOrStdout(), "{}")
-		return nil
+	if token := state.Identities[api]; token != "" {
+		return token, nil
+	}
+	return "", fmt.Errorf("credentials are missing; run onboard")
+}
+
+func runTurnHook(c *cobra.Command, home, agent string) (map[string]any, error) {
+	empty := map[string]any{}
+	if !filepath.IsAbs(home) || (agent != "codex" && agent != "claude") {
+		return empty, fmt.Errorf("invalid installed hook configuration")
 	}
 	raw, err := io.ReadAll(io.LimitReader(c.InOrStdin(), (1<<20)+1))
 	if err != nil || len(raw) > 1<<20 {
-		return fmt.Errorf("invalid hook input")
+		return empty, fmt.Errorf("invalid hook input")
 	}
 	var input watching.HookInput
 	if json.Unmarshal(raw, &input) != nil {
-		return fmt.Errorf("invalid hook input")
+		return empty, fmt.Errorf("invalid hook input")
 	}
-	if input.Session == "" || input.CWD == "" || (input.Event != "UserPromptSubmit" && input.Event != "Stop") {
-		fmt.Fprint(c.OutOrStdout(), "{}")
-		return nil
+	if input.Session == "" || input.CWD == "" {
+		return empty, nil
 	}
-	ctx, cancel := context.WithTimeout(c.Context(), 40*time.Second)
-	defer cancel()
-	unlock, err := agentInstallationLock(ctx, home)
-	if err != nil {
-		return err
+	turn := input.Turn
+	if turn == "" {
+		turn = input.PromptID
 	}
-	defer func() {
-		if unlock != nil {
-			unlock()
+	id := turnwatch.Identity{Namespace: home, Agent: agent, Session: input.Session, Turn: turn}
+	switch input.Event {
+	case "Stop", "Interrupt", "SessionEnd":
+		operation := "stop"
+		wait := 55 * time.Second
+		if input.Event != "Stop" {
+			operation = "cancel"
+			wait = 10 * time.Second
 		}
-	}()
+		ctx, cancel := context.WithTimeout(c.Context(), wait)
+		defer cancel()
+		if _, live := turnwatch.Available(ctx, id); !live {
+			return empty, nil
+		}
+		result, err := turnwatch.Call(ctx, id, operation)
+		if err != nil {
+			return empty, err
+		}
+		return turnHookResult(result), nil
+	case "UserPromptSubmit":
+	default:
+		return empty, nil
+	}
 	var state agentHookState
 	if err := watching.Read(filepath.Join(home, "state.json"), &state); err != nil {
-		return fmt.Errorf("cannot read installer state")
+		return empty, fmt.Errorf("cannot read installer approval")
 	}
 	explicit := ""
 	if c.Flags().Changed("api-url") || c.InheritedFlags().Changed("api-url") {
@@ -161,116 +160,134 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) error {
 	}
 	api, err := agentHookAPI(explicit, os.Getenv("DOOMER_API_URL"), state.API)
 	if err != nil {
-		return err
+		return empty, err
 	}
-	repo, _ := watching.HookRepository(c.Context(), input)
-	cfg, err := agentHookConsent(state, api, agent, repo)
+	if _, err := agentHookConsent(state, api, agent, ""); err != nil {
+		return empty, err
+	}
+	token, err := turnToken(api, state)
 	if err != nil {
-		return err
+		return empty, err
 	}
-	config := filepath.Join(home, "native-state")
-	root := filepath.Join(config, "watch", watching.Key(api+"\x00"+cfg.Profile))
-	exe, err := os.Executable()
+	directory, err := filepath.EvalSymlinks(input.CWD)
 	if err != nil {
-		return err
+		return empty, err
 	}
-	watchDirectory := input.CWD
-	if input.Event == "UserPromptSubmit" {
-		watchDirectory = "" // Capture the turn's initial state before the agent edits.
-	}
-	if process, live, e := runningWatch(root); e == nil && live && !process.PromptScoped {
-		// Retire the older permanent watcher; this prompt starts its replacement
-		// after its recursive scope is recorded. Preserve deliberate user pauses.
-		if _, err := refreshManagedWatch(ctx, root, func(watchProcess) error { return nil }); err != nil {
-			return err
+	ctx, cancel := context.WithTimeout(c.Context(), 25*time.Second)
+	defer cancel()
+	if existing, live := turnwatch.Available(ctx, id); live {
+		if turn == "" {
+			if _, err := turnwatch.Call(ctx, id, "cancel"); err != nil {
+				return empty, err
+			}
+		} else {
+			if existing.API != api || existing.Directory != directory {
+				return empty, fmt.Errorf("this turn already has a worker with different configuration")
+			}
+			return empty, nil
 		}
 	}
-	if err := prepareAgentWatcher(ctx, exe, home, root, config, watchDirectory, state, &cfg); err != nil {
-		return err
+	requestTurn := turn
+	if requestTurn == "" {
+		requestTurn = rand.Text()
 	}
-	if input.Event != "UserPromptSubmit" {
-		unlock()
-		unlock = nil
+	cfg := turnwatch.Config{Identity: id, Directory: directory, API: api, Token: token, Prompt: input.Prompt, RequestTurn: requestTurn, ManagerHome: home}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return empty, err
 	}
-	// Reuse the existing native hook protocol and bounded Stop wait.
-	child := exec.CommandContext(ctx, exe, "--api-url", api, "--profile", cfg.Profile, "watch", "hook", "--state", root, "--agent", agent)
-	child.Env, child.Stdin = agentHookEnv(config), bytes.NewReader(raw)
-	var result bytes.Buffer
-	child.Stdout, child.Stderr = &result, c.ErrOrStderr()
-	if err := child.Run(); err != nil {
-		return fmt.Errorf("native hook did not complete: %w", err)
+	exe, err := turnExecutable()
+	if err != nil {
+		return empty, err
 	}
-	if input.Event == "UserPromptSubmit" {
-		if err := prepareAgentWatcher(ctx, exe, home, root, config, input.CWD, state, &cfg); err != nil {
-			return err
+	child := exec.Command(exe, "watch", "turn-worker")
+	exited, err := startTurnProcess(child, data)
+	if err != nil {
+		return empty, err
+	}
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if result, live := turnwatch.Available(ctx, id); live {
+			if result.API != api || result.Directory != directory {
+				return empty, fmt.Errorf("worker identity collision")
+			}
+			return empty, nil
+		}
+		select {
+		case err := <-exited:
+			if err != nil && strings.Contains(err.Error(), "address already in use") {
+				// A duplicate delivery raced this hook. The kernel chose one
+				// worker; wait for that worker's ready handshake instead.
+				exited = nil
+				continue
+			}
+			return empty, fmt.Errorf("turn worker exited before startup: %v", err)
+		case <-ctx.Done():
+			_ = child.Process.Kill()
+			return empty, fmt.Errorf("turn worker did not become ready")
+		case <-ticker.C:
 		}
 	}
-	_, err = c.OutOrStdout().Write(result.Bytes())
-	return err
 }
 
-func prepareAgentWatcher(ctx context.Context, exe, home, root, config, repo string, state agentHookState, cfg *watching.Config) error {
-	lock, err := lifecycleLock(ctx, root)
-	if err != nil {
-		return err
-	}
-	defer lock.Close()
-	if _, err := os.Stat(filepath.Join(home, "uninstalling.json")); err == nil {
-		return fmt.Errorf("uninstall is in progress")
-	}
-	if paused(root) {
-		return fmt.Errorf("watching is paused; resume it explicitly")
-	}
-	store := adversarylabs.ConfigStore{Path: filepath.Join(config, "config.json")}
-	token := os.Getenv("DOOMER_TOKEN")
-	if token == "" {
-		token = state.Identities[cfg.API]
-	}
-	if token == "" {
-		if saved, ok, err := store.ExactAuthE(adversarylabs.AuthKey(cfg.API, cfg.Profile)); err != nil {
-			return err
-		} else if ok {
-			token = saved.Token
+func turnHookResult(result turnwatch.Response) map[string]any {
+	var findings, failures []string
+	completed := 0
+	for _, review := range result.Results {
+		if review.Status == "ready" {
+			completed++
+		}
+		if review.Error != "" {
+			failures = append(failures, filepath.Base(review.Repository)+": "+review.Error)
+		}
+		for _, lead := range review.Leads {
+			if !sourcesnapshot.ValidPath(lead.Path) || lead.Line < 1 {
+				continue
+			}
+			findings = append(findings, fmt.Sprintf("%s — %s:%d: %s\nCheck: %s", filepath.Base(review.Repository), lead.Path, lead.Line, lead.Concern, lead.Check))
 		}
 	}
-	if token == "" {
-		var secret [32]byte
-		if _, err := rand.Read(secret[:]); err != nil {
-			return err
-		}
-		token = adversarylabs.AnonymousTokenPrefix + base64.RawURLEncoding.EncodeToString(secret[:])
+	if len(findings) > 0 {
+		return map[string]any{"decision": "block", "reason": "Doomer Quick review findings:\n" + strings.Join(findings, "\n\n")}
 	}
-	cfg.AccountKey = watching.Key(token)
-	p, live, err := runningWatch(root)
-	if err != nil {
-		return err
+	if len(failures) > 0 {
+		return map[string]any{"systemMessage": "Doomer Quick review was not completed:\n" + strings.Join(failures, "\n")}
 	}
-	if live {
-		var previous watching.Config
-		if err := watching.Read(filepath.Join(root, "config.json"), &previous); err != nil {
+	if completed > 0 {
+		return map[string]any{"systemMessage": fmt.Sprintf("Doomer Quick review completed for %d repositories; no findings returned.", completed)}
+	}
+	return map[string]any{}
+}
+
+func newTurnWorkerCommand() *cobra.Command {
+	c := &cobra.Command{Use: "turn-worker", Hidden: true, Args: cobra.NoArgs}
+	c.PersistentPreRunE = func(*cobra.Command, []string) error { return nil }
+	c.PersistentPostRun = func(*cobra.Command, []string) {}
+	c.RunE = func(c *cobra.Command, _ []string) error {
+		var cfg turnwatch.Config
+		if err := json.NewDecoder(io.LimitReader(c.InOrStdin(), 1<<20)).Decode(&cfg); err != nil {
 			return err
 		}
-		if !p.AllChanges || previous.AccountKey != cfg.AccountKey {
-			return fmt.Errorf("restart the existing watcher to apply changed credentials or review mode")
+		if !filepath.IsAbs(cfg.Directory) || !filepath.IsAbs(cfg.ManagerHome) || cfg.Identity.Namespace != cfg.ManagerHome || cfg.Identity.Session == "" || (cfg.Identity.Agent != "codex" && cfg.Identity.Agent != "claude") || cfg.Token == "" || cfg.RequestTurn == "" {
+			return errors.New("invalid turn worker configuration")
 		}
+		if err := adversarylabs.ValidateAPIURL(cfg.API); err != nil {
+			return err
+		}
+		allowed := func(ctx context.Context, path string) bool {
+			var state agentHookState
+			if _, err := os.Stat(filepath.Join(cfg.ManagerHome, "uninstalling.json")); err == nil {
+				return false
+			}
+			if watching.Read(filepath.Join(cfg.ManagerHome, "state.json"), &state) != nil {
+				return false
+			}
+			consent, err := agentHookConsent(state, cfg.API, cfg.Identity.Agent, path)
+			return err == nil && (path == "" || watching.Allowed(consent, path))
+		}
+		client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, cfg.API)
+		return turnwatch.Serve(c.Context(), cfg, client, allowed)
 	}
-	if err := store.SetAuth(adversarylabs.AuthKey(cfg.API, cfg.Profile), adversarylabs.Auth{Token: token}); err != nil {
-		return err
-	}
-	if err := watching.Write(filepath.Join(root, "config.json"), cfg); err != nil {
-		return err
-	}
-	if live || repo == "" {
-		return nil
-	}
-	session := rand.Text()
-	child := exec.Command(exe, "--api-url", cfg.API, "--profile", cfg.Profile, "watch", "--all-changes", "--managed-session", session)
-	child.Dir, child.Env = repo, agentHookEnv(config)
-	if err := startWatchProcess(child, filepath.Join(root, "watch.log")); err != nil {
-		return err
-	}
-	return waitWatch(ctx, func() (bool, error) {
-		p, live, err := runningWatch(root)
-		return live && p.ManagedSession == session, err
-	})
+	return c
 }

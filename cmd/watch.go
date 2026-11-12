@@ -457,7 +457,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 		if err != nil {
 			return err
 		}
-		process := watchProcess{WorkingDirectory: workingDirectory, PID: os.Getpid(), Session: watchSession, ManagedSession: managedSession, AllChanges: cfg.AllChanges, PromptScoped: cfg.PromptScoped, ConsentedAt: cfg.ConsentedAt, Directories: args}
+		process := watchProcess{WorkingDirectory: workingDirectory, PID: os.Getpid(), Session: watchSession, ManagedSession: managedSession, AllChanges: cfg.AllChanges, ConsentedAt: cfg.ConsentedAt, Directories: args}
 		if err := watching.Write(filepath.Join(root, "process.json"), process); err != nil {
 			return err
 		}
@@ -547,9 +547,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 				}
 			}()
 		}
-		if cfg.PromptScoped {
-			statusf("Recursive discovery enabled for active prompt directories; the watcher exits after their reviews finish.")
-		} else if discover {
+		if discover {
 			statusf("Agent discovery enabled; automatic checkouts become inactive after 14 days without agent activity.")
 		}
 		lastWorktreeScan := time.Time{}
@@ -558,32 +556,6 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 		for ctx.Err() == nil {
-			var promptRepositories map[string]bool
-			if cfg.PromptScoped {
-				var activePrompts int
-				promptRepositories, activePrompts, err = watching.RefreshWorkspacePrompts(ctx, root, cfg)
-				if err != nil {
-					return err
-				}
-				if activePrompts == 0 {
-					lock, e := lifecycleLock(ctx, root)
-					if e != nil {
-						return e
-					}
-					scopes, e := watching.WorkspacePrompts(root)
-					if e == nil && len(scopes) == 0 {
-						retirementLock = lock
-						cancel()
-						group.Wait()
-						statusf("All prompt turns finished; stopping the watcher.")
-						return nil
-					}
-					lock.Close()
-					if e != nil {
-						return e
-					}
-				}
-			}
 			if time.Now().After(nextPromptCleanup) {
 				watching.PrunePendingPrompts(root, time.Now())
 				nextPromptCleanup = time.Now().Add(time.Minute)
@@ -596,9 +568,6 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 			}
 			wanted := map[string]bool{}
 			for _, repo := range repos {
-				if cfg.PromptScoped && !promptRepositories[repo.Path] {
-					continue
-				}
 				if repo.Removed || !watching.Allowed(cfg, repo.Path) {
 					continue
 				}
@@ -732,6 +701,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	hook.Flags().StringVar(&hookAgent, "agent", "other", "coding agent identity")
 	c.AddCommand(hook)
 	c.AddCommand(newAgentWatchHookCommand())
+	c.AddCommand(newTurnWorkerCommand())
 	var hypothesisState, hypothesisID string
 	hypotheses := &cobra.Command{Use: "hypotheses", Hidden: true, Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
 		expected, _, err := watchPaths(*api, *profile)

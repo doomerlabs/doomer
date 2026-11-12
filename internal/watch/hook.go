@@ -177,12 +177,6 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 			next := Turn{Owner: owner, Prompt: input.Prompt, PendingPromptUntil: pendingUntil, Next: 1, Agent: agent}
 			return Write(turnFile, continueReviewContext(previous, next, input.Prompt))
 		})
-		if cfg.PromptScoped {
-			if err := beginWorkspacePrompt(ctx, root, cfg, input, owner); err != nil {
-				response["systemMessage"] = "Doomer could not watch this workspace: " + err.Error()
-				return
-			}
-		}
 		if agent == "claude" && allowed {
 			advanceClaudeActivation(root, path, owner)
 		}
@@ -202,14 +196,6 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 	}
 	if owner.Turn == "" {
 		owner.Turn = turn.Owner.Turn
-	}
-	if cfg.PromptScoped && input.Event == "Stop" {
-		defer endWorkspacePrompt(root, owner)
-		if err := queueWorkspaceStop(ctx, root, cfg, owner); err != nil {
-			response["systemMessage"] = "Doomer could not capture this workspace: " + err.Error()
-			return
-		}
-		_ = Read(turnFile, &turn)
 	}
 	if cfg.AllChanges && input.Event == "Stop" && allowed {
 		capture, err := captureForReview(ctx, root, path, "")

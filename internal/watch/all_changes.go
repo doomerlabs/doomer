@@ -24,9 +24,6 @@ func (r Runner) queueAllChanges(ctx context.Context, path string, capture source
 	if !r.Config.AllChanges || !Allowed(r.Config, path) || RepositoryRemoved(r.Root, path) {
 		return false, nil
 	}
-	if r.Config.PromptScoped && !r.bindWorkspacePrompt(path, capture.Digest) {
-		return false, nil
-	}
 	request, turn, active := allChangesTask(r.Root, path)
 	if !active {
 		return false, nil

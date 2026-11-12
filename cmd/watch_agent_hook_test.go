@@ -5,13 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/doomerlabs/doomer/internal/publock"
+	"github.com/doomerlabs/doomer/internal/turnwatch"
 	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
@@ -35,84 +36,139 @@ func TestAgentHookProcess(t *testing.T) {
 	os.Exit(2)
 }
 
-func TestAgentHookStartsAndReusesGoWatcher(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("background watchers require Unix")
+func TestAgentHookWorkersArePerTurnAndLeaveNoRuntimeFiles(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("local worker IPC requires Linux or macOS")
 	}
-	home := t.TempDir()
-	repo := newWatchTestRepo(t)
-	workspace := t.TempDir()
-	nested := filepath.Join(workspace, "one", "two", "three", "project")
-	if err := os.MkdirAll(filepath.Dir(nested), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(repo, nested); err != nil {
-		t.Fatal(err)
-	}
-	repo = nested
-	config := filepath.Join(home, "native-state")
-	api := "http://localhost:1/api" // No request should be needed before a prompt.
-	root := filepath.Join(config, "watch", watching.Key(api+"\x00node-codex"))
-	state := agentHookState{Identities: map[string]string{api: "doomer_anon_test_identity"}}
-	cfg := watching.Config{Version: 1, API: api, Profile: "node-codex", AllChanges: true, PromptScoped: true, AllRepositories: true, ExplicitConsent: true, ConsentedAt: time.Now()}
-	owner := watching.Owner{Session: "session", Turn: "turn"}
-	if err := watching.Write(watching.TurnPath(root, owner.Session), watching.Turn{Owner: owner}); err != nil {
-		t.Fatal(err)
-	}
-	scopePath := filepath.Join(root, "workspace-prompts", watching.Key(owner.Session)+".json")
-	if err := watching.Write(scopePath, watching.WorkspacePrompt{Owner: owner, Directory: workspace, Started: time.Now(), Baselines: map[string]string{repo: "clean"}}); err != nil {
+	home, workspace := t.TempDir(), t.TempDir()
+	api := "http://localhost:1/api"
+	state := `{"version":1,"api":"` + api + `","identities":{"` + api + `":"test"},"grants":[{"scope":"global","api":"` + api + `","approvedAt":"2026-11-12T12:00:00Z"}]}`
+	if err := os.WriteFile(filepath.Join(home, "state.json"), []byte(state), 0600); err != nil {
 		t.Fatal(err)
 	}
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	wrapper := filepath.Join(home, "go-test-cli")
+	wrapper := filepath.Join(t.TempDir(), "test-cli")
+	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\nexec "+watching.Quote(executable)+" -test.run=^TestAgentHookProcess$ -- \"$@\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	previous := turnExecutable
+	turnExecutable = func() (string, error) { return wrapper, nil }
+	t.Cleanup(func() { turnExecutable = previous })
+	t.Setenv("DOOMER_AGENT_HOOK_TEST_PROCESS", "1")
+	t.Setenv("DOOMER_TOKEN", "")
+	t.Setenv("DOOMER_CONFIG_DIR", t.TempDir())
+	t.Setenv("DOOMER_API_URL", api)
+	call := func(event, agent, turn string) {
+		t.Helper()
+		input, _ := json.Marshal(watching.HookInput{Event: event, Session: "session", Turn: turn, CWD: workspace, Prompt: "test"})
+		c := NewRootCommand()
+		c.SetArgs([]string{"watch", "agent-hook", "--manager-home", home, "--agent", agent})
+		c.SetIn(bytes.NewReader(input))
+		var output bytes.Buffer
+		c.SetOut(&output)
+		if err := c.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(output.String(), "not completed") {
+			t.Fatal(output.String())
+		}
+	}
+	ids := []turnwatch.Identity{{Namespace: home, Agent: "codex", Session: "session", Turn: "one"}, {Namespace: home, Agent: "codex", Session: "session", Turn: "two"}, {Namespace: home, Agent: "claude", Session: "session", Turn: "one"}}
+	t.Cleanup(func() {
+		for _, id := range ids {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			_, _ = turnwatch.Call(ctx, id, "cancel")
+			cancel()
+		}
+	})
+	for _, id := range ids {
+		call("UserPromptSubmit", id.Agent, id.Turn)
+	}
+	call("UserPromptSubmit", "codex", "one") // Duplicate delivery reuses this turn only.
+	call("Stop", "codex", "one")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, live := turnwatch.Available(ctx, ids[0]); live {
+		t.Fatal("ended turn still has a worker")
+	}
+	for _, id := range ids[1:] {
+		if _, live := turnwatch.Available(ctx, id); !live {
+			t.Fatal("ending one turn stopped another worker")
+		}
+	}
+	call("Interrupt", "codex", "two")
+	call("Stop", "claude", "one")
+	entries, err := os.ReadDir(home)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("runtime polluted manager home: %v %v", entries, err)
+	}
+	after, _ := os.ReadFile(filepath.Join(home, "state.json"))
+	if string(after) != state {
+		t.Fatal("worker changed durable approval")
+	}
+}
+
+func TestAgentHookKilledWorkerCanRestartWithoutCleanup(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux abstract socket crash cleanup")
+	}
+	home, workspace := t.TempDir(), t.TempDir()
+	api := "http://localhost:1/api"
+	if err := os.WriteFile(filepath.Join(home, "state.json"), []byte(`{"version":1,"grants":[{"scope":"global","api":"`+api+`","approvedAt":"2026-11-12T12:00:00Z"}]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapper := filepath.Join(t.TempDir(), "test-cli")
 	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\nexec "+watching.Quote(executable)+" -test.run=^TestAgentHookProcess$ -- \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("DOOMER_AGENT_HOOK_TEST_PROCESS", "1")
-	t.Setenv("DOOMER_TOKEN", "")
-	t.Cleanup(func() {
-		_ = watching.Write(filepath.Join(root, "paused.json"), true)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := waitWatch(ctx, func() (bool, error) { _, live, err := runningWatch(root); return !live, err }); err != nil {
-			t.Error(err)
+	id := turnwatch.Identity{Namespace: home, Agent: "codex", Session: "session", Turn: "turn"}
+	data, _ := json.Marshal(turnwatch.Config{Identity: id, Directory: workspace, API: api, Token: "test", RequestTurn: "turn", ManagerHome: home})
+	start := func() (*exec.Cmd, <-chan error) {
+		t.Helper()
+		cmd := exec.Command(wrapper, "watch", "turn-worker")
+		done, err := startTurnProcess(cmd, data)
+		if err != nil {
+			t.Fatal(err)
 		}
-	})
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	if err := prepareAgentWatcher(ctx, wrapper, home, root, config, workspace, state, &cfg); err != nil {
-		t.Fatal(err)
-	}
-	first, live, err := runningWatch(root)
-	if err != nil || !live || !first.AllChanges || !first.PromptScoped {
-		t.Fatalf("watcher: %+v %t %v", first, live, err)
-	}
-	if err := prepareAgentWatcher(ctx, wrapper, home, root, config, workspace, state, &cfg); err != nil {
-		t.Fatal(err)
-	}
-	second, live, err := runningWatch(root)
-	if err != nil || !live || first.PID != second.PID {
-		t.Fatalf("watcher was not reused: %+v %v", second, err)
-	}
-	if err := waitWatch(ctx, func() (bool, error) {
-		repos, err := watching.Repositories(root, cfg)
-		for _, r := range repos {
-			if r.Path == repo {
-				return true, err
+		t.Cleanup(func() { _ = cmd.Process.Kill() })
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		for {
+			if _, live := turnwatch.Available(ctx, id); live {
+				return cmd, done
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatal("worker startup timed out")
+			case <-time.After(10 * time.Millisecond):
 			}
 		}
-		return false, err
-	}); err != nil {
+	}
+	first, done := start()
+	if err := first.Process.Kill(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(scopePath); err != nil {
+	<-done
+	_, replacement := start()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, err := turnwatch.Call(ctx, id, "cancel"); err != nil {
 		t.Fatal(err)
 	}
-	if err := waitWatch(ctx, func() (bool, error) { _, live, err := runningWatch(root); return !live, err }); err != nil {
-		t.Fatal("watcher survived its last prompt:", err)
+	if err := <-replacement; err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(home)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("crash left runtime files: %v %v", entries, err)
 	}
 }
 
@@ -153,54 +209,6 @@ func TestAgentHookApprovalIsolation(t *testing.T) {
 	}
 	if _, err := agentHookConsent(state, "https://other.test/api", "codex", "/work/project"); err == nil {
 		t.Fatal("reused another service's approval")
-	}
-}
-
-func TestAgentHookPreparesNativeStateWithoutNode(t *testing.T) {
-	home := t.TempDir()
-	config := filepath.Join(home, "native-state")
-	api := "http://localhost:3000/api"
-	root := filepath.Join(config, "watch", watching.Key(api+"\x00node-codex"))
-	state := agentHookState{Identities: map[string]string{api: "doomer_anon_test_identity"}}
-	cfg := watching.Config{Version: 1, API: api, Profile: "node-codex", AllChanges: true, AllRepositories: true, ExplicitConsent: true, ConsentedAt: time.Now()}
-	t.Setenv("DOOMER_TOKEN", "")
-	if err := prepareAgentWatcher(context.Background(), "/no-node-or-executable-needed", home, root, config, "", state, &cfg); err != nil {
-		t.Fatal(err)
-	}
-	store := adversarylabs.ConfigStore{Path: filepath.Join(config, "config.json")}
-	auth, ok, err := store.ExactAuthE(adversarylabs.AuthKey(api, "node-codex"))
-	if err != nil || !ok || auth.Token != state.Identities[api] {
-		t.Fatalf("credentials: %v %v", ok, err)
-	}
-	var saved watching.Config
-	if err := watching.Read(filepath.Join(root, "config.json"), &saved); err != nil {
-		t.Fatal(err)
-	}
-	if !watching.ConsentValid(saved, api, "node-codex", auth.Token) {
-		t.Fatal("native consent is not usable")
-	}
-	// Existing watches must not silently switch identity during another session.
-	watchLock, err := publock.TryAcquire(root, "watcher")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer watchLock.Close()
-	if err := watching.Write(filepath.Join(root, "process.json"), watchProcess{AllChanges: true}); err != nil {
-		t.Fatal(err)
-	}
-	if err := watching.Write(filepath.Join(root, "heartbeat.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("DOOMER_TOKEN", "different-token")
-	if err := prepareAgentWatcher(context.Background(), "unused", home, root, config, "", state, &cfg); err == nil || !strings.Contains(err.Error(), "restart") {
-		t.Fatalf("identity switch: %v", err)
-	}
-	// A paused watcher remains paused even if a fresh prompt arrives.
-	if err := watching.Write(filepath.Join(root, "paused.json"), true); err != nil {
-		t.Fatal(err)
-	}
-	if err := prepareAgentWatcher(context.Background(), "unused", home, root, config, "", state, &cfg); err == nil || !strings.Contains(err.Error(), "paused") {
-		t.Fatalf("pause: %v", err)
 	}
 }
 
