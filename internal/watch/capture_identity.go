@@ -40,6 +40,9 @@ func captureForReview(ctx context.Context, root, path, base string) (sourcesnaps
 		if Read(StatePath(root, path), &state) == nil && !state.Ambiguous && state.Owner.Session != "" &&
 			Read(TurnPath(root, state.Owner.Session), &turn) == nil && turn.Owner == state.Owner &&
 			Read(reviewCapturePath(root, path), &captured) == nil && captured.Digest == state.Fingerprint {
+			if scope := workspacePromptForRepository(root, path); scope != nil && !scope.ClosingAt.IsZero() && scope.Owner == state.Owner {
+				return captured, nil // Drain the final turn snapshot, not edits made after Stop.
+			}
 			if unchanged, ok := unchangedCapture(ctx, path, captured); ok {
 				return unchanged, nil
 			}

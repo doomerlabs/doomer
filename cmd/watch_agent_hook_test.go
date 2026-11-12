@@ -41,11 +41,28 @@ func TestAgentHookStartsAndReusesGoWatcher(t *testing.T) {
 	}
 	home := t.TempDir()
 	repo := newWatchTestRepo(t)
+	workspace := t.TempDir()
+	nested := filepath.Join(workspace, "one", "two", "three", "project")
+	if err := os.MkdirAll(filepath.Dir(nested), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(repo, nested); err != nil {
+		t.Fatal(err)
+	}
+	repo = nested
 	config := filepath.Join(home, "native-state")
 	api := "http://localhost:1/api" // No request should be needed before a prompt.
 	root := filepath.Join(config, "watch", watching.Key(api+"\x00node-codex"))
 	state := agentHookState{Identities: map[string]string{api: "doomer_anon_test_identity"}}
-	cfg := watching.Config{Version: 1, API: api, Profile: "node-codex", AllChanges: true, AllRepositories: true, ExplicitConsent: true, ConsentedAt: time.Now()}
+	cfg := watching.Config{Version: 1, API: api, Profile: "node-codex", AllChanges: true, PromptScoped: true, AllRepositories: true, ExplicitConsent: true, ConsentedAt: time.Now()}
+	owner := watching.Owner{Session: "session", Turn: "turn"}
+	if err := watching.Write(watching.TurnPath(root, owner.Session), watching.Turn{Owner: owner}); err != nil {
+		t.Fatal(err)
+	}
+	scopePath := filepath.Join(root, "workspace-prompts", watching.Key(owner.Session)+".json")
+	if err := watching.Write(scopePath, watching.WorkspacePrompt{Owner: owner, Directory: workspace, Started: time.Now(), Baselines: map[string]string{repo: "clean"}}); err != nil {
+		t.Fatal(err)
+	}
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -66,19 +83,36 @@ func TestAgentHookStartsAndReusesGoWatcher(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	if err := prepareAgentWatcher(ctx, wrapper, home, root, config, repo, state, &cfg); err != nil {
+	if err := prepareAgentWatcher(ctx, wrapper, home, root, config, workspace, state, &cfg); err != nil {
 		t.Fatal(err)
 	}
 	first, live, err := runningWatch(root)
-	if err != nil || !live || !first.AllChanges {
+	if err != nil || !live || !first.AllChanges || !first.PromptScoped {
 		t.Fatalf("watcher: %+v %t %v", first, live, err)
 	}
-	if err := prepareAgentWatcher(ctx, wrapper, home, root, config, repo, state, &cfg); err != nil {
+	if err := prepareAgentWatcher(ctx, wrapper, home, root, config, workspace, state, &cfg); err != nil {
 		t.Fatal(err)
 	}
 	second, live, err := runningWatch(root)
 	if err != nil || !live || first.PID != second.PID {
 		t.Fatalf("watcher was not reused: %+v %v", second, err)
+	}
+	if err := waitWatch(ctx, func() (bool, error) {
+		repos, err := watching.Repositories(root, cfg)
+		for _, r := range repos {
+			if r.Path == repo {
+				return true, err
+			}
+		}
+		return false, err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(scopePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := waitWatch(ctx, func() (bool, error) { _, live, err := runningWatch(root); return !live, err }); err != nil {
+		t.Fatal("watcher survived its last prompt:", err)
 	}
 }
 

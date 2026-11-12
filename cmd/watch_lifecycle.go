@@ -24,6 +24,7 @@ type watchProcess struct {
 	Session          string    `json:"session"`
 	ManagedSession   string    `json:"managed_session,omitempty"`
 	AllChanges       bool      `json:"all_changes,omitempty"`
+	PromptScoped     bool      `json:"prompt_scoped,omitempty"`
 	ConsentedAt      time.Time `json:"consented_at"`
 	Directories      []string  `json:"directories,omitempty"`
 	WorkingDirectory string    `json:"working_directory,omitempty"`

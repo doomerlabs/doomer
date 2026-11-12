@@ -50,7 +50,7 @@ func agentHookAPI(explicit, environment, saved string) (string, error) {
 }
 
 func agentHookConsent(state agentHookState, api, agent, repo string) (watching.Config, error) {
-	cfg := watching.Config{Version: 1, API: api, Profile: "node-" + agent, ExplicitConsent: true, AllChanges: true}
+	cfg := watching.Config{Version: 1, API: api, Profile: "node-" + agent, ExplicitConsent: true, AllChanges: true, PromptScoped: true}
 	for _, grant := range state.Grants {
 		if grant.API != api || grant.ApprovedAt.IsZero() {
 			continue
@@ -62,7 +62,7 @@ func agentHookConsent(state agentHookState, api, agent, repo string) (watching.C
 		for _, allowed := range grant.Agents {
 			if allowed == agent && grant.Repo != "" {
 				cfg.Directories = append(cfg.Directories, grant.Repo)
-				if grant.Repo == repo {
+				if grant.Repo == repo || repo == "" {
 					cfg.ConsentedAt = grant.ApprovedAt
 				}
 				break
@@ -174,11 +174,24 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) error {
 	if err != nil {
 		return err
 	}
-	if err := prepareAgentWatcher(ctx, exe, home, root, config, repo, state, &cfg); err != nil {
+	watchDirectory := input.CWD
+	if input.Event == "UserPromptSubmit" {
+		watchDirectory = "" // Capture the turn's initial state before the agent edits.
+	}
+	if process, live, e := runningWatch(root); e == nil && live && !process.PromptScoped {
+		// Retire the older permanent watcher; this prompt starts its replacement
+		// after its recursive scope is recorded. Preserve deliberate user pauses.
+		if _, err := refreshManagedWatch(ctx, root, func(watchProcess) error { return nil }); err != nil {
+			return err
+		}
+	}
+	if err := prepareAgentWatcher(ctx, exe, home, root, config, watchDirectory, state, &cfg); err != nil {
 		return err
 	}
-	unlock()
-	unlock = nil
+	if input.Event != "UserPromptSubmit" {
+		unlock()
+		unlock = nil
+	}
 	// Reuse the existing native hook protocol and bounded Stop wait.
 	child := exec.CommandContext(ctx, exe, "--api-url", api, "--profile", cfg.Profile, "watch", "hook", "--state", root, "--agent", agent)
 	child.Env, child.Stdin = agentHookEnv(config), bytes.NewReader(raw)
@@ -186,6 +199,11 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) error {
 	child.Stdout, child.Stderr = &result, c.ErrOrStderr()
 	if err := child.Run(); err != nil {
 		return fmt.Errorf("native hook did not complete: %w", err)
+	}
+	if input.Event == "UserPromptSubmit" {
+		if err := prepareAgentWatcher(ctx, exe, home, root, config, input.CWD, state, &cfg); err != nil {
+			return err
+		}
 	}
 	_, err = c.OutOrStdout().Write(result.Bytes())
 	return err

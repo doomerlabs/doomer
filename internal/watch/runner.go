@@ -179,6 +179,9 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 		r.flush(ctx)
 		r.refreshUnavailableReview(ctx, path)
 		_, _, filesystemTask := allChangesTask(r.Root, path)
+		if r.Config.PromptScoped {
+			filesystemTask = workspacePromptForRepository(r.Root, path) != nil
+		}
 		if !once && !captureRequested(r.Root, path, started, last) && !(r.Config.AllChanges && filesystemTask) {
 			if retryRequest != nil {
 				nextWake = time.Until(nextRetry)
