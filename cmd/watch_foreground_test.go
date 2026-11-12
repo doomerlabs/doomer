@@ -24,7 +24,7 @@ func TestWatchTokenPrefersScopedAccount(t *testing.T) {
 	state := agentHookState{Identities: map[string]string{api: "anonymous-token", "http://localhost:3000/api": "local-anonymous"}, CredentialDirs: map[string]string{api: dir}}
 	check := func(service, want string) {
 		t.Helper()
-		got, err := watchToken(NewRootCommand(), service, state)
+		got, err := watchToken(NewRootCommand(), service, state, watchEnvironment{})
 		if err != nil || got != want {
 			t.Fatalf("credential resolution: got %q, err %v", got, err)
 		}
@@ -48,14 +48,14 @@ func TestWatchTokenHonorsProfileAndRejectsExpiredLogin(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := agentHookState{Identities: map[string]string{api: "anonymous-token"}}
-	got, err := watchToken(NewRootCommand(), api, state)
+	got, err := watchToken(NewRootCommand(), api, state, watchEnvironment{})
 	if err != nil || got != "work-account" {
 		t.Fatalf("wrong profile: %q, %v", got, err)
 	}
 	if err := store.SetAuth(adversarylabs.AuthKey(api, "work"), adversarylabs.Auth{Token: "expired", ExpiresAt: time.Now().Add(-time.Hour).Format(time.RFC3339)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := watchToken(NewRootCommand(), api, state); err == nil {
+	if _, err := watchToken(NewRootCommand(), api, state, watchEnvironment{}); err == nil {
 		t.Fatal("expired account silently became anonymous")
 	}
 }
@@ -65,8 +65,12 @@ func TestForegroundWatchRunsUntilCallerStopsIt(t *testing.T) {
 	api := "http://localhost:1/api"
 	t.Setenv("DOOMER_HOME", home)
 	t.Setenv("DOOMER_TOKEN", "test")
-	t.Setenv("DOOMER_API_URL", api)
-	state := map[string]any{"version": 1, "api": api, "grants": []any{map[string]any{"scope": "global", "api": api, "approvedAt": time.Now().UTC()}}}
+	t.Setenv("DOOMER_API_URL", "https://doomer.ai/api")
+	t.Setenv("DOOMER_CONFIG_DIR", t.TempDir())
+	if err := os.WriteFile(filepath.Join(workspace, ".doomer.env"), []byte("DOOMER_API_URL="+api+"\nDOOMER_TOKEN=\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	state := map[string]any{"version": 1, "api": "https://doomer.ai/api", "identities": map[string]string{api: "local-token"}, "grants": []any{map[string]any{"scope": "global", "api": api, "approvedAt": time.Now().UTC()}}}
 	data, _ := json.Marshal(state)
 	if err := os.WriteFile(filepath.Join(home, "state.json"), data, 0600); err != nil {
 		t.Fatal(err)

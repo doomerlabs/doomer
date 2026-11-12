@@ -27,11 +27,11 @@ type watchConfiguration struct {
 	ManagerHome string `json:"manager_home"`
 }
 
-func watchToken(c *cobra.Command, api string, state agentHookState) (string, error) {
-	if token := os.Getenv("DOOMER_TOKEN"); token != "" {
+func watchToken(c *cobra.Command, api string, state agentHookState, env watchEnvironment) (string, error) {
+	if token := env.get("DOOMER_TOKEN"); token != "" {
 		return token, nil
 	}
-	dir := os.Getenv("DOOMER_CONFIG_DIR")
+	dir := env.get("DOOMER_CONFIG_DIR")
 	if dir == "" {
 		dir = state.CredentialDirs[api]
 	}
@@ -45,8 +45,9 @@ func watchToken(c *cobra.Command, api string, state agentHookState) (string, err
 	settings := viper.New()
 	settings.SetConfigFile(filepath.Join(dir, "settings.yaml"))
 	settings.SetDefault("profile", "default")
-	settings.SetEnvPrefix("DOOMER")
-	settings.AutomaticEnv()
+	if profile := env.get("DOOMER_PROFILE"); profile != "" {
+		settings.Set("profile", profile)
+	}
 	if err := settings.ReadInConfig(); err != nil && !os.IsNotExist(err) {
 		return "", err
 	}
@@ -95,7 +96,7 @@ func defaultManagerHome() (string, error) {
 
 func newForegroundWatchCommand() *cobra.Command {
 	var fromStdin bool
-	c := &cobra.Command{Use: "watch [directory]", Short: "Watch recursively and review settled changes until stopped", Args: cobra.MaximumNArgs(1)}
+	c := &cobra.Command{Use: "watch [directory]", Short: "Watch recursively and review settled changes until stopped", Args: cobra.MaximumNArgs(1), Long: "Watch recursively and review settled changes until stopped.\n\nReads the nearest .doomer.env in the watched directory or its parents. Supported keys: DOOMER_API_URL, DOOMER_CONFIG_DIR, DOOMER_TOKEN, DOOMER_PROFILE.\nPrecedence: explicit flags, directory settings, inherited environment, saved defaults. Values are literal KEY=value assignments; no shell or direnv is executed. An empty DOOMER_TOKEN clears an inherited token."}
 	c.PersistentPreRunE = func(command *cobra.Command, args []string) error {
 		if command != c {
 			for parent := c.Parent(); parent != nil; parent = parent.Parent() {
@@ -135,30 +136,35 @@ func newForegroundWatchCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var state agentHookState
-			if err := watching.Read(filepath.Join(config.ManagerHome, "state.json"), &state); err != nil {
-				return fmt.Errorf("read upload approval: %w", err)
-			}
-			explicit := ""
-			if c.Flags().Changed("api-url") || c.InheritedFlags().Changed("api-url") {
-				explicit, _ = c.Flags().GetString("api-url")
-			}
-			config.API, err = agentHookAPI(explicit, os.Getenv("DOOMER_API_URL"), state.API)
-			if err != nil {
-				return err
-			}
-			config.Token, err = watchToken(c, config.API, state)
-			if err != nil {
-				return err
-			}
 			config.ID = rand.Text()
 		}
-		if !filepath.IsAbs(config.Directory) || !filepath.IsAbs(config.ManagerHome) || config.Token == "" || config.ID == "" {
+		if !filepath.IsAbs(config.Directory) || !filepath.IsAbs(config.ManagerHome) || config.ID == "" {
 			return fmt.Errorf("invalid watch configuration")
 		}
-		if err := adversarylabs.ValidateAPIURL(config.API); err != nil {
+		environment, err := directoryWatchEnvironment(config.Directory)
+		if err != nil {
 			return err
 		}
+		var state agentHookState
+		if err := watching.Read(filepath.Join(config.ManagerHome, "state.json"), &state); err != nil {
+			return fmt.Errorf("read upload approval: %w", err)
+		}
+		explicit := ""
+		if c.Flags().Changed("api-url") || c.InheritedFlags().Changed("api-url") {
+			explicit, _ = c.Flags().GetString("api-url")
+		}
+		config.API, err = agentHookAPI(explicit, environment.get("DOOMER_API_URL"), state.API)
+		if err != nil {
+			return err
+		}
+		if _, err := agentHookConsent(state, config.API, config.Agent, ""); err != nil {
+			return err
+		}
+		config.Token, err = watchToken(c, config.API, state, environment)
+		if err != nil {
+			return err
+		}
+
 		allowed := func(ctx context.Context, path string) bool {
 			var state agentHookState
 			if _, err := os.Stat(filepath.Join(config.ManagerHome, "uninstalling.json")); err == nil {

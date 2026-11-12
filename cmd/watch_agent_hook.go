@@ -150,25 +150,6 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	default:
 		return empty, nil
 	}
-	var state agentHookState
-	if err := watching.Read(filepath.Join(home, "state.json"), &state); err != nil {
-		return empty, fmt.Errorf("cannot read installer approval")
-	}
-	explicit := ""
-	if c.Flags().Changed("api-url") || c.InheritedFlags().Changed("api-url") {
-		explicit, _ = c.Flags().GetString("api-url")
-	}
-	api, err := agentHookAPI(explicit, os.Getenv("DOOMER_API_URL"), state.API)
-	if err != nil {
-		return empty, err
-	}
-	if _, err := agentHookConsent(state, api, agent, ""); err != nil {
-		return empty, err
-	}
-	token, err := watchToken(c, api, state)
-	if err != nil {
-		return empty, err
-	}
 	directory, err := filepath.EvalSymlinks(input.CWD)
 	if err != nil {
 		return empty, err
@@ -181,7 +162,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 				return empty, err
 			}
 		} else {
-			if existing.API != api || existing.Directory != directory {
+			if existing.Directory != directory {
 				return empty, fmt.Errorf("this turn already has a watcher with different configuration")
 			}
 			return empty, nil
@@ -195,7 +176,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	if len(prompt) > 4000 {
 		prompt = prompt[:4000]
 	}
-	cfg := watchConfiguration{Config: livewatch.Config{ID: rand.Text(), ControlKey: id.Key(), Directory: directory, API: api, Token: token, Agent: agent, Request: &adversarylabs.WorkspaceUserRequest{Prompt: string(prompt), SessionID: input.Session, TurnID: requestTurn}}, ManagerHome: home}
+	cfg := watchConfiguration{Config: livewatch.Config{ID: rand.Text(), ControlKey: id.Key(), Directory: directory, Agent: agent, Request: &adversarylabs.WorkspaceUserRequest{Prompt: string(prompt), SessionID: input.Session, TurnID: requestTurn}}, ManagerHome: home}
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return empty, err
@@ -204,7 +185,14 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	if err != nil {
 		return empty, err
 	}
-	child := exec.Command(exe, "watch", "--config-stdin")
+	arguments := []string{"watch", "--config-stdin"}
+	for _, name := range []string{"api-url", "profile"} {
+		if c.Flags().Changed(name) || c.InheritedFlags().Changed(name) {
+			value, _ := c.Flags().GetString(name)
+			arguments = append(arguments, "--"+name, value)
+		}
+	}
+	child := exec.Command(exe, arguments...)
 	exited, err := startBackgroundWatch(child, data)
 	if err != nil {
 		return empty, err
@@ -213,7 +201,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	defer ticker.Stop()
 	for {
 		if result, live := livewatch.Available(ctx, id.Key()); live {
-			if result.API != api || result.Directory != directory {
+			if result.Directory != directory {
 				return empty, fmt.Errorf("watcher identity collision")
 			}
 			return empty, nil

@@ -1,7 +1,8 @@
 ## Local builds
 
 The correct command to build the Go CLI is `make build`.
-The user runs local builds. Agents must not run `make build`, substitute
+Use `make dev` to build and atomically replace `~/.local/bin/doomer-dev`.
+The user runs local builds. Agents must not run `make build` or `make dev`, substitute
 `go build`, or build or install a CLI binary on the user's behalf. Make the
 requested code changes and leave building and installation to the user.
 This also excludes tests that invoke `go build`: skip

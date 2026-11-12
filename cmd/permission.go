@@ -122,7 +122,11 @@ func printInstallerPermission(c *cobra.Command, home, profile, path, id, agent s
 	if c.Flags().Changed("api-url") || c.InheritedFlags().Changed("api-url") {
 		explicitAPI, _ = c.Flags().GetString("api-url")
 	}
-	api, err := agentHookAPI(explicitAPI, os.Getenv("DOOMER_API_URL"), state.API)
+	environment, err := directoryWatchEnvironment(path)
+	if err != nil {
+		return true, err
+	}
+	api, err := agentHookAPI(explicitAPI, environment.get("DOOMER_API_URL"), state.API)
 	if err != nil {
 		return true, err
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +29,7 @@ func TestAgentHookProcess(t *testing.T) {
 			command := NewRootCommand()
 			command.SetArgs(os.Args[i+1:])
 			if err := command.Execute(); err != nil {
+				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 			os.Exit(0)
@@ -121,7 +123,7 @@ func TestAgentHookKilledWorkerCanRestartWithoutCleanup(t *testing.T) {
 	}
 	home, workspace := t.TempDir(), t.TempDir()
 	api := "http://localhost:1/api"
-	if err := os.WriteFile(filepath.Join(home, "state.json"), []byte(`{"version":1,"grants":[{"scope":"global","api":"`+api+`","approvedAt":"2026-11-12T12:00:00Z"}]}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "state.json"), []byte(`{"version":1,"api":"`+api+`","identities":{"`+api+`":"test"},"grants":[{"scope":"global","api":"`+api+`","approvedAt":"2026-11-12T12:00:00Z"}]}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	executable, err := os.Executable()
@@ -217,6 +219,10 @@ func TestAgentHookApprovalIsolation(t *testing.T) {
 }
 
 func TestAgentHookRejectsUnapprovedServiceBeforeWriting(t *testing.T) {
+	wrapper := hookTestExecutable(t)
+	previous := turnExecutable
+	turnExecutable = func() (string, error) { return wrapper, nil }
+	t.Cleanup(func() { turnExecutable = previous })
 	home := t.TempDir()
 	if err := os.WriteFile(filepath.Join(home, "state.json"), []byte(`{"api":"https://doomer.ai/api","grants":[]}`), 0600); err != nil {
 		t.Fatal(err)
@@ -243,5 +249,58 @@ func TestAgentHookResultsIncludeReviewLinks(t *testing.T) {
 	result := turnHookResult(livewatch.Response{Results: []livewatch.Result{{Repository: "/repo", Status: "ready", URL: url}}})
 	if !strings.Contains(result["systemMessage"].(string), url) {
 		t.Fatal("review link missing")
+	}
+}
+
+func hookTestExecutable(t *testing.T) string {
+	t.Helper()
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapper := filepath.Join(t.TempDir(), "test-cli")
+	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\nexec "+watching.Quote(binary)+" -test.run=^TestAgentHookProcess$ -- \"$@\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DOOMER_AGENT_HOOK_TEST_PROCESS", "1")
+	return wrapper
+}
+
+func TestAgentHookLeavesDirectoryRoutingToWatch(t *testing.T) {
+	wrapper := hookTestExecutable(t)
+	old := turnExecutable
+	turnExecutable = func() (string, error) { return wrapper, nil }
+	t.Cleanup(func() { turnExecutable = old })
+	home, root := t.TempDir(), t.TempDir()
+	local := "http://localhost:3000/api"
+	t.Setenv("DOOMER_API_URL", "https://doomer.ai/api")
+	t.Setenv("DOOMER_TOKEN", "production-token")
+	t.Setenv("DOOMER_CONFIG_DIR", t.TempDir())
+	state := `{"version":1,"api":"https://doomer.ai/api","identities":{"http://localhost:3000/api":"local-token"},"grants":[{"scope":"global","api":"http://localhost:3000/api","approvedAt":"2026-11-12T12:00:00Z"}]}`
+	if err := os.WriteFile(filepath.Join(home, "state.json"), []byte(state), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".doomer.env"), []byte("DOOMER_API_URL="+local+"\nDOOMER_TOKEN=\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	input, _ := json.Marshal(watching.HookInput{Event: "UserPromptSubmit", Session: "directory-test", Turn: "one", CWD: root})
+	c := NewRootCommand()
+	c.SetArgs([]string{"watch", "agent-hook", "--manager-home", home, "--agent", "codex"})
+	c.SetIn(bytes.NewReader(input))
+	var out bytes.Buffer
+	c.SetOut(&out)
+	if err := c.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "not completed") {
+		t.Fatal(out.String())
+	}
+	id := hookIdentity{Namespace: home, Agent: "codex", Session: "directory-test", Turn: "one"}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	defer livewatch.Call(ctx, id.Key(), "cancel")
+	response, live := livewatch.Available(ctx, id.Key())
+	if !live || response.API != local {
+		t.Fatalf("watch did not select localhost: %+v", response)
 	}
 }
