@@ -25,7 +25,7 @@ func newHasPermissionCommand(app *application.App, api, profile *string) *cobra.
 	c := &cobra.Command{
 		Use:   "has-permission [directory]",
 		Short: "Read saved repository upload consent without changing setup",
-		Long:  "Read saved upload consent for this repository and its approved worktrees. Prints true or false. Uses the Node installer's saved approval when present, otherwise checks legacy watcher consent. An explicit native config directory or credential profile selects legacy consent unless --manager-home is supplied. Use --managed for managed review tasks; it verifies the current account with the service before reading the saved grant. These checks do not write local state. A pause retains consent. Accept the decision only when the command exits successfully. Discard all output on error, including incomplete output after a write failure.",
+		Long:  "Read saved upload consent for this repository and its approved worktrees. Prints true or false. Uses the Node installer's saved approval when present, otherwise checks legacy watcher consent. An explicit credential profile selects legacy consent unless --manager-home is supplied. Use --managed for managed review tasks; it verifies the current account with the service before reading the saved grant. These checks do not write local state. A pause retains consent. Accept the decision only when the command exits successfully. Discard all output on error, including incomplete output after a write failure.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			path := "."
@@ -84,7 +84,7 @@ func printInstallerPermission(c *cobra.Command, home, profile, path, id, agent s
 	explicitHome := home != ""
 	// Existing native profiles remain isolated from installer approvals. The
 	// public command, which has neither override, discovers the installer's store.
-	if !explicitHome && (os.Getenv("DOOMER_CONFIG_DIR") != "" || profile != "default" || c.Flags().Changed("profile") || c.InheritedFlags().Changed("profile")) {
+	if !explicitHome && (profile != "default" || c.Flags().Changed("profile") || c.InheritedFlags().Changed("profile")) {
 		return false, nil
 	}
 	if home == "" {

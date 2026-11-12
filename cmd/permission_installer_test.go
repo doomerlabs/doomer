@@ -99,11 +99,14 @@ func TestHasPermissionInstallerScopeRevocationAndCorruption(t *testing.T) {
 	}
 }
 
-func TestHasPermissionInstallerRespectsNativeConfigOverride(t *testing.T) {
+func TestHasPermissionInstallerWorksWithDirectoryEnvironment(t *testing.T) {
 	manager, repo := installerPermissionFixture(t, `[{"scope":"global","api":"http://localhost:3000/api","approvedAt":"2026-11-12T12:00:00Z"}]`)
 	t.Setenv("DOOMER_CONFIG_DIR", t.TempDir())
-	if output, err := execute(t, "", "has-permission", repo); err != nil || output != "false\n" {
-		t.Fatalf("overrode native config: %s %v", output, err)
+	if output, err := execute(t, "", "has-permission", repo); err != nil || output != "true\n" {
+		t.Fatalf("directory environment hid installer approval: %s %v", output, err)
+	}
+	if output, err := execute(t, "", "--profile", "default", "has-permission", repo); err != nil || output != "false\n" {
+		t.Fatalf("explicit native profile was ignored: %s %v", output, err)
 	}
 	if output, err := execute(t, "", "has-permission", repo, "--manager-home", manager); err != nil || output != "true\n" {
 		t.Fatalf("explicit installer config: %s %v", output, err)
