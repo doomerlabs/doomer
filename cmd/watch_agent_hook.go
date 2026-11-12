@@ -117,7 +117,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	if json.Unmarshal(raw, &input) != nil {
 		return empty, fmt.Errorf("invalid hook input")
 	}
-	if input.Session == "" || input.CWD == "" {
+	if input.Session == "" {
 		return empty, nil
 	}
 	turn := input.Turn
@@ -144,6 +144,9 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 		}
 		return turnHookResult(result), nil
 	case "UserPromptSubmit":
+		if input.CWD == "" {
+			return empty, nil
+		}
 	default:
 		return empty, nil
 	}
@@ -233,9 +236,12 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 }
 
 func turnHookResult(result livewatch.Response) map[string]any {
-	var findings, failures []string
+	var findings, failures, links []string
 	completed := 0
 	for _, review := range result.Results {
+		if review.URL != "" {
+			links = append(links, "Review: "+review.URL)
+		}
 		if review.Status == "ready" {
 			completed++
 		}
@@ -249,14 +255,18 @@ func turnHookResult(result livewatch.Response) map[string]any {
 			findings = append(findings, fmt.Sprintf("%s — %s:%d: %s\nCheck: %s", filepath.Base(review.Repository), lead.Path, lead.Line, lead.Concern, lead.Check))
 		}
 	}
+	linkText := ""
+	if len(links) > 0 {
+		linkText = "\n" + strings.Join(links, "\n")
+	}
 	if len(findings) > 0 {
-		return map[string]any{"decision": "block", "reason": "Doomer Quick review findings:\n" + strings.Join(findings, "\n\n")}
+		return map[string]any{"decision": "block", "reason": "Doomer Quick review findings:\n" + strings.Join(findings, "\n\n") + linkText}
 	}
 	if len(failures) > 0 {
-		return map[string]any{"systemMessage": "Doomer Quick review was not completed:\n" + strings.Join(failures, "\n")}
+		return map[string]any{"systemMessage": "Doomer Quick review was not completed:\n" + strings.Join(failures, "\n") + linkText}
 	}
 	if completed > 0 {
-		return map[string]any{"systemMessage": fmt.Sprintf("Doomer Quick review completed for %d repositories; no findings returned.", completed)}
+		return map[string]any{"systemMessage": fmt.Sprintf("Doomer Quick review completed for %d repositories; no findings returned.", completed) + linkText}
 	}
 	return map[string]any{}
 }

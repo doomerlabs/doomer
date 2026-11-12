@@ -63,7 +63,11 @@ func TestAgentHookWorkersArePerTurnAndLeaveNoRuntimeFiles(t *testing.T) {
 	t.Setenv("DOOMER_API_URL", api)
 	call := func(event, agent, turn string) {
 		t.Helper()
-		input, _ := json.Marshal(watching.HookInput{Event: event, Session: "session", Turn: turn, CWD: workspace, Prompt: "test"})
+		cwd := workspace
+		if event != "UserPromptSubmit" {
+			cwd = ""
+		}
+		input, _ := json.Marshal(watching.HookInput{Event: event, Session: "session", Turn: turn, CWD: cwd, Prompt: "test"})
 		c := NewRootCommand()
 		c.SetArgs([]string{"watch", "agent-hook", "--manager-home", home, "--agent", agent})
 		c.SetIn(bytes.NewReader(input))
@@ -100,7 +104,7 @@ func TestAgentHookWorkersArePerTurnAndLeaveNoRuntimeFiles(t *testing.T) {
 		}
 	}
 	call("Interrupt", "codex", "two")
-	call("Stop", "claude", "one")
+	call("SessionEnd", "claude", "one")
 	entries, err := os.ReadDir(home)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("runtime polluted manager home: %v %v", entries, err)
@@ -231,5 +235,13 @@ func TestAgentHookRejectsUnapprovedServiceBeforeWriting(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, "native-state")); !os.IsNotExist(err) {
 		t.Fatal("unapproved hook wrote native state")
+	}
+}
+
+func TestAgentHookResultsIncludeReviewLinks(t *testing.T) {
+	url := "https://doomer.ai/look-closer/example/repo/review"
+	result := turnHookResult(livewatch.Response{Results: []livewatch.Result{{Repository: "/repo", Status: "ready", URL: url}}})
+	if !strings.Contains(result["systemMessage"].(string), url) {
+		t.Fatal("review link missing")
 	}
 }
