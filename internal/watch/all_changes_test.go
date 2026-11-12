@@ -21,6 +21,91 @@ type allChangesClient struct {
 	submitted chan adversarylabs.WorkspaceSubmission
 }
 
+type failedThenReadyClient struct {
+	fakeClient
+	submitted chan adversarylabs.WorkspaceSubmission
+	count     int
+}
+
+func (c *failedThenReadyClient) StartWorkspace(ctx context.Context, token string, input adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {
+	c.count++
+	c.submitted <- input
+	if c.count == 1 {
+		return adversarylabs.WorkspaceReview{ID: input.ReviewID, Status: "failed"}, nil
+	}
+	return c.fakeClient.StartWorkspace(ctx, token, input)
+}
+
+func TestAllChangesEveryPromptSubmitsUnchangedSnapshot(t *testing.T) {
+	root, repo := t.TempDir(), repository(t)
+	cfg := Config{AllChanges: true, Directories: []string{repo}, API: "https://example.com/api"}
+	filesystemPrompt(t, root, repo, cfg)
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("edit awaiting review\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	client := &failedThenReadyClient{submitted: make(chan adversarylabs.WorkspaceSubmission, 5)}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	done := make(chan error, 1)
+	runner := Runner{Root: root, Config: cfg, Client: client, Token: "test", Interval: 25 * time.Millisecond}
+	go func() { done <- runner.Run(ctx, repo, false) }()
+	defer func() { cancel(); <-done }()
+	nextSubmission := func() adversarylabs.WorkspaceSubmission {
+		t.Helper()
+		select {
+		case input := <-client.submitted:
+			return input
+		case <-ctx.Done():
+			t.Fatal("review was not submitted")
+			return adversarylabs.WorkspaceSubmission{}
+		}
+	}
+	waitFor := func(status string) {
+		t.Helper()
+		for {
+			var feed Feed
+			if Read(FeedPath(root, repo), &feed) == nil && feed.AssessmentStatus == status {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatalf("review never reached %s", status)
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	}
+	first := nextSubmission()
+	waitFor("unavailable")
+	select {
+	case <-client.submitted:
+		t.Fatal("failed review retried within the same turn")
+	case <-time.After(150 * time.Millisecond):
+	}
+	prompt := func(turn string) {
+		raw, _ := json.Marshal(HookInput{Event: "UserPromptSubmit", Session: "session", Turn: turn, CWD: repo, Prompt: "Try the review again"})
+		hookWithReadiness(ctx, root, cfg, bytes.NewReader(raw), io.Discard, func(context.Context) bool { return false }, "codex")
+	}
+	prompt("second-turn")
+	second := nextSubmission()
+	if first.ReviewID == second.ReviewID || second.UserRequest == nil || second.UserRequest.TurnID != "second-turn" {
+		t.Fatal("retry did not get a new review identity and prompt")
+	}
+	if first.Diff != second.Diff {
+		t.Fatal("retry changed the source being reviewed")
+	}
+	waitFor("ready")
+	prompt("third-turn")
+	third := nextSubmission()
+	if third.ReviewID == second.ReviewID || third.UserRequest == nil || third.UserRequest.TurnID != "third-turn" || third.Diff != second.Diff {
+		t.Fatal("successful earlier review suppressed a new turn")
+	}
+	waitFor("ready")
+	select {
+	case <-client.submitted:
+		t.Fatal("polling submitted the same turn repeatedly")
+	case <-time.After(150 * time.Millisecond):
+	}
+}
+
 func (c *allChangesClient) StartWorkspace(ctx context.Context, token string, input adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {
 	c.submitted <- input
 	return c.fakeClient.StartWorkspace(ctx, token, input)

@@ -111,6 +111,7 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 		started = time.Now()
 	}
 	var last, observed string
+	var lastRequest *State
 	var nextRetry time.Time
 	var retryRequest *State
 	var retryCapture sourcesnapshot.Capture
@@ -153,6 +154,8 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 				retryAttempts++
 				if err == nil || errors.Is(err, errReviewTerminal) || retryAttempts >= 3 {
 					last = retryCapture.Digest
+					completed := *retryRequest
+					lastRequest = &completed
 					retryRequest = nil
 					if err != nil {
 						r.logf("%s: review failed after %d attempts (%s).", filepath.Base(path), retryAttempts, err)
@@ -276,7 +279,7 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 				if nextWake <= 0 {
 					nextWake = time.Millisecond
 				}
-			} else if capture.Digest != last && time.Now().After(nextRetry) {
+			} else if (capture.Digest != last || r.Config.AllChanges && newPromptRequestsReview(r.Root, path, lastRequest)) && time.Now().After(nextRetry) {
 				var attempt State
 				if e := Read(StatePath(r.Root, path), &attempt); e != nil {
 					r.debugf("%s: could not read the pending request: %v", path, e)
@@ -290,14 +293,20 @@ func (r Runner) Run(ctx context.Context, path string, once bool) error {
 				}
 				if err == nil {
 					last = capture.Digest
+					lastRequest = &attempt
 					retryRequest = nil
 					nextRetry = time.Time{}
 				} else if errors.Is(err, errReviewTerminal) {
 					// Reposting the same ID returns the same terminal review.
-					// Wait for a changed snapshot instead of retrying forever.
+					// A later prompt creates a fresh request, even for this snapshot.
 					last = capture.Digest
+					lastRequest = &attempt
 					retryRequest = nil
-					r.logf("%s: %s. Waiting for a new change.", filepath.Base(path), err)
+					if r.Config.AllChanges {
+						r.logf("%s: %s. Waiting for a new prompt or change.", filepath.Base(path), err)
+					} else {
+						r.logf("%s: %s. Waiting for a new change.", filepath.Base(path), err)
+					}
 				} else {
 					retryRequest = &attempt
 					retryCapture = capture
