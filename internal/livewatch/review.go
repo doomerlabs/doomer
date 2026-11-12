@@ -140,7 +140,10 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		return fail(err)
 	}
 	for {
-		result.ID, result.URL = current.ID, adversarylabs.WorkspaceLink(cfg.API, current)
+		result.ID = current.ID
+		if link := adversarylabs.WorkspaceLink(cfg.API, current); link != "" {
+			result.URL = link
+		}
 		if current.Early != nil && (current.Early.Status == "ready" || current.Early.Status == "unavailable") {
 			result.Status, result.Leads = current.Early.Status, current.Early.Leads
 			if result.Status == "unavailable" {

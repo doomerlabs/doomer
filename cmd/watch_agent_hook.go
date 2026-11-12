@@ -228,7 +228,7 @@ func turnHookResult(result livewatch.Response) map[string]any {
 	completed := 0
 	for _, review := range result.Results {
 		if review.URL != "" {
-			links = append(links, "Review: "+review.URL)
+			links = append(links, "[Doomer review]("+review.URL+")")
 		}
 		if review.Status == "ready" {
 			completed++

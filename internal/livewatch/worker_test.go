@@ -305,3 +305,26 @@ func TestSeparateInvocationsUseDistinctReviewIDs(t *testing.T) {
 		t.Fatal("new watch reused a previous watch's review")
 	}
 }
+
+type publicLinkClient struct{ fakeClient }
+
+func (f *publicLinkClient) StartWorkspace(context.Context, string, adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {
+	return adversarylabs.WorkspaceReview{ID: "review", Status: "queued", URL: "https://dev.example.exe.xyz/look-closer/org/repo/" + strings.Repeat("a", 64)}, nil
+}
+func (f *publicLinkClient) GetWorkspace(context.Context, string, string) (adversarylabs.WorkspaceReview, error) {
+	return adversarylabs.WorkspaceReview{ID: "review", Status: "completed", Early: &adversarylabs.WorkspaceAssessment{Status: "ready"}}, nil
+}
+func TestReviewRetainsPublicLinkWhenPollingOmitsIt(t *testing.T) {
+	repo := makeRepository(t, t.TempDir(), "repo")
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("changed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := capture(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := review(context.Background(), &publicLinkClient{}, Config{ID: "watch", API: "http://localhost:3000/api", Token: "test"}, repo, snapshot, 1)
+	if result.Status != "ready" || result.URL != "https://dev.example.exe.xyz/look-closer/org/repo/"+strings.Repeat("a", 64) {
+		t.Fatalf("review link lost: %+v", result)
+	}
+}
