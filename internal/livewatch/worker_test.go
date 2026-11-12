@@ -1,4 +1,4 @@
-package turnwatch
+package livewatch
 
 import (
 	"context"
@@ -74,15 +74,15 @@ func makeRepository(t *testing.T, parent, relative string) string {
 	return path
 }
 
-func startWorker(t *testing.T, directory string, client *fakeClient, drain time.Duration, allowed func(context.Context, string) bool, identity ...Identity) (Config, <-chan error) {
+func startWorker(t *testing.T, directory string, client *fakeClient, drain time.Duration, allowed func(context.Context, string) bool, identity ...string) (Config, <-chan error) {
 	t.Helper()
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("Unix IPC")
 	}
-	cfg := Config{Identity: Identity{Namespace: t.TempDir(), Agent: "codex", Session: "session", Turn: "turn"}, Directory: directory, API: "http://localhost:3000/api", Token: "test", Prompt: "change a nested repo", RequestTurn: "turn", DrainTimeout: drain}
+	cfg := Config{ID: t.TempDir(), ControlKey: Key(t.TempDir()), Directory: directory, API: "http://localhost:3000/api", Token: "test", DrainTimeout: drain}
 	if len(identity) > 0 {
-		cfg.Identity = identity[0]
-		cfg.RequestTurn = identity[0].Turn
+		cfg.ID = identity[0]
+		cfg.ControlKey = Key(identity[0])
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -90,7 +90,7 @@ func startWorker(t *testing.T, directory string, client *fakeClient, drain time.
 	go func() { done <- Serve(ctx, cfg, client, allowed) }()
 	until := time.Now().Add(5 * time.Second)
 	for time.Now().Before(until) {
-		if _, live := Available(ctx, cfg.Identity); live {
+		if _, live := Available(ctx, cfg.ControlKey); live {
 			return cfg, done
 		}
 		select {
@@ -107,7 +107,7 @@ func stopWorker(t *testing.T, cfg Config, done <-chan error) Response {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result, err := Call(ctx, cfg.Identity, "stop")
+	result, err := Call(ctx, cfg.ControlKey, "stop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func stopWorker(t *testing.T, cfg Config, done <-chan error) Response {
 	return result
 }
 
-func TestRecursiveTurnCapturesOnlyChangedRepoAndExits(t *testing.T) {
+func TestRecursiveWatchCapturesOnlyChangedRepoAndExits(t *testing.T) {
 	parent := t.TempDir()
 	changed := makeRepository(t, parent, "a/b/c/d/changed")
 	sibling := makeRepository(t, parent, "sibling")
@@ -131,7 +131,7 @@ func TestRecursiveTurnCapturesOnlyChangedRepoAndExits(t *testing.T) {
 	}
 	client := &fakeClient{started: make(chan adversarylabs.WorkspaceSubmission, 10)}
 	cfg, done := startWorker(t, parent, client, time.Second, func(context.Context, string) bool { return true })
-	if err := os.WriteFile(filepath.Join(changed, "file.txt"), []byte("during this turn\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(changed, "file.txt"), []byte("during this watch\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	result := stopWorker(t, cfg, done)
@@ -139,14 +139,14 @@ func TestRecursiveTurnCapturesOnlyChangedRepoAndExits(t *testing.T) {
 		t.Fatalf("unexpected results: %+v", result)
 	}
 	input := <-client.started
-	if !strings.Contains(input.Diff, "during this turn") || strings.Contains(input.Diff, "old unrelated change") {
+	if !strings.Contains(input.Diff, "during this watch") || strings.Contains(input.Diff, "old unrelated change") {
 		t.Fatal(input.Diff)
 	}
-	if input.FullReview == nil || *input.FullReview || input.UserRequest.TurnID != "turn" {
-		t.Fatal("lost Quick-only turn context")
+	if input.FullReview == nil || *input.FullReview || input.UserRequest != nil {
+		t.Fatal("standalone watch invented agent context or enabled full review")
 	}
-	if _, live := Available(context.Background(), cfg.Identity); live {
-		t.Fatal("worker endpoint survived turn end")
+	if _, live := Available(context.Background(), cfg.ControlKey); live {
+		t.Fatal("watcher endpoint survived stop")
 	}
 }
 
@@ -167,7 +167,7 @@ func TestRepositoriesCreatedMidTurnAndApprovalBoundaries(t *testing.T) {
 	}
 }
 
-func TestEveryTurnSubmitsIdenticalContents(t *testing.T) {
+func TestSeparateInvocationsSubmitIdenticalContents(t *testing.T) {
 	repo := makeRepository(t, t.TempDir(), "repo")
 	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("same edit\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -175,12 +175,12 @@ func TestEveryTurnSubmitsIdenticalContents(t *testing.T) {
 	client := &fakeClient{started: make(chan adversarylabs.WorkspaceSubmission, 10)}
 	namespace := t.TempDir()
 	for _, turn := range []string{"one", "two"} {
-		cfg, done := startWorker(t, repo, client, time.Second, func(context.Context, string) bool { return true }, Identity{Namespace: namespace, Agent: "codex", Session: "session", Turn: turn})
+		cfg, done := startWorker(t, repo, client, time.Second, func(context.Context, string) bool { return true }, namespace+turn)
 		stopWorker(t, cfg, done)
 	}
 	first, second := <-client.started, <-client.started
 	if first.Diff != second.Diff || first.ReviewID == second.ReviewID {
-		t.Fatal("distinct turns were deduplicated")
+		t.Fatal("distinct watches were deduplicated")
 	}
 }
 
@@ -217,7 +217,7 @@ func TestStopDrainsLatestEditBeforeWorkerExits(t *testing.T) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 		defer cancel()
-		out, _ := Call(ctx, cfg.Identity, "stop")
+		out, _ := Call(ctx, cfg.ControlKey, "stop")
 		result <- out
 	}()
 	close(release)
@@ -284,7 +284,7 @@ func TestMemoryDiffPreservesMissingFinalNewline(t *testing.T) {
 	}
 }
 
-func TestTurnlessAgentsStillSubmitDistinctTurns(t *testing.T) {
+func TestSeparateInvocationsUseDistinctReviewIDs(t *testing.T) {
 	repo := makeRepository(t, t.TempDir(), "repo")
 	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("edit\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -294,14 +294,14 @@ func TestTurnlessAgentsStillSubmitDistinctTurns(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &fakeClient{}
-	cfg := Config{Identity: Identity{Agent: "claude", Session: "session"}, API: "http://localhost:3000/api", Token: "test"}
+	cfg := Config{API: "http://localhost:3000/api", Token: "test"}
 	for _, turn := range []string{"one", "two"} {
-		cfg.RequestTurn = turn
+		cfg.ID = turn
 		if result := review(context.Background(), client, cfg, repo, snapshot, 1); result.Status != "ready" {
 			t.Fatal(result)
 		}
 	}
 	if client.inputs[0].ReviewID == client.inputs[1].ReviewID {
-		t.Fatal("turnless agent reused a previous turn's review")
+		t.Fatal("new watch reused a previous watch's review")
 	}
 }

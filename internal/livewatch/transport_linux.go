@@ -1,6 +1,6 @@
 //go:build linux
 
-package turnwatch
+package livewatch
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ import (
 // Linux abstract sockets live entirely in the kernel: no pathname, PID file,
 // lock file, or cleanup marker is created on the filesystem.
 func endpoint(key string) (string, error) {
-	return fmt.Sprintf("@doomer-turn-%d-%s", os.Getuid(), key), nil
+	return fmt.Sprintf("@doomer-watch-%d-%s", os.Getuid(), key), nil
 }
 func listen(key string) (net.Listener, error) {
 	address, _ := endpoint(key)

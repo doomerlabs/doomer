@@ -1,6 +1,6 @@
 //go:build !linux && !darwin
 
-package turnwatch
+package livewatch
 
 import (
 	"fmt"
@@ -8,9 +8,9 @@ import (
 )
 
 func endpoint(string) (string, error) {
-	return "", fmt.Errorf("turn workers currently support Linux and macOS")
+	return "", fmt.Errorf("watch control sockets currently support Linux and macOS")
 }
 func listen(string) (net.Listener, error) {
-	return nil, fmt.Errorf("turn workers currently support Linux and macOS")
+	return nil, fmt.Errorf("watch control sockets currently support Linux and macOS")
 }
 func ownPeer(net.Conn) bool { return false }

@@ -1,4 +1,4 @@
-package turnwatch
+package livewatch
 
 import (
 	"context"
@@ -49,22 +49,29 @@ type worker struct {
 	closeListener func() error
 }
 
-// Serve owns the listener for exactly one turn and closes it on every exit.
+// Serve runs until its caller stops it and closes its optional control listener.
 // The only persistent data it reads is the caller's saved authorization.
 func Serve(ctx context.Context, cfg Config, client Client, allowed func(context.Context, string) bool) error {
-	listener, err := listen(cfg.Identity.Key())
-	if err != nil {
-		return err
+	var listener net.Listener
+	if cfg.ControlKey != "" {
+		var err error
+		listener, err = listen(cfg.ControlKey)
+		if err != nil {
+			return err
+		}
+		defer listener.Close()
 	}
-	defer listener.Close()
 	return serve(ctx, listener, cfg, client, allowed)
 }
 
 func serve(ctx context.Context, listener net.Listener, cfg Config, client Client, allowed func(context.Context, string) bool) error {
-	ctx, cancel := context.WithTimeout(ctx, 8*time.Hour)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	w := &worker{cfg: cfg, client: client, allowed: allowed, repos: map[string]*repository{}, controls: make(chan control), completed: make(chan completion, 64), slots: make(chan struct{}, 4)}
-	w.closeListener = listener.Close
+	w.closeListener = func() error { return nil }
+	if listener != nil {
+		w.closeListener = listener.Close
+	}
 	defer func() { cancel(); w.jobs.Wait() }()
 	w.direct, _ = Root(ctx, cfg.Directory)
 	watcher, err := fsnotify.NewWatcher()
@@ -79,45 +86,62 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 	if err != nil {
 		return err
 	}
-	go func() { <-ctx.Done(); listener.Close() }()
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
+	if listener != nil {
+		go func() { <-ctx.Done(); listener.Close() }()
+		go func() {
+			for {
+				conn, err := listener.Accept()
+				if err != nil {
+					return
+				}
+				go func(conn net.Conn) {
+					defer conn.Close()
+					if !ownPeer(conn) {
+						return
+					}
+					_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+					var req request
+					if json.NewDecoder(io.LimitReader(conn, 4096)).Decode(&req) != nil || req.Key != cfg.ControlKey {
+						return
+					}
+					if req.Operation == "status" {
+						_ = json.NewEncoder(conn).Encode(Response{Ready: true, API: cfg.API, Directory: cfg.Directory})
+						return
+					}
+					if req.Operation != "stop" && req.Operation != "cancel" {
+						return
+					}
+					command := control{cancel: req.Operation == "cancel", reply: make(chan Response, 1), sent: make(chan struct{})}
+					select {
+					case w.controls <- command:
+					case <-ctx.Done():
+						return
+					}
+					select {
+					case result := <-command.reply:
+						_ = json.NewEncoder(conn).Encode(result)
+					case <-ctx.Done():
+					}
+					close(command.sent)
+				}(conn)
+			}
+		}()
+	}
+	if cfg.Stop != nil {
+		go func() {
+			select {
+			case <-cfg.Stop:
+			case <-ctx.Done():
 				return
 			}
-			go func(conn net.Conn) {
-				defer conn.Close()
-				if !ownPeer(conn) {
-					return
-				}
-				_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-				var req request
-				if json.NewDecoder(io.LimitReader(conn, 4096)).Decode(&req) != nil || req.Key != cfg.Identity.Key() {
-					return
-				}
-				if req.Operation == "status" {
-					_ = json.NewEncoder(conn).Encode(Response{Ready: true, API: cfg.API, Directory: cfg.Directory})
-					return
-				}
-				if req.Operation != "stop" && req.Operation != "cancel" {
-					return
-				}
-				command := control{cancel: req.Operation == "cancel", reply: make(chan Response, 1), sent: make(chan struct{})}
-				select {
-				case w.controls <- command:
-				case <-ctx.Done():
-					return
-				}
-				select {
-				case result := <-command.reply:
-					_ = json.NewEncoder(conn).Encode(result)
-				case <-ctx.Done():
-				}
-				close(command.sent)
-			}(conn)
-		}
-	}()
+			sent := make(chan struct{})
+			close(sent)
+			select {
+			case w.controls <- control{reply: make(chan Response, 1), sent: sent}:
+			case <-ctx.Done():
+			}
+		}()
+	}
 	return w.run(ctx)
 }
 
@@ -251,7 +275,7 @@ func (w *worker) response(timeout bool) Response {
 	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory}
 	for path, r := range w.repos {
 		if timeout && (r.running || r.pending) {
-			response.Results = append(response.Results, Result{Repository: path, Status: "unavailable", Error: "review did not finish before turn end"})
+			response.Results = append(response.Results, Result{Repository: path, Status: "unavailable", Error: "review did not finish before watch stopped"})
 		} else if r.result != nil {
 			response.Results = append(response.Results, *r.result)
 		}
@@ -323,7 +347,7 @@ func (w *worker) run(ctx context.Context) error {
 				err := w.scan(finalCtx, false, true)
 				stop()
 				if err != nil {
-					finish(command, Response{Error: fmt.Sprintf("capture final turn state: %v", err)})
+					finish(command, Response{Error: fmt.Sprintf("capture final changes: %v", err)})
 					return err
 				}
 			}
@@ -339,6 +363,9 @@ func (w *worker) run(ctx context.Context) error {
 			if r := w.repos[done.path]; r != nil && r.version == done.version {
 				r.running = false
 				r.result = &done.result
+				if w.cfg.Report != nil {
+					w.cfg.Report(done.result)
+				}
 			}
 			w.schedule(ctx)
 		case _, ok := <-w.watcher.Events:

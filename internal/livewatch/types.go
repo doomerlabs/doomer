@@ -1,6 +1,6 @@
-// Package turnwatch owns one transient, in-memory review worker per agent turn.
-// It does not use the legacy watcher's on-disk runtime or upload caches.
-package turnwatch
+// Package livewatch watches repositories and submits settled changes.
+// Runtime state stays in memory; the caller owns the process lifetime.
+package livewatch
 
 import (
 	"context"
@@ -14,28 +14,18 @@ import (
 
 func Key(value string) string { sum := sha256.Sum256([]byte(value)); return hex.EncodeToString(sum[:]) }
 
-type Identity struct {
-	Namespace string `json:"namespace"`
-	Agent     string `json:"agent"`
-	Session   string `json:"session"`
-	Turn      string `json:"turn"`
-}
-
-// A turnless agent uses a session rendezvous for its current worker. Starting
-// its next prompt cancels the previous worker before binding that rendezvous.
-func (id Identity) Key() string {
-	return Key(id.Namespace + "\x00" + id.Agent + "\x00" + id.Session + "\x00" + id.Turn)
-}
-
+// Config describes one watch invocation. Its caller controls when it stops.
 type Config struct {
-	Identity     Identity      `json:"identity"`
-	Directory    string        `json:"directory"`
-	API          string        `json:"api"`
-	Token        string        `json:"token"`
-	Prompt       string        `json:"prompt"`
-	RequestTurn  string        `json:"request_turn"`
-	ManagerHome  string        `json:"manager_home"`
-	DrainTimeout time.Duration `json:"drain_timeout,omitempty"`
+	ID           string                              `json:"id"`
+	ControlKey   string                              `json:"control_key,omitempty"`
+	Directory    string                              `json:"directory"`
+	API          string                              `json:"api"`
+	Token        string                              `json:"token"`
+	Request      *adversarylabs.WorkspaceUserRequest `json:"request,omitempty"`
+	Agent        string                              `json:"agent,omitempty"`
+	DrainTimeout time.Duration                       `json:"drain_timeout,omitempty"`
+	Stop         <-chan struct{}                     `json:"-"`
+	Report       func(Result)                        `json:"-"`
 }
 
 type Client interface {

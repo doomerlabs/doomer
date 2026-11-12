@@ -1,4 +1,4 @@
-package turnwatch
+package livewatch
 
 import (
 	"bytes"
@@ -129,16 +129,12 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		return fail(fmt.Errorf("base and current repository do not match"))
 	}
 	look, deep := true, false
-	group := Key(cfg.Identity.Key() + "\x00" + cfg.RequestTurn + "\x00" + repo)
-	prompt := []rune(cfg.Prompt)
-	if len(prompt) > 4000 {
-		prompt = prompt[:4000]
-	}
+	group := Key(cfg.ID + "\x00" + repo)
 	current, err := client.StartWorkspace(ctx, cfg.Token, adversarylabs.WorkspaceSubmission{
 		GitIdentity: capture.GitIdentity, LookCloser: &look, FullReview: &deep, ReviewScope: "diff", AgentDiff: diff, Diff: diff,
-		UserRequest:  &adversarylabs.WorkspaceUserRequest{Prompt: string(prompt), SessionID: cfg.Identity.Session, TurnID: cfg.RequestTurn},
+		UserRequest:  cfg.Request,
 		RepositoryID: repoID, BaseSnapshotID: baseID, SnapshotID: headID, Repository: repository, Branch: capture.Source.Branch,
-		GroupID: group, ReviewID: Key(fmt.Sprintf("%s\x00%d", group, revision)), Revision: revision, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "agent": cfg.Identity.Agent},
+		GroupID: group, ReviewID: Key(fmt.Sprintf("%s\x00%d", group, revision)), Revision: revision, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "agent": cfg.Agent},
 	})
 	if err != nil {
 		return fail(err)

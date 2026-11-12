@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/doomerlabs/doomer/internal/turnwatch"
+	"github.com/doomerlabs/doomer/internal/livewatch"
 	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
@@ -22,13 +21,21 @@ import (
 
 var turnExecutable = os.Executable
 
+// Session/turn identity belongs to the hook, never to the watcher.
+type hookIdentity struct{ Namespace, Agent, Session, Turn string }
+
+func (id hookIdentity) Key() string {
+	return livewatch.Key(id.Namespace + "\x00" + id.Agent + "\x00" + id.Session + "\x00" + id.Turn)
+}
+
 // The manager owns installation and approval. Hooks read that data directly;
 // neither starting a watcher nor delivering a result requires Node at runtime.
 type agentHookState struct {
-	Version    int               `json:"version"`
-	API        string            `json:"api"`
-	Identities map[string]string `json:"identities"`
-	Grants     []struct {
+	Version        int               `json:"version"`
+	API            string            `json:"api"`
+	Identities     map[string]string `json:"identities"`
+	CredentialDirs map[string]string `json:"credentialDirs"`
+	Grants         []struct {
 		Scope      string    `json:"scope"`
 		API        string    `json:"api"`
 		Repo       string    `json:"repo"`
@@ -80,12 +87,12 @@ func agentHookConsent(state agentHookState, api, agent, repo string) (watching.C
 
 func newAgentWatchHookCommand() *cobra.Command {
 	var home, agent, owner string
-	c := &cobra.Command{Use: "agent-hook", Short: "Handle installed agent hooks with an in-memory turn worker", Args: cobra.NoArgs}
+	c := &cobra.Command{Use: "agent-hook", Short: "Start and stop watch for an agent", Args: cobra.NoArgs}
 	// Hook execution must not load or create legacy watcher state as a side effect.
 	c.PersistentPreRunE = func(*cobra.Command, []string) error { return nil }
 	c.PersistentPostRun = func(*cobra.Command, []string) {}
 	c.RunE = func(c *cobra.Command, _ []string) error {
-		result, err := runTurnHook(c, home, agent)
+		result, err := runAgentWatchHook(c, home, agent)
 		if err != nil {
 			result = map[string]any{"systemMessage": "Doomer Quick review was not completed: " + err.Error()}
 		}
@@ -97,17 +104,7 @@ func newAgentWatchHookCommand() *cobra.Command {
 	return c
 }
 
-func turnToken(api string, state agentHookState) (string, error) {
-	if token := os.Getenv("DOOMER_TOKEN"); token != "" {
-		return token, nil
-	}
-	if token := state.Identities[api]; token != "" {
-		return token, nil
-	}
-	return "", fmt.Errorf("credentials are missing; run onboard")
-}
-
-func runTurnHook(c *cobra.Command, home, agent string) (map[string]any, error) {
+func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, error) {
 	empty := map[string]any{}
 	if !filepath.IsAbs(home) || (agent != "codex" && agent != "claude") {
 		return empty, fmt.Errorf("invalid installed hook configuration")
@@ -127,7 +124,7 @@ func runTurnHook(c *cobra.Command, home, agent string) (map[string]any, error) {
 	if turn == "" {
 		turn = input.PromptID
 	}
-	id := turnwatch.Identity{Namespace: home, Agent: agent, Session: input.Session, Turn: turn}
+	id := hookIdentity{Namespace: home, Agent: agent, Session: input.Session, Turn: turn}
 	switch input.Event {
 	case "Stop", "Interrupt", "SessionEnd":
 		operation := "stop"
@@ -138,10 +135,10 @@ func runTurnHook(c *cobra.Command, home, agent string) (map[string]any, error) {
 		}
 		ctx, cancel := context.WithTimeout(c.Context(), wait)
 		defer cancel()
-		if _, live := turnwatch.Available(ctx, id); !live {
+		if _, live := livewatch.Available(ctx, id.Key()); !live {
 			return empty, nil
 		}
-		result, err := turnwatch.Call(ctx, id, operation)
+		result, err := livewatch.Call(ctx, id.Key(), operation)
 		if err != nil {
 			return empty, err
 		}
@@ -165,7 +162,7 @@ func runTurnHook(c *cobra.Command, home, agent string) (map[string]any, error) {
 	if _, err := agentHookConsent(state, api, agent, ""); err != nil {
 		return empty, err
 	}
-	token, err := turnToken(api, state)
+	token, err := watchToken(c, api, state)
 	if err != nil {
 		return empty, err
 	}
@@ -175,14 +172,14 @@ func runTurnHook(c *cobra.Command, home, agent string) (map[string]any, error) {
 	}
 	ctx, cancel := context.WithTimeout(c.Context(), 25*time.Second)
 	defer cancel()
-	if existing, live := turnwatch.Available(ctx, id); live {
+	if existing, live := livewatch.Available(ctx, id.Key()); live {
 		if turn == "" {
-			if _, err := turnwatch.Call(ctx, id, "cancel"); err != nil {
+			if _, err := livewatch.Call(ctx, id.Key(), "cancel"); err != nil {
 				return empty, err
 			}
 		} else {
 			if existing.API != api || existing.Directory != directory {
-				return empty, fmt.Errorf("this turn already has a worker with different configuration")
+				return empty, fmt.Errorf("this turn already has a watcher with different configuration")
 			}
 			return empty, nil
 		}
@@ -191,7 +188,11 @@ func runTurnHook(c *cobra.Command, home, agent string) (map[string]any, error) {
 	if requestTurn == "" {
 		requestTurn = rand.Text()
 	}
-	cfg := turnwatch.Config{Identity: id, Directory: directory, API: api, Token: token, Prompt: input.Prompt, RequestTurn: requestTurn, ManagerHome: home}
+	prompt := []rune(input.Prompt)
+	if len(prompt) > 4000 {
+		prompt = prompt[:4000]
+	}
+	cfg := watchConfiguration{Config: livewatch.Config{ID: rand.Text(), ControlKey: id.Key(), Directory: directory, API: api, Token: token, Agent: agent, Request: &adversarylabs.WorkspaceUserRequest{Prompt: string(prompt), SessionID: input.Session, TurnID: requestTurn}}, ManagerHome: home}
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return empty, err
@@ -200,17 +201,17 @@ func runTurnHook(c *cobra.Command, home, agent string) (map[string]any, error) {
 	if err != nil {
 		return empty, err
 	}
-	child := exec.Command(exe, "watch", "turn-worker")
-	exited, err := startTurnProcess(child, data)
+	child := exec.Command(exe, "watch", "--config-stdin")
+	exited, err := startBackgroundWatch(child, data)
 	if err != nil {
 		return empty, err
 	}
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		if result, live := turnwatch.Available(ctx, id); live {
+		if result, live := livewatch.Available(ctx, id.Key()); live {
 			if result.API != api || result.Directory != directory {
-				return empty, fmt.Errorf("worker identity collision")
+				return empty, fmt.Errorf("watcher identity collision")
 			}
 			return empty, nil
 		}
@@ -222,16 +223,16 @@ func runTurnHook(c *cobra.Command, home, agent string) (map[string]any, error) {
 				exited = nil
 				continue
 			}
-			return empty, fmt.Errorf("turn worker exited before startup: %v", err)
+			return empty, fmt.Errorf("watcher exited before startup: %v", err)
 		case <-ctx.Done():
 			_ = child.Process.Kill()
-			return empty, fmt.Errorf("turn worker did not become ready")
+			return empty, fmt.Errorf("watcher did not become ready")
 		case <-ticker.C:
 		}
 	}
 }
 
-func turnHookResult(result turnwatch.Response) map[string]any {
+func turnHookResult(result livewatch.Response) map[string]any {
 	var findings, failures []string
 	completed := 0
 	for _, review := range result.Results {
@@ -258,36 +259,4 @@ func turnHookResult(result turnwatch.Response) map[string]any {
 		return map[string]any{"systemMessage": fmt.Sprintf("Doomer Quick review completed for %d repositories; no findings returned.", completed)}
 	}
 	return map[string]any{}
-}
-
-func newTurnWorkerCommand() *cobra.Command {
-	c := &cobra.Command{Use: "turn-worker", Hidden: true, Args: cobra.NoArgs}
-	c.PersistentPreRunE = func(*cobra.Command, []string) error { return nil }
-	c.PersistentPostRun = func(*cobra.Command, []string) {}
-	c.RunE = func(c *cobra.Command, _ []string) error {
-		var cfg turnwatch.Config
-		if err := json.NewDecoder(io.LimitReader(c.InOrStdin(), 1<<20)).Decode(&cfg); err != nil {
-			return err
-		}
-		if !filepath.IsAbs(cfg.Directory) || !filepath.IsAbs(cfg.ManagerHome) || cfg.Identity.Namespace != cfg.ManagerHome || cfg.Identity.Session == "" || (cfg.Identity.Agent != "codex" && cfg.Identity.Agent != "claude") || cfg.Token == "" || cfg.RequestTurn == "" {
-			return errors.New("invalid turn worker configuration")
-		}
-		if err := adversarylabs.ValidateAPIURL(cfg.API); err != nil {
-			return err
-		}
-		allowed := func(ctx context.Context, path string) bool {
-			var state agentHookState
-			if _, err := os.Stat(filepath.Join(cfg.ManagerHome, "uninstalling.json")); err == nil {
-				return false
-			}
-			if watching.Read(filepath.Join(cfg.ManagerHome, "state.json"), &state) != nil {
-				return false
-			}
-			consent, err := agentHookConsent(state, cfg.API, cfg.Identity.Agent, path)
-			return err == nil && (path == "" || watching.Allowed(consent, path))
-		}
-		client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, cfg.API)
-		return turnwatch.Serve(c.Context(), cfg, client, allowed)
-	}
-	return c
 }

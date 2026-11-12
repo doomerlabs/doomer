@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/doomerlabs/doomer/internal/turnwatch"
+	"github.com/doomerlabs/doomer/internal/livewatch"
 	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
@@ -76,11 +76,11 @@ func TestAgentHookWorkersArePerTurnAndLeaveNoRuntimeFiles(t *testing.T) {
 			t.Fatal(output.String())
 		}
 	}
-	ids := []turnwatch.Identity{{Namespace: home, Agent: "codex", Session: "session", Turn: "one"}, {Namespace: home, Agent: "codex", Session: "session", Turn: "two"}, {Namespace: home, Agent: "claude", Session: "session", Turn: "one"}}
+	ids := []hookIdentity{{Namespace: home, Agent: "codex", Session: "session", Turn: "one"}, {Namespace: home, Agent: "codex", Session: "session", Turn: "two"}, {Namespace: home, Agent: "claude", Session: "session", Turn: "one"}}
 	t.Cleanup(func() {
 		for _, id := range ids {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			_, _ = turnwatch.Call(ctx, id, "cancel")
+			_, _ = livewatch.Call(ctx, id.Key(), "cancel")
 			cancel()
 		}
 	})
@@ -91,11 +91,11 @@ func TestAgentHookWorkersArePerTurnAndLeaveNoRuntimeFiles(t *testing.T) {
 	call("Stop", "codex", "one")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if _, live := turnwatch.Available(ctx, ids[0]); live {
+	if _, live := livewatch.Available(ctx, ids[0].Key()); live {
 		t.Fatal("ended turn still has a worker")
 	}
 	for _, id := range ids[1:] {
-		if _, live := turnwatch.Available(ctx, id); !live {
+		if _, live := livewatch.Available(ctx, id.Key()); !live {
 			t.Fatal("ending one turn stopped another worker")
 		}
 	}
@@ -129,12 +129,12 @@ func TestAgentHookKilledWorkerCanRestartWithoutCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("DOOMER_AGENT_HOOK_TEST_PROCESS", "1")
-	id := turnwatch.Identity{Namespace: home, Agent: "codex", Session: "session", Turn: "turn"}
-	data, _ := json.Marshal(turnwatch.Config{Identity: id, Directory: workspace, API: api, Token: "test", RequestTurn: "turn", ManagerHome: home})
+	id := hookIdentity{Namespace: home, Agent: "codex", Session: "session", Turn: "turn"}
+	data, _ := json.Marshal(watchConfiguration{Config: livewatch.Config{ID: "watch", ControlKey: id.Key(), Directory: workspace, API: api, Token: "test"}, ManagerHome: home})
 	start := func() (*exec.Cmd, <-chan error) {
 		t.Helper()
-		cmd := exec.Command(wrapper, "watch", "turn-worker")
-		done, err := startTurnProcess(cmd, data)
+		cmd := exec.Command(wrapper, "watch", "--config-stdin")
+		done, err := startBackgroundWatch(cmd, data)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -142,7 +142,7 @@ func TestAgentHookKilledWorkerCanRestartWithoutCleanup(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		for {
-			if _, live := turnwatch.Available(ctx, id); live {
+			if _, live := livewatch.Available(ctx, id.Key()); live {
 				return cmd, done
 			}
 			select {
@@ -160,7 +160,7 @@ func TestAgentHookKilledWorkerCanRestartWithoutCleanup(t *testing.T) {
 	_, replacement := start()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if _, err := turnwatch.Call(ctx, id, "cancel"); err != nil {
+	if _, err := livewatch.Call(ctx, id.Key(), "cancel"); err != nil {
 		t.Fatal(err)
 	}
 	if err := <-replacement; err != nil {

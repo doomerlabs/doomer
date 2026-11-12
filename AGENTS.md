@@ -4,6 +4,10 @@ The correct command to build the Go CLI is `make build`.
 The user runs local builds. Agents must not run `make build`, substitute
 `go build`, or build or install a CLI binary on the user's behalf. Make the
 requested code changes and leave building and installation to the user.
+This also excludes tests that invoke `go build`: skip
+`TestWatchBackgroundLifecycle` and
+`TestSideBySideUpgradeStartsCurrentSupervisorAndRetries`. Test-executable
+subprocess helpers can exercise the CLI commands without building a CLI binary.
 
 ## Pull request ownership and monitoring
 

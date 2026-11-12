@@ -1,4 +1,4 @@
-package turnwatch
+package livewatch
 
 import (
 	"context"
@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-func Call(ctx context.Context, id Identity, operation string) (Response, error) {
+func Call(ctx context.Context, key string, operation string) (Response, error) {
 	var out Response
-	address, err := endpoint(id.Key())
+	address, err := endpoint(key)
 	if err != nil {
 		return out, err
 	}
@@ -22,14 +22,14 @@ func Call(ctx context.Context, id Identity, operation string) (Response, error) 
 	}
 	defer conn.Close()
 	if !ownPeer(conn) {
-		return out, fmt.Errorf("turn worker belongs to a different operating-system user")
+		return out, fmt.Errorf("watcher belongs to a different operating-system user")
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(deadline)
 	} else {
 		_ = conn.SetDeadline(time.Now().Add(45 * time.Second))
 	}
-	if err := json.NewEncoder(conn).Encode(request{Key: id.Key(), Operation: operation}); err != nil {
+	if err := json.NewEncoder(conn).Encode(request{Key: key, Operation: operation}); err != nil {
 		return out, err
 	}
 	if err := json.NewDecoder(io.LimitReader(conn, 4<<20)).Decode(&out); err != nil {
@@ -42,9 +42,9 @@ func Call(ctx context.Context, id Identity, operation string) (Response, error) 
 }
 
 // Available detects an existing worker without asking it to start a review.
-func Available(ctx context.Context, id Identity) (Response, bool) {
+func Available(ctx context.Context, key string) (Response, bool) {
 	probe, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
 	defer cancel()
-	out, err := Call(probe, id, "status")
+	out, err := Call(probe, key, "status")
 	return out, err == nil && out.Ready
 }

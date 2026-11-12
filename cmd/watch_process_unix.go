@@ -11,9 +11,9 @@ import (
 	"syscall"
 )
 
-func startTurnProcess(child *exec.Cmd, input []byte) (<-chan error, error) {
+func startBackgroundWatch(child *exec.Cmd, input []byte) (<-chan error, error) {
 	child.Stdin = bytes.NewReader(input)
-	var diagnostic turnDiagnostic
+	var diagnostic watchDiagnostic
 	child.Stdout, child.Stderr = io.Discard, &diagnostic
 	child.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := child.Start(); err != nil {
@@ -30,9 +30,9 @@ func startTurnProcess(child *exec.Cmd, input []byte) (<-chan error, error) {
 	return done, nil
 }
 
-type turnDiagnostic struct{ bytes.Buffer }
+type watchDiagnostic struct{ bytes.Buffer }
 
-func (b *turnDiagnostic) Write(data []byte) (int, error) {
+func (b *watchDiagnostic) Write(data []byte) (int, error) {
 	n := len(data)
 	if remaining := 4096 - b.Len(); remaining > 0 {
 		if len(data) > remaining {
