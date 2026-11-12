@@ -81,6 +81,17 @@ func TestAgentHookWorkersArePerTurnAndLeaveNoRuntimeFiles(t *testing.T) {
 		if strings.Contains(output.String(), "not completed") {
 			t.Fatal(output.String())
 		}
+		if event == "UserPromptSubmit" {
+			var result struct {
+				Specific struct {
+					Event   string `json:"hookEventName"`
+					Context string `json:"additionalContext"`
+				} `json:"hookSpecificOutput"`
+			}
+			if json.Unmarshal(output.Bytes(), &result) != nil || result.Specific.Event != "UserPromptSubmit" || !strings.Contains(result.Specific.Context, "watch instructions --control") {
+				t.Fatalf("startup did not supply model context: %s", output.String())
+			}
+		}
 	}
 	ids := []hookIdentity{{Namespace: home, Agent: "codex", Session: "session", Turn: "one"}, {Namespace: home, Agent: "codex", Session: "session", Turn: "two"}, {Namespace: home, Agent: "claude", Session: "session", Turn: "one"}}
 	t.Cleanup(func() {

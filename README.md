@@ -60,8 +60,8 @@ for policies, recovery, adapter behavior, and deployment visibility.
 For the Node-managed integration, `doomer watch` reviews settled source changes,
 including manual edits, without pre/post-tool attribution. The prompt hook starts
 watch; the Stop hook waits for Quick results. If there are findings, the agent
-retrieves the details with the hook's supplied `doomer watch instructions`
-command, then records each decision using `doomer watch respond`. Decisions are
+retrieves the details with `doomer watch instructions`, supplied through the
+prompt hook's additional model context, then records each decision using `doomer watch respond`. Decisions are
 sent to the existing workspace review feedback API as `fixed`, `dismissed`, or `deferred`, with agreement and a
 reason. An unanswered finding stays unanswered until the service confirms the
 response was saved.

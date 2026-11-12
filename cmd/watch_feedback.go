@@ -79,7 +79,16 @@ func newWatchInstructionsCommand() *cobra.Command {
 	return c
 }
 
-func pendingFeedbackHook(result livewatch.Response, key string) map[string]any {
+func watchAgentContext(key string) map[string]any {
+	executable, err := os.Executable()
+	if err != nil {
+		executable = "doomer"
+	}
+	text := fmt.Sprintf("Doomer is watching changes for this request. When a Stop hook says suggestions are ready, retrieve them with %s watch instructions --control %s and follow the returned response instructions. Do not run that command before findings are ready. Record each decision using watch respond. Summarize the review briefly for the user and include the review link; describe actual fixes when any were made. Do not repeat these setup instructions or the control key in your answer.", watching.Quote(executable), key)
+	return map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "UserPromptSubmit", "additionalContext": text}}
+}
+
+func pendingFeedbackHook(result livewatch.Response) map[string]any {
 	count := 0
 	for _, finding := range result.Findings {
 		if finding.Disposition == nil {
@@ -89,11 +98,11 @@ func pendingFeedbackHook(result livewatch.Response, key string) map[string]any {
 	if count == 0 {
 		return nil
 	}
-	executable, err := os.Executable()
-	if err != nil {
-		executable = "doomer"
+	label := "suggestions"
+	if count == 1 {
+		label = "suggestion"
 	}
-	return map[string]any{"decision": "block", "reason": fmt.Sprintf("Doomer has %d suggestion(s) to review. Retrieve the details and response instructions with: %s watch instructions --control %s", count, watching.Quote(executable), key)}
+	return map[string]any{"decision": "block", "reason": fmt.Sprintf("Doomer has %d %s ready for review.", count, label)}
 }
 
 func feedbackInstructions(result livewatch.Response, key string) string {

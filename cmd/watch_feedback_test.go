@@ -10,15 +10,15 @@ import (
 
 func TestFeedbackHookRequestsEveryUnansweredFinding(t *testing.T) {
 	response := livewatch.Response{Findings: []livewatch.Finding{{ReviewID: "review", Lead: adversarylabs.WorkspaceLead{ID: strings.Repeat("a", 64), Path: "file.go", Line: 12, Concern: "Check the guard"}}}}
-	out := pendingFeedbackHook(response, strings.Repeat("b", 64))
+	out := pendingFeedbackHook(response)
 	if out["decision"] != "block" {
 		t.Fatal(out)
 	}
 	visible := out["reason"].(string)
-	if !strings.Contains(visible, "watch instructions") {
+	if visible != "Doomer has 1 suggestion ready for review." {
 		t.Fatal(visible)
 	}
-	for _, hidden := range []string{"review_id", "lead_id", "status=fixed", "Do not dump", "internal handoff"} {
+	for _, hidden := range []string{"watch instructions", "--control", "review_id", "lead_id", "status=fixed", "Do not dump", "internal handoff"} {
 		if strings.Contains(visible, hidden) {
 			t.Fatalf("verbose guidance leaked into hook reason: %s", visible)
 		}
@@ -30,7 +30,7 @@ func TestFeedbackHookRequestsEveryUnansweredFinding(t *testing.T) {
 		}
 	}
 	response.Findings[0].Disposition = &livewatch.Feedback{Status: "dismissed"}
-	if pendingFeedbackHook(response, "") != nil {
+	if pendingFeedbackHook(response) != nil {
 		t.Fatal("asked for recorded response again")
 	}
 }
@@ -72,5 +72,21 @@ func TestPartialFeedbackReportDoesNotClaimCompletion(t *testing.T) {
 	report := feedbackReport(livewatch.Response{Findings: []livewatch.Finding{{Lead: adversarylabs.WorkspaceLead{ID: "pending"}}}})
 	if !strings.Contains(report, "Unanswered: 1") || strings.Contains(report, "No more response commands") {
 		t.Fatal(report)
+	}
+}
+
+func TestWatchCommandsGoOnlyToPromptContext(t *testing.T) {
+	key := strings.Repeat("b", 64)
+	output := watchAgentContext(key)
+	if output["reason"] != nil || output["systemMessage"] != nil {
+		t.Fatal("prompt instructions placed in visible output")
+	}
+	specific := output["hookSpecificOutput"].(map[string]any)
+	if specific["hookEventName"] != "UserPromptSubmit" {
+		t.Fatal(specific)
+	}
+	text := specific["additionalContext"].(string)
+	if !strings.Contains(text, "watch instructions --control "+key) {
+		t.Fatal("missing command in model context")
 	}
 }
