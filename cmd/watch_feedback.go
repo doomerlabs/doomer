@@ -48,7 +48,7 @@ func newWatchRespondCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"recorded": len(feedback), "summary": feedbackReport(result)})
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"recorded": len(feedback), "report": makeFeedbackReport(result)})
 	}
 	return c
 }
@@ -79,12 +79,35 @@ func newWatchInstructionsCommand() *cobra.Command {
 	return c
 }
 
+// report drains the current edits without stopping the watcher. The agent reads
+// this result before its final answer; the Stop hook still owns shutdown.
+func newWatchReportCommand() *cobra.Command {
+	var key string
+	c := &cobra.Command{Use: "report", Short: "Wait for reviews and read the current watch report", Args: cobra.NoArgs}
+	c.PersistentPreRunE = func(*cobra.Command, []string) error { return nil }
+	c.PersistentPostRun = func(*cobra.Command, []string) {}
+	c.Flags().StringVar(&key, "control", "", "watch control key supplied by the hook")
+	c.RunE = func(c *cobra.Command, _ []string) error {
+		if !watchControlKey.MatchString(key) {
+			return fmt.Errorf("a valid --control key from the hook is required")
+		}
+		ctx, cancel := context.WithTimeout(c.Context(), 55*time.Second)
+		defer cancel()
+		result, err := livewatch.Call(ctx, key, "checkpoint")
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(c.OutOrStdout()).Encode(makeFeedbackReport(result))
+	}
+	return c
+}
+
 func watchAgentContext(key string) map[string]any {
 	executable, err := os.Executable()
 	if err != nil {
 		executable = "doomer"
 	}
-	text := fmt.Sprintf("Doomer is watching changes for this request. When a Stop hook says suggestions are ready, retrieve them with %s watch instructions --control %s and follow the returned response instructions. Do not run that command before findings are ready. Record each decision using watch respond. Summarize the review briefly for the user and include the review link; describe actual fixes when any were made. Do not repeat these setup instructions or the control key in your answer.", watching.Quote(executable), key)
+	text := fmt.Sprintf("Doomer is watching changes for this request. Before your final answer, run %s watch report --control %s to wait for reviews and read their report. If unanswered findings remain, retrieve them with %s watch instructions --control %s, investigate each, record decisions using watch respond, then run watch report again to review any resulting edits. A Stop hook saying suggestions are ready is a reminder to complete this process. Once report returns complete=true, incorporate the report into ONE final answer; no further watch commands are needed. Use natural language with links embedded in descriptive phrases such as CLI changes or changes in the named repository. Briefly describe actual fixes or unresolved deferred concerns; otherwise use one short review sentence. Do not repeat setup instructions, counts, response JSON, or the control key to the user. Do not claim success if the report contains errors.", watching.Quote(executable), key, watching.Quote(executable), key)
 	return map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "UserPromptSubmit", "additionalContext": text}}
 }
 
@@ -128,7 +151,7 @@ func feedbackInstructions(result livewatch.Response, key string) string {
 		executable = "doomer"
 	}
 	fmt.Fprintf(&text, "\nRecord every decision in Doomer using this command after filling in status, agrees, and reason:\n%s watch respond --control %s <<'DOOMER_RESPONSES'\n%s\nDOOMER_RESPONSES\n", watching.Quote(executable), key, payload)
-	text.WriteString("Use status=fixed with agrees=true only for a verified fix; dismissed with agrees=false for a disproved finding; deferred for an unresolved or out-of-scope finding (agrees=null if unassessed). Give a specific reason for each. A failed submission is not recorded; resolve the error and retry.\nKeep the response JSON in your tool call. Do not dump the findings into the user's answer. The next Stop will provide a final summary and review link after every response is recorded.")
+	text.WriteString("Use status=fixed with agrees=true only for a verified fix; dismissed with agrees=false for a disproved finding; deferred for an unresolved or out-of-scope finding (agrees=null if unassessed). Give a specific reason for each. A failed submission is not recorded; resolve the error and retry.\nKeep the response JSON in your tool call. Do not dump the findings into the user's answer. After recording decisions, run watch report with the same control key before answering. It checks any resulting edits and returns the report and review links for your final answer.")
 	return text.String()
 }
 
@@ -141,109 +164,114 @@ func finalFeedbackHook(result livewatch.Response) map[string]any {
 			return map[string]any{"systemMessage": "Doomer review did not complete; no final review summary is available."}
 		}
 	}
-	if len(result.Results) == 0 && len(result.Findings) == 0 {
-		return map[string]any{}
+	// Completed reviews belong in the agent's final answer, not another visible
+	// hook message that forces a second answer.
+	return map[string]any{}
+}
+
+type feedbackReview struct {
+	Repository string `json:"repository"`
+	URL        string `json:"url"`
+}
+
+type feedbackDetail struct {
+	Repository string `json:"repository"`
+	Path       string `json:"path"`
+	Line       int    `json:"line"`
+	Concern    string `json:"concern"`
+	Reason     string `json:"reason"`
+}
+
+type watchFeedbackReport struct {
+	Complete         bool             `json:"complete"`
+	Suggestions      int              `json:"suggestions"`
+	Fixed            int              `json:"fixed"`
+	Disagreed        int              `json:"disagreed"`
+	Deferred         int              `json:"deferred"`
+	Unanswered       int              `json:"unanswered"`
+	Reviews          []feedbackReview `json:"reviews"`
+	Fixes            []feedbackDetail `json:"fixes"`
+	DeferredFindings []feedbackDetail `json:"deferred_findings"`
+	Errors           []string         `json:"errors"`
+	SuggestedSummary string           `json:"suggested_summary"`
+}
+
+func makeFeedbackReport(result livewatch.Response) watchFeedbackReport {
+	report := watchFeedbackReport{Suggestions: len(result.Findings), Reviews: []feedbackReview{}, Fixes: []feedbackDetail{}, DeferredFindings: []feedbackDetail{}, Errors: []string{}}
+	// Prefer the latest review link for each repository over historical findings.
+	links := map[string]string{}
+	for _, finding := range result.Findings {
+		if finding.URL != "" {
+			links[finding.Repository] = finding.URL
+		}
+		if finding.Disposition == nil {
+			report.Unanswered++
+			continue
+		}
+		detail := feedbackDetail{Repository: finding.Repository, Path: finding.Lead.Path, Line: finding.Lead.Line, Concern: finding.Lead.Concern, Reason: finding.Disposition.Reason}
+		switch finding.Disposition.Status {
+		case "fixed":
+			report.Fixed++
+			report.Fixes = append(report.Fixes, detail)
+		case "dismissed":
+			report.Disagreed++
+		case "deferred":
+			report.Deferred++
+			report.DeferredFindings = append(report.DeferredFindings, detail)
+		}
 	}
-	return map[string]any{"decision": "block", "reason": briefFeedbackSummary(result)}
+	for _, review := range result.Results {
+		if review.URL != "" {
+			links[review.Repository] = review.URL
+		}
+		if review.Error != "" {
+			report.Errors = append(report.Errors, review.Error)
+		} else if review.Status != "ready" && review.Status != "unchanged" {
+			report.Errors = append(report.Errors, "Review did not complete for "+review.Repository)
+		}
+	}
+	if result.Error != "" {
+		report.Errors = append(report.Errors, result.Error)
+	}
+	repositories := make([]string, 0, len(links))
+	for repository := range links {
+		repositories = append(repositories, repository)
+	}
+	sort.Strings(repositories)
+	var phrases []string
+	escape := strings.NewReplacer("\\", "\\\\", "[", "\\[", "]", "\\]")
+	for _, repository := range repositories {
+		report.Reviews = append(report.Reviews, feedbackReview{Repository: repository, URL: links[repository]})
+		phrases = append(phrases, "[changes in "+escape.Replace(filepath.Base(repository))+"]("+links[repository]+")")
+	}
+	subject := "the changes"
+	if len(phrases) == 1 {
+		subject = "the " + phrases[0]
+	} else if len(phrases) > 1 {
+		subject = "the " + strings.Join(phrases[:len(phrases)-1], ", ") + " and " + phrases[len(phrases)-1]
+	}
+	report.Complete = report.Unanswered == 0 && len(report.Errors) == 0
+	switch {
+	case len(result.Results) == 0 && len(result.Findings) == 0 && len(report.Errors) == 0:
+		report.SuggestedSummary = "Doomer found no changes to review."
+	case len(report.Errors) > 0:
+		report.SuggestedSummary = "Doomer could not complete its review of " + subject + "."
+	case report.Unanswered > 0:
+		report.SuggestedSummary = "Doomer reviewed " + subject + "; some suggestions still need a decision."
+	case report.Fixed > 0:
+		report.SuggestedSummary = "Doomer reviewed " + subject + " and helped identify fixes."
+	case report.Suggestions > 0:
+		report.SuggestedSummary = "Doomer reviewed " + subject + "; we considered its suggestions and made no changes based on them."
+	default:
+		report.SuggestedSummary = "Doomer reviewed " + subject + " and raised no issues."
+	}
+	if report.Deferred > 0 {
+		report.SuggestedSummary += " Some concerns remain deferred."
+	}
+	return report
 }
 
 func feedbackReport(result livewatch.Response) string {
-	fixed, disagreed, deferred, unanswered := 0, 0, 0, 0
-	var details []string
-	links := map[string]bool{}
-	for _, review := range result.Results {
-		if review.URL != "" {
-			links[review.URL] = true
-		}
-	}
-	for _, finding := range result.Findings {
-		if finding.URL != "" {
-			links[finding.URL] = true
-		}
-		if finding.Disposition == nil {
-			unanswered++
-			continue
-		}
-		switch finding.Disposition.Status {
-		case "fixed":
-			fixed++
-			details = append(details, fmt.Sprintf("%s — %s:%d: %s\nFix: %s", filepath.Base(finding.Repository), finding.Lead.Path, finding.Lead.Line, finding.Lead.Concern, finding.Disposition.Reason))
-		case "dismissed":
-			disagreed++
-		case "deferred":
-			deferred++
-		}
-	}
-	var text strings.Builder
-	fmt.Fprintf(&text, "Doomer reviewed the changes and reported %d suggestion(s): fixed %d, disagreed with %d, deferred %d. Unanswered: %d.\n", len(result.Findings), fixed, disagreed, deferred, unanswered)
-	if fixed > 0 {
-		text.WriteString("\nFixed findings:\n" + strings.Join(details, "\n\n") + "\n")
-	}
-	orderedLinks := make([]string, 0, len(links))
-	for link := range links {
-		orderedLinks = append(orderedLinks, link)
-	}
-	sort.Strings(orderedLinks)
-	for _, link := range orderedLinks {
-		fmt.Fprintf(&text, "\n[Doomer review](%s)\n", link)
-	}
-	text.WriteString("\nFor the final answer, summarize these results rather than copying this tool output. Do not repeat the counts or list every finding unless the user asks for those details. ")
-	if fixed > 0 {
-		text.WriteString("Briefly summarize the concrete changes made because of Doomer's findings and include the review link.")
-	} else if len(result.Findings) > 0 {
-		text.WriteString("Use one short sentence: Doomer reviewed the changes; we considered its suggestions and made no changes based on them. Include the review link.")
-	} else {
-		text.WriteString("Use one short sentence saying Doomer reviewed the changes and raised no issues, with the review link.")
-	}
-	if deferred > 0 {
-		text.WriteString(" Briefly disclose any deferred unresolved concern; do not imply everything was resolved.")
-	}
-	if unanswered == 0 {
-		text.WriteString(" No more response commands are needed.")
-	} else {
-		text.WriteString(" Record the remaining unanswered findings before finishing.")
-	}
-	return text.String()
-}
-
-func briefFeedbackSummary(result livewatch.Response) string {
-	fixed, deferred := 0, 0
-	links := map[string]bool{}
-	for _, review := range result.Results {
-		if review.URL != "" {
-			links[review.URL] = true
-		}
-	}
-	for _, finding := range result.Findings {
-		if finding.URL != "" {
-			links[finding.URL] = true
-		}
-		if finding.Disposition != nil {
-			if finding.Disposition.Status == "fixed" {
-				fixed++
-			}
-			if finding.Disposition.Status == "deferred" {
-				deferred++
-			}
-		}
-	}
-	text := "Doomer reviewed the changes and raised no issues."
-	if len(result.Findings) > 0 {
-		text = "Doomer reviewed the changes; its suggestions were considered and no changes were made based on them."
-		if fixed > 0 {
-			text = fmt.Sprintf("Doomer reviewed the changes; %d suggestion(s) were fixed.", fixed)
-		}
-		if deferred > 0 {
-			text += fmt.Sprintf(" %d suggestion(s) remain deferred.", deferred)
-		}
-	}
-	ordered := make([]string, 0, len(links))
-	for link := range links {
-		ordered = append(ordered, link)
-	}
-	sort.Strings(ordered)
-	for _, link := range ordered {
-		text += "\n[Doomer review](" + link + ")"
-	}
-	return text
+	payload, _ := json.MarshalIndent(makeFeedbackReport(result), "", "  ")
+	return string(payload)
 }

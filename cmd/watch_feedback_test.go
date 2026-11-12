@@ -1,8 +1,14 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/doomerlabs/doomer/internal/livewatch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
@@ -35,43 +41,58 @@ func TestFeedbackHookRequestsEveryUnansweredFinding(t *testing.T) {
 	}
 }
 
-func TestFinalFeedbackHookSummarizesCountsAndActualFixes(t *testing.T) {
+func TestFinalFeedbackHookStaysSilentAfterRecordedDecisions(t *testing.T) {
 	response := livewatch.Response{}
 	for i, status := range []string{"fixed", "fixed", "dismissed"} {
 		response.Findings = append(response.Findings, livewatch.Finding{ReviewID: "review", Repository: "/repo", URL: "https://doomer.ai/review/example", Lead: adversarylabs.WorkspaceLead{Path: "file.go", Line: i + 1, Concern: "guard"}, Disposition: &livewatch.Feedback{Status: status, Reason: "Verified change"}})
 	}
-	out := finalFeedbackHook(response)
-	visible := out["reason"].(string)
-	for _, hidden := range []string{"internal handoff", "Do not repeat", "Fixed findings:", "Verified change"} {
-		if strings.Contains(visible, hidden) {
-			t.Fatalf("instructions leaked into visible summary: %s", visible)
-		}
+	if out := finalFeedbackHook(response); len(out) != 0 {
+		t.Fatalf("completed review requested another answer: %v", out)
 	}
-	if !strings.Contains(visible, "2 suggestion(s) were fixed") || !strings.Contains(visible, "https://doomer.ai/review/example") {
-		t.Fatal(visible)
+	report := makeFeedbackReport(response)
+	if !report.Complete || report.Suggestions != 3 || report.Fixed != 2 || report.Disagreed != 1 || len(report.Fixes) != 2 || report.Fixes[0].Reason != "Verified change" {
+		t.Fatalf("missing recorded outcomes: %+v", report)
 	}
-	text := feedbackReport(response)
-	for _, want := range []string{"reported 3", "fixed 2", "disagreed with 1", "deferred 0", "Fixed findings:", "Verified change", "https://doomer.ai/review/example", "Do not repeat the counts"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("missing %q: %s", want, text)
-		}
+	response.Findings[2].Disposition.Status = "deferred"
+	report = makeFeedbackReport(response)
+	if report.Deferred != 1 || len(report.DeferredFindings) != 1 || !strings.Contains(report.SuggestedSummary, "remain deferred") {
+		t.Fatalf("deferred concern hidden: %+v", report)
 	}
-	response.Findings = response.Findings[2:]
-	text = finalFeedbackHook(response)["reason"].(string)
-	if !strings.Contains(text, "no changes were made based on them") || strings.Contains(text, "Fixed findings:") {
-		t.Fatal(text)
+}
+
+func TestFeedbackReportUsesLatestNaturalLinksPerRepository(t *testing.T) {
+	response := livewatch.Response{
+		Findings: []livewatch.Finding{{Repository: "/workspace/doomer", URL: "https://example.test/old", Disposition: &livewatch.Feedback{Status: "dismissed"}}},
+		Results: []livewatch.Result{
+			{Repository: "/workspace/doomer", URL: "https://example.test/cli", Status: "ready"},
+			{Repository: "/workspace/doomerlabs", URL: "https://example.test/app", Status: "ready"},
+		},
 	}
-	response.Findings[0].Disposition.Status = "deferred"
-	text = finalFeedbackHook(response)["reason"].(string)
-	if !strings.Contains(text, "1 suggestion(s) remain deferred") {
-		t.Fatal(text)
+	report := makeFeedbackReport(response)
+	if !report.Complete || len(report.Reviews) != 2 {
+		t.Fatal(report)
+	}
+	want := "Doomer reviewed the [changes in doomer](https://example.test/cli) and [changes in doomerlabs](https://example.test/app); we considered its suggestions and made no changes based on them."
+	if report.SuggestedSummary != want {
+		t.Fatal(report.SuggestedSummary)
+	}
+	if strings.Contains(feedbackReport(response), "https://example.test/old") {
+		t.Fatal("historical review duplicated the current repository link")
 	}
 }
 
 func TestPartialFeedbackReportDoesNotClaimCompletion(t *testing.T) {
-	report := feedbackReport(livewatch.Response{Findings: []livewatch.Finding{{Lead: adversarylabs.WorkspaceLead{ID: "pending"}}}})
-	if !strings.Contains(report, "Unanswered: 1") || strings.Contains(report, "No more response commands") {
-		t.Fatal(report)
+	for _, response := range []livewatch.Response{
+		{Findings: []livewatch.Finding{{Lead: adversarylabs.WorkspaceLead{ID: "pending"}}}},
+		{Results: []livewatch.Result{{Status: "unavailable", Error: "upload failed"}}},
+	} {
+		report := makeFeedbackReport(response)
+		if report.Complete || strings.Contains(report.SuggestedSummary, "raised no issues") {
+			t.Fatal(report)
+		}
+	}
+	if len(finalFeedbackHook(livewatch.Response{Results: []livewatch.Result{{Status: "unavailable"}}})) == 0 {
+		t.Fatal("incomplete review was suppressed")
 	}
 }
 
@@ -86,7 +107,62 @@ func TestWatchCommandsGoOnlyToPromptContext(t *testing.T) {
 		t.Fatal(specific)
 	}
 	text := specific["additionalContext"].(string)
-	if !strings.Contains(text, "watch instructions --control "+key) {
+	if !strings.Contains(text, "watch instructions --control "+key) || !strings.Contains(text, "watch report --control "+key) || !strings.Contains(text, "ONE final answer") {
 		t.Fatal("missing command in model context")
+	}
+}
+
+func TestWatchReportLeavesShutdownToHook(t *testing.T) {
+	directory := t.TempDir()
+	hash := sha256.Sum256([]byte(directory))
+	key := hex.EncodeToString(hash[:])
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- livewatch.Serve(ctx, livewatch.Config{Directory: directory, ControlKey: key}, nil, func(context.Context, string) bool { return true })
+	}()
+	for {
+		if _, live := livewatch.Available(ctx, key); live {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("watch startup: %v", err)
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	command := newWatchReportCommand()
+	command.SetContext(ctx)
+	command.SetArgs([]string{"--control", key})
+	var out bytes.Buffer
+	command.SetOut(&out)
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var report watchFeedbackReport
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil || !report.Complete || report.SuggestedSummary != "Doomer found no changes to review." {
+		t.Fatalf("report: %s (%v)", out.String(), err)
+	}
+	if _, live := livewatch.Available(ctx, key); !live {
+		t.Fatal("reading the report stopped the hook-owned watcher")
+	}
+	result, err := livewatch.Call(ctx, key, "finish")
+	if err != nil || len(finalFeedbackHook(result)) != 0 {
+		t.Fatalf("Stop should silently close a completed review: %+v %v", result, err)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("Stop did not stop the worker")
+	}
+	if _, live := livewatch.Available(ctx, key); live {
+		t.Fatal("completed worker remains available to repeat the review")
 	}
 }
