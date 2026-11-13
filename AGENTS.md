@@ -47,29 +47,9 @@ For changes affecting agent installation, onboarding, review, upgrades, policy,
 hooks, or the lifecycle runner, use `.agents/skills/agent-e2e/SKILL.md` to start
 relevant E2E early and report coverage for the final proposed source.
 
-Before opening or updating a PR, if Docker and Doppler project `doomer`, config
-`test`, are accessible, run the Linux E2E helper locally. It selects scenarios
-from the current working tree and runs them from a frozen snapshot:
+The shared suite is in `doomerlabs/agent-e2e`, normally cloned alongside this repository. Its README documents component paths/versions and precompiled CLI inputs. Preserve Jev selection, signed R2 reuse, per-case dependencies and recordings. Never build the local CLI on the user's behalf; use a CI-built or user-supplied candidate.
 
-```sh
-doppler run --project doomer --config test -- scripts/agent-e2e-local-linux.sh
-```
-
-Start this as soon as the changes stabilize, while review and PR preparation
-continue. Run it against the final proposed contents, investigate failures, and
-report the result before marking the PR ready. Successful Linux results populate
-the shared cache so CI can verify them instead of repeating agent calls. Matching
-signed successes remain reusable while their result and artifacts are present.
-The bucket deletes cached objects after seven days. The
-runner also reuses unaffected scenarios locally; report cache hits separately
-from newly executed tests. Supply the PR description with
-`E2E_PR_DESCRIPTION_FILE=/path/to/description.txt` to use its requested scope
-locally. An author can request the complete suite in that description using any
-natural language. Inspect the retained selection evidence before reporting
-coverage. Native
-macOS runs do not populate the Linux CI cache. Check access without printing
-secrets. If Docker or Doppler access is unavailable, report that CI must execute
-the missing scenarios; do not copy credentials into the repository.
+For a user-run Linux suite, `scripts/agent-e2e-local-linux.sh --output /tmp/unique-report-directory` delegates to the shared runner. Agents must set `E2E_CANDIDATE_BINARY` to a CI-built or user-supplied executable before running it. Credentials come from Doppler `doomer/test`. Inspect retained selection evidence and report cache hits separately from executed cases. Matching Linux successes may satisfy CI; native macOS results do not. Do not claim E2E success from unit tests alone.
 
 ## Testing policy
 

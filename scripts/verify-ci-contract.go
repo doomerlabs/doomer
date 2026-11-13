@@ -453,53 +453,27 @@ func validateRelease(workflow *yaml.Node) {
 }
 
 func validateAgentRecordings(workflow *yaml.Node) {
-	plan := requiredValue(workflow, "jobs", "plan")
-	selection := findStep(plan, "Select lifecycle scenarios")
-	if !nodeContains(selection, "--pr-event") || !nodeContains(selection, "GITHUB_EVENT_PATH") {
-		fail("E2E selection must read the PR author's description from the event file")
-	}
-	if !nodeContains(selection, `base=$(git merge-base "${SELECTOR_BASE:-origin/main}" "$head")`) {
-		fail("E2E selection must compare from the PR merge base")
+	job := requiredValue(workflow, "jobs", "onboarding")
+	if !nodeContains(requiredValue(job, "if"), "github.event.pull_request.head.repo.full_name == github.repository") {
+		fail("shared E2E must exclude fork credentials")
 	}
 	if !nodeContains(requiredValue(workflow, "on", "pull_request", "types"), "edited") {
-		fail("Editing a PR description must refresh its E2E selection")
+		fail("scope edits must rerun selection")
 	}
-	lifecycle := requiredValue(workflow, "jobs", "lifecycle")
-	if !nodeContains(requiredValue(findStep(lifecycle, "Run lifecycle scenario"), "if"), "needs.plan.outputs.selected") {
-		fail("E2E lifecycle execution must honor the selected tests")
+	checkout := findStep(job, "Check out pinned shared runner")
+	if scalar(requiredValue(checkout, "with", "repository")) != "doomerlabs/agent-e2e" || !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(scalar(requiredValue(checkout, "with", "ref"))) {
+		fail("shared E2E runner must be pinned")
 	}
-	if findStep(lifecycle, "Record unselected scenario") == nil {
-		fail("E2E checks must explain unselected scenarios")
-	}
-	if scalar(requiredValue(plan, "outputs", "cache_artifact_name")) != "${{ steps.scenarios.outputs.cache_artifact_name }}" {
-		fail("E2E plan must expose the current attempt's unique verified artifact name")
-	}
-	if !nodeContains(findStep(plan, "Discover all lifecycle scenarios"), "uuid.uuid4().hex") {
-		fail("E2E plan must generate a fresh artifact name for each attempt")
-	}
-	if scalar(requiredValue(findStep(plan, "Save verified cached recordings"), "with", "name")) != "${{ steps.scenarios.outputs.cache_artifact_name }}" {
-		fail("E2E upload must use the current plan's unique artifact name")
-	}
-	report := requiredValue(workflow, "jobs", "report")
-	if scalar(requiredValue(report, "env", "E2E_SELECTED_TESTS")) != "${{ needs.plan.outputs.selected }}" {
-		fail("E2E gallery must distinguish selected and unselected tests")
-	}
-	restore := findStep(report, "Restore verified cached recordings")
-	if scalar(requiredValue(restore, "with", "name")) != "${{ needs.plan.outputs.cache_artifact_name }}" {
-		fail("E2E report must restore the exact current verified artifact into its root")
-	}
-	seenRestore := false
-	for _, step := range steps(report) {
-		if step == restore {
-			seenRestore = true
-		}
-		if strings.HasPrefix(scalar(value(step, "uses")), "actions/download-artifact@") && step != restore {
-			pattern := scalar(requiredValue(step, "with", "pattern"))
-			if seenRestore || (pattern != "agent-e2e-codex-*" && pattern != "agent-e2e-claude-*") {
-				fail("E2E scenario downloads must precede verified restoration and exclude old galleries")
-			}
+	run := findStep(job, "Select and run shared agent scenarios")
+	for _, required := range []string{"scripts/with-test-secrets.py", "scripts/run.py", "--changed-repo", "COMPONENT_BASE", "--description-file", "GITHUB_EVENT_PATH", "--cli-source"} {
+		if !nodeContains(run, required) {
+			fail("shared E2E caller lost %s", required)
 		}
 	}
+	if !nodeContains(findStep(job, "Retain selection and recordings"), "/verified") {
+		fail("shared E2E recordings must be retained")
+	}
+	validatePinnedActions("shared agent E2E", workflow)
 }
 
 func main() {

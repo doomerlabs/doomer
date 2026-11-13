@@ -1,239 +1,74 @@
 name: agent-e2e
-
 on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, edited, ready_for_review]
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
-  group: agent-e2e-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}
+  group: agent-e2e-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
-
 jobs:
-  plan:
+  onboarding:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 60
     environment: agent-e2e
-    outputs:
-      scenarios: ${{ steps.scenarios.outputs.scenarios }}
-      release: ${{ steps.scenarios.outputs.release }}
-      cached: ${{ steps.cache.outputs.cached }}
-      selected: ${{ steps.selection.outputs.selected }}
-      selected_count: ${{ steps.selection.outputs.selected_count }}
-      cache_artifact_name: ${{ steps.scenarios.outputs.cache_artifact_name }}
+    defaults:
+      run:
+        working-directory: e2e-runner
+    env:
+      # Depot bootstrap only; test credentials remain in Doppler doomer/test.
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      E2E_REPORT_DIR: /tmp/component-agent-e2e
+      COMPONENT_SOURCE: ${{ github.workspace }}/component
+      CANDIDATE_SOURCE: ${{ github.workspace }}/candidate-cli
+      COMPONENT_BASE: ${{ github.event.pull_request.base.sha }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          path: component
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - name: Check out pinned shared runner
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: doomerlabs/agent-e2e
+          ref: 9ada91dd472f6b0dad1e9c793cd2823455a66f9f
+          path: e2e-runner
+          persist-credentials: false
+      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c
+        with:
+          go-version-file: e2e-runner/go.mod
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.20.0
-      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
-        with:
-          go-version-file: go.mod
-      - name: Select lifecycle scenarios
-        id: selection
-        env:
-          E2E_CONCENTRATE_API_KEY: ${{ secrets.E2E_CONCENTRATE_API_KEY }}
-          SELECTOR_BASE: ${{ github.event.pull_request.base.sha }}
-          SELECTOR_HEAD: ${{ github.event.pull_request.head.sha }}
-          SELECTOR_EVENT: ${{ github.event_name }}
+      - name: Select and run shared agent scenarios
         run: |
-          head=${SELECTOR_HEAD:-HEAD}
-          base=$(git merge-base "${SELECTOR_BASE:-origin/main}" "$head")
-          extra=()
-          if [[ $SELECTOR_EVENT == workflow_dispatch ]]; then extra+=(--full-suite); fi
-          python3 scripts/agent-e2e-selector.py predict \
-            --base "$base" --head "$head" --pr-event "$GITHUB_EVENT_PATH" \
-            --output "$RUNNER_TEMP/e2e-selection" "${extra[@]}"
-          python3 - "$RUNNER_TEMP/e2e-selection/prediction.json" >> "$GITHUB_OUTPUT" <<'PYTHON'
-          import json, pathlib, sys
-          prediction = json.loads(pathlib.Path(sys.argv[1]).read_text())
-          selected = prediction['selected']
-          print('selected=' + json.dumps(selected, separators=(',', ':')))
-          print('selected_count=' + str(len(selected)))
+          python3 - <<'PYTHON'
+          import json,os,pathlib,subprocess
+          event=json.loads(pathlib.Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+          description=pathlib.Path(os.environ['RUNNER_TEMP'])/'component-description.txt'
+          description.write_text((event.get('pull_request') or {}).get('body') or '')
+          args=['python3','scripts/with-test-secrets.py','python3','scripts/run.py','--require-cache',
+                '--output',os.environ['E2E_REPORT_DIR'],'--changed-repo',os.environ['COMPONENT_SOURCE'],
+                '--description-file',str(description)]
+          if os.environ.get('COMPONENT_BASE'): args += ['--base',os.environ['COMPONENT_BASE']]
+          if os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch': args.append('--full-suite')
+          args += ['--cli-source',os.environ['COMPONENT_SOURCE']]
+          raise SystemExit(subprocess.call(args))
           PYTHON
-      - name: Retain selection evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: agent-e2e-selection-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/e2e-selection
-          retention-days: 14
-      - name: Discover all lifecycle scenarios
-        id: scenarios
-        run: |
-          go run ./tests/codexinstall --scenario list > "$RUNNER_TEMP/e2e-scenarios.txt"
-          python3 - "$RUNNER_TEMP/e2e-scenarios.txt" >> "$GITHUB_OUTPUT" <<'PY'
-          import json, pathlib, re, sys, uuid
-          scenarios = [line.strip() for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.strip()]
-          if not scenarios or len(set(scenarios)) != len(scenarios):
-              raise SystemExit("Scenario discovery returned an empty or duplicate list")
-          if any(not re.fullmatch(r"[a-z0-9-]+", name) for name in scenarios):
-              raise SystemExit("Scenario discovery returned an invalid name")
-          print("scenarios=" + json.dumps(scenarios))
-          print("cache_artifact_name=agent-e2e-cached-results-" + uuid.uuid4().hex)
-          PY
-          release=$(cat tests/codexinstall/baseline-release.txt)
-          if [[ ! $release =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}\.[1-9][0-9]*$ ]]; then
-            echo "Stable channel returned an unexpected Doomer release version" >&2
-            exit 1
-          fi
-          printf 'release=%s\n' "$release" >> "$GITHUB_OUTPUT"
-
-      - name: Verify signed shared results
-        id: cache
-        env:
-          E2E_CANDIDATE_RELEASE: ${{ steps.scenarios.outputs.release }}
-          E2E_SELECTED_TESTS: ${{ steps.selection.outputs.selected }}
-          E2E_R2_ACCOUNT_ID: ${{ secrets.E2E_R2_ACCOUNT_ID }}
-          E2E_R2_BUCKET: ${{ secrets.E2E_R2_BUCKET }}
-          E2E_R2_ACCESS_KEY_ID: ${{ secrets.E2E_R2_READ_ACCESS_KEY_ID }}
-          E2E_R2_SECRET_ACCESS_KEY: ${{ secrets.E2E_R2_READ_SECRET_ACCESS_KEY }}
-        run: |
-          export E2E_BASELINE_SOURCE="$RUNNER_TEMP/e2e-baseline"
-          python3 scripts/agent-e2e-cache-plan.py --jobs 8 --output "$RUNNER_TEMP/e2e-cache"
-      - name: Save verified cached recordings
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ${{ steps.scenarios.outputs.cache_artifact_name }}
-          path: ${{ runner.temp }}/e2e-cache/verified
-          retention-days: 14
-
-  lifecycle:
-    needs: plan
-    # Fork PRs never run credential-bearing jobs, even after manual run approval.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    name: ${{ matrix.harness }} / ${{ matrix.scenario }}
-    runs-on: ubuntu-24.04
-    environment: agent-e2e
-    timeout-minutes: 40
-    strategy:
-      fail-fast: false
-      # Bound provider request bursts while keeping scenarios parallel.
-      max-parallel: 8
-      matrix:
-        harness: [codex, claude]
-        scenario: ${{ fromJSON(needs.plan.outputs.scenarios) }}
-    env:
-      E2E_CANDIDATE_RELEASE: ${{ needs.plan.outputs.release }}
-      E2E_REPORT_DIR: /tmp/doomer-e2e-reports
-    steps:
-      - name: Record unselected scenario
-        if: ${{ !contains(fromJSON(needs.plan.outputs.selected), format('{0}/{1}', matrix.harness, matrix.scenario)) }}
-        run: echo 'Not selected for this change; no agent execution.' >> "$GITHUB_STEP_SUMMARY"
-      - name: Accept verified cached result
-        if: ${{ fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
-        run: |
-          echo 'Signed result and artifacts verified in plan; no agent execution.'
-          echo 'Result: verified shared-cache hit. Recording is in the combined gallery.' >> "$GITHUB_STEP_SUMMARY"
-      - if: ${{ contains(fromJSON(needs.plan.outputs.selected), format('{0}/{1}', matrix.harness, matrix.scenario)) && !fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-      - if: ${{ contains(fromJSON(needs.plan.outputs.selected), format('{0}/{1}', matrix.harness, matrix.scenario)) && !fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
-        with:
-          go-version-file: go.mod
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: ${{ contains(fromJSON(needs.plan.outputs.selected), format('{0}/{1}', matrix.harness, matrix.scenario)) && !fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
-        with:
-          node-version: 22.20.0
-      - name: Run lifecycle scenario
-        if: ${{ contains(fromJSON(needs.plan.outputs.selected), format('{0}/{1}', matrix.harness, matrix.scenario)) && !fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
-        env:
-          E2E_R2_ACCOUNT_ID: ${{ secrets.E2E_R2_ACCOUNT_ID }}
-          E2E_R2_BUCKET: ${{ secrets.E2E_R2_BUCKET }}
-          E2E_R2_ACCESS_KEY_ID: ${{ secrets.E2E_R2_WRITE_ACCESS_KEY_ID }}
-          E2E_R2_SECRET_ACCESS_KEY: ${{ secrets.E2E_R2_WRITE_SECRET_ACCESS_KEY }}
-          E2E_CACHE_SIGNING_KEY: ${{ secrets.E2E_CACHE_SIGNING_KEY }}
-          E2E_CACHE_SIGNING_KEY_ID: ${{ secrets.E2E_CACHE_SIGNING_KEY_ID }}
-          TEST_OPENAI_API_KEY: ${{ matrix.harness == 'codex' && secrets.TEST_OPENAI_API_KEY || '' }}
-          TEST_CLAUDE_CODE_OAUTH_TOKEN: ${{ matrix.harness == 'claude' && secrets.TEST_CLAUDE_CODE_OAUTH_TOKEN || '' }}
-          E2E_SCENARIO: ${{ matrix.scenario }}
-          E2E_HARNESS: ${{ matrix.harness }}
-        run: |
-          report_root=$E2E_REPORT_DIR
-          for attempt in 1 2; do
-            export E2E_REPORT_DIR="$report_root/attempt-$attempt"
-            if scripts/ci-agent-e2e.sh "$E2E_HARNESS" "$E2E_SCENARIO"; then
-              status=0
-              break
-            else
-              status=$?
-            fi
-            if [[ $attempt == 1 ]]; then
-              echo "Scenario failed; retrying once with a fresh home."
-            fi
-          done
-          # The gallery reads the final attempt; retain both attempts for debugging.
-          if [[ -d $E2E_REPORT_DIR ]]; then
-            cp -a "$E2E_REPORT_DIR/." "$report_root/"
-          fi
-          exit "$status"
-      - name: Build recording index
-        if: ${{ always() && contains(fromJSON(needs.plan.outputs.selected), format('{0}/{1}', matrix.harness, matrix.scenario)) && !fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
-        env:
-          E2E_SCENARIO: ${{ matrix.scenario }}
-          E2E_HARNESS: ${{ matrix.harness }}
-        run: GITHUB_STEP_SUMMARY='' python3 scripts/ci-agent-e2e-report.py --single "$E2E_REPORT_DIR" "$E2E_HARNESS" "$E2E_SCENARIO"
-      - name: Save HTML recording and JSON result
-        if: ${{ always() && contains(fromJSON(needs.plan.outputs.selected), format('{0}/{1}', matrix.harness, matrix.scenario)) && !fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: agent-e2e-${{ matrix.harness }}-${{ matrix.scenario }}
-          path: ${{ env.E2E_REPORT_DIR }}
-          retention-days: 14
-          overwrite: true
-          if-no-files-found: error
-
-  report:
-    name: all lifecycle results
-    needs: [plan, lifecycle]
-    if: always() && !cancelled() && needs.plan.result == 'success'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    env:
-      E2E_SCENARIOS: ${{ needs.plan.outputs.scenarios }}
-      E2E_SELECTED_TESTS: ${{ needs.plan.outputs.selected }}
-      E2E_ARTIFACT_NAME: agent-e2e-all-recordings
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-      - name: Collect Codex scenario recordings
-        if: needs.plan.outputs.selected_count != '0'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          pattern: agent-e2e-codex-*
-          path: e2e-artifacts
-      - name: Collect Claude scenario recordings
-        if: needs.plan.outputs.selected_count != '0'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          pattern: agent-e2e-claude-*
-          path: e2e-artifacts
-      # Download this plan attempt's verified reports last. Older scenario
-      # artifacts from a rerun must not replace their cache-hit provenance.
-      - name: Restore verified cached recordings
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: ${{ needs.plan.outputs.cache_artifact_name }}
-          path: e2e-artifacts
-      - name: Summarize every scenario including failures
+      - name: Retain selection and recordings
         if: always()
-        run: python3 scripts/ci-agent-e2e-report.py --all e2e-artifacts
-      - name: Save combined HTML recording gallery
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: agent-e2e-all-recordings
-          path: e2e-artifacts
+          name: agent-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            /tmp/component-agent-e2e/selection
+            /tmp/component-agent-e2e/components.json
+            /tmp/component-agent-e2e/cache-plan.json
+            /tmp/component-agent-e2e/verified
+            /tmp/component-agent-e2e/suite-*
+            /tmp/component-agent-e2e/retries
           retention-days: 14
-          overwrite: true
-          if-no-files-found: error
