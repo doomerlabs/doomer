@@ -124,7 +124,7 @@ func responseError(resp *http.Response, token string) error {
 		switch resp.StatusCode {
 		case http.StatusUnauthorized:
 			if token == "" || IsAnonymousToken(token) {
-				message += "; anonymous access was rejected; check the configured service and saved upload approval with npx @doomerlabs/doomer doctor"
+			message += "; anonymous access was rejected; check the configured service and upload approval (https://doomer.ai/docs/troubleshooting)"
 			} else {
 				message += "; sign in again with doomer login --device using the same service and profile"
 			}

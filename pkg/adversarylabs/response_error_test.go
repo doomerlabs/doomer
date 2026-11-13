@@ -63,7 +63,7 @@ func TestResponseRecoveryRespectsCompatibilityAndAnonymousAccess(t *testing.T) {
 	} {
 		resp := &http.Response{StatusCode: 401, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(tc.body))}
 		err := responseError(resp, tc.token)
-		if !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "login --device") {
+		if !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "login --device") || strings.Contains(err.Error(), "npx") {
 			t.Fatalf("contradictory recovery: %v", err)
 		}
 	}
