@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +27,10 @@ func TestFixtureFeedbackMatchesClientReceiptContract(t *testing.T) {
 	defer f.mu.Unlock()
 	if len(f.Feedback) != 1 {
 		t.Fatal("fixture did not record the accepted response")
+	}
+	want := map[string]any{"lead_id": strings.Repeat("a", 64), "status": "dismissed", "reason": "Verified the greeting matches the request", "agrees": false}
+	if !reflect.DeepEqual(f.Feedback["review-test"], want) {
+		t.Fatalf("feedback payload changed: got %#v want %#v", f.Feedback["review-test"], want)
 	}
 }
 

@@ -182,9 +182,6 @@ check names and complete without an agent process. Missing, malformed,
 or unavailable results run through the existing fresh-home retry path and publish
 new signed results. The combined gallery includes both cached and executed
 recordings, labels their origin, and charges zero new provider spend for hits.
-The released-CLI regression check can reuse only a separately signed witness of
-the exact expected missing-policy failure with successful cleanup.
-
 Linux local and CI results are mutually acceptable only when OS, architecture,
 source, pinned agent package, toolchain, model, authentication and all other
 fingerprinted settings match. macOS and Windows results do not satisfy Linux
@@ -199,7 +196,7 @@ doppler run --project doomer --config test -- scripts/agent-e2e-local-linux.sh
 ```
 
 This builds an Ubuntu 24.04 / linux-amd64 container with the pinned Go toolchain, runs both
-pinned harnesses and the historical regression with bounded concurrency, and
+pinned harnesses with bounded concurrency, and
 publishes successful results. It uses the same execution script as CI, including
 a $0.50 per-case API reservation and subscription-only Claude authentication.
 Each invocation creates and prints a private `run.XXXXXX` report directory under
