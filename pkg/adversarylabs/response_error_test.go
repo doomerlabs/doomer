@@ -39,7 +39,7 @@ func TestResponseErrorGivesRecoveryWithoutTrustingServerInstructions(t *testing.
 		want   string
 	}{
 		{401, "doomer login --device"},
-		{403, "account has access"},
+		{403, "access and upload approval"},
 		{429, "wait before retrying"},
 		{503, "retry after it recovers"},
 	} {
@@ -48,6 +48,23 @@ func TestResponseErrorGivesRecoveryWithoutTrustingServerInstructions(t *testing.
 		var apiError *ResponseError
 		if !errors.As(err, &apiError) || apiError.StatusCode != tc.status || !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "malicious-command") || strings.Contains(err.Error(), "secret-token") {
 			t.Fatalf("unsafe or missing recovery: %v", err)
+		}
+	}
+}
+
+func TestResponseRecoveryRespectsCompatibilityAndAnonymousAccess(t *testing.T) {
+	for _, tc := range []struct {
+		body, token, want string
+	}{
+		{`{"error":"client_update_required"}`, "account-token", "update Doomer"},
+		{`{"error":"client_policy_unavailable"}`, "account-token", "retry this operation later"},
+		{`{}`, "", "anonymous access was rejected"},
+		{`{}`, AnonymousTokenPrefix + strings.Repeat("A", 43), "anonymous access was rejected"},
+	} {
+		resp := &http.Response{StatusCode: 401, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(tc.body))}
+		err := responseError(resp, tc.token)
+		if !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "login --device") {
+			t.Fatalf("contradictory recovery: %v", err)
 		}
 	}
 }
