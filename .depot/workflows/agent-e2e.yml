@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: doomerlabs/agent-e2e
-          ref: 9ada91dd472f6b0dad1e9c793cd2823455a66f9f
+          ref: 2a932db98d72cb71a68a40ea1e0917dbeecde83e
           path: e2e-runner
           persist-credentials: false
       - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c
