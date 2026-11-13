@@ -143,6 +143,9 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 			return empty, err
 		}
 		if operation == "finish" {
+			if agent == "claude" {
+				return claudeStopFeedback(result, id.Key(), input.StopActive), nil
+			}
 			if feedback := pendingFeedbackHook(result); feedback != nil {
 				return feedback, nil
 			}
@@ -171,7 +174,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 			if existing.Directory != directory {
 				return empty, fmt.Errorf("this turn already has a watcher with different configuration")
 			}
-			return watchAgentContext(id.Key()), nil
+			return watchAgentContextForAgent(id.Key(), agent), nil
 		}
 	}
 	requestTurn := turn
@@ -210,7 +213,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 			if result.Directory != directory {
 				return empty, fmt.Errorf("watcher identity collision")
 			}
-			return watchAgentContext(id.Key()), nil
+			return watchAgentContextForAgent(id.Key(), agent), nil
 		}
 		select {
 		case err := <-exited:

@@ -88,7 +88,11 @@ func TestAgentHookWorkersArePerTurnAndLeaveNoRuntimeFiles(t *testing.T) {
 					Context string `json:"additionalContext"`
 				} `json:"hookSpecificOutput"`
 			}
-			if json.Unmarshal(output.Bytes(), &result) != nil || result.Specific.Event != "UserPromptSubmit" || !strings.Contains(result.Specific.Context, "watch instructions --control") {
+			wantContext := "watch instructions --control"
+			if agent == "claude" {
+				wantContext = "Stop hook will deliver the review report"
+			}
+			if json.Unmarshal(output.Bytes(), &result) != nil || result.Specific.Event != "UserPromptSubmit" || !strings.Contains(result.Specific.Context, wantContext) {
 				t.Fatalf("startup did not supply model context: %s", output.String())
 			}
 		}

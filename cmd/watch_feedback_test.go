@@ -190,3 +190,39 @@ func TestAdvisoryRequiresExplicitDisplayAcknowledgement(t *testing.T) {
 		t.Fatal("acknowledged advisory still blocks completion")
 	}
 }
+
+func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
+	key := strings.Repeat("a", 64)
+	context := watchAgentContextForAgent(key, "claude")["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
+	if strings.Contains(context, "watch report --control") {
+		t.Fatal("Claude still requires shell retrieval")
+	}
+	result := livewatch.Response{
+		Results:  []livewatch.Result{{Status: "ready", URL: "https://example.test/review"}},
+		Findings: []livewatch.Finding{{ReviewID: "review", Lead: adversarylabs.WorkspaceLead{ID: "lead", Path: "hello.py", Line: 1, Concern: "Handle invalid input"}}},
+		Notices:  []adversarylabs.ClientNotice{{ID: "news", Revision: 2, Message: "Service maintenance", NotifyUser: true}},
+	}
+	out := claudeStopFeedback(result, key, false)
+	text, _ := out["reason"].(string)
+	for _, want := range []string{"Handle invalid input", "Service maintenance", "watch respond", "notice-ack", "only after user-visible display", "do not bypass"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q: %v", want, out)
+		}
+	}
+	if out["decision"] != "block" {
+		t.Fatal(out)
+	}
+	// A denied response remains pending, but cannot trap Claude in a Stop loop.
+	blocked := claudeStopFeedback(result, key, true)
+	if blocked["decision"] != nil || blocked["systemMessage"] == nil {
+		t.Fatal(blocked)
+	}
+	if result.Findings[0].Disposition != nil || !result.Notices[0].NotifyUser {
+		t.Fatal("delivery recorded an acknowledgement or decision")
+	}
+	result.Findings[0].Disposition = &livewatch.Feedback{Status: "deferred", Reason: "Needs user input"}
+	result.Notices[0].NotifyUser = false
+	if out := claudeStopFeedback(result, key, true); len(out) != 0 {
+		t.Fatal(out)
+	}
+}
