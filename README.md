@@ -28,6 +28,17 @@ npx @doomerlabs/doomer install
 npx @doomerlabs/doomer doctor --json
 ```
 
+After setup, open `/hooks` in each selected agent to review and trust Doomer.
+Start a new session if the hooks have not loaded, then give the agent a small
+coding task. Doomer reviews it automatically; a completed review confirms
+activation. Installation alone does not prove that hooks are running.
+
+Use `npx @doomerlabs/doomer doctor` for a readable diagnosis. Structured output
+includes repair actions in `issues`, plus `uploadApproved` and `activation`.
+Missing upload approval is reported separately from installed configuration;
+declining it keeps automatic uploads off. Follow the reported command for
+missing files or hooks, or the settings-file instruction for disabled hooks.
+
 Hooks are required for automatic reviews. The user must grant upload permission
 and trust the hooks through the agent's native controls. Direct CLI reviews and
 adversary publishing also work with a standalone CLI installed through Homebrew;

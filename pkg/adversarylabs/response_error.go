@@ -118,6 +118,17 @@ func responseError(resp *http.Response, token string) error {
 			}
 		}
 	}
+	// Recovery comes from the HTTP status, never from server-supplied prose.
+	switch resp.StatusCode {
+	case http.StatusUnauthorized:
+		message += "; sign in again with doomer login --device using the same service and profile"
+	case http.StatusForbidden:
+		message += "; check that your account has access to this operation before retrying"
+	case http.StatusTooManyRequests:
+		message += "; wait before retrying; a rate-limited request is not a completed review"
+	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout, http.StatusInternalServerError:
+		message += "; the service could not complete this request; retry after it recovers and do not report the review as complete"
+	}
 	if token != "" {
 		message = strings.ReplaceAll(message, token, "[redacted]")
 	}

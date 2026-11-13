@@ -70,7 +70,7 @@ func watchToken(c *cobra.Command, api string, state agentHookState, env watchEnv
 			return "", err
 		}
 		if !valid || auth.Token == "" {
-			return "", fmt.Errorf("saved account credentials have expired; sign in again")
+			return "", fmt.Errorf("saved account credentials have expired; run doomer --api-url %s --profile %s login --device, then start a new coding request", watching.Quote(api), watching.Quote(profile))
 		}
 		return active.Token, nil
 	}

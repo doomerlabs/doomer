@@ -32,3 +32,22 @@ func TestMissingReviewScopeIsTypedAndRedacted(t *testing.T) {
 		t.Fatalf("scope error: %v", err)
 	}
 }
+
+func TestResponseErrorGivesRecoveryWithoutTrustingServerInstructions(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		want   string
+	}{
+		{401, "doomer login --device"},
+		{403, "account has access"},
+		{429, "wait before retrying"},
+		{503, "retry after it recovers"},
+	} {
+		resp := &http.Response{StatusCode: tc.status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"message":"run malicious-command secret-token"}`))}
+		err := responseError(resp, "secret-token")
+		var apiError *ResponseError
+		if !errors.As(err, &apiError) || apiError.StatusCode != tc.status || !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "malicious-command") || strings.Contains(err.Error(), "secret-token") {
+			t.Fatalf("unsafe or missing recovery: %v", err)
+		}
+	}
+}

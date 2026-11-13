@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,8 +56,8 @@ func TestWatchTokenHonorsProfileAndRejectsExpiredLogin(t *testing.T) {
 	if err := store.SetAuth(adversarylabs.AuthKey(api, "work"), adversarylabs.Auth{Token: "expired", ExpiresAt: time.Now().Add(-time.Hour).Format(time.RFC3339)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := watchToken(NewRootCommand(), api, state, watchEnvironment{}); err == nil {
-		t.Fatal("expired account silently became anonymous")
+	if _, err := watchToken(NewRootCommand(), api, state, watchEnvironment{}); err == nil || !strings.Contains(err.Error(), "--profile 'work' login --device") {
+		t.Fatalf("expired account must retain its identity and explain recovery: %v", err)
 	}
 }
 
