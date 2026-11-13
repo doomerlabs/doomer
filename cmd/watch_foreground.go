@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/doomerlabs/doomer/internal/livewatch"
 	"github.com/doomerlabs/doomer/internal/paths"
@@ -184,6 +185,12 @@ func newForegroundWatchCommand() *cobra.Command {
 		defer signal.Stop(signals)
 		stop := make(chan struct{})
 		ctx, cancel := context.WithCancel(context.WithoutCancel(c.Context()))
+		// A watcher owns its advisory cache; its responses carry notices to the
+		// agent. Background stderr is not evidence of user-visible delivery.
+		ctx = adversarylabs.WithNoticeCollector(ctx, config.ManagerHome, config.API, io.Discard)
+		config.Notices = func() []adversarylabs.ClientNotice { return adversarylabs.NoticesFromContext(ctx) }
+		config.AcknowledgeNotice = func(id string, revision int) error { return adversarylabs.AcknowledgeNotice(ctx, id, revision) }
+
 		defer cancel()
 		go func() {
 			select {
@@ -199,6 +206,11 @@ func newForegroundWatchCommand() *cobra.Command {
 			config.Report = func(result livewatch.Result) { _ = json.NewEncoder(c.OutOrStdout()).Encode(result) }
 		}
 		client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, config.API)
+		noticeCtx, stopNotices := context.WithTimeout(ctx, 2*time.Second)
+		noticesReady := make(chan struct{})
+		config.NoticesReady = noticesReady
+		go func() { defer close(noticesReady); defer stopNotices(); _, _ = client.CheckNotices(noticeCtx) }()
+
 		return livewatch.Serve(ctx, config.Config, client, allowed)
 	}
 	return c

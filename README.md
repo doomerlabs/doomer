@@ -15,45 +15,48 @@ tools. With Nix and direnv installed, run `direnv allow` in this checkout to
 activate it. You can also enter the shell with `nix develop`.
 
 ```sh
-go build -o bin/doomer .
+make build
 ./bin/doomer --help
 ```
 
 ## Coding-agent onboarding
 
-Install the managed skill using the [installation guide](https://github.com/doomerlabs/skills/blob/main/INSTALL.md).
-Choose repository installation for a shared team policy or personal installation
-for all your projects. The small bootstrap stores upgrade policy in SKILL.md.
-Doomer installs signed CLI releases and their matching instructions outside Git,
-and each task keeps its selected version until completion.
+Use the Node manager for installation, updates, consent and agent hooks:
 
 ```sh
-doomer prepare --repo . --agent codex --prompt "Your coding request"
-# Open the returned repository approval page, then resume:
-doomer prepare --task HANDLE
-doomer task submit HANDLE
-doomer task status HANDLE
+npx @doomerlabs/doomer install
+npx @doomerlabs/doomer doctor --json
 ```
 
-Follow the structured result from each command. Software-update authorization,
-account login, repository upload approval, and optional hook trust remain distinct.
-The repository approval page handles login and upload approval together. Use `--agent claude`
-for Claude Code. Directly reading the bootstrap also works when a harness does
-not discover repository skills.
+Hooks are required for automatic reviews. The user must grant upload permission
+and trust the hooks through the agent's native controls. Direct CLI reviews and
+adversary publishing also work with a standalone CLI installed through Homebrew;
+they do not require a skill or Node-managed hooks.
 
-If Claude cannot reach the service, ask your agent to show the reported
-`network_access.required_host` and follow the [network access setup guide](docs/network-access.md).
-It walks organization owners through adding the exact domain and resuming the
-same task after saving the setting.
+`doomer help` lists the public workflow. `doomer review`, `doomer finding`, and
+`doomer adversary` provide their own help and examples. Legacy `prepare`, `task`,
+and `preflight` entry points remain hidden compatibility commands for the older
+pinned `doomer-review` installation; they are not part of the new workflow.
 
-Reviews resume across separate CLI calls using the durable handle. Record
-Quick finding responses with `doomer task respond HANDLE`, then use
-`doomer task finish HANDLE` to verify the reviewed tree and delivery. Optional
-hooks use this same task lifecycle. Successful Quick review of the latest changes
-gates completion; Deep continues in the background and is awaited only when
-explicitly requested. Use task state and Quick readiness, not aggregate review
-status or `full_review.status`. See [managed runtime](docs/managed-runtime.md)
-for policies, recovery, adapter behavior, and deployment visibility.
+## CLI maintenance and advisories
+
+`doomer upgrade --check` checks without installing. `doomer upgrade` updates only
+the CLI: Homebrew installations delegate to `brew upgrade doomer`; Node-managed
+installations delegate to the installed manager's CLI-only `upgrade`; standalone
+stable binaries verify the signed catalog and archive before atomic replacement.
+Development binaries and legacy pinned runtimes are never silently replaced.
+
+Use `doomer status` for local installation information, `doomer notices` for current
+service advisories, and `doomer support bundle` for a private local diagnostic
+bundle. Sending a bundle requires explicit `--upload`. JSON is available with
+`--json` on status, upgrade and notices.
+
+The direct watcher carries server advisories in `watch report` and `watch
+instructions`. An agent must display a pending notice to the user and execute its
+exact acknowledgement command. Reading the notice or returning a report never
+counts as delivery. The Stop hook keeps the watcher available while delivery is
+pending; interruption still cancels it. Notice acknowledgement is local and tied
+to the exact advisory revision. Advisories do not authorize software updates.
 
 ## Watch repositories while you code
 
@@ -83,7 +86,7 @@ it runs free Look Closer reviews with no account needed and returns an unlisted 
 A signed-in profile can also run Deep review. The Mac app is not required.
 
 ```sh
-go build -o bin/doomer .
+make build
 ./bin/doomer login                  # optional: enables authenticated reviews
 ./bin/doomer watch
 ```
@@ -639,34 +642,21 @@ separately; upload estimates do not include the review itself. Human progress
 messages go to stderr for `review`, so `--format json` keeps stdout readable by
 other programs.
 
-### Local review permission check
+### Installation and permission readiness
 
-Run `doomer preflight --agent codex --repo .` (or `--agent claude`) before
-preparing a review. It prints JSON describing saved consent receipts for the
-selected repository, service, profile, and agent, plus Codex policy status when
-applicable. It does not contact a service, create a task, change permissions,
-restore portable state, or update software.
-
-`account_verified: false` is intentional: local receipts do not establish the
-currently signed-in account. Normal `prepare` still verifies current account and
-consent before any upload. A missing receipt is not a request to sign in again.
-Likewise, Codex policy `configured` means the text exists in the selected config;
-`activation: unverified` means the running reviewer has not been verified. After
-an accepted settings change, reload/restart Codex and verify an ordinary allowed
-Doomer operation in a fresh session. Host and organization restrictions remain.
-
-If review is blocked, the skill continues authorized local edits and tests,
-retains the task/baseline for later review, and reports incomplete coverage.
-An explicit user requirement to wait for review still takes precedence.
+For the new Node-managed workflow, run `npx @doomerlabs/doomer doctor --json`.
+It reads installation and permission state without granting access. Hooks require
+explicit upload approval and native agent trust. The old `preflight` command is
+retained only for legacy `doomer-review` installations.
 
 ### Support diagnostics
 
-Run `doomer doctor` from the affected checkout to save a private JSON diagnostic
-report and upload it to Doomer support. Python is not required.
+Run `doomer support bundle` from the affected checkout to save a private JSON diagnostic
+report. Add `--upload` only when you want to send it to Doomer support. Python is not required.
 
 ```sh
-doomer doctor --name "Pat" --email pat@example.com --tag case=123
-doomer doctor --repo /path/to/checkout --no-upload --output ./diagnostics.json
+doomer support bundle --upload --name "Pat" --email pat@example.com --tag case=123
+doomer support bundle --repo /path/to/checkout --output ./diagnostics.json
 ```
 
 The report includes installed binary versions, skill hashes, hook command shape,
@@ -678,10 +668,13 @@ raw logs, raw hook commands and credential files are excluded.
 Uploads use the selected API/profile and are private to support administrators.
 An authenticated account is identified by the server. Anonymous uploads use a
 hashed anonymous identity, and optional name/email/tags are self-reported.
-Use `--no-upload` for local inspection. A local report remains available when an
+Local inspection is the default; uploading requires `--upload`. A local report remains available when an
 upload fails, and `--output` refuses to overwrite an existing file.
 
-### Reset onboarding
+### Reset legacy onboarding
+
+For Node-managed installations use `npx @doomerlabs/doomer uninstall` or `revoke`.
+The following reset command is for older managed installations only.
 
 Run `doomer onboard reset --dry-run` to discover installed integrations and preview
 cleanup. Run `doomer onboard reset` to apply it; `--json` provides the same report

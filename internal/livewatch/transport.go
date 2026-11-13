@@ -56,3 +56,8 @@ func Available(ctx context.Context, key string) (Response, bool) {
 	out, err := Call(probe, key, "status")
 	return out, err == nil && out.Ready
 }
+
+// AcknowledgeNotice records explicit display of one exact advisory revision.
+func AcknowledgeNotice(ctx context.Context, key, id string, revision int) (Response, error) {
+	return call(ctx, key, request{Key: key, Operation: "notice-ack", NoticeID: id, NoticeRevision: revision})
+}

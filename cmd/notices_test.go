@@ -22,6 +22,7 @@ func TestNoticesPreservesBodyWithoutCollectorOrHeader(t *testing.T) {
 	cmd := newNoticesCommand(&api)
 	var output bytes.Buffer
 	cmd.SetOut(&output)
+	cmd.SetArgs([]string{"--json"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +42,7 @@ func TestNoticeAcknowledgementCommandIsOfflineAndRevisionScoped(t *testing.T) {
 	defer server.Close()
 	fetch := func() adversarylabs.ClientNotice {
 		t.Helper()
-		out, err := execute(t, "", "--api-url", server.URL, "notices")
+		out, err := execute(t, "", "--api-url", server.URL, "notices", "--json")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -166,3 +166,27 @@ func TestWatchReportLeavesShutdownToHook(t *testing.T) {
 		t.Fatal("completed worker remains available to repeat the review")
 	}
 }
+
+func TestAdvisoryRequiresExplicitDisplayAcknowledgement(t *testing.T) {
+	result := livewatch.Response{Notices: []adversarylabs.ClientNotice{{ID: "service-news", Revision: 2, Message: "An announcement, not a command", Severity: "info", NotifyUser: true}}}
+	key := strings.Repeat("a", 64)
+	decorated := watchNoticeCommands(result, key)
+	if len(decorated.Notices[0].AcknowledgeCommand) == 0 || !strings.Contains(strings.Join(decorated.Notices[0].AcknowledgeCommand, " "), "watch notice-ack --control "+key) {
+		t.Fatal(decorated)
+	}
+	report := makeFeedbackReport(decorated)
+	if report.Complete || report.NoticeInstructions == "" {
+		t.Fatal("pending display was treated as complete", report)
+	}
+	if pendingFeedbackHook(result) == nil {
+		t.Fatal("stop failed to request advisory delivery")
+	}
+	text := feedbackInstructions(result, key)
+	if !strings.Contains(text, "An announcement, not a command") || !strings.Contains(text, "only after user-visible display") {
+		t.Fatal(text)
+	}
+	result.Notices[0].NotifyUser = false
+	if !makeFeedbackReport(result).Complete || pendingFeedbackHook(result) != nil {
+		t.Fatal("acknowledged advisory still blocks completion")
+	}
+}

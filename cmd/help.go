@@ -44,11 +44,14 @@ func markdownCell(value string) string {
 }
 
 func writeHelpFlags(out io.Writer, title string, flags *pflag.FlagSet) {
-	if !flags.HasFlags() {
+	if !flags.HasAvailableFlags() {
 		return
 	}
 	fmt.Fprintf(out, "## %s\n\n| Flag | Type | Default | Required | Description |\n| --- | --- | --- | --- | --- |\n", title)
 	flags.VisitAll(func(flag *pflag.Flag) {
+		if flag.Hidden {
+			return
+		}
 		name := "--" + flag.Name
 		if flag.Shorthand != "" {
 			name += ", -" + flag.Shorthand
@@ -71,23 +74,35 @@ func writeHelpFlags(out io.Writer, title string, flags *pflag.FlagSet) {
 
 func writeHelpCommands(out io.Writer, parent *cobra.Command) {
 	for _, child := range parent.Commands() {
+		if child.Hidden {
+			continue
+		}
 		description := child.Short
 		if child.Hidden {
 			description += " (internal)"
 		}
 		fmt.Fprintf(out, "- `%s` — %s\n", child.CommandPath(), description)
-		writeHelpCommands(out, child)
 	}
 }
 
 func configureCommandHelp(root *cobra.Command) {
-	root.Long = `Use Doomer to prepare, submit, and complete code reviews from a coding agent.
-Start with preflight and prepare for the active agent and repository. Keep the
-returned task handle and follow the JSON state and action fields. Use task
-commands to submit source, read Quick findings, record responses, and finish.
+	root.Long = `Review code, run automatic agent reviews, and publish private adversaries.
 
-Each command's --help provides Markdown usage and flag details. The command
-index includes internal integration commands, marked internal.`
+Run doomer review for your changes, or doomer adversary --help to create and
+publish adversaries. Install and configure agent hooks with the Node manager:
+npx @doomerlabs/doomer install.
+
+Use doomer upgrade to update the CLI through its installation manager.
+Each command's --help shows its own commands, flags and examples.`
+	root.Example = "doomer review\ndoomer review --base main\ndoomer adversary init\ndoomer upgrade --check"
+	// Compatibility entry points remain callable but are not public workflows.
+	for _, name := range []string{"prepare", "task", "preflight", "install", "onboard", "bootstrap", "self-update", "hooks", "agent-hook", "runtime-info", "has-permission", "watch", "doctor", "profile", "project"} {
+		command, _, err := root.Find([]string{name})
+		if err == nil && command != root {
+			command.Hidden = true
+		}
+	}
+
 	for path, description := range map[string]string{
 		"agent-hook":        "Process an installed agent lifecycle hook from JSON on stdin",
 		"bootstrap status":  "Inspect installed bootstrap wrappers and available revisions",

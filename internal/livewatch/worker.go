@@ -32,19 +32,22 @@ type completion struct {
 	result  Result
 }
 type control struct {
-	cancel     bool
-	checkpoint bool
-	finish     bool
-	results    bool
-	feedback   []Feedback
-	reply      chan Response
-	sent       chan struct{}
+	cancel         bool
+	checkpoint     bool
+	finish         bool
+	results        bool
+	noticeID       string
+	noticeRevision int
+	feedback       []Feedback
+	reply          chan Response
+	sent           chan struct{}
 }
 type worker struct {
 	cfg           Config
 	client        Client
 	allowed       func(context.Context, string) bool
 	repos         map[string]*repository
+	noticeAcks    map[string]bool
 	findings      map[string]Finding
 	direct        string
 	watcher       *fsnotify.Watcher
@@ -73,7 +76,7 @@ func Serve(ctx context.Context, cfg Config, client Client, allowed func(context.
 func serve(ctx context.Context, listener net.Listener, cfg Config, client Client, allowed func(context.Context, string) bool) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	w := &worker{cfg: cfg, client: client, allowed: allowed, repos: map[string]*repository{}, findings: map[string]Finding{}, controls: make(chan control), completed: make(chan completion, 64), slots: make(chan struct{}, 4)}
+	w := &worker{cfg: cfg, client: client, allowed: allowed, repos: map[string]*repository{}, findings: map[string]Finding{}, noticeAcks: map[string]bool{}, controls: make(chan control), completed: make(chan completion, 64), slots: make(chan struct{}, 4)}
 	w.closeListener = func() error { return nil }
 	if listener != nil {
 		w.closeListener = listener.Close
@@ -110,6 +113,10 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 					if json.NewDecoder(io.LimitReader(conn, 256<<10)).Decode(&req) != nil || req.Key != cfg.ControlKey {
 						return
 					}
+					if req.Operation == "notice-ack" && (req.NoticeID == "" || req.NoticeRevision < 1) {
+						_ = json.NewEncoder(conn).Encode(Response{Error: "advisory ID and revision are required"})
+						return
+					}
 					if req.Operation == "feedback" && len(req.Feedback) == 0 {
 						_ = json.NewEncoder(conn).Encode(Response{Error: "at least one finding response is required"})
 						return
@@ -118,10 +125,10 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 						_ = json.NewEncoder(conn).Encode(Response{Ready: true, API: cfg.API, Directory: cfg.Directory})
 						return
 					}
-					if req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" {
+					if req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" {
 						return
 					}
-					command := control{results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, reply: make(chan Response, 1), sent: make(chan struct{})}
+					command := control{results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, noticeID: req.NoticeID, noticeRevision: req.NoticeRevision, reply: make(chan Response, 1), sent: make(chan struct{})}
 					select {
 					case w.controls <- command:
 					case <-ctx.Done():
@@ -283,6 +290,15 @@ func (w *worker) schedule(ctx context.Context) {
 
 func (w *worker) response(timeout bool) Response {
 	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory}
+	if w.cfg.Notices != nil {
+		for _, notice := range w.cfg.Notices() {
+			if w.noticeAcks[fmt.Sprintf("%s:%d", notice.ID, notice.Revision)] {
+				notice.NotifyUser = false
+			}
+			response.Notices = append(response.Notices, notice)
+		}
+	}
+
 	for path, r := range w.repos {
 		if timeout && (r.running || r.pending) {
 			response.Results = append(response.Results, Result{Repository: path, Status: "unavailable", Error: "review did not finish before watch stopped"})
@@ -315,6 +331,12 @@ func (w *worker) collectFindings() {
 }
 
 func (w *worker) hasPendingFeedback() bool {
+	for _, notice := range w.response(false).Notices {
+		if notice.NotifyUser {
+			return true
+		}
+	}
+
 	for _, finding := range w.findings {
 		if finding.Disposition == nil {
 			return true
@@ -402,6 +424,13 @@ func (w *worker) run(ctx context.Context) error {
 			for _, r := range w.repos {
 				busy = busy || r.running || r.pending
 			}
+			if !busy && w.cfg.NoticesReady != nil {
+				select {
+				case <-w.cfg.NoticesReady:
+				default:
+					busy = true
+				}
+			}
 			if !busy {
 				w.collectFindings()
 				response := w.response(false)
@@ -429,6 +458,27 @@ func (w *worker) run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case command := <-w.controls:
+
+			if command.noticeID != "" || command.noticeRevision != 0 {
+				response := w.response(false)
+				known := false
+				for _, n := range response.Notices {
+					if n.ID == command.noticeID && n.Revision == command.noticeRevision {
+						known = true
+						break
+					}
+				}
+				if !known || w.cfg.AcknowledgeNotice == nil {
+					response.Error = "unknown advisory revision"
+				} else if err := w.cfg.AcknowledgeNotice(command.noticeID, command.noticeRevision); err != nil {
+					response.Error = err.Error()
+				} else {
+					w.noticeAcks[fmt.Sprintf("%s:%d", command.noticeID, command.noticeRevision)] = true
+					response = w.response(false)
+				}
+				finish(command, response)
+				continue
+			}
 			if command.results {
 				finish(command, w.response(false))
 				continue

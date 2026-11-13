@@ -409,7 +409,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	hypotheses.Flags().StringVar(&hypothesisState, "state", "", "private integration state directory")
 	hypotheses.Flags().StringVar(&hypothesisID, "request", "", "single-use edit request")
 	c.AddCommand(hypotheses)
-	c.AddCommand(newWatchRespondCommand(), newWatchInstructionsCommand(), newWatchReportCommand())
+	c.AddCommand(newWatchRespondCommand(), newWatchInstructionsCommand(), newWatchReportCommand(), newWatchNoticeAckCommand())
 
 	var taskRepository, taskSession string
 	task := &cobra.Command{Use: "task", Short: "Preserve the original task across a coding-agent restart (stdin)", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {

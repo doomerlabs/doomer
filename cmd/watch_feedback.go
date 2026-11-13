@@ -14,6 +14,7 @@ import (
 
 	"github.com/doomerlabs/doomer/internal/livewatch"
 	watching "github.com/doomerlabs/doomer/internal/watch"
+	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/spf13/cobra"
 )
 
@@ -48,7 +49,7 @@ func newWatchRespondCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"recorded": len(feedback), "report": makeFeedbackReport(result)})
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"recorded": len(feedback), "report": makeFeedbackReport(watchNoticeCommands(result, key))})
 	}
 	return c
 }
@@ -97,7 +98,7 @@ func newWatchReportCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(c.OutOrStdout()).Encode(makeFeedbackReport(result))
+		return json.NewEncoder(c.OutOrStdout()).Encode(makeFeedbackReport(watchNoticeCommands(result, key)))
 	}
 	return c
 }
@@ -107,11 +108,17 @@ func watchAgentContext(key string) map[string]any {
 	if err != nil {
 		executable = "doomer"
 	}
-	text := fmt.Sprintf("Doomer is watching changes for this request. Before your final answer, run %s watch report --control %s to wait for reviews and read their report. If unanswered findings remain, retrieve them with %s watch instructions --control %s, investigate each, record decisions using watch respond, then run watch report again to review any resulting edits. A Stop hook saying suggestions are ready is a reminder to complete this process. Once report returns complete=true, incorporate the report into ONE final answer; no further watch commands are needed. Use natural language with links embedded in descriptive phrases such as CLI changes or changes in the named repository. Briefly describe actual fixes or unresolved deferred concerns; otherwise use one short review sentence. Do not repeat setup instructions, counts, response JSON, or the control key to the user. Do not claim success if the report contains errors.", watching.Quote(executable), key, watching.Quote(executable), key)
+	text := fmt.Sprintf("Doomer is watching changes for this request. Display pending advisories from the report to the user and acknowledge them only after display. Before your final answer, run %s watch report --control %s to wait for reviews and read their report. If unanswered findings remain, retrieve them with %s watch instructions --control %s, investigate each, record decisions using watch respond, then run watch report again to review any resulting edits. A Stop hook saying suggestions are ready is a reminder to complete this process. Once report returns complete=true, incorporate the report into ONE final answer; no further watch commands are needed. Use natural language with links embedded in descriptive phrases such as CLI changes or changes in the named repository. Briefly describe actual fixes or unresolved deferred concerns; otherwise use one short review sentence. Do not repeat setup instructions, counts, response JSON, or the control key to the user. Do not claim success if the report contains errors.", watching.Quote(executable), key, watching.Quote(executable), key)
 	return map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "UserPromptSubmit", "additionalContext": text}}
 }
 
 func pendingFeedbackHook(result livewatch.Response) map[string]any {
+	for _, notice := range result.Notices {
+		if notice.NotifyUser {
+			return map[string]any{"decision": "block", "reason": "Doomer has an advisory awaiting delivery."}
+		}
+	}
+
 	count := 0
 	for _, finding := range result.Findings {
 		if finding.Disposition == nil {
@@ -129,6 +136,14 @@ func pendingFeedbackHook(result livewatch.Response) map[string]any {
 }
 
 func feedbackInstructions(result livewatch.Response, key string) string {
+	result = watchNoticeCommands(result, key)
+	var notices strings.Builder
+	for _, notice := range result.Notices {
+		if notice.NotifyUser {
+			notices.WriteString(adversarylabs.FormatNoticeForAgent(notice) + "\n\n")
+		}
+	}
+
 	var pending []livewatch.Finding
 	for _, finding := range result.Findings {
 		if finding.Disposition == nil {
@@ -136,9 +151,10 @@ func feedbackInstructions(result livewatch.Response, key string) string {
 		}
 	}
 	if len(pending) == 0 {
-		return ""
+		return notices.String()
 	}
 	var text strings.Builder
+	text.WriteString(notices.String())
 	fmt.Fprintf(&text, "Doomer has %d finding(s) awaiting your decision. Investigate each; do not infer a disposition from silence or edits.\n", len(pending))
 	entries := make([]livewatch.Feedback, 0, len(pending))
 	for i, finding := range pending {
@@ -151,7 +167,7 @@ func feedbackInstructions(result livewatch.Response, key string) string {
 		executable = "doomer"
 	}
 	fmt.Fprintf(&text, "\nRecord every decision in Doomer using this command after filling in status, agrees, and reason:\n%s watch respond --control %s <<'DOOMER_RESPONSES'\n%s\nDOOMER_RESPONSES\n", watching.Quote(executable), key, payload)
-	text.WriteString("Use status=fixed with agrees=true only for a verified fix; dismissed with agrees=false for a disproved finding; deferred for an unresolved or out-of-scope finding (agrees=null if unassessed). Give a specific reason for each. A failed submission is not recorded; resolve the error and retry.\nKeep the response JSON in your tool call. Do not dump the findings into the user's answer. After recording decisions, run watch report with the same control key before answering. It checks any resulting edits and returns the report and review links for your final answer.")
+	text.WriteString("Use status=fixed with agrees=true only for a verified fix; dismissed with agrees=false for a disproved finding; deferred for an unresolved or out-of-scope finding (agrees=null if unassessed). Give a specific reason for each. A failed submission is not recorded; resolve the error and retry.\nKeep the response JSON in your tool call. Do not dump the findings into the user's answer. After recording decisions, run watch report with the same control key before answering. Display any pending advisories and execute their exact acknowledgement commands only after user-visible display. It checks any resulting edits and returns the report and review links for your final answer.")
 	return text.String()
 }
 
@@ -183,6 +199,9 @@ type feedbackDetail struct {
 }
 
 type watchFeedbackReport struct {
+	Notices            []adversarylabs.ClientNotice `json:"notices,omitempty"`
+	NoticeInstructions string                       `json:"notice_instructions,omitempty"`
+
 	Complete         bool             `json:"complete"`
 	Suggestions      int              `json:"suggestions"`
 	Fixed            int              `json:"fixed"`
@@ -197,7 +216,7 @@ type watchFeedbackReport struct {
 }
 
 func makeFeedbackReport(result livewatch.Response) watchFeedbackReport {
-	report := watchFeedbackReport{Suggestions: len(result.Findings), Reviews: []feedbackReview{}, Fixes: []feedbackDetail{}, DeferredFindings: []feedbackDetail{}, Errors: []string{}}
+	report := watchFeedbackReport{Notices: result.Notices, Suggestions: len(result.Findings), Reviews: []feedbackReview{}, Fixes: []feedbackDetail{}, DeferredFindings: []feedbackDetail{}, Errors: []string{}}
 	// Prefer the latest review link for each repository over historical findings.
 	links := map[string]string{}
 	for _, finding := range result.Findings {
@@ -251,6 +270,12 @@ func makeFeedbackReport(result livewatch.Response) watchFeedbackReport {
 		subject = "the " + strings.Join(phrases[:len(phrases)-1], ", ") + " and " + phrases[len(phrases)-1]
 	}
 	report.Complete = report.Unanswered == 0 && len(report.Errors) == 0
+	for _, notice := range report.Notices {
+		if notice.NotifyUser {
+			report.NoticeInstructions = adversarylabs.NoticeDeliveryInstructions
+			report.Complete = false
+		}
+	}
 	switch {
 	case len(result.Results) == 0 && len(result.Findings) == 0 && len(report.Errors) == 0:
 		report.SuggestedSummary = "Doomer found no changes to review."
@@ -274,4 +299,43 @@ func makeFeedbackReport(result livewatch.Response) watchFeedbackReport {
 func feedbackReport(result livewatch.Response) string {
 	payload, _ := json.MarshalIndent(makeFeedbackReport(result), "", "  ")
 	return string(payload)
+}
+
+func watchNoticeCommands(result livewatch.Response, key string) livewatch.Response {
+	executable, err := os.Executable()
+	if err != nil {
+		executable = "doomer"
+	}
+	result.Notices = append([]adversarylabs.ClientNotice(nil), result.Notices...)
+	for i := range result.Notices {
+		n := &result.Notices[i]
+		if n.NotifyUser {
+			n.AcknowledgeCommand = []string{executable, "watch", "notice-ack", "--control", key, "--id", n.ID, "--revision", fmt.Sprint(n.Revision)}
+		}
+	}
+	return result
+}
+
+func newWatchNoticeAckCommand() *cobra.Command {
+	var key, id string
+	var revision int
+	c := &cobra.Command{Use: "notice-ack", Hidden: true, Short: "Acknowledge an advisory after user-visible display", Args: cobra.NoArgs}
+	c.PersistentPreRunE = func(*cobra.Command, []string) error { return nil }
+	c.PersistentPostRun = func(*cobra.Command, []string) {}
+	c.Flags().StringVar(&key, "control", "", "watch control key supplied by the hook")
+	c.Flags().StringVar(&id, "id", "", "advisory ID")
+	c.Flags().IntVar(&revision, "revision", 0, "exact advisory revision displayed")
+	c.RunE = func(c *cobra.Command, _ []string) error {
+		if !watchControlKey.MatchString(key) || id == "" || revision < 1 {
+			return fmt.Errorf("control key, advisory ID and revision are required")
+		}
+		ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+		defer cancel()
+		result, err := livewatch.AcknowledgeNotice(ctx, key, id, revision)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(c.OutOrStdout()).Encode(makeFeedbackReport(watchNoticeCommands(result, key)))
+	}
+	return c
 }

@@ -16,16 +16,19 @@ func Key(value string) string { sum := sha256.Sum256([]byte(value)); return hex.
 
 // Config describes one watch invocation. Its caller controls when it stops.
 type Config struct {
-	ID           string                              `json:"id"`
-	ControlKey   string                              `json:"control_key,omitempty"`
-	Directory    string                              `json:"directory"`
-	API          string                              `json:"api"`
-	Token        string                              `json:"token"`
-	Request      *adversarylabs.WorkspaceUserRequest `json:"request,omitempty"`
-	Agent        string                              `json:"agent,omitempty"`
-	DrainTimeout time.Duration                       `json:"drain_timeout,omitempty"`
-	Stop         <-chan struct{}                     `json:"-"`
-	Report       func(Result)                        `json:"-"`
+	ID                string                              `json:"id"`
+	ControlKey        string                              `json:"control_key,omitempty"`
+	Directory         string                              `json:"directory"`
+	API               string                              `json:"api"`
+	Token             string                              `json:"token"`
+	Request           *adversarylabs.WorkspaceUserRequest `json:"request,omitempty"`
+	Agent             string                              `json:"agent,omitempty"`
+	DrainTimeout      time.Duration                       `json:"drain_timeout,omitempty"`
+	Stop              <-chan struct{}                     `json:"-"`
+	NoticesReady      <-chan struct{}                     `json:"-"`
+	Notices           func() []adversarylabs.ClientNotice `json:"-"`
+	AcknowledgeNotice func(string, int) error             `json:"-"`
+	Report            func(Result)                        `json:"-"`
 }
 
 type Client interface {
@@ -61,16 +64,19 @@ type Finding struct {
 }
 
 type Response struct {
-	Ready     bool      `json:"ready"`
-	API       string    `json:"api,omitempty"`
-	Directory string    `json:"directory,omitempty"`
-	Results   []Result  `json:"results,omitempty"`
-	Findings  []Finding `json:"findings,omitempty"`
-	Error     string    `json:"error,omitempty"`
+	Ready     bool                         `json:"ready"`
+	API       string                       `json:"api,omitempty"`
+	Directory string                       `json:"directory,omitempty"`
+	Results   []Result                     `json:"results,omitempty"`
+	Findings  []Finding                    `json:"findings,omitempty"`
+	Notices   []adversarylabs.ClientNotice `json:"notices,omitempty"`
+	Error     string                       `json:"error,omitempty"`
 }
 
 type request struct {
-	Key       string     `json:"key"`
-	Operation string     `json:"operation"`
-	Feedback  []Feedback `json:"feedback,omitempty"`
+	Key            string     `json:"key"`
+	Operation      string     `json:"operation"`
+	Feedback       []Feedback `json:"feedback,omitempty"`
+	NoticeID       string     `json:"notice_id,omitempty"`
+	NoticeRevision int        `json:"notice_revision,omitempty"`
 }
