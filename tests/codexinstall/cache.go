@@ -340,6 +340,12 @@ func (c *scenarioCache) publish(scenario, output string) {
 	if c == nil {
 		return
 	}
+	data, err := os.ReadFile(output)
+	var result report
+	if err != nil || json.Unmarshal(data, &result) != nil || !result.Passed {
+		fmt.Fprintln(os.Stderr, "Cache publication skipped: scenario did not pass")
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	if err := unchangedExternalInputs(ctx, c.metadata); err != nil {

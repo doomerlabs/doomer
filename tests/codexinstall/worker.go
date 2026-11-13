@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
 
 func runWorker(c config) report {
@@ -81,6 +83,12 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 	f := &fixture{Approved: true}
 	server := httptest.NewServer(httpHandler(f.serve))
 	defer server.Close()
+	// Onboarding manages service consent, not account login. Start with the
+	// same saved account credentials that both manual reviews and hooks read.
+	store := adversarylabs.ConfigStore{Path: filepath.Join(home, ".config/doomer/config.json")}
+	if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "default"), adversarylabs.Auth{Token: "fixture-account-token"}); err != nil {
+		return fail(err)
+	}
 	m := newMeter(c)
 	proxyURL := ""
 	if authenticationMode(c) == "api" {

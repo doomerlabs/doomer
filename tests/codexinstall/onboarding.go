@@ -157,7 +157,7 @@ func (j *journey) onboarding() error {
 		return err
 	}
 	j.result.Checks["doctor_ready"] = doctor.Ready
-	raw, err := os.ReadFile(filepath.Join(j.home, ".agents/skills/doomer/SKILL.md"))
+	raw, err := os.ReadFile(installedSkillPath(j.home, j.c))
 	if err != nil {
 		return err
 	}
@@ -294,6 +294,13 @@ func skillsAgent(c config) string {
 		return "claude-code"
 	}
 	return "codex"
+}
+
+func installedSkillPath(home string, c config) string {
+	if c.Harness == "claude" {
+		return filepath.Join(home, ".claude/skills/doomer/SKILL.md")
+	}
+	return filepath.Join(home, ".agents/skills/doomer/SKILL.md")
 }
 
 func (j *journey) checkHookDefinitions() error {
