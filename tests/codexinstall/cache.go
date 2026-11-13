@@ -342,8 +342,8 @@ func (c *scenarioCache) publish(scenario, output string) {
 	}
 	data, err := os.ReadFile(output)
 	var result report
-	if err != nil || json.Unmarshal(data, &result) != nil || !result.Passed {
-		fmt.Fprintln(os.Stderr, "Cache publication skipped: scenario did not pass")
+	if err != nil || json.Unmarshal(data, &result) != nil {
+		fmt.Fprintln(os.Stderr, "Cache publication skipped: invalid scenario report")
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -356,7 +356,11 @@ func (c *scenarioCache) publish(scenario, output string) {
 		fmt.Fprintln(os.Stderr, "Cache publication skipped:", err)
 		return
 	}
-	fmt.Fprintln(os.Stderr, "Published signed E2E result:", c.metadata.fingerprint(scenario))
+	if result.Passed {
+		fmt.Fprintln(os.Stderr, "Published signed E2E success:", c.metadata.fingerprint(scenario))
+	} else {
+		fmt.Fprintln(os.Stderr, "Published diagnostic E2E failure (not reusable):", c.metadata.fingerprint(scenario))
+	}
 }
 
 func cacheReportPassed(r report, m snapshotMetadata) bool { return r.Passed }

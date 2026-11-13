@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +12,22 @@ import (
 
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
+
+func TestFixtureFeedbackMatchesClientReceiptContract(t *testing.T) {
+	f := &fixture{Approved: true, Reviews: map[string]adversarylabs.WorkspaceSubmission{"review-test": {ReviewID: "review-test"}}}
+	server := httptest.NewServer(http.HandlerFunc(f.serve))
+	defer server.Close()
+	client := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, server.URL)
+	agrees := false
+	if err := client.ReportWorkspaceLead(t.Context(), "fixture-account-token", "review-test", strings.Repeat("a", 64), "dismissed", "Verified the greeting matches the request", &agrees); err != nil {
+		t.Fatalf("fixture did not confirm feedback using the real client contract: %v", err)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.Feedback) != 1 {
+		t.Fatal("fixture did not record the accepted response")
+	}
+}
 
 func TestOnboardingCatalogRejectsRetiredJourneys(t *testing.T) {
 	for _, name := range []string{"upgrade", "upgrade-defer", "policy-recovery", "portable-restart", "browser-onboarding", "review-preflight"} {

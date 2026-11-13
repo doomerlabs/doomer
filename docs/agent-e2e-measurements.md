@@ -1,5 +1,9 @@
 # Local agent E2E concurrency measurements
 
+These are historical measurements of the retired managed-lifecycle suite. The
+commands below are not instructions for the replacement onboarding suite; see
+`tests/codexinstall/README.md` for its current scenarios and commands.
+
 Phase 1 adds bounded local suite execution without changing the Depot matrix,
 release gates, scenario assertions, authentication modes or retries. The default
 remains one worker; four workers are an explicit opt-in until broader evidence

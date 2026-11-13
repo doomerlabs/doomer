@@ -82,7 +82,7 @@ func (f *fixture) serve(w http.ResponseWriter, r *http.Request) {
 					f.Feedback = map[string]map[string]any{}
 				}
 				f.Feedback[id] = response
-				send(map[string]bool{"accepted": true})
+				send(map[string]bool{"recorded": true})
 				return
 			}
 			send(f.review(id))

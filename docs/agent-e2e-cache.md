@@ -15,7 +15,7 @@ verification errors print an explicit cache miss and execute the scenario.
 
 Every normal invocation copies tracked and nonignored untracked inputs into a
 private temporary snapshot. The runner itself is rebuilt from this snapshot;
-scenario builds, bootstrap reads and fixture reads run there. Added, modified,
+candidate builds, Node installation and fixture reads run there. Added, modified,
 deleted and executable-bit changes to runtime dependencies affect identity. Edits to the original
 checkout after capture cannot alter test inputs. A changing checkout during
 capture is rejected. The snapshot is removed after the child exits, including
@@ -23,9 +23,9 @@ on interruption. A private `OUTPUT.inputs.json` records the manifest and resolve
 inputs for PR validation. Use a fresh output path each time.
 
 The captured inventory records repository contents and explicitly selected
-candidate, bootstrap or skills repositories. The runnable snapshot and cache key
+candidate Go, Node manager and new-skill repositories. The runnable snapshot and cache key
 use compiler-reported sources and embedded files plus declared runtime fixtures;
-explicit installer/skills repositories retain their full inventory. It excludes private Git
+explicit Node/skills repositories retain their full inventory, including the Node entrypoint. The official skills CLI dependency lockfile is captured too. It excludes private Git
 metadata, credentials (`.env*`, `.aws`, `auth.json`, `credentials*`, private key
 files), dependency/build caches, root binaries, report directories and run
 outputs. Symlinks and submodules fail capture until explicitly supported, rather
@@ -89,24 +89,23 @@ Cached reports preserve the original execution commit/time and origin
 environment, alongside the cache-hit marker for the current run. The existing
 `v1/` storage prefix retains its seven-day retention rule.
 
-## Baselines and freshness
+## Input pins and freshness
 
-When a candidate release is supplied, the runner constructs the installation
-channel from that immutable release manifest; otherwise it resolves the public
-stable channel once. It verifies the pinned public
-installer against the guide's SHA-256, and uses a fixture-local copy of that
-installer with the captured stable-channel JSON substituted. The guide receives
-the derived installer checksum. Archive download HTTPS/checksum verification
-remains intact. With `--skills-source`, the snapshot's installer receives the
-same narrowly scoped baseline substitution. Production installers are unchanged.
-The selected candidate release remains the installation baseline even if a new
-stable release is published while jobs are queued.
+The replacement onboarding suite uses `tests/codexinstall/onboarding-inputs.json`
+for its Node manager revision, new `doomer` skill revision, and official skills
+CLI version. The Node manager and skill sources are copied into the frozen
+snapshot. The official skills CLI's dependency lockfile is generated before
+execution; its contents and the Node/npm versions enter cache identity.
+The worker restores dependencies with `npm ci` and runs the actual manager and
+skills CLI. Only the external skill-source and installation-prefix arguments
+are substituted in the private manager copy.
 
-The signed managed catalog and relevant immutable release manifests also enter
-identity. Publication re-fetches every captured HTTPS input and is skipped if
-any changed or cannot be verified. Matching signed results remain reusable while
-their result and artifacts are present. The bucket's seven-day lifecycle rule
-controls retention. Unsupported installer layouts disable reuse.
+The Go candidate is built from the proposed source. `baseline-release.txt` is
+only the version label for that disposable candidate. The suite does not install
+a historical runtime, consult a managed release catalog, or exercise upgrades.
+Publication rechecks captured HTTPS package metadata; changed or unavailable
+inputs prevent publication. Cache fingerprint schema 3 prevents legacy suite
+successes from satisfying the new onboarding scenarios.
 
 `local` and `ci` execution classes remain explicit provenance. Linux results can
 be accepted across those two classes only with every other fingerprinted input
@@ -115,18 +114,14 @@ coverage. Use the local Linux command below to populate CI-compatible results.
 
 ## Signed result contract
 
-Schema 2 stores an envelope with `key_id`, base64 `payload`, and base64
+Schema 3 stores an envelope with `key_id`, base64 `payload`, and base64
 `signature`. The signature is Ed25519 over exactly the decoded payload bytes;
 verification never reserializes them. The UTF-8 JSON payload records schema,
 fingerprint, scenario, harness, outcome, captured inputs/environment, commit,
 start/end/duration, attempts and artifact references. A result is reusable only
 when its signature, trusted key, expected fingerprint, successful outcome,
-execution times and all referenced artifacts verify. The historical regression
-uses a separate fingerprinted assertion kind: `expect-policy-regression=true`.
-For that kind, a successful outcome means the exact missing-policy failure was
-observed and the local fixture was cleaned. Its signed envelope still records
-`outcome: passed`; the original report retains `passed: false`. The flag is part
-of the fingerprint, so this witness cannot satisfy an ordinary lifecycle check.
+execution times and all referenced artifacts verify. Only an actual passing
+scenario is eligible; there is no expected legacy-policy-failure exception.
 All other failures stay under `v1/failures/` and cannot replace a success.
 
 Object layout:
@@ -221,15 +216,10 @@ once in a fresh home. A partial local run never satisfies missing CI checks.
 
 `--cache-only` verifies and downloads shared results without making agent calls.
 It fails on a miss, allowing the plan to choose the ordinary execution path.
-The plan's `cache-plan.json` records required and verified counts, the separate
-regression result, and elapsed verification time.
+The plan's `cache-plan.json` records required and verified counts, elapsed verification time, and the selected scenarios.
 
-CI and the local Linux helper select the explicit published baseline in
-`tests/codexinstall/baseline-release.txt`. The captured installer pins its
-runtime install to that version. Candidate builds use a private Go overlay that
-limits release selection to that baseline and older releases, preserving stable
-policy and normal signed-catalog verification. The captured source itself is
-unchanged. Cache identity includes the signed catalog's eligible releases;
-a newly published later release does not invalidate a run, while changes to an
-eligible release do. Advancing the baseline requires changing the checked-in
-version and rerunning the suite.
+CI and the local Linux helper use the same pinned source inputs and candidate
+version label. The resulting source and dependency identities, rather than a
+published legacy runtime or policy catalog, control reuse. Advance a source
+pin when changing the corresponding repository, then validate the resulting
+new fingerprint before relying on its cache entry.
