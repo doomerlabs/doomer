@@ -187,7 +187,7 @@ func (j *journey) onboarding() error {
 			return nil
 		}
 		j.result.Turns++
-		_, err = runAgent(j.ctx, j.c, j.repo, j.env, "Create hello.py that prints hello followed by a newline. Use the installed Go CLI for one standalone Quick review and report its result. Do not install hooks.", "", j.record)
+		_, err = runAgent(j.ctx, j.c, j.repo, j.env, "Create hello.py that prints hello followed by a newline. Use the installed Go CLI for one standalone Quick review and report its result. The registry package is not published in this source-test fixture; use the same candidate Node manager for readiness: node "+strconv.Quote(manager)+" doctor --json. Do not install hooks.", "", j.record)
 		if err != nil {
 			return err
 		}
