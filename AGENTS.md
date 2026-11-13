@@ -49,7 +49,9 @@ relevant E2E early and report coverage for the final proposed source.
 
 The shared suite is in `doomerlabs/agent-e2e`, normally cloned alongside this repository. Its README documents component paths/versions and precompiled CLI inputs. Preserve Jev selection, signed R2 reuse, per-case dependencies and recordings. Never build the local CLI on the user's behalf; use a CI-built or user-supplied candidate.
 
-For a user-run Linux suite, `scripts/agent-e2e-local-linux.sh --output /tmp/unique-report-directory` delegates to the shared runner. Agents must set `E2E_CANDIDATE_BINARY` to a CI-built or user-supplied executable before running it. Credentials come from Doppler `doomer/test`. Inspect retained selection evidence and report cache hits separately from executed cases. Matching Linux successes may satisfy CI; native macOS results do not. Do not claim E2E success from unit tests alone.
+For a user-run Linux suite, `scripts/agent-e2e-local-linux.sh --output /tmp/unique-report-directory` delegates to the shared runner. Agents must set `E2E_CANDIDATE_BINARY` to a CI-built or user-supplied executable before running it. Users may explicitly opt into a source build with `E2E_BUILD_CANDIDATE=1`; agents must never enable it. Credentials come from Doppler `doomer/test`. Inspect retained selection evidence and report cache hits separately from executed cases. Matching Linux successes may satisfy CI; native macOS results do not. Do not claim E2E success from unit tests alone.
+
+Never print credentials or copy them into the repository. If Docker or Doppler `doomer/test` is unavailable, report which scenarios CI must execute; do not claim missing runs passed.
 
 ## Testing policy
 

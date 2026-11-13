@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: agent-e2e-${{ github.event.pull_request.number || github.run_id }}
+  group: agent-e2e-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 jobs:
   onboarding:
@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: doomerlabs/agent-e2e
-          ref: 2a932db98d72cb71a68a40ea1e0917dbeecde83e
+          ref: 33618389d4886a9d1ea7a3d88aa792a72d010d15
           path: e2e-runner
           persist-credentials: false
       - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c
@@ -59,6 +59,8 @@ jobs:
           args += ['--cli-source',os.environ['COMPONENT_SOURCE']]
           raise SystemExit(subprocess.call(args))
           PYTHON
+      - name: Validate selected result evidence
+        run: python3 scripts/verify-results.py "$E2E_REPORT_DIR"
       - name: Retain selection and recordings
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -71,4 +73,5 @@ jobs:
             /tmp/component-agent-e2e/verified
             /tmp/component-agent-e2e/suite-*
             /tmp/component-agent-e2e/retries
+          if-no-files-found: error
           retention-days: 14

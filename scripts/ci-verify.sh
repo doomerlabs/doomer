@@ -58,7 +58,6 @@ native_tests() {
 }
 
 quality() {
-  need python3
   log "tracked gofmt check"
   tracked_format
   log "module verification"

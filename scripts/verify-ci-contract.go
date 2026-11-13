@@ -461,17 +461,28 @@ func validateAgentRecordings(workflow *yaml.Node) {
 		fail("scope edits must rerun selection")
 	}
 	checkout := findStep(job, "Check out pinned shared runner")
-	if scalar(requiredValue(checkout, "with", "repository")) != "doomerlabs/agent-e2e" || !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(scalar(requiredValue(checkout, "with", "ref"))) {
-		fail("shared E2E runner must be pinned")
+	pin, err := os.ReadFile(".agent-e2e-revision")
+	if err != nil {
+		fail("read reviewed E2E revision: %v", err)
+	}
+	expected := strings.TrimSpace(string(pin))
+	if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(expected) || scalar(requiredValue(checkout, "with", "repository")) != "doomerlabs/agent-e2e" || scalar(requiredValue(checkout, "with", "ref")) != expected {
+		fail("shared E2E runner must match .agent-e2e-revision")
 	}
 	run := findStep(job, "Select and run shared agent scenarios")
-	for _, required := range []string{"scripts/with-test-secrets.py", "scripts/run.py", "--changed-repo", "COMPONENT_BASE", "--description-file", "GITHUB_EVENT_PATH", "--cli-source"} {
+	for _, required := range []string{"scripts/with-test-secrets.py", "scripts/run.py", "--changed-repo", "COMPONENT_BASE", "--description-file", "GITHUB_EVENT_PATH", "--cli-source", "--base"} {
 		if !nodeContains(run, required) {
 			fail("shared E2E caller lost %s", required)
 		}
 	}
 	if !nodeContains(findStep(job, "Retain selection and recordings"), "/verified") {
 		fail("shared E2E recordings must be retained")
+	}
+	if !nodeContains(findStep(job, "Validate selected result evidence"), "scripts/verify-results.py") || scalar(requiredValue(findStep(job, "Retain selection and recordings"), "with", "if-no-files-found")) != "error" {
+		fail("shared E2E must validate and retain successful evidence")
+	}
+	if !nodeContains(requiredValue(workflow, "concurrency", "group"), "github.event_name") {
+		fail("shared E2E concurrency must distinguish event types")
 	}
 	validatePinnedActions("shared agent E2E", workflow)
 }
