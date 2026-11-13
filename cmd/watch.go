@@ -341,7 +341,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	addWatchSetupFlags(c)
 	addWatchRepositoryCommands(c, app, api, profile)
 	addWatchLifecycleCommands(c, app, api, profile)
-	c.AddCommand(newWatchSupervisorCommand(api, profile))
+	c.AddCommand(newWatchSupervisorCommand(api, profile), newManagedWatchCommand(app, api, profile))
 	var state, hookAgent string
 	var dispatch bool
 	hook := &cobra.Command{Use: "hook", Hidden: true, RunE: func(c *cobra.Command, _ []string) error {

@@ -2,7 +2,7 @@
 
 Local runs capture their inputs, then reuse valid signed successful results or
 execute missing scenarios. `--no-cache` forces execution and disables reads and
-publication. CI verifies shared successes before running misses; release gates are unchanged.
+publication. CI verifies shared successes before running missing cases from the current onboarding suite.
 
 ## Running
 
@@ -121,7 +121,7 @@ fingerprint, scenario, harness, outcome, captured inputs/environment, commit,
 start/end/duration, attempts and artifact references. A result is reusable only
 when its signature, trusted key, expected fingerprint, successful outcome,
 execution times and all referenced artifacts verify. Only an actual passing
-scenario is eligible; there is no expected legacy-policy-failure exception.
+scenario from the current onboarding suite is eligible.
 All other failures stay under `v1/failures/` and cannot replace a success.
 
 Object layout:
@@ -187,7 +187,9 @@ source, pinned agent package, toolchain, model, authentication and all other
 fingerprinted settings match. macOS and Windows results do not satisfy Linux
 checks. CI uses read-only bucket credentials for its verification plan and separate
 publisher credentials only in fallback jobs. The matrix retains a fixed eight-job limit for both lightweight cached
-checks and provider-backed fallback execution. Release gates and the required scenario set are unchanged.
+checks and provider-backed fallback execution. The required suite is the 26 onboarding cases.
+The former baseline-policy regression check was removed with the legacy suite;
+it is no longer a required check in this workflow.
 
 To populate matching Linux results from the current local checkout:
 

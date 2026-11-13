@@ -448,7 +448,7 @@ func startManagedWatch(ctx context.Context, root, path, api, profile string, dir
 		return err
 	}
 	session := rand.Text()
-	args := []string{"--api-url", api, "--profile", profile, "watch", "--managed-session", session}
+	args := []string{"--api-url", api, "--profile", profile, "watch", "managed", "--managed-session", session}
 	args = append(args, directories...)
 	child := exec.Command(exe, args...)
 	child.Dir = path

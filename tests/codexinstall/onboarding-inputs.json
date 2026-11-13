@@ -1,7 +1,7 @@
 {
   "node_repository": "https://github.com/doomerlabs/doomer-node.git",
-  "node_revision": "41b345a2ac8b0ae5d1f15a3f5622d4e7b3faf58c",
+  "node_revision": "3775847a045a3476cf76d72c19f05bedd2d0a581",
   "skills_repository": "https://github.com/doomerlabs/skills.git",
-  "skills_revision": "0dce02c0698369e84f0add6afd365c23737a05a3",
+  "skills_revision": "fc0cb44887f0ed2ead0252340b5050e127dd81dd",
   "skills_cli_version": "1.8.1"
 }
