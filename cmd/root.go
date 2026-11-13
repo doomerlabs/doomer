@@ -111,7 +111,15 @@ func newRootCommand(injected *application.App) *cobra.Command {
 		if err := adversarylabs.ValidateAPIURL(apiURL); err != nil {
 			return err
 		}
-		command.SetContext(adversarylabs.WithNoticeCollector(command.Context(), dir, apiURL, command.ErrOrStderr()))
+		noticeContext := adversarylabs.WithNoticeCollector(command.Context(), dir, apiURL, command.ErrOrStderr())
+		top := command
+		for top.Parent() != nil && top.Parent() != root {
+			top = top.Parent()
+		}
+		if !top.Hidden {
+			noticeContext = adversarylabs.WithHumanNoticeOutput(noticeContext)
+		}
+		command.SetContext(noticeContext)
 		if injected != nil {
 			app.Deps = injected.Deps
 			return nil

@@ -112,6 +112,10 @@ func identifyCLIInstallation(path string) (cliInstallation, error) {
 		result.Command = []string{"node", state.Runtime, "upgrade", "--home", home}
 		return result, nil
 	}
+	// Do not adopt a versioned installation whose manager receipt is missing.
+	if actual != path || strings.HasPrefix(filepath.Base(actual), "doomer-") {
+		result.Manager = "unrecognized"
+	}
 	// Immutable old managed runtimes and development builds are never adopted.
 	if strings.Contains(actual, filepath.FromSlash("/.local/share/doomer/versions/")) {
 		result.Manager = "legacy"
@@ -130,6 +134,9 @@ func newUpgradeCommand() *cobra.Command {
 		installation, err := inspectCLIInstallation()
 		if err != nil {
 			return err
+		}
+		if installation.Manager == "unrecognized" {
+			return fmt.Errorf("cannot determine this versioned or symlinked CLI installation owner; upgrade it with its original installer")
 		}
 		if installation.Manager == "legacy" {
 			return fmt.Errorf("this runtime is pinned by the legacy skill; update that installation instead")

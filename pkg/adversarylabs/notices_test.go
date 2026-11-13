@@ -426,3 +426,16 @@ func TestAdvisoryTerminalKeepsDeliveryRulesBeforeUntrustedContent(t *testing.T) 
 		t.Fatal("missing acknowledgement safeguards")
 	}
 }
+
+func TestHumanNoticeOutputOmitsAgentInstructions(t *testing.T) {
+	var out bytes.Buffer
+	ctx := WithHumanNoticeOutput(WithNoticeCollector(context.Background(), t.TempDir(), "https://example.test/api", &out))
+	ctx.Value(noticeContextKey{}).(*NoticeCollector).receive(NoticeEnvelope{Schema: 1, Notices: []ClientNotice{{ID: "maintenance", Revision: 1, Component: "cli", Severity: "info", Message: "Service maintenance", ExpiresAt: time.Now().Add(time.Hour)}}}, "")
+	FlushNotices(ctx)
+	if !strings.Contains(out.String(), "Service maintenance") || strings.Contains(out.String(), "acknowledge_command") || strings.Contains(out.String(), "Display each advisory") {
+		t.Fatal(out.String())
+	}
+	if !NoticesFromContext(ctx)[0].NotifyUser {
+		t.Fatal("terminal output silently acknowledged delivery")
+	}
+}

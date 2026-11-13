@@ -20,7 +20,7 @@ func newSupportCommand(app *application.App, api, profile *string) *cobra.Comman
 		if upload {
 			return command.Flags().Set("no-upload", "false")
 		}
-		return nil
+		return command.Flags().Set("no-upload", "true")
 	}
 	c.AddCommand(bundle)
 	return c
