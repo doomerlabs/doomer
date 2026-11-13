@@ -226,3 +226,30 @@ func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
 		t.Fatal(out)
 	}
 }
+
+func TestClaudeFailedReviewsStayIncompleteWithoutStopLoop(t *testing.T) {
+	cases := map[string]livewatch.Response{
+		"service outage":      {Results: []livewatch.Result{{Repository: "/repo", Status: "unavailable", Error: "service unavailable"}}},
+		"interrupted request": {Results: []livewatch.Result{{Repository: "/repo", Status: "unavailable", Error: "review did not finish before watch stopped"}}},
+		"transport failure":   {Error: "connection lost"},
+	}
+	for name, result := range cases {
+		t.Run(name, func(t *testing.T) {
+			report := makeFeedbackReport(result)
+			if report.Complete || len(report.Errors) == 0 {
+				t.Fatal("failure reported as completed", report)
+			}
+			first := claudeStopFeedback(result, strings.Repeat("a", 64), false)
+			text, _ := first["reason"].(string)
+			if first["decision"] != "block" || !strings.Contains(text, report.Errors[0]) {
+				t.Fatal("first delivery lost failure", first)
+			}
+			for i := 0; i < 3; i++ {
+				repeat := claudeStopFeedback(result, strings.Repeat("a", 64), true)
+				if repeat["decision"] != nil || !strings.Contains(repeat["systemMessage"].(string), "incomplete") {
+					t.Fatal("failure trapped the agent or claimed completion", repeat)
+				}
+			}
+		})
+	}
+}
