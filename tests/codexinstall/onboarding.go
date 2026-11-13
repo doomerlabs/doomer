@@ -157,7 +157,7 @@ func (j *journey) onboarding() error {
 		return err
 	}
 	j.result.Checks["doctor_ready"] = doctor.Ready
-	raw, err := os.ReadFile(installedSkillPath(j.home, j.c))
+	raw, err := os.ReadFile(installedSkillPath(j.home, state.Agents))
 	if err != nil {
 		return err
 	}
@@ -296,8 +296,10 @@ func skillsAgent(c config) string {
 	return "codex"
 }
 
-func installedSkillPath(home string, c config) string {
-	if c.Harness == "claude" {
+func installedSkillPath(home string, agents []string) string {
+	// Standalone installation deliberately uses the universal Codex location,
+	// including when the human happens to be using Claude for this test.
+	if len(agents) == 1 && agents[0] == "claude" {
 		return filepath.Join(home, ".claude/skills/doomer/SKILL.md")
 	}
 	return filepath.Join(home, ".agents/skills/doomer/SKILL.md")

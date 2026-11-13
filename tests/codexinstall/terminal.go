@@ -88,6 +88,9 @@ func (j *journey) terminalCoding(prompt string, readOnly bool) error {
 		args = []string{"-c", terminalDriver, j.c.Codex, "--permission-mode", claudePermissionMode(j.c), "--model", j.c.Model, "--effort", claudeEffort, prompt}
 	}
 	cmd := exec.CommandContext(j.ctx, "python3", args...)
+	// A watch process can outlive the terminal and retain its output pipe.
+	// Bound the copy wait so a failed hook never hangs the whole CI job.
+	cmd.WaitDelay = 5 * time.Second
 	cmd.Dir = j.repo
 	cmd.Env = append(j.env, "TERM=xterm-256color", "DOOMER_TEST_HARNESS="+j.c.Harness, "DOOMER_TEST_TRUST_HOOKS=allow", "DOOMER_TEST_TERMINAL_LOG="+filepath.Join(j.home, "terminal.log"))
 	var output bytes.Buffer

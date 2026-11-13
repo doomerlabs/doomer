@@ -26,6 +26,22 @@ func TestOnboardingCatalogRejectsRetiredJourneys(t *testing.T) {
 	}
 }
 
+func TestInstalledSkillLocationMatchesSelectedAgents(t *testing.T) {
+	home := t.TempDir()
+	for _, test := range []struct {
+		agents    []string
+		directory string
+	}{
+		{nil, ".agents"}, {[]string{"codex"}, ".agents"},
+		{[]string{"claude"}, ".claude"}, {[]string{"claude", "codex"}, ".agents"},
+	} {
+		want := filepath.Join(home, test.directory, "skills/doomer/SKILL.md")
+		if got := installedSkillPath(home, test.agents); got != want {
+			t.Fatalf("agents %v: got %s want %s", test.agents, got, want)
+		}
+	}
+}
+
 func TestHookReviewAssertionsRequireSessionIdentityAndFeedback(t *testing.T) {
 	f := &fixture{Findings: true, Reviews: map[string]adversarylabs.WorkspaceSubmission{"one": {GroupID: "one"}}}
 	r := report{Checks: map[string]bool{}}
