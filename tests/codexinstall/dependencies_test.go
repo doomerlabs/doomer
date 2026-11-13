@@ -33,10 +33,10 @@ func extraSnapshot(t *testing.T, body, rules string) snapshotMetadata {
 }
 
 func TestExtraDependenciesAffectOnlyDeclaredScenarios(t *testing.T) {
-	rules := "version: 1\nextra_dependencies:\n  blargh.txt: [codex/upgrade]\n"
+	rules := "version: 1\nextra_dependencies:\n  blargh.txt: [codex/hook-repair]\n"
 	before := extraSnapshot(t, "before", rules)
 	after := extraSnapshot(t, "after", rules)
-	if before.fingerprint("upgrade") == after.fingerprint("upgrade") {
+	if before.fingerprint("hook-repair") == after.fingerprint("hook-repair") {
 		t.Fatal("declared scenario reused changed input")
 	}
 	if before.fingerprint("install") != after.fingerprint("install") {
@@ -56,7 +56,7 @@ func TestExtraDependenciesAffectOnlyDeclaredScenarios(t *testing.T) {
 }
 
 func TestSignedCacheRespectsExtraDependencies(t *testing.T) {
-	rules := "version: 1\nextra_dependencies:\n  blargh.txt: [codex/upgrade]\n"
+	rules := "version: 1\nextra_dependencies:\n  blargh.txt: [codex/hook-repair]\n"
 	before := extraSnapshot(t, "before", rules)
 	after := extraSnapshot(t, "after", rules)
 	keys := testCacheKey(t)
@@ -73,22 +73,22 @@ func TestSignedCacheRespectsExtraDependencies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var upgraded report
-	if err := json.Unmarshal(raw, &upgraded); err != nil {
+	var repaird report
+	if err := json.Unmarshal(raw, &repaird); err != nil {
 		t.Fatal(err)
 	}
-	upgraded.Scenario = "upgrade"
-	raw, err = json.Marshal(upgraded)
+	repaird.Scenario = "hook-repair"
+	raw, err = json.Marshal(repaird)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := publishCachedResult(context.Background(), store, before, "upgrade", path, time.Now()); err != nil {
+	if err := publishCachedResult(context.Background(), store, before, "hook-repair", path, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if err := reuseCachedResult(context.Background(), store, after, "upgrade", filepath.Join(t.TempDir(), "miss.json"), keys); err == nil {
+	if err := reuseCachedResult(context.Background(), store, after, "hook-repair", filepath.Join(t.TempDir(), "miss.json"), keys); err == nil {
 		t.Fatal("changed extra dependency reused a signed result")
 	}
 	writeCacheReport(t, path, true)

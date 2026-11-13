@@ -46,39 +46,6 @@ func TestClaudePermissionModes(t *testing.T) {
 	}
 }
 
-func TestClaudeDisabledHookReminderWording(t *testing.T) {
-	for _, message := range []string{
-		"Doomer hooks are disabled. Enable them in /hooks.",
-		"The hooks are installed, but your settings currently disable hooks. They are switched off.",
-		"Hooks: they're installed but turned off by Claude Code's own settings.",
-		"Doomer's hooks are installed, but your Claude settings turn them off.",
-		"Doomer hooks:\nDisabled in Claude Code settings. Open /hooks to turn them on.",
-		"The hooks are not enabled until you approve.",
-		"The hooks are not yet enabled.",
-		"The hooks aren't currently enabled.",
-		"The hooks aren’t enabled.",
-		"Doomer's hooks are installed in `~/.claude/settings.json`, but your Claude Code settings currently turn them off.",
-	} {
-		if !claudeDisabledHookReminder(message) {
-			t.Errorf("missed hook reminder: %s", message)
-		}
-	}
-	for _, message := range []string{
-		"Doomer is ready.",
-		"Automatic updates are turned off.",
-		"The hooks are installed.",
-		"Updates are off. Hooks are installed.",
-		"Updates are off.\nHooks are installed.",
-		"Hooks are enabled.",
-		"Auto-updates are not enabled, but hooks are installed.",
-		"Hooks are installed, but auto-updates are not enabled.",
-	} {
-		if claudeDisabledHookReminder(message) {
-			t.Errorf("accepted unrelated message: %s", message)
-		}
-	}
-}
-
 func TestClaudeMeterCountsCacheWritesAndPreservesBudget(t *testing.T) {
 	m := newMeter(config{Harness: "claude", APIKey: "private-key", Model: "claude-opus-5-5", Budget: .20})
 	m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
@@ -249,27 +216,6 @@ func TestClaudeMeterRetainsReservationOnCancellation(t *testing.T) {
 			}
 			if reserved <= 0 || m.usage.Reserved != reserved || m.usage.Unknown != 1 || m.usage.Cost != 0 {
 				t.Fatal("cancelled inference changed its conservative charge", reserved, m.usage)
-			}
-		})
-	}
-}
-
-func TestHookProposalRecognizesExtractedSetup(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		output string
-		want   bool
-	}{
-		{"wrapped", `{"hook_setup":{"state":"missing","install_command":["doomer","task","hook-setup","handle","--allow"]}}`, true},
-		{"extracted", "{\n  \"state\": \"missing\",\n  \"install_command\": [\n    \"doomer\", \"task\", \"hook-setup\", \"handle\", \"--allow\"\n  ]\n}", true},
-		{"other setup", `{"state":"missing","install_command":["doomer","task","policy","handle","--allow"]}`, false},
-		{"declined", `{"state":"declined","decline_command":["doomer","task","hook-setup","handle","--decline"]}`, false},
-		{"decline echo", `{"state":"declined","install_command":["doomer","task","hook-setup","handle","--decline"]}`, false},
-		{"unrelated path", `{"install_command":["/tmp/hook-setup","--allow"]}`, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := hookProposal.MatchString(tc.output); got != tc.want {
-				t.Fatalf("hook offer = %v, want %v", got, tc.want)
 			}
 		})
 	}

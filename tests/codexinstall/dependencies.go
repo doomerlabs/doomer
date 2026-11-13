@@ -66,7 +66,7 @@ func extraDependencyFiles(root, snapshot string, metadata snapshotMetadata) (map
 			files = append(files, strings.TrimPrefix(entry.Path, prefix))
 		}
 	}
-	scenarios := append(append([]string{}, scenarioNames...), "ordinary-upgrade", "policy-activation")
+	scenarios := append([]string{}, scenarioNames...)
 	for _, harness := range []string{"codex", "claude"} {
 		for _, scenario := range scenarios {
 			tests = append(tests, harness+"/"+scenario)

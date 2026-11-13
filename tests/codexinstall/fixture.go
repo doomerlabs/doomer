@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
@@ -14,17 +12,12 @@ import (
 type fixture struct {
 	mu                                              sync.Mutex
 	Cancelled, Findings, FailSubmit, PendingReviews bool
-	Deep                                            bool
-	PortableChoice                                  bool
-	DeepPolls                                       int
+	Approved                                        bool
 	Reviews                                         map[string]adversarylabs.WorkspaceSubmission
 	Feedback                                        map[string]map[string]any
 	Attempts                                        []string
-	Request, Challenge                              string
-	Approved                                        bool
-	Creates, Polls, Uploads                         int
+	Uploads                                         int
 	Events                                          []string
-	Adoptions                                       []adversarylabs.ActivationEvent
 }
 
 func (f *fixture) serve(w http.ResponseWriter, r *http.Request) {
@@ -34,50 +27,6 @@ func (f *fixture) serve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	send := func(v any) { _ = json.NewEncoder(w).Encode(v) }
 	switch r.URL.Path {
-	case "/v1/auth/device/code":
-		// Legacy login probes carry no repository content. This fixture uses
-		// the managed browser flow, so report it unsupported without counting
-		// an attempted sign-in as a source upload.
-		http.Error(w, "device login is not supported by this fixture", http.StatusNotFound)
-		return
-	case "/v1/setup/grants":
-		var in struct {
-			Request   string `json:"request"`
-			Challenge string `json:"codeChallenge"`
-			Resumable bool   `json:"resumable"`
-		}
-		if json.NewDecoder(r.Body).Decode(&in) != nil || in.Request == "" || in.Challenge == "" || !in.Resumable {
-			http.Error(w, "invalid setup", 400)
-			return
-		}
-		if f.Request != "" && f.Request != in.Request {
-			http.Error(w, "duplicate setup", 409)
-			return
-		}
-		if f.Request == "" {
-			f.Creates++
-		}
-		f.Request = in.Request
-		f.Challenge = in.Challenge
-		send(map[string]any{"url": "http://" + r.Host + "/cli/setup#request=" + in.Request, "expiresIn": 1800})
-	case "/v1/setup/grants/poll":
-		var in map[string]string
-		_ = json.NewDecoder(r.Body).Decode(&in)
-		sum := sha256.Sum256([]byte(in["codeVerifier"]))
-		if f.Request == "" || in["request"] != f.Request || base64.RawURLEncoding.EncodeToString(sum[:]) != f.Challenge {
-			http.Error(w, "invalid verifier", 403)
-			return
-		}
-		f.Polls++
-		if f.Cancelled {
-			send(map[string]string{"state": "cancelled"})
-			return
-		}
-		if !f.Approved {
-			send(map[string]string{"state": "pending"})
-			return
-		}
-		send(map[string]any{"state": "approved", "token": "fixture-account-token", "account_id": "fixture-account", "portable_state": f.PortableChoice})
 	case "/v1/auth/whoami":
 		if !f.authorized(r) {
 			http.Error(w, "unauthorized", 401)
@@ -111,30 +60,6 @@ func (f *fixture) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		f.Reviews[input.ReviewID] = input
 		send(f.review(input.ReviewID))
-	case "/v2/installations/activate":
-		if !f.authorized(r) {
-			http.Error(w, "unauthorized", 403)
-			return
-		}
-		var event adversarylabs.ActivationEvent
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		if r.Method != http.MethodPost || decoder.Decode(&event) != nil || event.InstallationID == "" || event.AttemptID == "" || event.Repository == "" ||
-			(event.Stage != "approved" && event.Stage != "activated" && event.Stage != "first_review") {
-			http.Error(w, "invalid adoption event", 400)
-			return
-		}
-		if event.Stage == "first_review" {
-			submission, ok := f.Reviews[event.ReviewID]
-			if !ok || submission.Client["installation_id"] != event.InstallationID || submission.Client["installation_attempt_id"] != event.AttemptID {
-				http.Error(w, "unverified first review", 400)
-				return
-			}
-		}
-		f.Adoptions = append(f.Adoptions, event)
-		send(map[string]bool{"accepted": true})
-	case "/v3/installations/observe":
-		send(map[string]bool{"accepted": true})
 	default:
 		if strings.HasPrefix(r.URL.Path, "/v1/reviews/workspace/") {
 			if !f.authorized(r) {
@@ -160,9 +85,6 @@ func (f *fixture) serve(w http.ResponseWriter, r *http.Request) {
 				send(map[string]bool{"accepted": true})
 				return
 			}
-			if f.Deep {
-				f.DeepPolls++
-			}
 			send(f.review(id))
 			return
 		}
@@ -180,17 +102,9 @@ func (f *fixture) review(id string) map[string]any {
 	if f.PendingReviews {
 		return map[string]any{"id": id, "status": "queued", "anonymous": false, "look_closer_enabled": true, "full_review": map[string]any{"enabled": false, "status": "disabled"}}
 	}
-	if f.Deep {
-		full := map[string]any{"enabled": true, "status": "running"}
-		if f.DeepPolls >= 2 {
-			full["status"] = "completed"
-			full["result"] = map[string]any{"summary": "Fixture deep review verified.", "findings": []any{}}
-		}
-		return map[string]any{"id": id, "status": "completed", "url": "https://example.invalid/reviews/" + id, "anonymous": false, "look_closer_enabled": true, "full_review": full, "early_assessment": map[string]any{"status": "ready", "stage": "analysis", "leads": []any{}}}
-	}
 	leads := []map[string]any{}
 	if f.Findings {
-		leads = append(leads, map[string]any{"id": strings.Repeat("a", 64), "path": "hello.txt", "line": 1, "concern": "Verify the greeting content requested by the user is present.", "check": "Read hello.txt and record whether its content matches the requested greeting."})
+		leads = append(leads, map[string]any{"id": strings.Repeat("a", 64), "path": "hello.py", "line": 1, "concern": "Verify the greeting content requested by the user is present.", "check": "Read hello.py and record whether its content matches the requested greeting."})
 	}
 	return map[string]any{"id": id, "status": "completed", "url": "https://example.invalid/reviews/" + id, "anonymous": false, "look_closer_enabled": true, "full_review": map[string]any{"enabled": false, "status": "disabled"}, "early_assessment": map[string]any{"status": "ready", "stage": "analysis", "leads": leads}}
 }

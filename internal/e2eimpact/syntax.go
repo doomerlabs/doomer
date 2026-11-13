@@ -32,6 +32,9 @@ func LoadGoSyntax(ctx context.Context, root, target string) (CheckedSyntax, erro
 	cmd.Env = append(os.Environ(), "GOWORK=off")
 	raw, err := cmd.Output()
 	if err != nil {
+		if failure, ok := err.(*exec.ExitError); ok {
+			return out, fmt.Errorf("load typed scenario inputs: %w: %s", err, failure.Stderr)
+		}
 		return out, fmt.Errorf("load typed scenario inputs: %w", err)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))

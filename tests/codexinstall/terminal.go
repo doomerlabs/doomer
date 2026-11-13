@@ -14,8 +14,6 @@ import (
 	"time"
 )
 
-// A real terminal is required for the interactive agent frontend. Python's
-// standard-library PTY keeps this opt-in Linux test free of extra dependencies.
 const terminalDriver = `import os,pty,sys,select,signal,time,fcntl,termios,struct,re
 pid,master=pty.fork()
 if pid==0:
@@ -76,34 +74,22 @@ finally:
 
 var terminalEscapes = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
 
-func (j *journey) tui() error {
+// Native trust is exercised in a real terminal. Completion is taken from the
+// agent session event, never from a legacy managed-task state file.
+func (j *journey) terminalCoding(prompt string, readOnly bool) error {
 	started := time.Now()
-	prompt := "Create hello.txt containing hello followed by a newline. Follow the installed Doomer skill and finish its review, recording responses to any findings. Keep agent approval settings unchanged."
-	if j.c.Scenario == "global-npx-discovery" {
-		prompt = "Create hello.py that prints hello followed by a newline when run with Python 3."
-	}
-	j.record("Scripted user", prompt)
 	j.f.mu.Lock()
-	j.f.Findings = true
+	priorReviews, priorFeedback := len(j.f.Reviews), len(j.f.Feedback)
+	wantsFeedback := j.f.Findings
 	j.f.mu.Unlock()
+	j.record("Scripted user", prompt)
 	args := []string{"-c", terminalDriver, j.c.Codex, "--no-alt-screen", "--dangerously-bypass-approvals-and-sandbox", "-C", j.repo, prompt}
 	if j.c.Harness == "claude" {
-		args = []string{"-c", terminalDriver, j.c.Codex, "--permission-mode", claudePermissionMode(j.c), "--model", j.c.Model, "--effort", claudeEffort, "--append-system-prompt", "The active harness is Claude Code. Its Doomer agent identifier is claude."}
-		if j.c.Scenario == "tui-hooks-denied" {
-			args = append(args, "--settings", `{"disableAllHooks":true}`)
-		}
-		args = append(args, prompt)
+		args = []string{"-c", terminalDriver, j.c.Codex, "--permission-mode", claudePermissionMode(j.c), "--model", j.c.Model, "--effort", claudeEffort, prompt}
 	}
 	cmd := exec.CommandContext(j.ctx, "python3", args...)
-	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
-	cmd.WaitDelay = 5 * time.Second
 	cmd.Dir = j.repo
-	choice := "allow"
-	if j.c.Scenario == "tui-hooks-denied" {
-		choice = "deny"
-	}
-	j.record("Scripted user", "At the native hook trust screen, choose "+choice+". Keep agent approval settings unchanged.")
-	cmd.Env = append(j.env, "TERM=xterm-256color", "DOOMER_TEST_HARNESS="+j.c.Harness, "DOOMER_TEST_TRUST_HOOKS="+choice, "DOOMER_TEST_TERMINAL_LOG="+filepath.Join(j.home, "terminal.log"))
+	cmd.Env = append(j.env, "TERM=xterm-256color", "DOOMER_TEST_HARNESS="+j.c.Harness, "DOOMER_TEST_TRUST_HOOKS=allow", "DOOMER_TEST_TERMINAL_LOG="+filepath.Join(j.home, "terminal.log"))
 	var output bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &output, &output
 	input, err := cmd.StdinPipe()
@@ -115,73 +101,87 @@ func (j *journey) tui() error {
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
+	defer func() {
+		input.Close()
+		cmd.Process.Kill()
+		<-done
+		j.record("Terminal", terminalEscapes.ReplaceAllString(output.String(), ""))
+		j.recordTerminalMessages(started)
+	}()
 	j.result.Turns++
-	timer := time.NewTimer(170 * time.Second)
-	defer timer.Stop()
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
-	complete := false
-	hookActivated := false
-wait:
 	for {
 		select {
 		case <-j.ctx.Done():
-			break wait
-		case <-timer.C:
-			break wait
-		case err = <-done:
-			input.Close()
-			j.record("Command", "Interactive "+agentName(j.c)+" terminal\n"+terminalEscapes.ReplaceAllString(output.String(), ""))
-			j.recordTerminalMessages(started)
-			return fmt.Errorf("interactive %s exited before completing the review: %v", agentName(j.c), err)
+			return j.ctx.Err()
 		case <-ticker.C:
-			tasks, readErr := savedTasks(j.home)
-			if readErr != nil {
-				continue
-			}
-			for _, task := range tasks {
-				if task.Stage == "complete" && task.Review != nil {
-					complete = true
-					hookActivated = task.HookActivated
-					break wait
+			if terminalCompleted(j.home, j.c, started) {
+				j.f.mu.Lock()
+				delivered := len(j.f.Reviews) > priorReviews && (!wantsFeedback || len(j.f.Feedback) > priorFeedback)
+				j.f.mu.Unlock()
+				if readOnly || j.c.Scenario == "decline-uploads" || delivered {
+					return nil
 				}
 			}
+		case err = <-done:
+			// Leave the deferred cleanup a completed channel to consume.
+			done <- err
+			return fmt.Errorf("interactive agent exited before completion: %v", err)
 		}
 	}
-	if complete {
-		select {
-		case <-time.After(2 * time.Second):
-		case <-j.ctx.Done():
-		}
-	}
-	input.Close()
-	<-done
-	j.record("Command", "Interactive "+agentName(j.c)+" terminal\n"+terminalEscapes.ReplaceAllString(output.String(), ""))
-	j.recordTerminalMessages(started)
-	if !complete {
-		return fmt.Errorf("interactive %s did not finish within the terminal timeout", agentName(j.c))
-	}
-	var raw []byte
-	if j.c.Scenario == "global-npx-discovery" {
-		command := exec.CommandContext(j.ctx, "python3", filepath.Join(j.repo, "hello.py"))
-		command.Env = j.env
-		raw, err = command.Output()
-	} else {
-		raw, err = os.ReadFile(filepath.Join(j.repo, "hello.txt"))
-	}
-	if err != nil || strings.TrimSpace(string(raw)) != "hello" {
-		return fmt.Errorf("interactive coding result is missing")
-	}
-	if choice == "allow" && j.c.Scenario != "global-npx-discovery" {
-		j.result.Checks["native_hook_activated"] = hookActivated
-	} else {
-		j.result.Checks["native_hook_stayed_inactive"] = !hookActivated
-	}
-	return j.finish()
 }
 
-// Only agent_message events are user-facing transcript text. Reasoning and
-// response-item payloads are intentionally excluded from the recording.
+func terminalCompleted(home string, c config, since time.Time) bool {
+	root := filepath.Join(home, ".codex/sessions")
+	if c.Harness == "claude" {
+		root = filepath.Join(home, ".claude/projects")
+	}
+	complete := false
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".jsonl") {
+			return nil
+		}
+		_, err = d.Info()
+		if err != nil {
+			return nil
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return nil
+		}
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		scanner.Buffer(make([]byte, 65536), 4<<20)
+		for scanner.Scan() {
+			var event struct {
+				Type      string `json:"type"`
+				Timestamp string `json:"timestamp"`
+				Payload   struct {
+					Type string `json:"type"`
+				} `json:"payload"`
+				Message struct {
+					StopReason string `json:"stop_reason"`
+				} `json:"message"`
+			}
+			if json.Unmarshal(scanner.Bytes(), &event) != nil {
+				continue
+			}
+			at, err := time.Parse(time.RFC3339Nano, event.Timestamp)
+			if err != nil || at.Before(since) {
+				continue
+			}
+			if event.Type == "event_msg" && (event.Payload.Type == "task_complete" || event.Payload.Type == "turn_complete") {
+				complete = true
+			}
+			if c.Harness == "claude" && event.Type == "assistant" && event.Message.StopReason == "end_turn" {
+				complete = true
+			}
+		}
+		return nil
+	})
+	return complete
+}
 func (j *journey) recordTerminalMessages(started time.Time) {
 	root := filepath.Join(j.home, ".codex", "sessions")
 	if j.c.Harness == "claude" {

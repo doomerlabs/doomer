@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const fingerprintSchema = 2
+const fingerprintSchema = 3
 
 type snapshotEntry struct {
 	Path   string `json:"path"`
@@ -43,15 +43,14 @@ type snapshotMetadata struct {
 	Arch               string                       `json:"arch"`
 	Commit             string                       `json:"commit,omitempty"`
 	Baseline           string                       `json:"baseline,omitempty"`
-	Stable             json.RawMessage              `json:"stable,omitempty"`
 	Captured           time.Time                    `json:"captured"`
 	CacheDisabled      string                       `json:"cache_disabled,omitempty"`
 }
 
 type snapshotOptions struct {
-	Output, Agent, Candidate, Bootstrap, Skills, Guide string
-	Settings                                           map[string]string
-	Local                                              bool
+	Output, Agent, Candidate, Skills, Node string
+	Settings                               map[string]string
+	Local                                  bool
 }
 
 func byteHash(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
@@ -103,7 +102,7 @@ func sourceInventory(ctx context.Context, root, prefix, output string, excludedR
 	seen := map[string]bool{}
 	var entries []snapshotEntry
 	for _, p := range strings.Split(string(raw), "\x00") {
-		if p == "" || seen[p] || excludedSnapshotPath(p) {
+		if p == "" || seen[p] || (excludedSnapshotPath(p) && !(prefix == "node" && p == "bin/doomer.js")) {
 			continue
 		}
 		seen[p] = true
@@ -232,7 +231,7 @@ func runSnapshot(ctx context.Context, opts snapshotOptions, args []string) error
 	commit, _ := exec.CommandContext(ctx, "git", "-C", root, "rev-parse", "HEAD").Output()
 	metadata.Commit = strings.TrimSpace(string(commit))
 	sources := map[string]string{"cli": root}
-	for role, source := range map[string]string{"candidate": opts.Candidate, "bootstrap": opts.Bootstrap, "skills": opts.Skills} {
+	for role, source := range map[string]string{"candidate": opts.Candidate, "skills": opts.Skills, "node": opts.Node} {
 		if source != "" {
 			abs, err := filepath.Abs(source)
 			if err != nil {
@@ -242,7 +241,7 @@ func runSnapshot(ctx context.Context, opts snapshotOptions, args []string) error
 		}
 	}
 	// Deterministic roles; identical paths can be copied once and reused.
-	roles := []string{"cli", "candidate", "bootstrap", "skills"}
+	roles := []string{"cli", "candidate", "skills", "node"}
 	captured := map[string]string{}
 	mapped := map[string]string{}
 	for _, role := range roles {
@@ -294,19 +293,14 @@ func runSnapshot(ctx context.Context, opts snapshotOptions, args []string) error
 		metadata.CacheDisabled = "shared reuse currently requires a pinned local agent package"
 	}
 
-	guide := opts.Guide
 	if opts.Local {
 		frozenOptions := opts
 		frozenOptions.Skills = mapped["skills"]
-		frozen, err := freezeExternalInputs(ctx, dir, frozenOptions, &metadata)
-		if err != nil {
-			metadata.Stable = nil
-			metadata.CacheDisabled = err.Error()
-			fmt.Fprintln(os.Stderr, "Cache disabled:", err)
-		} else {
-			guide = frozen
+		if _, err := freezeExternalInputs(ctx, dir, frozenOptions, &metadata); err != nil {
+			return fmt.Errorf("freeze onboarding inputs: %w", err)
 		}
 	}
+
 	sort.Slice(metadata.Files, func(i, j int) bool { return metadata.Files[i].Path < metadata.Files[j].Path })
 	if opts.Local {
 		if err := prepareRuntimeInputs(ctx, dir, mapped, &metadata); err != nil {
@@ -343,8 +337,8 @@ func runSnapshot(ctx context.Context, opts snapshotOptions, args []string) error
 	if err = build.Run(); err != nil {
 		return fmt.Errorf("build captured runner: %w", err)
 	}
-	overrides := []string{"--snapshot-input", metaPath, "--output", output}
-	for role, flag := range map[string]string{"candidate": "--candidate-source", "bootstrap": "--bootstrap-source", "skills": "--skills-source"} {
+	overrides := []string{"--snapshot-input", metaPath, "--output", output, "--tooling-source", filepath.Join(dir, "tooling")}
+	for role, flag := range map[string]string{"candidate": "--candidate-source", "skills": "--skills-source", "node": "--node-source"} {
 		if p := mapped[role]; p != "" {
 			overrides = append(overrides, flag, p)
 		}
@@ -359,9 +353,7 @@ func runSnapshot(ctx context.Context, opts snapshotOptions, args []string) error
 		}
 		overrides = append(overrides, agentFlag, opts.Agent)
 	}
-	if guide != "" {
-		overrides = append(overrides, "--install-guide", guide)
-	}
+
 	// All test reads/builds now resolve inside the captured source tree.
 	child := exec.CommandContext(ctx, runner, append(append([]string(nil), args...), overrides...)...)
 	child.Dir = mapped["cli"]

@@ -64,12 +64,12 @@ class CachePlanTests(unittest.TestCase):
             return SimpleNamespace(returncode=0)
         with tempfile.TemporaryDirectory() as directory:
             env = {'E2E_SELECTED_TESTS': '["codex/install"]'}
-            with patch('sys.argv', ['plan', '--output', directory, '--populate']), patch.dict(os.environ, env, clear=True), patch.object(plan.subprocess, 'check_output', return_value='install\npolicy-recovery\n'), patch.object(plan.subprocess, 'run', side_effect=run):
+            with patch('sys.argv', ['plan', '--output', directory, '--populate']), patch.dict(os.environ, env, clear=True), patch.object(plan.subprocess, 'check_output', return_value='install\nhook-repair\n'), patch.object(plan.subprocess, 'run', side_effect=run):
                 plan.main()
             result = json.loads(Path(directory, 'cache-plan.json').read_text())
         self.assertEqual([['scripts/ci-agent-e2e.sh', 'codex', 'all']], calls)
         self.assertTrue(result['complete'])
-        self.assertFalse(result['regression_required'])
+        self.assertNotIn('regression_required', result)
         self.assertEqual(1, result['required'])
 
     def test_empty_selection_executes_nothing(self):

@@ -1,88 +1,53 @@
 ---
 name: agent-e2e
-description: Run and diagnose Doomer's real-agent lifecycle E2E tests when changing installation, onboarding, review, upgrade, policy, hooks, or the agent harness.
+description: Run and diagnose Doomer's real-agent onboarding and direct-hook E2E tests when changing installation, onboarding, review, hooks, or the agent harness.
 ---
 
-# Agent lifecycle E2E
+# Agent onboarding E2E
 
-Read `tests/codexinstall/README.md` for prerequisites, pinned agent versions,
-authentication modes and scenario assertions. Run fast relevant tests first,
-including `go test -race ./tests/codexinstall` for runner changes.
+Read `tests/codexinstall/README.md` and `tests/codexinstall/onboarding-inputs.json`.
+The suite replaces the old managed lifecycle tests. Do not restore managed
+upgrade, update-policy, portable-state, or managed-task scenarios. Both pinned
+agents exercise the Node manager, official skills CLI, native Go CLI and hooks.
 
-Start representative E2E once relevant implementation changes stabilize, while
-reviewing the diff and preparing the PR. Include ordinary review, upgrade, policy
-and terminal coverage when changing the runner. Do not require paid E2E before
-every checkpoint commit. Before marking a PR ready, check that the tested source
-matches the final proposed contents and explain any missing coverage.
-
-Use dedicated pinned agent executables and a writable disposable-home parent
-outside `/tmp` and outside the agent package directory. Never use the developer's
-installed Doomer as the candidate. Use `--candidate-source . --generated-bootstrap`
-to test this checkout and its embedded bootstrap. Set `--candidate-release VERSION`
-to the currently published version used to label the disposable candidate.
-For local tests, `--candidate-source PATH` selects a different CLI checkout.
-
-Example from the repository root, replacing the executable, home parent and
-published version with verified local values:
+Respect the user's local-build restriction. Agents must not execute the real
+E2E helper when it builds a candidate CLI. Use the runner's unit tests while
+leaving local CLI builds to the user and real-agent validation to authorized CI:
 
 ```sh
-doppler run --project doomer --config test -- \
-  go run ./tests/codexinstall --scenario all --jobs 4 \
-  --suite-scenarios first-review,upgrade,policy-installed,tui \
-  --local-codex /path/to/dedicated/codex \
-  --local-root /path/to/disposable-homes \
-  --candidate-release VERSION --candidate-source . --generated-bootstrap \
-  --budget 0.50 --suite-budget 2 --output /tmp/e2e-review.json
+go test -race ./tests/codexinstall -skip '^TestPrunedRuntimeBuildsRealCLIAndRunner$'
 ```
 
-Doppler `doomer/test` supplies `TEST_OPENAI_API_KEY` for Codex API tests or
-`TEST_ANTHROPIC_API_KEY` for Claude API tests. Claude subscription tests use
-`--harness claude --auth subscription --local-claude PATH` and
-`TEST_CLAUDE_CODE_OAUTH_TOKEN`; Codex subscription uses `--auth subscription
---codex-auth-home PATH`. Keep secrets and private recordings out of Git and PR
-attachments. Remote runs additionally need `TEST_EXE_SSH_PRIVATE_KEY`.
+Do not run the skipped infrastructure test: it builds a CLI binary. When a user
+runs real E2E locally, use the Linux helper through Doppler `doomer/test`:
 
-`--jobs 1` is the default serial mode; `--jobs 4` is an explicit experiment.
-Omit `--suite-scenarios` to run the full suite. API scheduling reserves each active
-case's full `--budget`; `--suite-budget` includes completed charges and active
-reservations. If no remaining case fits, the aggregate reports it as unstarted
-and exits unsuccessfully. Choose a cap that can cover the requested suite.
-Subscription mode has no dollar accounting or automatic API fallback.
+```sh
+doppler run --project doomer --config test -- scripts/agent-e2e-local-linux.sh
+```
 
-Each scenario runs in its own fresh home. For `/tmp/e2e-review.json`, results are
-in `/tmp/e2e-review-runs/SCENARIO/`: `report.json`, `report.json.html`, and
-`runner.log`. The aggregate is atomically updated in requested scenario order,
-including failures and unstarted work. Always use a new output prefix. Ctrl-C
-and SIGTERM stop scheduling, cancel active cases, allow cleanup and retain
-completed results. SIGKILL cannot guarantee cleanup; inspect reported leftovers.
-Failures continue through other scenarios; there are no automatic local retries.
-Inspect each failure's JSON, replay and runner log before deciding to rerun.
+Start applicable real-agent CI early, after source stabilizes. Inspect retained
+selection evidence and reports before reporting which scenarios passed. Do not
+claim a green real-agent suite from unit tests. Every case needs final-source
+validation; no known failure becomes a pass by weakening its assertion.
 
-Read `docs/agent-e2e-cache.md` for the snapshot, fingerprint, signing and storage
-contract. The runner captures source before execution and rebuilds itself from
-that snapshot. `OUTPUT.inputs.json` contains the tested manifest; source edits
-after capture require a new invocation before marking the PR ready. Normal runs
-look up signed successes, verify their reports, execute misses and publish as
-each scenario finishes. Missing storage or invalid results are explicit misses.
-`--no-cache` bypasses lookup and publication, retaining snapshot isolation.
+`onboarding-inputs.json` pins the Node and skill commits and skills CLI version.
+The snapshot includes their source plus the official skills CLI's dependency
+lockfile. Local `E2E_NODE_SOURCE` / `E2E_SKILLS_SOURCE` overrides select candidate
+checkouts for direct CI-helper runs. Never use the user's installed CLI or live
+agent configuration as a fixture. Keep the native executable inside the
+fresh disposable home. Test secrets come from Doppler or Depot; never print or
+commit them, installation identities, private reports or recordings.
 
-AWS CLI v2 plus dedicated `E2E_R2_*` and `E2E_CACHE_*` settings from Doppler
-`doomer/test` enable shared reuse. Never use release credentials or signing keys.
-Retained private reports expire from storage after seven days. Reuse requires
-matching inputs and verified signatures and artifacts. OS and architecture remain separate identities. For CI-compatible results, use
-`scripts/agent-e2e-local-linux.sh` through Doppler; the Linux local/CI acceptance
-rule still requires every other fingerprinted input to match.
+Preserve the real native trust path. Hook configuration is not proof of hook
+activation. Review assertions must observe API submissions with session/turn
+identity and explicit recorded finding feedback. Standalone reviews use the
+installed Go CLI. The Node manager performs installation and configuration.
 
-Record the result fingerprint from each report's `cache` field, manifest/report
-locations, cache hits versus executed scenarios, harness/model/auth mode,
-baseline, worker count, wall time and provider errors in PR validation notes.
-Cached reports retain historical usage but add cache-hit provenance; suite
-charges are zero for a hit. CI retains its existing retries and release gates.
+Source capture, scenario dependency selection, signed cache verification,
+per-case budget limits, recordings, cleanup, and one fresh-home CI retry remain
+part of the harness. Cache schema 3 excludes legacy successes. Record cache hits
+separately from newly executed tests. macOS results do not satisfy Linux CI.
+Do not use old baseline-policy regression jobs or old release catalogs.
 
-Incremental reuse is conservative. Scenario-specific runner bodies and helper
-calls are discovered automatically; there is no audit pin to refresh. Verify
-changes with the mutation tests in `scenario_dependencies_test.go` and inspect
-`scenario_hashes` in the captured manifest. Explicit entries in
-`e2e-extra-dependencies.yml` add whole-file inputs and override body exclusions.
-Uncertain identity or runtime behavior falls back to full runner inputs. CLI
-source remains shared because the agents choose commands dynamically.
+Keep all PRs under an existing `/doomer no-approve` hold when requested. The
+hold prevents approval/merging; it does not mean a PR must be a draft.

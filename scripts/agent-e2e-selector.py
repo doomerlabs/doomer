@@ -106,8 +106,7 @@ def catalog(source):
     strings = re.findall(r'"([a-z0-9-]+)"', body)
     if re.sub(r'"[a-z0-9-]+"|[\s,]', "", body) or not strings or len(strings) != len(set(strings)):
         raise ValueError("ambiguous scenario catalog")
-    return [agent + "/" + scenario for agent in ("codex", "claude") for scenario in strings
-            if (agent, scenario) != ("claude", "browser-onboarding")]
+    return [agent + "/" + scenario for agent in ("codex", "claude") for scenario in strings]
 
 
 def source_path(path):
@@ -120,7 +119,7 @@ def source_path(path):
 def allowed_path(path):
     if any(part.startswith(".env") or part in {".aws", "credentials", "auth.json"} for part in Path(path).parts):
         return False
-    if path in SHARED or path in {"AGENTS.md", "README.md"} or source_path(path):
+    if path in SHARED or path in {"AGENTS.md", "README.md", "tests/codexinstall/onboarding-inputs.json"} or source_path(path):
         return True
     if path == "tests/codexinstall/Dockerfile":
         return True

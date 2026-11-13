@@ -23,8 +23,6 @@ jobs:
       scenarios: ${{ steps.scenarios.outputs.scenarios }}
       release: ${{ steps.scenarios.outputs.release }}
       cached: ${{ steps.cache.outputs.cached }}
-      regression: ${{ steps.cache.outputs.regression }}
-      regression_required: ${{ steps.cache.outputs.regression_required }}
       selected: ${{ steps.selection.outputs.selected }}
       selected_count: ${{ steps.selection.outputs.selected_count }}
       cache_artifact_name: ${{ steps.scenarios.outputs.cache_artifact_name }}
@@ -33,6 +31,9 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.20.0
       - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
@@ -119,9 +120,6 @@ jobs:
       matrix:
         harness: [codex, claude]
         scenario: ${{ fromJSON(needs.plan.outputs.scenarios) }}
-        exclude:
-          - harness: claude
-            scenario: browser-onboarding
     env:
       E2E_CANDIDATE_RELEASE: ${{ needs.plan.outputs.release }}
       E2E_REPORT_DIR: /tmp/doomer-e2e-reports
@@ -142,6 +140,10 @@ jobs:
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: ${{ contains(fromJSON(needs.plan.outputs.selected), format('{0}/{1}', matrix.harness, matrix.scenario)) && !fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
+        with:
+          node-version: 22.20.0
       - name: Run lifecycle scenario
         if: ${{ contains(fromJSON(needs.plan.outputs.selected), format('{0}/{1}', matrix.harness, matrix.scenario)) && !fromJSON(needs.plan.outputs.cached)[format('{0}/{1}', matrix.harness, matrix.scenario)] }}
         env:
@@ -190,59 +192,9 @@ jobs:
           overwrite: true
           if-no-files-found: error
 
-  policy-regression:
-    name: released CLI reproduces missing-policy regression
-    needs: plan
-    if: needs.plan.outputs.regression_required == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: ubuntu-24.04
-    environment: agent-e2e
-    timeout-minutes: 40
-    steps:
-      - name: Accept verified regression witness
-        if: needs.plan.outputs.regression == 'true'
-        run: echo 'Signed result verifies the exact missing-policy failure and cleanup; no agent execution.'
-      - if: needs.plan.outputs.regression != 'true'
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-      - name: Check out released CLI baseline
-        if: needs.plan.outputs.regression != 'true'
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: 83f551519b8dcbc0786f9d2817a7df87656c60ff # 2026.11.8.7, before policy recovery
-          path: baseline
-          persist-credentials: false
-      - if: needs.plan.outputs.regression != 'true'
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
-        with:
-          go-version-file: go.mod
-      - name: Require the specific regression on the released CLI
-        if: needs.plan.outputs.regression != 'true'
-        env:
-          E2E_R2_ACCOUNT_ID: ${{ secrets.E2E_R2_ACCOUNT_ID }}
-          E2E_R2_BUCKET: ${{ secrets.E2E_R2_BUCKET }}
-          E2E_R2_ACCESS_KEY_ID: ${{ secrets.E2E_R2_WRITE_ACCESS_KEY_ID }}
-          E2E_R2_SECRET_ACCESS_KEY: ${{ secrets.E2E_R2_WRITE_SECRET_ACCESS_KEY }}
-          E2E_CACHE_SIGNING_KEY: ${{ secrets.E2E_CACHE_SIGNING_KEY }}
-          E2E_CACHE_SIGNING_KEY_ID: ${{ secrets.E2E_CACHE_SIGNING_KEY_ID }}
-          TEST_OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
-          E2E_CANDIDATE_RELEASE: ${{ needs.plan.outputs.release }}
-          E2E_CANDIDATE_SOURCE: ${{ github.workspace }}/baseline
-          E2E_EXPECT_POLICY_REGRESSION: '1'
-          E2E_REPORT_DIR: ${{ runner.temp }}/policy-baseline-reports
-        run: scripts/ci-agent-e2e.sh codex policy-recovery
-      - name: Save baseline failure evidence
-        if: always() && needs.plan.outputs.regression != 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: policy-regression-baseline
-          path: ${{ runner.temp }}/policy-baseline-reports
-          retention-days: 14
-          if-no-files-found: error
-
   report:
     name: all lifecycle results
-    needs: [plan, lifecycle, policy-regression]
+    needs: [plan, lifecycle]
     if: always() && !cancelled() && needs.plan.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 10

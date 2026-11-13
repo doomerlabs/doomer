@@ -41,8 +41,7 @@ def main():
         scenarios = requested
     if not scenarios:
         raise SystemExit('No scenarios selected')
-    catalog = [harness + '/' + scenario for harness in ('codex', 'claude') for scenario in scenarios
-               if (harness, scenario) != ('claude', 'browser-onboarding')]
+    catalog = [harness + '/' + scenario for harness in ('codex', 'claude') for scenario in scenarios]
     selection = os.environ.get('E2E_SELECTED_TESTS')
     try:
         selected_tests = json.loads(selection) if selection is not None else catalog
@@ -89,33 +88,18 @@ def main():
         for results in pool.map(suite, ('codex', 'claude')):
             cached.update(results)
 
-    baseline = root / 'policy-regression'
-    regression_required = 'codex/policy-recovery' in selected_tests
-    regression = False
-    if regression_required:
-        source = os.environ['E2E_BASELINE_SOURCE']
-        if not (Path(source) / 'go.mod').is_file():
-            subprocess.run(['scripts/agent-e2e-baseline.sh', source], check=True)
-        env = dict(os.environ, E2E_REPORT_DIR=str(baseline), E2E_EXPECT_POLICY_REGRESSION='1',
-                   E2E_CACHE_ONLY='0' if args.populate else '1', E2E_CANDIDATE_SOURCE=source)
-        result = subprocess.run(['scripts/ci-agent-e2e.sh', 'codex', 'policy-recovery'], env=env, check=False)
-        regression = result.returncode == 0
-    if regression:
-        shutil.copytree(baseline, publish / 'policy-regression', dirs_exist_ok=True)
     expected = len(cached)
     hits = sum(cached.values())
-    status = dict(cached=cached, regression=regression, regression_required=regression_required,
+    status = dict(cached=cached,
                   verified=hits, required=expected,
-                  complete=hits == expected and (regression or not regression_required), duration_seconds=time.monotonic()-start)
+                  complete=hits == expected, duration_seconds=time.monotonic()-start)
     for target in (root / 'cache-plan.json', publish / 'cache-plan.json'):
         target.write_text(json.dumps(status, indent=2)+'\n')
     output = os.environ.get('GITHUB_OUTPUT')
     if output:
         with open(output, 'a') as stream:
             stream.write('cached=' + json.dumps(cached, separators=(',', ':')) + '\n')
-            stream.write('regression=' + json.dumps(regression) + '\n')
-            stream.write('regression_required=' + json.dumps(regression_required) + '\n')
-    print(f"Verified {hits}/{expected} scenario results; baseline={regression}; {status['duration_seconds']:.1f}s")
+    print(f"Verified {hits}/{expected} scenario results; {status['duration_seconds']:.1f}s")
     if args.populate and not status['complete']:
         raise SystemExit('Local population has failures; inspect retained reports')
 

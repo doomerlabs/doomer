@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -21,13 +20,11 @@ func runWorker(c config) report {
 }
 
 func runWorkerContext(parent context.Context, c config) (result report) {
-	c = stableUpgradeFixture(c)
 	start := time.Now()
 	result.Model = c.Model
 	result.AuthMode = authenticationMode(c)
 	result.Scenario = c.Scenario
 	result.CandidateVersion = c.CandidateVersion
-	result.InstallGuide = c.InstallGuide
 	var recordMu sync.Mutex
 	result.Checks = map[string]bool{}
 	record := func(kind, text string) {
@@ -67,7 +64,7 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 	}
 	ctx, cancel := context.WithTimeout(parent, 8*time.Minute)
 	defer cancel()
-	gitEnv := []string{"HOME=" + home, "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
+	gitEnv := []string{"HOME=" + home, "PATH=" + os.Getenv("PATH"), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
 	git := exec.CommandContext(ctx, "git", "init", "-q", repo)
 	git.Env = gitEnv
 	if err = git.Run(); err != nil {
@@ -81,14 +78,7 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 			return fail(err)
 		}
 	}
-	f := &fixture{PortableChoice: c.Scenario == "portable-restart"}
-	if c.Scenario == "portable-restart" {
-		cmd := exec.CommandContext(ctx, "git", "-C", repo, "remote", "add", "origin", "https://github.com/example/portable-fixture.git")
-		cmd.Env = gitEnv
-		if err := cmd.Run(); err != nil {
-			return fail(err)
-		}
-	}
+	f := &fixture{Approved: true}
 	server := httptest.NewServer(httpHandler(f.serve))
 	defer server.Close()
 	m := newMeter(c)
@@ -110,7 +100,7 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 		result.APICalls = append([]string(nil), f.Events...)
 		f.mu.Unlock()
 	}()
-	env := []string{"HOME=" + home, "PATH=" + filepath.Join(home, ".local/bin") + ":/usr/bin:/bin:/usr/sbin:/sbin", "DOOMER_API_URL=" + server.URL, "DOOMER_CONFIG_DIR=" + filepath.Join(home, ".config/doomer"), "NO_COLOR=1", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
+	env := []string{"HOME=" + home, "PATH=" + filepath.Join(home, ".local/bin") + string(os.PathListSeparator) + os.Getenv("PATH"), "DOOMER_API_URL=" + server.URL, "DOOMER_CONFIG_DIR=" + filepath.Join(home, ".config/doomer"), "DOOMER_TOKEN=fixture-account-token", "NO_COLOR=1", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
 	browserPath := filepath.Join(home, "opened-browser-url")
 	browserScript := fmt.Sprintf("#!/usr/bin/env python3\nimport pathlib, sys\npathlib.Path(%q).write_text(sys.argv[1])\n", browserPath)
 	if err := os.MkdirAll(filepath.Join(home, ".local/bin"), 0700); err != nil {
@@ -122,7 +112,7 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 		}
 	}
 	env = append(env, "DISPLAY=fixture")
-	configuration, err := configureAgent(c, home, proxyURL)
+	_, err = configureAgent(c, home, proxyURL)
 	if err != nil {
 		return fail(err)
 	}
@@ -141,435 +131,30 @@ func runWorkerContext(parent context.Context, c config) (result report) {
 		}
 		result.Checks["subscription_authentication"] = true
 	}
-	if c.Scenario == "browser-onboarding" {
-		j := journey{c: c, ctx: ctx, home: home, repo: repo, env: env, f: f, result: &result, codexConfig: configuration, record: record}
-		if err := j.browserOnboarding(); err != nil {
-			return fail(err)
-		}
-		result.Passed = true
-		return result
-	}
-	if c.Scenario == "ordinary-upgrade" || c.Scenario == "policy-activation" {
-		j := journey{c: c, ctx: ctx, home: home, repo: repo, env: env, f: f, result: &result, codexConfig: configuration, record: record}
-		if err := j.ordinaryUpgrade(); err != nil {
-			return fail(err)
-		}
-		result.Passed = true
-		return result
-	}
-	if c.SkillsGuide != "" && len(c.PinnedStable) > 0 {
-		var err error
-		pinned, err := pinInstaller([]byte(c.SkillsInstaller), c.PinnedStable)
-		if err != nil {
-			return fail(err)
-		}
-		if c.CandidateVersion != "" {
-			pinned, err = pinInstallerRuntime(pinned, c.CandidateVersion)
-			if err != nil {
-				return fail(err)
-			}
-		}
-		c.SkillsInstaller = string(pinned)
-	}
-	if c.SkillsGuide != "" {
-		guide, err := writeCandidateSkills(&c, root)
-		if err != nil {
-			return fail(err)
-		}
-		c.InstallGuide = guide
-		result.InstallGuide = guide
-		record("fixture", "Testing candidate skills installer, guide, and bootstrap")
-	}
-	if c.InstallGuide == "" {
-		c.InstallGuide = "https://doomer.ai/install.md"
-	}
-	prompt := "Read " + c.InstallGuide + " and follow the instructions to set up Doomer in this repository. Use a team/repository installation, local-only without a PR. This is an isolated test: DOOMER_API_URL points at its local account service; preserve that setting. Ask before granting updates or repository uploads. Keep messages concise."
-	prompt += " Use --agent " + agentName(c) + " when preparing Doomer and configuring this integration."
-	if personalScenario(c.Scenario) {
-		prompt = strings.Replace(prompt, "team/repository installation, local-only without a PR", "personal installation in my home directory, without a PR", 1)
-	}
-	if c.Harness == "claude" {
-		prompt = "In this Claude Code session, read " + strings.TrimPrefix(prompt, "Read ")
-	}
-	session := ""
-	approvedUpdate := false
-	interruptedBrowserResumed := false
-	approvedPolicy := false
-	sawUpdateRequest := false
-	declined := false
-	candidateInstalled := false
-	approvalLinkRetries := 0
-	if c.Scenario == "global-npx-discovery" {
-		if err := installGlobalNpxSkill(ctx, home, repo, c.NpxSkillSource, env, record); err != nil {
-			return fail(err)
-		}
-		if c.CandidateFile != "" {
-			// Exercise first-use runtime installation without touching the npx skill.
-			args, err := globalRuntimeInstallArgs(home)
-			if err != nil {
-				return fail(err)
-			}
-			install := exec.CommandContext(ctx, c.CandidateFile, args...)
-			install.Dir, install.Env = repo, env
-			output, err := install.CombinedOutput()
-			record("Runtime installation", string(output))
-			if err != nil {
-				return fail(fmt.Errorf("candidate runtime installation: %w: %s", err, output))
-			}
-			if err := installCandidate(c, home); err != nil {
-				return fail(err)
-			}
-		}
-		// Exercise the published bootstrap and its own runtime installer unchanged.
-		candidateInstalled = true
-		prompt = "The CLI runtime and personal skill have been installed and checked. Read the installed personal Doomer skill and follow its setup-only instructions: use doomer prepare --agent " + agentName(c) + " --repo . without --prompt, then follow the returned managed approval flow. Do not run install again, replace the launcher, or use the legacy onboard/login flow. Preserve the skill files and ask for required approvals. This isolated test uses DOOMER_API_URL for its managed account service. Decline optional hooks; this installation uses per-call reviews."
-	} else if c.CandidateFile != "" || c.SkillsGuide != "" {
-		result.Turns++
-		software, err := runAgent(ctx, c, repo, env, prompt+" Install the verified runtime and skill files only in this turn. The team PR step belongs to later agent onboarding; this turn only authorizes local installation. Do not run doomer prepare or begin onboarding yet. Stop after the install command completes.", "", record)
-		if err != nil {
-			return fail(err)
-		}
-		session = software.Session
-		if err := assembleCandidateInstallation(c, home, repo); err != nil {
-			return fail(err)
-		}
-		if c.Scenario == "personal-discovery" || c.Scenario == "repository-discovery" {
-			if err := reinstallDiscoverySkills(ctx, c, home, repo, env, record); err != nil {
-				return fail(err)
-			}
-		}
-		candidateInstalled = c.CandidateFile != ""
-		prompt = "The installed build has been checked. Continue onboarding Doomer in this repository using its existing installed files and original scope. This test home persists for the scenario, so use ordinary setup without --portable. Ask for the required user approvals. Use --agent " + agentName(c) + " when preparing Doomer and configuring this integration."
-	}
-	if c.Harness == "claude" && (c.CandidateFile != "" || c.SkillsGuide != "") {
-		prompt = "In this Claude Code session, " + prompt
-	}
-	if c.Scenario == "portable-restart" {
-		prompt = strings.Replace(prompt, "This test home persists for the scenario, so use ordinary setup without --portable.", "This scenario restarts the home, so use --portable.", 1)
-		prompt += " I will choose reusable setup at the browser approval."
-	}
-	for turn := 0; turn < 8; turn++ {
-		result.Turns++
-		waitCapable := false
-		approvalPresented := result.Checks["presented_approval_link"]
-		presentedThisTurn := false
-		var presentationError error
-		observed, err := runAgent(ctx, c, repo, env, prompt, session, func(kind, text string) {
-			record(kind, text)
-			if opened, err := os.ReadFile(browserPath); err == nil && observeBrowserDecision(f, server.URL, "Browser", string(opened), c.Scenario == "decline-uploads") {
-				approvalPresented, presentedThisTurn = true, true
-				result.Checks["presented_approval_link"] = true
-				result.Checks["approval_page_opened"] = true
-				declined = c.Scenario == "decline-uploads"
-				record("Browser decision", "The simulated user answered on the verified page opened by the CLI.")
-			}
-			if kind == "Claude" || kind == "Codex" {
-				f.mu.Lock()
-				presentedNow := f.Request != "" && strings.Contains(text, server.URL+"/cli/setup#request="+f.Request)
-				approvalPresented = approvalPresented || presentedNow
-				presentedThisTurn = presentedThisTurn || presentedNow
-				f.mu.Unlock()
-			}
-			if presentedThisTurn && approvalWaitBeforePresentation(kind, text, false) {
-				result.Checks["same_turn_approval_wait"] = true
-			}
-			if approvalWaitBeforePresentation(kind, text, approvalPresented) {
-				presentationError = fmt.Errorf("agent waited for browser approval before presenting the complete approval URL or opening the approval page")
-				cancel()
-				return
-			}
-			if kind == "Command" && strings.Contains(text, `"wait_command"`) {
-				waitCapable = true
-				if _, exists := result.Checks["same_turn_approval_wait"]; !exists {
-					result.Checks["same_turn_approval_wait"] = false
-				}
-			}
-			if waitCapable && observeBrowserDecision(f, server.URL, kind, text, c.Scenario == "decline-uploads") {
-				result.Checks["presented_approval_link"] = true
-				if c.Scenario == "decline-uploads" {
-					declined = true
-				}
-				record("Browser decision", "The simulated user answered on the displayed approval page while the agent turn remained active.")
-			}
-		})
-		if presentationError != nil {
-			return fail(presentationError)
-		}
-		if presentedThisTurn && waitCapable && !result.Checks["same_turn_approval_wait"] && c.Scenario != "decline-uploads" {
-			return fail(fmt.Errorf("agent ended its turn after presenting the approval URL without continuing the wait"))
-		}
-		if err != nil {
-			return fail(err)
-		}
-		if observed.Session != "" {
-			session = observed.Session
-		}
-		sawUpdateRequest = sawUpdateRequest || observed.UpdateRequested
-		if observed.UpdateRequested && c.CandidateFile != "" && !candidateInstalled {
-			if err := installCandidate(c, home); err != nil {
-				return fail(err)
-			}
-			candidateInstalled = true
-		}
-		text := strings.Join(observed.Messages, "\n")
-		if c.Scenario == "interrupted" && !interruptedBrowserResumed {
-			f.mu.Lock()
-			accepted := f.Approved
-			f.mu.Unlock()
-			if accepted {
-				tasks, e := savedTasks(home)
-				if e != nil || len(tasks) != 1 {
-					return fail(fmt.Errorf("missing durable setup task"))
-				}
-				interruptedBrowserResumed = true
-				session = ""
-				prompt = "The browser approval is saved. Resume the existing Doomer setup in this persistent home with doomer prepare --task " + tasks[0].Handle + ". Finish hook configuration and verify setup without a replacement task."
-				result.Checks["fresh_agent_resumed_setup"] = true
-				continue
-			}
-		}
-		if declined {
-			f.mu.Lock()
-			safe := !f.Approved && f.Uploads == 0
-			creates := f.Creates
-			f.mu.Unlock()
-			if c.Scenario == "decline-updates" {
-				safe = safe && creates == 0
-			}
-			if !safe {
-				return fail(fmt.Errorf("declined permission was not respected"))
-			}
-			result.Checks["decline_respected"] = true
-			result.Passed = true
-			return result
-		}
-		f.mu.Lock()
-		uploadGranted := f.Approved
-		f.mu.Unlock()
-		if c.Harness == "codex" && uploadGranted && observed.PolicyOffered && !approvedPolicy {
-			approvedPolicy = true
-			prompt = "I approve saving the displayed Doomer authorization in Codex's local approval-reviewer settings. Apply it, preserve unrelated settings, then verify setup."
-			record("Scripted user", prompt)
-			continue
-		}
-		if c.Harness == "claude" && (observed.PolicyOffered || observed.SetupPending) && !approvedPolicy {
-			approvedPolicy = true
-			prompt = "I approve account verification and installing the displayed scoped Claude reviewer settings, including the six Doomer command rules, the consent-scoped autoMode.allow classifier policy, and hooks as part of the requested onboarding. Preserve unrelated settings, existing deny rules, and native hook trust. Still ask for any missing repository upload and software-update approval."
-			record("Scripted user", prompt)
-			continue
-		}
-		discovery := c.Scenario == "personal-discovery" || c.Scenario == "repository-discovery" || c.Scenario == "global-npx-discovery"
-		ready, checks := inspectInstall(ctx, repo, home, env, personalScenario(c.Scenario), c.Harness, !discovery)
-		if discovery && !ready && checks["authenticated"] && checks["upload_approved"] && !checks["hooks_configured"] {
-			prompt = "I decline optional Doomer hook installation. Record that choice, preserve my existing upload approval and reviewer settings, and finish verifying setup for per-call reviews."
-			record("Scripted user", prompt)
-			continue
-		}
-		if ready {
-			for name, ok := range checks {
-				result.Checks[name] = ok
-			}
-			f.mu.Lock()
-			result.Checks["one_repository_approval"] = f.Creates == 1 && f.Approved
-			result.Checks["no_repository_upload"] = f.Uploads == 0
-			result.Checks["asked_update_permission"] = approvedUpdate && sawUpdateRequest
 
-			f.mu.Unlock()
-			if !result.Checks["presented_approval_link"] {
-				return fail(fmt.Errorf("repository approval link was not presented"))
-			}
-			for _, ok := range result.Checks {
-				if !ok {
-					return fail(fmt.Errorf("installation assertion failed"))
-				}
-			}
-			versionCmd := exec.CommandContext(ctx, filepath.Join(home, ".local/bin/doomer"), "version")
-			versionCmd.Env = env
-			installedVersion, err := versionCmd.Output()
-			if err != nil {
-				return fail(fmt.Errorf("read installed Doomer version: %w", err))
-			}
-			result.DoomerVersion = strings.TrimSpace(string(installedVersion))
-			if c.CandidateFile != "" && !candidateInstalled {
-				if err := installCandidate(c, home); err != nil {
-					return fail(err)
-				}
-			}
-			j := journey{c: c, ctx: ctx, home: home, repo: repo, env: env, f: f, result: &result, record: record, codexConfig: configuration}
-			if err := j.afterInstall(); err != nil {
-				return fail(err)
-			}
-			result.Passed = true
-			return result
-		}
-		f.mu.Lock()
-		pending := f.Request != "" && !f.Approved
-		approvalURL := server.URL + "/cli/setup#request=" + f.Request
-		f.mu.Unlock()
-		if pending {
-			if !strings.Contains(text, approvalURL) {
-				if approvalLinkRetries > 0 {
-					return fail(fmt.Errorf("agent did not present the exact repository approval link after correction"))
-				}
-				approvalLinkRetries++
-				record("Scripted user", "The approval link is missing or incorrect. Repository access has not been approved.")
-				prompt = "The approval link is missing or incorrect. I have not approved repository access. Copy the exact complete approval URL from Doomer's output, preserving every character and the fragment."
-				continue
-			}
-			f.mu.Lock()
-			if c.Scenario == "decline-uploads" {
-				f.Cancelled = true
-				declined = true
-			} else {
-				f.Approved = true
-			}
-			f.mu.Unlock()
-			result.Checks["presented_approval_link"] = true
-			prompt = "I chose Allow on the repository approval page. Continue setup and verify it."
-			if declined {
-				prompt = "I declined repository uploads. Finish setup without uploads."
-			}
-			if c.Scenario == "interrupted" {
-				tasks, e := savedTasks(home)
-				if e != nil || len(tasks) != 1 {
-					return fail(fmt.Errorf("missing durable setup task"))
-				}
-				session = ""
-				prompt = "The original Doomer installation was interrupted. I approved repository access. This is the same persistent test home and repository; preserve DOOMER_API_URL and use ordinary setup without --portable. Run doomer prepare --task " + tasks[0].Handle + " to finish the original installation, including " + agentName(c) + " hook configuration. Verify setup without creating a replacement task."
-				result.Checks["fresh_agent_resumed_setup"] = true
-			}
-		} else if sawUpdateRequest && !approvedUpdate && (strings.Contains(strings.ToLower(text), "update") || strings.Contains(strings.ToLower(text), "permission")) {
-			approvedUpdate = true
-			result.Checks["asked_update_permission"] = true
-			prompt = "Allow automatic updates (recommended). Continue setup."
-			if c.Scenario == "decline-updates" {
-				declined = true
-				prompt = "Not now. Do not enable updates or repository uploads. Finish with setup incomplete."
-			}
-		} else if checks["authenticated"] && !checks["hooks_configured"] && strings.Contains(strings.ToLower(text), "hook") {
-			prompt = "I approve configuring the active agent's Doomer hooks as part of this installation. Preserve native trust controls. Complete setup and verify it."
-		} else {
-			return fail(fmt.Errorf("agent stopped before installation readiness without an expected approval request (checks: %v)", checks))
+	j := journey{c: c, ctx: ctx, home: home, repo: repo, env: env, f: f, result: &result, record: record}
+	if err := j.onboarding(); err != nil {
+		return fail(err)
+	}
+	for name, passed := range result.Checks {
+		if !passed {
+			return fail(fmt.Errorf("assertion failed: %s", name))
 		}
 	}
-	return fail(fmt.Errorf("installation exceeded eight conversation turns"))
+	result.Passed = true
+	return result
 }
 
 type httpHandler func(http.ResponseWriter, *http.Request)
 
 func (h httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h(w, r) }
 
-func inspectInstall(ctx context.Context, repo, home string, env []string, personal bool, harness string, requireHooks bool) (bool, map[string]bool) {
-	checks := map[string]bool{}
-	base := repo
-	if personal {
-		base = home
-	}
-	for _, agent := range []string{".agents", ".claude"} {
-		b, err := os.ReadFile(filepath.Join(base, agent, "skills/doomer-review/SKILL.md"))
-		checks[agent+"_skill"] = err == nil && bytes.Contains(b, []byte("doomer-protocol"))
-	}
-	launcher := filepath.Join(home, ".local/bin/doomer")
-	_, err := os.Stat(launcher)
-	checks["launcher"] = err == nil
-	hooks, _ := os.ReadFile(agentHooksPath(config{Harness: harness}, home))
-	if requireHooks {
-		checks["hooks_configured"] = bytes.Contains(hooks, []byte("--managed-task-adapter"))
-	}
-	if !checks["launcher"] {
-		return false, checks
-	}
-	tasks, _ := filepath.Glob(filepath.Join(home, ".config/doomer/managed/tasks/*.json"))
-	if len(tasks) != 1 {
-		return false, checks
-	}
-	var task struct {
-		Handle string `json:"handle"`
-		Agent  string `json:"agent"`
-	}
-	data, _ := os.ReadFile(tasks[0])
-	if json.Unmarshal(data, &task) != nil || task.Handle == "" {
-		return false, checks
-	}
-	checks["correct_agent"] = task.Agent == agentName(config{Harness: harness})
-	cmd := exec.CommandContext(ctx, launcher, "prepare", "--task", task.Handle)
-	cmd.Dir = repo
-	cmd.Env = env
-	raw, err := cmd.Output()
-	var state struct {
-		State       string `json:"state"`
-		Software    bool   `json:"software_ready"`
-		Auth        bool   `json:"authenticated"`
-		Upload      bool   `json:"upload_approved"`
-		CodexPolicy struct {
-			State string `json:"state"`
-		} `json:"codex_policy_status"`
-	}
-	if err != nil || json.Unmarshal(raw, &state) != nil {
-		return false, checks
-	}
-	checks["ready"] = state.State == "ready"
-	checks["software_ready"] = state.Software
-	checks["authenticated"] = state.Auth
-	checks["upload_approved"] = state.Upload
-	if harness == "codex" {
-		checks["codex_policy_configured"] = state.CodexPolicy.State == "configured"
-	}
-	for _, ok := range checks {
-		if !ok {
-			return false, checks
-		}
-	}
-	return true, checks
-}
+var anonymousCredential = regexp.MustCompile(`doomer_anon_[A-Za-z0-9_-]+`)
 
 func redact(text, key string) string {
 	if key != "" {
 		text = strings.ReplaceAll(text, key, "[REDACTED]")
 	}
 	text = strings.ReplaceAll(text, "fixture-account-token", "[TEST TOKEN]")
-	return text
-}
-
-// Answer only a complete URL actually shown in an agent message, never a URL
-// found in tool output. Older agents may end the turn; the fallback below the
-// runAgent call still resumes those installs using the same browser decision.
-func observeBrowserDecision(f *fixture, baseURL, kind, text string, decline bool) bool {
-	if kind != "Codex" && kind != "Claude" && kind != "Browser" {
-		return false
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.Request == "" || f.Approved || f.Cancelled {
-		return false
-	}
-	if !strings.Contains(text, baseURL+"/cli/setup#request="+f.Request) {
-		return false
-	}
-	if decline {
-		f.Cancelled = true
-	} else {
-		f.Approved = true
-	}
-	return true
-}
-
-// Only invocation events count here; command output may quote a wait without running it.
-func approvalWaitBeforePresentation(kind, text string, presented bool) bool {
-	if presented {
-		return false
-	}
-	command := text
-	if kind == "Command" && strings.HasPrefix(text, "Bash ") {
-		var input struct {
-			Command string `json:"command"`
-		}
-		if json.Unmarshal([]byte(strings.TrimPrefix(text, "Bash ")), &input) != nil {
-			return false
-		}
-		command = input.Command
-	} else if kind != "Command started" {
-		return false
-	}
-	return (strings.Contains(command, "task login") && strings.Contains(command, "--wait")) || strings.Contains(command, "wait_command")
+	return anonymousCredential.ReplaceAllString(text, "[TEST ANONYMOUS TOKEN]")
 }

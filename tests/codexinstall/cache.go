@@ -353,15 +353,7 @@ func (c *scenarioCache) publish(scenario, output string) {
 	fmt.Fprintln(os.Stderr, "Published signed E2E result:", c.metadata.fingerprint(scenario))
 }
 
-func expectedPolicyRegression(r report) bool {
-	return !r.Passed && r.Error == "deterministic prepare probe: missing policy after delivered offer" && r.Execution == "local" && r.LocalCleaned
-}
-func cacheReportPassed(r report, m snapshotMetadata) bool {
-	if m.Settings["expect-policy-regression"] == "true" {
-		return expectedPolicyRegression(r)
-	}
-	return r.Passed
-}
+func cacheReportPassed(r report, m snapshotMetadata) bool { return r.Passed }
 
 // CI accepts locally executed Linux results only on the same architecture and
 // with every content, agent, toolchain, auth and execution input unchanged.

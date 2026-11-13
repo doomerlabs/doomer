@@ -27,7 +27,7 @@ func readSuite(t *testing.T, path string) suiteSummary {
 }
 
 func TestSuiteConcurrentMembershipAndIsolation(t *testing.T) {
-	names := []string{"first-review", "upgrade", "policy-installed", "tui"}
+	names := []string{"first-review", "hook-repair", "repeat-onboarding", "read-only"}
 	for _, jobs := range []int{1, 4} {
 		t.Run(fmt.Sprint(jobs), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "suite.json")

@@ -1,10 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"math"
@@ -12,29 +9,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
 
 type roundTrip func(*http.Request) (*http.Response, error)
-
-func TestNativeConfigUpdatesDoNotHidePolicyInstallation(t *testing.T) {
-	before := []byte("model='fixture'\n")
-	for _, tc := range []struct {
-		after string
-		want  bool
-	}{
-		{"model='fixture'\n[projects.'/tmp/repo']\ntrust_level='trusted'\n", true},
-		{"model='other'\n", false},
-		{"model='fixture'\n[auto_review]\nextra_policy='unexpected grant'\n", false},
-	} {
-		if got := preservesCodexPolicyConfig(before, []byte(tc.after)); got != tc.want {
-			t.Fatalf("preserve=%v want=%v for %s", got, tc.want, tc.after)
-		}
-	}
-}
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
@@ -84,29 +64,6 @@ func TestMeterRejectsBeforeSpending(t *testing.T) {
 	}
 }
 
-func TestFixtureRequiresApprovalAndValidVerifier(t *testing.T) {
-	verifier := "test-verifier"
-	sum := sha256.Sum256([]byte(verifier))
-	f := &fixture{}
-	request := `{"request":"test-request","resumable":true,"codeChallenge":"` + base64.RawURLEncoding.EncodeToString(sum[:]) + `"}`
-	f.serve(httptest.NewRecorder(), httptest.NewRequest("POST", "http://localhost/v1/setup/grants", strings.NewReader(request)))
-	poll := func(verifier string) *httptest.ResponseRecorder {
-		out := httptest.NewRecorder()
-		f.serve(out, httptest.NewRequest("POST", "http://localhost/v1/setup/grants/poll", strings.NewReader(`{"request":"test-request","codeVerifier":"`+verifier+`"}`)))
-		return out
-	}
-	if out := poll(verifier); !strings.Contains(out.Body.String(), "pending") {
-		t.Fatal(out.Body.String())
-	}
-	f.Approved = true
-	if out := poll("incorrect"); out.Code != 403 {
-		t.Fatal(out.Code)
-	}
-	if out := poll(verifier); !strings.Contains(out.Body.String(), "fixture-account-token") {
-		t.Fatal(out.Body.String())
-	}
-}
-
 func TestUnknownUsageKeepsReservation(t *testing.T) {
 	m := newMeter(config{Model: "gpt-6.1-terra", Budget: .2})
 	m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
@@ -149,27 +106,6 @@ func TestCodexFailureCannotBecomeSuccessfulTurn(t *testing.T) {
 	turn, err := readCodexTurn(strings.NewReader(stream), func(string, string) {})
 	if err != nil || !turn.Failed {
 		t.Fatal(turn, err)
-	}
-}
-
-func TestCodexUpdateStateIgnoresJSONWhitespace(t *testing.T) {
-	for _, space := range []string{"", " ", "  ", "\n\t"} {
-		raw, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"type": "command_execution", "aggregated_output": "{\"state\":" + space + "\"update_permission_required\"}"}})
-		turn, err := readCodexTurn(bytes.NewReader(raw), func(string, string) {})
-		if err != nil || !turn.UpdateRequested {
-			t.Fatal(turn, err)
-		}
-	}
-}
-
-func TestScenarioNames(t *testing.T) {
-	for _, name := range scenarioNames {
-		if !validScenario(name) {
-			t.Fatal(name)
-		}
-	}
-	if validScenario("anything") {
-		t.Fatal("unknown scenario accepted")
 	}
 }
 
@@ -216,24 +152,6 @@ func TestLocalProcessCleanupIsScopedToExecutablePath(t *testing.T) {
 	}
 }
 
-func TestRelocateHomeEnvironmentPreservesSiblingPaths(t *testing.T) {
-	old := filepath.Join(os.TempDir(), "old-home")
-	fresh := filepath.Join(os.TempDir(), "new-home")
-	sep := string(os.PathListSeparator)
-	bin := filepath.Join(old, "bin")
-	for _, entry := range []struct{ input, want string }{
-		{"HOME=" + old, "HOME=" + fresh},
-		{"CODEX_HOME=" + filepath.Join(old, ".codex"), "CODEX_HOME=" + filepath.Join(fresh, ".codex")},
-		{"TMPDIR=" + old + "-scratch", "TMPDIR=" + old + "-scratch"},
-		{"CDPATH=" + old + "other", "CDPATH=" + old + "other"},
-		{"PATH=" + bin + sep + old + "-other", "PATH=" + filepath.Join(fresh, "bin") + sep + old + "-other"},
-	} {
-		if got := relocateHomeEnvironment(entry.input, old, fresh); got != entry.want {
-			t.Fatal(entry.input, got, entry.want)
-		}
-	}
-}
-
 func TestMeterCancellationReleasesAccountingLock(t *testing.T) {
 	m := newMeter(config{Model: "gpt-6.1-terra", Budget: .2})
 	m.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
@@ -251,56 +169,6 @@ func TestMeterCancellationReleasesAccountingLock(t *testing.T) {
 	defer m.mu.Unlock()
 	if m.usage.Unknown != 1 || m.usage.Reserved == 0 {
 		t.Fatal("cancelled request lost its conservative budget reservation", m.usage)
-	}
-}
-
-func TestInstallRequiresConfiguredCodexPolicy(t *testing.T) {
-	for _, policyState := range []string{"missing", "configured"} {
-		t.Run(policyState, func(t *testing.T) {
-			root := t.TempDir()
-			home, repo := filepath.Join(root, "home"), filepath.Join(root, "repo")
-			files := map[string]string{
-				filepath.Join(repo, ".agents/skills/doomer-review/SKILL.md"):   "doomer-protocol",
-				filepath.Join(repo, ".claude/skills/doomer-review/SKILL.md"):   "doomer-protocol",
-				agentHooksPath(config{Harness: "codex"}, home):                 "--managed-task-adapter",
-				filepath.Join(home, ".config/doomer/managed/tasks/setup.json"): `{"handle":"setup","agent":"codex"}`,
-				filepath.Join(home, ".local/bin/doomer"):                       "#!/bin/sh\nprintf '%s\\n' '{\"state\":\"ready\",\"software_ready\":true,\"authenticated\":true,\"upload_approved\":true,\"codex_policy_status\":{\"state\":\"" + policyState + "\"}}'\n",
-			}
-			for path, content := range files {
-				if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(path, []byte(content), 0700); err != nil {
-					t.Fatal(err)
-				}
-			}
-			ready, checks := inspectInstall(context.Background(), repo, home, nil, false, "codex", true)
-			want := policyState == "configured"
-			if ready != want || checks["codex_policy_configured"] != want {
-				t.Fatalf("ready=%v checks=%v, expected configured=%v", ready, checks, want)
-			}
-		})
-	}
-}
-
-func TestReviewPreflightUsesRealReviewerWithoutBypass(t *testing.T) {
-	want := []string{"exec", "--json", "--sandbox", "workspace-write", "-c", `approval_policy="on-request"`, "-c", `approvals_reviewer="auto_review"`}
-	if got := codexExecArgs(config{ReviewApprovals: true}); !reflect.DeepEqual(got, want) {
-		t.Fatalf("review preflight must use exact guarded arguments: %q", got)
-	}
-	if !validScenario("review-preflight") {
-		t.Fatal("regression missing from CI discovery")
-	}
-}
-
-func TestSkillDiscoveryScenariosRunInBothAgentMatrices(t *testing.T) {
-	for _, scenario := range []string{"personal-discovery", "repository-discovery", "upgrade-personal-npx", "upgrade-repo-over-personal-npx"} {
-		if !validScenario(scenario) {
-			t.Fatal("skill discovery missing from CI scenario list", scenario)
-		}
-	}
-	if !personalScenario("personal-discovery") || personalScenario("repository-discovery") || !personalScenario("upgrade-personal-npx") || personalScenario("upgrade-repo-over-personal-npx") {
-		t.Fatal("skill discovery scenarios use the wrong installation scope")
 	}
 }
 
@@ -328,174 +196,5 @@ func TestProviderFailureIsDistinguishedFromBudgetRejection(t *testing.T) {
 	}
 	if m.usage.ProviderHTTPFailures[429] != 1 || m.usage.BudgetRejections != 1 {
 		t.Fatal(m.usage)
-	}
-}
-
-func TestCandidateInjectionRequiresCompletedPublicInstallation(t *testing.T) {
-	home := t.TempDir()
-	candidate := filepath.Join(t.TempDir(), "candidate")
-	if err := os.WriteFile(candidate, []byte("test candidate"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	err := installCandidate(config{CandidateFile: candidate, CandidateVersion: "2026.11.7.5"}, home)
-	if err == nil || !strings.Contains(err.Error(), "public installation did not produce the expected verified runtime") || !strings.Contains(err.Error(), "inspect the installation turn") {
-		t.Fatal(err)
-	}
-}
-
-func TestCodexPolicyQuestionWithoutPrepareOutput(t *testing.T) {
-	for _, tc := range []struct {
-		text string
-		want bool
-	}{
-		{"For the missing Codex policy, would you like to install the Doomer policy or use per-call approvals?", true},
-		{"Approve account verification and the scoped Claude permission repair.", true},
-		{"The policy was declined. I preserved it and will not ask again.", false},
-		{"The user approved the policy last session.", false},
-		{"Your existing permissions are preserved. Ready to proceed?", false},
-		{"The policy is installed and ready.", false},
-	} {
-		raw, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"type": "agent_message", "text": tc.text}})
-		turn, err := readCodexTurn(bytes.NewReader(raw), func(string, string) {})
-		if err != nil || turn.PolicyOffered != tc.want {
-			t.Fatal(tc, turn, err)
-		}
-	}
-}
-
-func TestDeclineConfigAllowsOnlyNativeProjectTrust(t *testing.T) {
-	before := []byte("model = 'test'\n")
-	for _, tc := range []struct {
-		extra string
-		want  bool
-	}{
-		{"[projects.'/tmp/repo']\ntrust_level = 'trusted'\n", true},
-		{"[auto_review]\nextra_policy = ''\n", false},
-		{"approval_policy = 'never'\n", false},
-		{"[projects.'/tmp/repo']\ntrust_level = 'trusted'\napproval_policy = 'never'\n", false},
-	} {
-		if got := preservesCodexPolicyConfig(before, append(append([]byte{}, before...), []byte(tc.extra)...)); got != tc.want {
-			t.Fatal(tc, got)
-		}
-	}
-}
-
-func TestClaudeSetupChoiceUsesStructuredReadiness(t *testing.T) {
-	for _, tc := range []struct {
-		raw  string
-		want bool
-	}{
-		{`{"claude_permissions":{"state":"missing"}}`, true},
-		{`{"saved_consents":[{"claude_permissions":{"state":"missing","decision":"pending"}}]}`, true},
-		{`{"saved_consents":[{"claude_permissions":{"state":"missing","decision":"declined"}}]}`, false},
-		{`{"claude_permissions":{"state":"missing","decision":"unreadable"}}`, false},
-		{`{"claude_permissions":{"state":"configured"}}`, false},
-		{`Please approve some permission`, false},
-	} {
-		if got := claudeSetupPending(tc.raw); got != tc.want {
-			t.Fatal(tc.raw, got)
-		}
-	}
-}
-
-func TestBrowserDecisionRequiresDisplayedExactURL(t *testing.T) {
-	for _, kind := range []string{"Codex", "Claude", "Browser"} {
-		f := &fixture{Request: "opaque-request"}
-		if observeBrowserDecision(f, "https://fixture.invalid", "Command", "https://fixture.invalid/cli/setup#request=opaque-request", false) {
-			t.Fatal("tool output granted consent")
-		}
-		if observeBrowserDecision(f, "https://fixture.invalid", kind, "https://fixture.invalid/cli/setup", false) {
-			t.Fatal("incomplete URL granted consent")
-		}
-		if !observeBrowserDecision(f, "https://fixture.invalid", kind, "Approve https://fixture.invalid/cli/setup#request=opaque-request", false) || !f.Approved {
-			t.Fatal("displayed page decision was not delivered")
-		}
-		if observeBrowserDecision(f, "https://fixture.invalid", kind, "https://fixture.invalid/cli/setup#request=opaque-request", false) {
-			t.Fatal("repeated browser decision")
-		}
-	}
-	f := &fixture{Request: "decline"}
-	if !observeBrowserDecision(f, "https://fixture.invalid", "Codex", "https://fixture.invalid/cli/setup#request=decline", true) || !f.Cancelled || f.Approved {
-		t.Fatal("browser cancellation was ignored")
-	}
-	if observeBrowserDecision(&fixture{}, "https://fixture.invalid", "Codex", "https://fixture.invalid/cli/setup#request=", false) {
-		t.Fatal("no request was pending")
-	}
-}
-
-func TestRevokedApprovalObservesBrowserWithoutAgentOutput(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "opened-browser-url")
-	f := &fixture{Request: "renewed-request"}
-	observed := make(chan string, 1)
-	stop := watchRevokedApproval(context.Background(), f, path, "https://fixture.invalid", func(kind, text string) {
-		observed <- kind
-	})
-	defer stop()
-	if err := os.WriteFile(path, []byte("https://fixture.invalid/cli/setup#request=renewed-request"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case kind := <-observed:
-		if kind != "Browser decision" {
-			t.Fatal(kind)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("opened approval page was not cancelled without agent output")
-	}
-	stop()
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if !f.Cancelled || f.Approved || f.Uploads != 0 {
-		t.Fatalf("revocation decision changed upload access: cancelled=%v approved=%v uploads=%d", f.Cancelled, f.Approved, f.Uploads)
-	}
-}
-
-func TestRevokedApprovalWatcherStopsWithoutBrowser(t *testing.T) {
-	stop := watchRevokedApproval(context.Background(), &fixture{}, filepath.Join(t.TempDir(), "missing"), "https://fixture.invalid", func(string, string) {
-		t.Error("unexpected browser decision")
-	})
-	done := make(chan struct{})
-	go func() { stop(); close(done) }()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("browser watcher did not stop")
-	}
-}
-
-func TestApprovalWaitRequiresPriorPresentation(t *testing.T) {
-	for _, tc := range []struct {
-		name, kind, text string
-		presented, want  bool
-	}{
-		{"Claude wait", "Command", `Bash {"command":"doomer task login task --wait 45s"}`, false, true},
-		{"Claude loop", "Command", `Bash {"command":"for i in $(seq 1 13); do doomer task login task --wait 45s; done"}`, false, true},
-		{"returned command", "Command", `Bash {"command":"python3 -c 'execute(result[\"wait_command\"])'"}`, false, true},
-		{"Codex wait", "Command started", "doomer task login task --wait 45s", false, true},
-		{"already displayed", "Command", `Bash {"command":"doomer task login task --wait 45s"}`, true, false},
-		{"tool output", "Command", `{"wait_command":["doomer","task","login","task","--wait","45s"]}`, false, false},
-		{"preparation", "Command", `Bash {"command":"doomer prepare --agent claude"}`, false, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := approvalWaitBeforePresentation(tc.kind, tc.text, tc.presented); got != tc.want {
-				t.Fatalf("wait before presentation = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
-func TestPolicyChoiceObservation(t *testing.T) {
-	for _, tc := range []struct {
-		text string
-		want bool
-	}{
-		{"The missing policy would add that scope to Codex’s reviewer configuration. Allow, Not now, or Never ask again?", true},
-		{"The proposed setup adds that scoped authorization to Codex configuration. Allow, Not now, or Never ask again?", true},
-		{"Install optional hooks? Allow, Not now, or Never ask again?", false},
-		{"The policy is installed. No action is needed.", false},
-	} {
-		if got := policyChoiceOffered(tc.text); got != tc.want {
-			t.Fatalf("choice observation %q = %t", tc.text, got)
-		}
 	}
 }

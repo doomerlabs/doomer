@@ -48,10 +48,9 @@ docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" \
   -e TEST_OPENAI_API_KEY -e TEST_CLAUDE_CODE_OAUTH_TOKEN \
   -e E2E_R2_ACCOUNT_ID -e E2E_R2_BUCKET -e E2E_R2_ACCESS_KEY_ID -e E2E_R2_SECRET_ACCESS_KEY \
   -e E2E_CACHE_SIGNING_KEY -e E2E_CACHE_SIGNING_KEY_ID -e E2E_CACHE_PUBLIC_KEYS \
-  -e E2E_SELECTED_TESTS -e E2E_NPX_SKILL_SOURCE \
+  -e E2E_SELECTED_TESTS \
   "$(cat "$runner_home/image-id")" bash -c '
     set -euo pipefail
     git config --global --add safe.directory /src
-    export E2E_BASELINE_SOURCE="$HOME/baseline"
     python3 scripts/agent-e2e-cache-plan.py --populate --jobs 8 --output /reports
   '

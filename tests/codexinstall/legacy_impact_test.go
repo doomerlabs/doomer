@@ -15,18 +15,7 @@ import (
 	"strings"
 )
 
-var fixtureScopes = map[string][]string{
-	"browser_onboarding.go":  {"browser-onboarding"},
-	"unconfigured_repo.go":   {"unconfigured-repo"},
-	"upgrade.go":             {"upgrade", "upgrade-defer", "upgrade-untracked", "upgrade-personal", "upgrade-custom", "upgrade-authorized-session", "upgrade-personal-npx", "upgrade-repo-over-personal-npx"},
-	"npx_upgrade.go":         {"upgrade-personal-npx", "upgrade-repo-over-personal-npx"},
-	"recovery.go":            {"portable-invalid", "revoked-uploads", "interrupted-review"},
-	"portable.go":            {"portable-restart"},
-	"preflight.go":           {"review-preflight", "review-preflight-denied"},
-	"command_permissions.go": {"review-command-permissions", "policy-installed"},
-	"policy_recovery.go":     {"policy-recovery", "policy-declined"},
-	"hook_setup.go":          {"hooks-upgrade", "hooks-declined", "hooks-trust"},
-}
+var fixtureScopes = map[string][]string{"repair.go": {"hook-repair"}}
 
 // Updating shared runner control flow requires reviewing the scope boundaries.
 // A mismatch safely falls back to shared fixture bodies until that audit occurs.

@@ -17,8 +17,8 @@ func impactFixture(t *testing.T, body, caller string) (string, snapshotMetadata)
 	snapshot := t.TempDir()
 	root := filepath.Join(snapshot, "cli")
 	files := map[string]string{
-		"tests/codexinstall/upgrade.go":   "package main\nfunc (j *journey) upgrade() error { " + body + " }\n",
-		"tests/codexinstall/scenarios.go": "package main\ntype journey struct { c config }; type config struct { Scenario string }; func (j *journey) afterInstall() error { switch j.c.Scenario { case \"upgrade\", \"upgrade-defer\", \"upgrade-untracked\", \"upgrade-personal\", \"upgrade-custom\", \"upgrade-authorized-session\": return j.upgrade() }; return nil }; " + caller,
+		"tests/codexinstall/repair.go":    "package main\nfunc (j *journey) repair() error { " + body + " }\n",
+		"tests/codexinstall/scenarios.go": "package main\ntype journey struct { c config }; type config struct { Scenario string }; func (j *journey) afterInstall() error { switch j.c.Scenario { case \"hook-repair\": return j.repair() }; return nil }; " + caller,
 	}
 	for path, text := range files {
 		writeImpactFile(t, root, path, text)
@@ -71,17 +71,17 @@ func impactMetadata(t *testing.T, snapshot, root string) snapshotMetadata {
 }
 func TestScenarioBodyChangesInvalidateOnlyItsDependents(t *testing.T) {
 	root, before := impactFixture(t, "return nil", "")
-	if _, ok := before.ScenarioFiles["cli/tests/codexinstall/upgrade.go"]; !ok {
-		t.Fatal("upgrade fixture unexpectedly shared")
+	if _, ok := before.ScenarioFiles["cli/tests/codexinstall/repair.go"]; !ok {
+		t.Fatal("repair fixture unexpectedly shared")
 	}
-	writeImpactFile(t, root, "tests/codexinstall/upgrade.go", "package main\nfunc (j *journey) upgrade() error {\n\n// a different-length body\nif j.c.Scenario == \"upgrade\" { return nil }; return nil\n}\n")
+	writeImpactFile(t, root, "tests/codexinstall/repair.go", "package main\nfunc (j *journey) repair() error {\n\n// a different-length body\nif j.c.Scenario == \"hook-repair\" { return nil }; return nil\n}\n")
 	after := impactMetadata(t, filepath.Dir(root), root)
 	if before.fingerprint("install") != after.fingerprint("install") {
 		t.Fatal("unrelated install invalidated")
 	}
-	for _, scenario := range fixtureScopes["upgrade.go"] {
+	for _, scenario := range fixtureScopes["repair.go"] {
 		if before.fingerprint(scenario) == after.fingerprint(scenario) {
-			t.Fatal("changed upgrade dependency reused", scenario)
+			t.Fatal("changed repair dependency reused", scenario)
 		}
 	}
 	if before.fingerprint("unknown-future-scenario") == after.fingerprint("unknown-future-scenario") {
@@ -90,14 +90,14 @@ func TestScenarioBodyChangesInvalidateOnlyItsDependents(t *testing.T) {
 }
 func TestScenarioHeadersAndUnexpectedCallersStayShared(t *testing.T) {
 	for name, source := range map[string]string{
-		"imports":        "package main\nimport \"fmt\"\nfunc (j *journey) upgrade() error { return fmt.Errorf(\"changed\") }",
-		"global":         "package main\nvar shared = 1\nfunc (j *journey) upgrade() error { return nil }",
-		"signature":      "package main\nfunc (j *journey) upgrade(extra bool) error { return nil }",
-		"initialization": "package main\nfunc init() { panic(\"changed\") }\nfunc (j *journey) upgrade() error { return nil }",
+		"imports":        "package main\nimport \"fmt\"\nfunc (j *journey) repair() error { return fmt.Errorf(\"changed\") }",
+		"global":         "package main\nvar shared = 1\nfunc (j *journey) repair() error { return nil }",
+		"signature":      "package main\nfunc (j *journey) repair(extra bool) error { return nil }",
+		"initialization": "package main\nfunc init() { panic(\"changed\") }\nfunc (j *journey) repair() error { return nil }",
 	} {
 		t.Run(name, func(t *testing.T) {
 			root, before := impactFixture(t, "return nil", "")
-			writeImpactFile(t, root, "tests/codexinstall/upgrade.go", source)
+			writeImpactFile(t, root, "tests/codexinstall/repair.go", source)
 			after := impactMetadata(t, filepath.Dir(root), root)
 			if before.fingerprint("install") == after.fingerprint("install") {
 				t.Fatal("shared declaration change was ignored")
@@ -105,21 +105,21 @@ func TestScenarioHeadersAndUnexpectedCallersStayShared(t *testing.T) {
 		})
 	}
 	for name, caller := range map[string]string{
-		"unconditional":       "func shared(j *journey) error { return j.upgrade() }",
-		"different-scenario":  "func shared(j *journey) error { if j.c.Scenario == \"install\" { return j.upgrade() }; return nil }",
-		"global-reference":    "var callback = (*journey).upgrade",
-		"reflection":          "func invoke(j *journey) { value.MethodByName(\"upgrade\") }",
-		"unaudited-condition": "func shared(j *journey) error { if j.c.Scenario == \"upgrade\" { return j.upgrade() }; return nil }",
-		"mutated-scenario":    "func mutate(j *journey) { j.c.Scenario = \"upgrade\" }",
-		"aliased-config":      "func mutate(j *journey) { p := &j.c; p.Scenario = \"upgrade\" }",
-		"substituted-config":  "func mutate(j *journey) { _ = config{Scenario: \"upgrade\"} }",
+		"unconditional":       "func shared(j *journey) error { return j.repair() }",
+		"different-scenario":  "func shared(j *journey) error { if j.c.Scenario == \"install\" { return j.repair() }; return nil }",
+		"global-reference":    "var callback = (*journey).repair",
+		"reflection":          "func invoke(j *journey) { value.MethodByName(\"hook-repair\") }",
+		"unaudited-condition": "func shared(j *journey) error { if j.c.Scenario == \"hook-repair\" { return j.repair() }; return nil }",
+		"mutated-scenario":    "func mutate(j *journey) { j.c.Scenario = \"hook-repair\" }",
+		"aliased-config":      "func mutate(j *journey) { p := &j.c; p.Scenario = \"hook-repair\" }",
+		"substituted-config":  "func mutate(j *journey) { _ = config{Scenario: \"hook-repair\"} }",
 	} {
 		t.Run(name, func(t *testing.T) {
 			root, before := impactFixture(t, "return nil", caller)
-			if _, ok := before.ScenarioFiles["cli/tests/codexinstall/upgrade.go"]; ok {
+			if _, ok := before.ScenarioFiles["cli/tests/codexinstall/repair.go"]; ok {
 				t.Fatal("unexpected caller did not make fixture shared")
 			}
-			writeImpactFile(t, root, "tests/codexinstall/upgrade.go", "package main\nfunc (j *journey) upgrade() error { panic(\"changed\") }")
+			writeImpactFile(t, root, "tests/codexinstall/repair.go", "package main\nfunc (j *journey) repair() error { panic(\"changed\") }")
 			after := impactMetadata(t, filepath.Dir(root), root)
 			if before.fingerprint("install") == after.fingerprint("install") {
 				t.Fatal("shared fixture body reused")
@@ -127,22 +127,7 @@ func TestScenarioHeadersAndUnexpectedCallersStayShared(t *testing.T) {
 		})
 	}
 }
-func TestLegacyScenarioScopeBaseline(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	scopes, err := scopedFixtureInputs(root, filepath.Dir(root))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"upgrade.go", "recovery.go", "portable.go", "preflight.go", "command_permissions.go", "policy_recovery.go", "hook_setup.go", "unconfigured_repo.go", "browser_onboarding.go"} {
-		path := filepath.Base(root) + "/tests/codexinstall/" + name
-		if _, ok := scopes[path]; !ok {
-			t.Errorf("%s is not scoped; audit its callers", name)
-		}
-	}
-}
+
 func TestCompilerInputsIgnoreDocsButRetainEmbedsAndNewSource(t *testing.T) {
 	makeFixture := func(document, asset, extra string) snapshotMetadata {
 		snapshot := t.TempDir()
@@ -192,7 +177,7 @@ func TestSignedResultReusedAcrossUnrelatedFixtureChange(t *testing.T) {
 	if err := publishCachedResult(context.Background(), store, before, "install", path, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	writeImpactFile(t, root, "tests/codexinstall/upgrade.go", "package main\nfunc (j *journey) upgrade() error { panic(\"changed\") }")
+	writeImpactFile(t, root, "tests/codexinstall/repair.go", "package main\nfunc (j *journey) repair() error { panic(\"changed\") }")
 	after := impactMetadata(t, filepath.Dir(root), root)
 	after.Commit = "current-run"
 	target := filepath.Join(t.TempDir(), "reused.json")
@@ -257,15 +242,15 @@ func TestPrunedRuntimeBuildsRealCLIAndRunner(t *testing.T) {
 
 func TestScopedBodiesIgnoreOffsetsButKeepCompilerDirectives(t *testing.T) {
 	root, _ := impactFixture(t, "return nil", "")
-	path := "tests/codexinstall/upgrade.go"
-	writeImpactFile(t, root, path, "package main\nfunc (j *journey) upgrade() error { return nil }\nfunc helper() {}\n")
+	path := "tests/codexinstall/repair.go"
+	writeImpactFile(t, root, path, "package main\nfunc (j *journey) repair() error { return nil }\nfunc helper() {}\n")
 	before := impactMetadata(t, filepath.Dir(root), root)
-	writeImpactFile(t, root, path, "package main\nfunc (j *journey) upgrade() error {\n\n\nreturn nil\n}\nfunc helper() {\n}\n")
+	writeImpactFile(t, root, path, "package main\nfunc (j *journey) repair() error {\n\n\nreturn nil\n}\nfunc helper() {\n}\n")
 	after := impactMetadata(t, filepath.Dir(root), root)
 	if before.fingerprint("install") != after.fingerprint("install") {
 		t.Fatal("body line offsets changed shared identity")
 	}
-	writeImpactFile(t, root, path, "//go:debug panicnil=1\npackage main\nfunc (j *journey) upgrade() error { return nil }\nfunc helper() {}\n")
+	writeImpactFile(t, root, path, "//go:debug panicnil=1\npackage main\nfunc (j *journey) repair() error { return nil }\nfunc helper() {}\n")
 	directive := impactMetadata(t, filepath.Dir(root), root)
 	if before.fingerprint("install") == directive.fingerprint("install") {
 		t.Fatal("compiler directive was ignored")
@@ -278,7 +263,7 @@ func TestScopeAuditSurvivesBodyEditButNotSharedControlChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeImpactFile(t, root, "tests/codexinstall/upgrade.go", "package main\nfunc (j *journey) upgrade() error { panic(\"changed body\") }")
+	writeImpactFile(t, root, "tests/codexinstall/repair.go", "package main\nfunc (j *journey) repair() error { panic(\"changed body\") }")
 	body := impactMetadata(t, filepath.Dir(root), root)
 	digest, err := fixtureAuditDigest(root, body.ScenarioFiles)
 	if err != nil {

@@ -70,7 +70,7 @@ func scenarioBodyInputs(ctx context.Context, root, snapshot string) (map[string]
 	files := map[string]*ast.File{}
 	sources := map[string][]byte{}
 	all := map[string]bool{}
-	for _, name := range append(append([]string{}, scenarioNames...), "ordinary-upgrade", "policy-activation") {
+	for _, name := range append([]string{}, scenarioNames...) {
 		all[name] = true
 	}
 	opaque := false

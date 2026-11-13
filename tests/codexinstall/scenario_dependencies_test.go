@@ -24,10 +24,10 @@ func automaticFixture(t *testing.T, files map[string]string) (string, string) {
 		"tests/codexinstall/scenarios.go": `package main
 type config struct { Scenario string }; type journey struct { c config }
 func (j *journey) afterInstall() error {
- switch j.c.Scenario { case "upgrade": return j.upgrade(); case "install": return j.install() }; return nil
+ switch j.c.Scenario { case "hook-repair": return j.repair(); case "install": return j.install() }; return nil
 }`,
 		"tests/codexinstall/worker.go":  "package main; func runWorkerContext(c config) { j:=journey{c:c}; _=j.afterInstall() }",
-		"tests/codexinstall/blargh.go":  "package main; func blargh() int { return 1 }; func (j *journey) upgrade() error { _=blargh(); _=shared(); return nil }",
+		"tests/codexinstall/blargh.go":  "package main; func blargh() int { return 1 }; func (j *journey) repair() error { _=blargh(); _=shared(); return nil }",
 		"tests/codexinstall/install.go": "package main; func (j *journey) install() error { _=shared(); return nil }",
 		"tests/codexinstall/shared.go":  "package main; func shared() int { return 2 }",
 	}
@@ -60,9 +60,9 @@ func TestAutomaticScenarioMutationAndNewCallEdge(t *testing.T) {
 	if len(before.ScenarioHashes) == 0 {
 		t.Fatal("automatic projection was disabled")
 	}
-	writeImpactFile(t, root, "tests/codexinstall/blargh.go", "package main; func blargh() int { return 99 }; func (j *journey) upgrade() error { _=blargh(); _=shared(); return nil }")
+	writeImpactFile(t, root, "tests/codexinstall/blargh.go", "package main; func blargh() int { return 99 }; func (j *journey) repair() error { _=blargh(); _=shared(); return nil }")
 	after := automaticMetadata(t, root, snapshot)
-	if before.fingerprint("upgrade") == after.fingerprint("upgrade") {
+	if before.fingerprint("hook-repair") == after.fingerprint("hook-repair") {
 		t.Fatal("dependent scenario reused changed helper")
 	}
 	if before.fingerprint("install") != after.fingerprint("install") {
@@ -70,7 +70,7 @@ func TestAutomaticScenarioMutationAndNewCallEdge(t *testing.T) {
 	}
 	writeImpactFile(t, root, "tests/codexinstall/install.go", "package main; func (j *journey) install() error { _=blargh(); _=shared(); return nil }")
 	newEdge := automaticMetadata(t, root, snapshot)
-	writeImpactFile(t, root, "tests/codexinstall/blargh.go", "package main; func blargh() int { return 100 }; func (j *journey) upgrade() error { _=blargh(); _=shared(); return nil }")
+	writeImpactFile(t, root, "tests/codexinstall/blargh.go", "package main; func blargh() int { return 100 }; func (j *journey) repair() error { _=blargh(); _=shared(); return nil }")
 	changed := automaticMetadata(t, root, snapshot)
 	if newEdge.fingerprint("install") == changed.fingerprint("install") {
 		t.Fatal("new call edge was not automatically discovered")
@@ -85,7 +85,7 @@ func TestAutomaticScenarioSharedAndDispatcherChanges(t *testing.T) {
 	before := automaticMetadata(t, root, snapshot)
 	writeImpactFile(t, root, "tests/codexinstall/shared.go", "package main; func shared() int { return 42 }")
 	after := automaticMetadata(t, root, snapshot)
-	for _, name := range []string{"install", "upgrade"} {
+	for _, name := range []string{"install", "hook-repair"} {
 		if before.fingerprint(name) == after.fingerprint(name) {
 			t.Fatal("shared edit did not invalidate", name)
 		}
@@ -94,10 +94,10 @@ func TestAutomaticScenarioSharedAndDispatcherChanges(t *testing.T) {
 	writeImpactFile(t, root, "tests/codexinstall/scenarios.go", `package main
 type config struct { Scenario string }; type journey struct { c config }
 func (j *journey) afterInstall() error {
- switch j.c.Scenario { case "upgrade": _=123; return j.upgrade(); case "install": return j.install() }; return nil
+ switch j.c.Scenario { case "hook-repair": _=123; return j.repair(); case "install": return j.install() }; return nil
 }`)
 	after = automaticMetadata(t, root, snapshot)
-	if before.fingerprint("upgrade") == after.fingerprint("upgrade") {
+	if before.fingerprint("hook-repair") == after.fingerprint("hook-repair") {
 		t.Fatal("dispatcher branch edit ignored")
 	}
 	if before.fingerprint("install") != after.fingerprint("install") {
@@ -127,11 +127,11 @@ func TestAutomaticScenarioUncertaintyFallsBack(t *testing.T) {
 
 func TestAutomaticScenarioDispatchBindingAndFallthrough(t *testing.T) {
 	for name, dispatch := range map[string]string{
-		"shadowed-receiver": `{ j:=struct{c config}{}; switch j.c.Scenario { case "upgrade": return jUpgrade() } }; return nil`,
-		"fallthrough":       `switch j.c.Scenario { case "install": fallthrough; case "upgrade": return j.upgrade() }; return nil`,
+		"shadowed-receiver": `{ j:=struct{c config}{}; switch j.c.Scenario { case "hook-repair": return jRepair() } }; return nil`,
+		"fallthrough":       `switch j.c.Scenario { case "install": fallthrough; case "hook-repair": return j.repair() }; return nil`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			source := "package main; type config struct { Scenario string }; type journey struct { c config }; func jUpgrade() error { return nil }; func (j *journey) afterInstall() error { " + dispatch + " }"
+			source := "package main; type config struct { Scenario string }; type journey struct { c config }; func jRepair() error { return nil }; func (j *journey) afterInstall() error { " + dispatch + " }"
 			root, snapshot := automaticFixture(t, map[string]string{"tests/codexinstall/scenarios.go": source})
 			if len(automaticMetadata(t, root, snapshot).ScenarioHashes) != 0 {
 				t.Fatal("uncertain dispatcher binding permitted projection")
@@ -147,13 +147,13 @@ func TestAutomaticScenarioRawStringCases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(strings.ReplaceAll(string(raw), `"upgrade"`, "`upgrade`")), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(strings.ReplaceAll(string(raw), `"hook-repair"`, "`hook-repair`")), 0600); err != nil {
 		t.Fatal(err)
 	}
 	before := automaticMetadata(t, root, snapshot)
-	writeImpactFile(t, root, "tests/codexinstall/blargh.go", "package main; func blargh() int { return 456 }; func (j *journey) upgrade() error { _=blargh(); _=shared(); return nil }")
+	writeImpactFile(t, root, "tests/codexinstall/blargh.go", "package main; func blargh() int { return 456 }; func (j *journey) repair() error { _=blargh(); _=shared(); return nil }")
 	after := automaticMetadata(t, root, snapshot)
-	if before.fingerprint("upgrade") == after.fingerprint("upgrade") || before.fingerprint("install") != after.fingerprint("install") {
+	if before.fingerprint("hook-repair") == after.fingerprint("hook-repair") || before.fingerprint("install") != after.fingerprint("install") {
 		t.Fatal("raw-string case changed dependency selection")
 	}
 }
@@ -172,27 +172,12 @@ func TestRealRunnerAutomaticScenarioProjections(t *testing.T) {
 	}
 	var different bool
 	for _, values := range hashes {
-		different = different || values["install"] != values["upgrade"]
+		different = different || values["install"] != values["hook-repair"]
 	}
 	if !different {
-		t.Fatal("real install and upgrade have identical projections")
+		t.Fatal("real install and repair have identical projections")
 	}
-	// Main added these scenarios after the planner was implemented. They must
-	// acquire their helper dependency without a production mapping update.
-	foundNPX := false
-	for path, values := range hashes {
-		if strings.HasSuffix(path, "/npx_upgrade.go") {
-			foundNPX = true
-			for _, scenario := range []string{"upgrade-personal-npx", "upgrade-repo-over-personal-npx"} {
-				if values[scenario] == values["install"] {
-					t.Fatal("new scenario missed its automatically discovered helper", scenario)
-				}
-			}
-		}
-	}
-	if !foundNPX {
-		t.Fatal("new upstream NPX helper was not discovered")
-	}
+
 }
 
 func TestAutomaticScenarioSignedReuseAcrossLocalAndCI(t *testing.T) {
@@ -201,7 +186,7 @@ func TestAutomaticScenarioSignedReuseAcrossLocalAndCI(t *testing.T) {
 	before.OS, before.Arch = "linux", "amd64"
 	keys := testCacheKey(t)
 	store := &memoryCache{objects: map[string][]byte{}}
-	for _, scenario := range []string{"install", "upgrade"} {
+	for _, scenario := range []string{"install", "hook-repair"} {
 		path := filepath.Join(t.TempDir(), "report.json")
 		writeCacheReport(t, path, true)
 		raw, err := os.ReadFile(path)
@@ -224,12 +209,12 @@ func TestAutomaticScenarioSignedReuseAcrossLocalAndCI(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	writeImpactFile(t, root, "tests/codexinstall/blargh.go", "package main; func blargh() int { return 999 }; func (j *journey) upgrade() error { _=blargh(); _=shared(); return nil }")
+	writeImpactFile(t, root, "tests/codexinstall/blargh.go", "package main; func blargh() int { return 999 }; func (j *journey) repair() error { _=blargh(); _=shared(); return nil }")
 	after := automaticMetadata(t, root, snapshot)
 	after.OS, after.Arch = "linux", "amd64"
 	for _, environment := range []string{"local", "ci"} {
 		after.Environment = environment
-		for _, scenario := range []string{"install", "upgrade"} {
+		for _, scenario := range []string{"install", "hook-repair"} {
 			hit := false
 			for _, candidate := range cacheLookupEnvironments(after) {
 				if err := reuseCachedResult(context.Background(), store, candidate, scenario, filepath.Join(t.TempDir(), "result.json"), keys); err == nil {
@@ -246,7 +231,7 @@ func TestAutomaticScenarioSignedReuseAcrossLocalAndCI(t *testing.T) {
 func TestAutomaticScenarioIndirectReferenceStaysShared(t *testing.T) {
 	root, snapshot := automaticFixture(t, map[string]string{"tests/codexinstall/callback.go": "package main; var callback = blargh"})
 	before := automaticMetadata(t, root, snapshot)
-	writeImpactFile(t, root, "tests/codexinstall/blargh.go", "package main; func blargh() int { return 888 }; func (j *journey) upgrade() error { _=blargh(); _=shared(); return nil }")
+	writeImpactFile(t, root, "tests/codexinstall/blargh.go", "package main; func blargh() int { return 888 }; func (j *journey) repair() error { _=blargh(); _=shared(); return nil }")
 	after := automaticMetadata(t, root, snapshot)
 	if before.fingerprint("install") == after.fingerprint("install") {
 		t.Fatal("escaped helper incorrectly excluded from install")
@@ -257,7 +242,7 @@ func TestExtraDependencyOverridesAutomaticBodyExclusion(t *testing.T) {
 	root, snapshot := automaticFixture(t, nil)
 	before := automaticMetadata(t, root, snapshot)
 	before.ExtraFiles = map[string][]string{"install": {"cli/tests/codexinstall/blargh.go"}}
-	writeImpactFile(t, root, "tests/codexinstall/blargh.go", "package main; func blargh() int { return 777 }; func (j *journey) upgrade() error { _=blargh(); _=shared(); return nil }")
+	writeImpactFile(t, root, "tests/codexinstall/blargh.go", "package main; func blargh() int { return 777 }; func (j *journey) repair() error { _=blargh(); _=shared(); return nil }")
 	after := automaticMetadata(t, root, snapshot)
 	after.ExtraFiles = before.ExtraFiles
 	if before.fingerprint("install") == after.fingerprint("install") {
@@ -332,12 +317,12 @@ func TestRealRepositoryMutationSelectsOnlyAffectedScenarios(t *testing.T) {
 		}
 		return m
 	}
-	mutate("tests/codexinstall/preflight.go", "reviewPreflight")
+	mutate("tests/codexinstall/terminal.go", "terminalCompleted")
 	after := recapture()
-	if before.fingerprint("review-preflight") == after.fingerprint("review-preflight") {
+	if before.fingerprint("first-review") == after.fingerprint("first-review") {
 		t.Fatal("real preflight edit reused its result")
 	}
-	for _, scenario := range []string{"install", "upgrade", "policy-recovery"} {
+	for _, scenario := range []string{"install", "hook-repair", "uninstall"} {
 		if before.fingerprint(scenario) != after.fingerprint(scenario) {
 			old := map[string]snapshotEntry{}
 			for _, entry := range before.fingerprintFiles(scenario) {
@@ -355,7 +340,7 @@ func TestRealRepositoryMutationSelectsOnlyAffectedScenarios(t *testing.T) {
 			t.Fatal("real preflight edit invalidated unrelated scenario", scenario)
 		}
 	}
-	mutate("cmd/managed_bootstrap.go", "")
+	mutate("cmd/watch.go", "")
 	product := recapture()
 	for _, scenario := range scenarioNames {
 		if after.fingerprint(scenario) == product.fingerprint(scenario) {

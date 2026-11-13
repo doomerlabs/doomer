@@ -90,8 +90,7 @@ def main():
     elif mode == "--all":
         scenarios = json.loads(os.environ["E2E_SCENARIOS"])
         results = [read_result(root, harness, scenario, Path(f"agent-e2e-{harness}-{scenario}"))
-                   for harness in ("codex", "claude") for scenario in scenarios
-                   if not (harness == "claude" and scenario == "browser-onboarding")]
+                   for harness in ("codex", "claude") for scenario in scenarios]
         selection = os.environ.get("E2E_SELECTED_TESTS")
         if selection is not None:
             selected = json.loads(selection)

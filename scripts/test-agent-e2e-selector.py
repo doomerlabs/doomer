@@ -24,7 +24,7 @@ class SelectorTests(unittest.TestCase):
         self.git("init", "-q")
         self.git("config", "user.name", "Test")
         self.git("config", "user.email", "test@example.invalid")
-        self.write("tests/codexinstall/scenarios.go", 'package main\nvar scenarioNames = []string{"install", "browser-onboarding"}\n')
+        self.write("tests/codexinstall/scenarios.go", 'package main\nvar scenarioNames = []string{"install", "skill-first"}\n')
         self.write("cmd/root.go", "package cmd\n")
         self.write("main.go", "package main\n")
         self.commit()
@@ -47,12 +47,12 @@ class SelectorTests(unittest.TestCase):
         self.git("-c", "commit.gpgsign=false", "commit", "-qm", "fixture")
 
     def test_catalog_and_new_scenarios(self):
-        self.write("tests/codexinstall/scenarios.go", 'package main\nvar scenarioNames = []string{"install", "browser-onboarding", "new-case"}\n')
+        self.write("tests/codexinstall/scenarios.go", 'package main\nvar scenarioNames = []string{"install", "skill-first", "new-case"}\n')
         self.commit()
         tests, changed, forced, request = selector.build_input(self.root, self.base, "HEAD")
-        self.assertEqual(5, len(tests))
+        self.assertEqual(6, len(tests))
         self.assertEqual(["claude/new-case", "codex/new-case"], forced)
-        self.assertNotIn("claude/browser-onboarding", tests)
+        self.assertIn("claude/skill-first", tests)
         self.assertIn("new-case", request)
 
     def test_shared_changes_require_every_test(self):

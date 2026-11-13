@@ -32,7 +32,7 @@ func (m snapshotMetadata) fingerprintFiles(scenario string) []snapshotEntry {
 	for _, path := range m.RuntimeFiles {
 		selected[path] = true
 	}
-	known := scenario == "ordinary-upgrade" || scenario == "policy-activation"
+	known := false
 	for _, name := range scenarioNames {
 		known = known || name == scenario
 	}
@@ -121,23 +121,24 @@ func prepareRuntimeInputs(ctx context.Context, snapshot string, roots map[string
 		}
 	}
 	for _, path := range []string{
-		"internal/managed/bootstrap-2026.11.6.10.md", "tests/codexinstall/cache-keys.json",
+		"tests/codexinstall/onboarding-inputs.json", "tests/codexinstall/cache-keys.json",
 		"tests/codexinstall/baseline-release.txt", "tests/codexinstall/Dockerfile",
 		"scripts/ci-agent-e2e.sh", "scripts/agent-e2e-local-linux.sh",
-		"scripts/agent-e2e-baseline.sh", "scripts/agent-e2e-cache-plan.py",
+		"scripts/agent-e2e-cache-plan.py",
 		".depot/workflows/agent-e2e.yml",
 		"e2e-extra-dependencies.yml",
 	} {
 		add(roots["cli"], path)
 	}
-	if root := roots["bootstrap"]; root != "" {
-		for _, path := range []string{".agents/skills/doomer-review/SKILL.md", ".claude/skills/doomer-review/SKILL.md"} {
-			add(root, path)
-		}
-	}
 	for _, entry := range m.Files {
-		if strings.HasPrefix(entry.Path, "agent/") {
+		if strings.HasPrefix(entry.Path, "agent/") || strings.HasPrefix(entry.Path, "tooling/") {
 			selected[entry.Path] = true
+		}
+		if root := roots["node"]; root != "" {
+			relative, _ := filepath.Rel(snapshot, root)
+			if strings.HasPrefix(entry.Path, filepath.ToSlash(relative)+"/") {
+				selected[entry.Path] = true
+			}
 		}
 		// Explicit installer/skill repositories retain their full inventory.
 		if root := roots["skills"]; root != "" {
@@ -249,7 +250,7 @@ func fileExists(path string) bool {
 }
 
 func auditedDispatcher(file string, fn *ast.FuncDecl) bool {
-	if file == "scenarios.go" && fn.Name.Name == "afterInstall" && fn.Recv != nil && len(fn.Recv.List) == 1 {
+	if ((file == "scenarios.go" && fn.Name.Name == "afterInstall") || (file == "onboarding.go" && fn.Name.Name == "onboarding")) && fn.Recv != nil && len(fn.Recv.List) == 1 {
 		if fn.Type.Params.NumFields() != 0 {
 			return false
 		}

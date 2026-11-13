@@ -9,15 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/doomerlabs/doomer/internal/managed"
 )
 
 func runLocal(ctx context.Context, c config, parent string) (result report) {
-	if c.Scenario == "global-npx-discovery" && c.CandidateVersion == "" {
-		// Honor an explicit candidate; use the current compatible version otherwise.
-		c.CandidateVersion = managed.BootstrapVersion
-	}
 	result.Execution = "local"
 	if parent == "" {
 		result.Error = "local runs require --local-root"
@@ -44,12 +38,7 @@ func runLocal(ctx context.Context, c config, parent string) (result report) {
 	c.WorkRoot = dir
 	if c.CandidateVersion != "" {
 		c.CandidateFile = filepath.Join(dir, "candidate")
-		overlay, err := candidateReleaseOverlay(c.CandidateSource, dir, c.CandidateVersion)
-		if err != nil {
-			result.Error = err.Error()
-			return result
-		}
-		build := exec.CommandContext(ctx, "go", "build", "-overlay", overlay, "-ldflags", "-X github.com/doomerlabs/doomer/internal/version.Version="+c.CandidateVersion+" -X github.com/doomerlabs/doomer/internal/managed.BootstrapCLIRange=>="+c.CandidateVersion, "-o", c.CandidateFile, ".")
+		build := exec.CommandContext(ctx, "go", "build", "-ldflags", "-X github.com/doomerlabs/doomer/internal/version.Version="+c.CandidateVersion, "-o", c.CandidateFile, ".")
 		build.Dir = c.CandidateSource
 		if output, err := build.CombinedOutput(); err != nil {
 			result.Error = fmt.Sprintf("build local candidate: %v: %s", err, output)

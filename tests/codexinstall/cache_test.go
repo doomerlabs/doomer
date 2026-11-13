@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/doomerlabs/doomer/internal/managed"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -243,17 +242,6 @@ func TestSnapshotIncludesNewAndDeletedFilesAndFreezesBytes(t *testing.T) {
 		t.Fatal("deletion did not change manifest")
 	}
 }
-func TestInstallerPinPreservesVerificationAndUsesCapturedBaseline(t *testing.T) {
-	script := []byte("channel = json.loads(download(STABLE_CHANNEL, 1024 * 1024))\nif hashlib.sha256(archive).hexdigest() != expected: raise ValueError('checksum')")
-	pinned, err := pinInstaller(script, []byte(`{"version":"2026.11.9.3"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(pinned), "download(STABLE_CHANNEL") || !strings.Contains(string(pinned), "hashlib.sha256(archive)") || !strings.Contains(string(pinned), "2026.11.9.3") {
-		t.Fatal(string(pinned))
-	}
-}
-
 func TestLiveR2RoundTrip(t *testing.T) {
 	if os.Getenv("E2E_CACHE_LIVE_TEST") != "1" {
 		t.Skip("set E2E_CACHE_LIVE_TEST=1 with dedicated Doppler test credentials")
@@ -425,126 +413,5 @@ func TestCICacheAcceptanceKeepsPlatformAndInputs(t *testing.T) {
 	m.OS = "darwin"
 	if len(cacheLookupEnvironments(m)) != 1 {
 		t.Fatal("enabled cross-environment reuse outside Linux")
-	}
-}
-
-func TestExpectedRegressionCacheRequiresExactFailureAndCleanup(t *testing.T) {
-	keys := testCacheKey(t)
-	m := testCacheMetadata()
-	m.Settings["expect-policy-regression"] = "true"
-	r := report{Scenario: "policy-recovery", Harness: "codex", AuthMode: "api", Execution: "local", LocalCleaned: true, Error: "deterministic prepare probe: missing policy after delivered offer"}
-	if !cacheReportPassed(r, m) {
-		t.Fatal("expected regression rejected")
-	}
-	for _, wrong := range []report{{Passed: true, LocalCleaned: true}, {Error: "provider unavailable", Execution: "local", LocalCleaned: true}, {Error: r.Error, Execution: "local"}} {
-		if cacheReportPassed(wrong, m) {
-			t.Fatal("unrelated failure accepted as baseline regression")
-		}
-	}
-	store := &memoryCache{objects: map[string][]byte{}}
-	path := filepath.Join(t.TempDir(), "report.json")
-	raw, _ := json.Marshal(r)
-	os.WriteFile(path, raw, 0600)
-	os.WriteFile(path+".html", []byte("regression transcript"), 0600)
-	if err := publishCachedResult(context.Background(), store, m, "policy-recovery", path, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := verifyCachedResult(store.objects[cacheResultKey(m, "policy-recovery")], m, "policy-recovery", keys, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	if err := reuseCachedResult(context.Background(), store, m, "policy-recovery", filepath.Join(t.TempDir(), "hit.json"), keys); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestPinnedReleaseDoesNotFollowMovingStable(t *testing.T) {
-	version := "2026.11.9.3"
-	artifacts := map[string]string{}
-	for _, platform := range []string{"darwin_amd64", "darwin_arm64", "linux_amd64", "linux_arm64"} {
-		artifacts["doomer_"+version+"_"+platform+".tar.gz"] = "sha256:" + strings.Repeat("a", 64)
-	}
-	raw, _ := json.Marshal(map[string]any{"schemaVersion": 1, "version": version, "artifacts": artifacts})
-	pinned, err := channelFromManifest(raw, version)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(pinned), version) || strings.Contains(string(pinned), "stable.json") {
-		t.Fatal("baseline was not pinned")
-	}
-	if _, err = channelFromManifest(raw, "2026.11.9.4"); err == nil {
-		t.Fatal("accepted different release version")
-	}
-	delete(artifacts, "doomer_"+version+"_linux_amd64.tar.gz")
-	raw, _ = json.Marshal(map[string]any{"schemaVersion": 1, "version": version, "artifacts": artifacts})
-	if _, err = channelFromManifest(raw, version); err == nil {
-		t.Fatal("accepted missing artifact digest")
-	}
-}
-
-func TestCatalogIdentityIgnoresOnlyReleasesAboveBaseline(t *testing.T) {
-	catalog := managed.Catalog{Releases: []managed.Release{{Version: "2026.11.9.4"}, {Version: "2026.11.9.5"}}}
-	first, err := catalogReleaseIdentity(catalog, "2026.11.9.5")
-	if err != nil {
-		t.Fatal(err)
-	}
-	catalog.Releases = append(catalog.Releases, managed.Release{Version: "2026.11.9.6"})
-	next, err := catalogReleaseIdentity(catalog, "2026.11.9.5")
-	if err != nil || string(first) != string(next) {
-		t.Fatal("unrelated new release invalidated pinned horizon")
-	}
-	catalog.Releases[0].Withdrawn = true
-	next, err = catalogReleaseIdentity(catalog, "2026.11.9.5")
-	if err != nil || string(first) == string(next) {
-		t.Fatal("changed eligible release did not invalidate")
-	}
-	catalog.Releases[1].Withdrawn = true
-	if _, err = catalogReleaseIdentity(catalog, "2026.11.9.5"); err == nil {
-		t.Fatal("withdrawn baseline was accepted")
-	}
-}
-
-func TestCandidateOverlayBuildsWithoutMutatingSource(t *testing.T) {
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(root, "internal/managed/releases.go")
-	before, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	output := t.TempDir()
-	overlay, err := candidateReleaseOverlay(root, output, "2026.11.9.5")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "go", "build", "-buildvcs=false", "-overlay", overlay, "-o", filepath.Join(output, "candidate"), ".")
-	cmd.Dir = root
-	if raw, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build pinned candidate: %v: %s", err, raw)
-	}
-	after, err := os.ReadFile(path)
-	if err != nil || string(before) != string(after) {
-		t.Fatal("overlay changed source")
-	}
-	derived, err := os.ReadFile(filepath.Join(output, "pinned-releases.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(derived), `if VersionLess("2026.11.9.5", r.Version)`) {
-		t.Fatal("release horizon was not pinned")
-	}
-}
-
-func TestPinnedInstallerPinsTheDelegatedRuntime(t *testing.T) {
-	raw := []byte("command = [str(binary), 'install', '--runtime']")
-	pinned, err := pinInstallerRuntime(raw, "2026.11.9.5")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(pinned), "'--policy', 'pinned', '--version', \"2026.11.9.5\"") {
-		t.Fatal(string(pinned))
 	}
 }

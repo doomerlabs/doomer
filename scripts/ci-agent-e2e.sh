@@ -74,38 +74,33 @@ if [[ ! $release =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}\.[1-9][0-9]*$ ]]; then
   exit 1
 fi
 candidate_args=(--candidate-release "$release")
-if [[ -n ${E2E_NPX_SKILL_SOURCE:-} ]]; then
-  candidate_args+=(--npx-skill-source "$E2E_NPX_SKILL_SOURCE")
-fi
-if [[ -n ${E2E_CANDIDATE_SOURCE:-} ]]; then
-  candidate_args+=(--candidate-source "$E2E_CANDIDATE_SOURCE")
-fi
-if [[ -n ${E2E_SKILLS_SOURCE:-} ]]; then
-  candidate_args+=(--skills-source "$E2E_SKILLS_SOURCE")
-else
-  candidate_args+=(--generated-bootstrap)
-fi
+# Capture the manager and skill from explicit local sources or reviewed commits.
+readarray -t onboarding_inputs < <(python3 - <<'INPUTS'
+import json
+p=json.load(open('tests/codexinstall/onboarding-inputs.json'))
+for k in ('node_repository','node_revision','skills_repository','skills_revision','skills_cli_version'): print(p[k])
+INPUTS
+)
+fetch_source() {
+  git clone --quiet --no-checkout "$1" "$3"
+  git -C "$3" checkout --quiet --detach "$2"
+  [[ $(git -C "$3" rev-parse HEAD) == "$2" ]]
+}
+node_source=${E2E_NODE_SOURCE:-$work/node-source}
+skills_source=${E2E_SKILLS_SOURCE:-$work/skills-source}
+if [[ -z ${E2E_NODE_SOURCE:-} ]]; then fetch_source "${onboarding_inputs[0]}" "${onboarding_inputs[1]}" "$node_source"; fi
+if [[ -z ${E2E_SKILLS_SOURCE:-} ]]; then fetch_source "${onboarding_inputs[2]}" "${onboarding_inputs[3]}" "$skills_source"; fi
+candidate_args+=(--node-source "$node_source" --skills-source "$skills_source" --skills-cli-version "${onboarding_inputs[4]}")
+if [[ -n ${E2E_CANDIDATE_SOURCE:-} ]]; then candidate_args+=(--candidate-source "$E2E_CANDIDATE_SOURCE"); fi
 # One contract for local population, CI preflight, and fallback execution.
 # Subscription mode does not consume the API dollar budget.
 scenario_budget=0.50
 extra_args=(--jobs "${E2E_JOBS:-4}")
 if [[ ${E2E_CACHE_ONLY:-0} == 1 ]]; then extra_args+=(--cache-only); fi
 if [[ ${E2E_FORCE_RUN:-0} == 1 ]]; then extra_args+=(--no-cache); fi
-if [[ ${E2E_EXPECT_POLICY_REGRESSION:-0} == 1 ]]; then extra_args+=(--expect-policy-regression); fi
 if [[ -n ${E2E_SUITE_SCENARIOS:-} ]]; then extra_args+=(--suite-scenarios "$E2E_SUITE_SCENARIOS"); fi
 run_result=0
 "$work/runner" "${agent_args[@]}" "${candidate_args[@]}" \
   --local-root "$work/homes" --scenario "$scenario" --budget "$scenario_budget" --suite-budget 20 "${extra_args[@]}" \
   --output "$reports/report.json" || run_result=$?
-if [[ ${E2E_EXPECT_POLICY_REGRESSION:-0} == 1 ]]; then
-  if [[ $run_result != 0 && ${E2E_CACHE_ONLY:-0} == 1 ]]; then exit "$run_result"; fi
-  python3 - "$reports/report.json" <<'PY'
-import json, sys
-r = json.load(open(sys.argv[1]))
-if r.get("passed") or r.get("error") != "deterministic prepare probe: missing policy after delivered offer" or not r.get("local_cleaned"):
-    raise SystemExit("Baseline did not reproduce the expected missing-policy failure: " + r.get("error", ""))
-print("Confirmed: released CLI fails the missing-policy recovery assertion; isolated fixture cleaned.")
-PY
-else
-  exit "$run_result"
-fi
+exit "$run_result"
