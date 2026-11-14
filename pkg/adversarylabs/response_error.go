@@ -118,6 +118,24 @@ func responseError(resp *http.Response, token string) error {
 			}
 		}
 	}
+	// An explicit compatibility failure already supplies its own recovery.
+	// Otherwise derive advice from the status and credential type, never prose.
+	if safeCode != "client_update_required" && safeCode != "client_policy_unavailable" {
+		switch resp.StatusCode {
+		case http.StatusUnauthorized:
+			if token == "" || IsAnonymousToken(token) {
+				message += "; anonymous access was rejected; check the configured service and upload approval (https://doomer.ai/docs/troubleshooting)"
+			} else {
+				message += "; sign in again with doomer login --device using the same service and profile"
+			}
+		case http.StatusForbidden:
+			message += "; check your access and upload approval for this operation before retrying"
+		case http.StatusTooManyRequests:
+			message += "; wait before retrying; a rate-limited request is not a completed review"
+		case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout, http.StatusInternalServerError:
+			message += "; the service could not complete this request; retry after it recovers and do not report the review as complete"
+		}
+	}
 	if token != "" {
 		message = strings.ReplaceAll(message, token, "[redacted]")
 	}

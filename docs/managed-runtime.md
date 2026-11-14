@@ -225,9 +225,7 @@ an older launcher to parse its flag. Task history remains local to each environm
 release signatures and expiry, task isolation, lock contention, interrupted
 submission recovery, response recording, revocation, native-discovery absence,
 and account-authenticated per-call review completion against an isolated API.
-The opt-in `tests/codexinstall` suite exercises real Codex headless and terminal
-clients on macOS and Linux. Desktop GUI, Claude and Cowork still require separate
-client coverage.
+Real-agent onboarding tests now live in [doomerlabs/agent-e2e](https://github.com/doomerlabs/agent-e2e). They exercise the new Node-managed `doomer` skill and direct Go hooks for Codex and Claude. The legacy managed runtime remains covered by its unit tests; it is not part of that replacement E2E suite.
 
 For isolated validation or an ephemeral harness, `DOOMER_RUNTIME_HOME` can name
 an absolute root for runtime binaries. Personal bootstraps remain in the actual

@@ -118,6 +118,7 @@ type NoticeCollector struct {
 	mu           sync.Mutex
 	path         string
 	writer       io.Writer
+	humanOutput  bool
 	api          string
 	notices      []ClientNotice
 	acknowledged map[string]time.Time
@@ -137,6 +138,15 @@ func WithNoticeCollector(ctx context.Context, configDir, api string, writer io.W
 	}
 	return context.WithValue(ctx, noticeContextKey{}, c)
 }
+
+// WithHumanNoticeOutput omits agent instructions from ordinary terminal diagnostics.
+func WithHumanNoticeOutput(ctx context.Context) context.Context {
+	if c, ok := ctx.Value(noticeContextKey{}).(*NoticeCollector); ok {
+		c.humanOutput = true
+	}
+	return ctx
+}
+
 func NoticesFromContext(ctx context.Context) []ClientNotice {
 	c, _ := ctx.Value(noticeContextKey{}).(*NoticeCollector)
 	if c == nil {
@@ -237,7 +247,9 @@ func FlushNotices(ctx context.Context) {
 			continue
 		}
 		n.AcknowledgeCommand = []string{"doomer", "--api-url", c.api, "notices", "--ack", n.ID, "--revision", fmt.Sprint(n.Revision)}
-		fmt.Fprint(c.writer, advisoryDeliveryPrelude(n))
+		if !c.humanOutput {
+			fmt.Fprint(c.writer, advisoryDeliveryPrelude(n))
+		}
 		fmt.Fprintln(c.writer, AdvisoryTerminal(n))
 	}
 }

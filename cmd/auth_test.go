@@ -54,6 +54,8 @@ func isolate(t *testing.T) adversarylabs.ConfigStore {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	t.Setenv("DOOMER_CONFIG_DIR", dir)
+	// Permission checks must never discover the developer's real installer grants.
+	t.Setenv("DOOMER_HOME", filepath.Join(dir, "installer"))
 	// Codex prefers CODEX_HOME over HOME, including when tests replace HOME.
 	// Never let integration tests write hooks into the invoking agent's profile.
 	t.Setenv("CODEX_HOME", filepath.Join(dir, "codex"))

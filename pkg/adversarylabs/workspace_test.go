@@ -80,3 +80,27 @@ func TestWorkspaceRequestsCompactStatusOnSubmitAndPoll(t *testing.T) {
 		t.Fatalf("poll: %+v %v (calls %d)", polled, err, calls)
 	}
 }
+
+func TestWorkspaceFeedbackRequiresRecordedAcknowledgment(t *testing.T) {
+	for _, recorded := range []bool{false, true} {
+		t.Run(map[bool]string{false: "unconfirmed", true: "recorded"}[recorded], func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/v1/reviews/workspace/review/feedback" || r.Header.Get("Authorization") != "Bearer token" {
+					t.Error("wrong feedback request")
+				}
+				var input map[string]any
+				if json.NewDecoder(r.Body).Decode(&input) != nil || input["status"] != "fixed" || input["reason"] != "Verified fix" || input["agrees"] != true {
+					t.Error("missing disposition")
+				}
+				_ = json.NewEncoder(w).Encode(map[string]bool{"recorded": recorded})
+			}))
+			defer server.Close()
+			client := NewClientWithBaseURL(ConfigStore{}, server.URL+"/api")
+			agrees := true
+			err := client.ReportWorkspaceLead(context.Background(), "token", "review", strings.Repeat("a", 64), "fixed", "Verified fix", &agrees)
+			if (err == nil) != recorded {
+				t.Fatalf("acknowledgment: %v", err)
+			}
+		})
+	}
+}

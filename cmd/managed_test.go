@@ -105,7 +105,7 @@ func TestManagedPerCallAccountReviewLifecycle(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{"id": "managed-review", "status": "failed", "full_review": map[string]any{"enabled": true, "status": "failed"}, "early_assessment": map[string]any{"status": "ready", "leads": []map[string]any{{"id": lead, "path": "new.txt", "line": 1, "concern": "verify"}}}})
 		case "/v1/reviews/workspace/managed-review/feedback":
 			feedback++
-			w.Write([]byte(`{}`))
+			w.Write([]byte(`{"recorded":true}`))
 		default:
 			t.Errorf("unexpected route %s", r.URL.Path)
 			w.WriteHeader(404)

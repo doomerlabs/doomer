@@ -494,3 +494,12 @@ func publishPaths(r *os.Root, binaryPath, recordPath, next, recordNext string, e
 	}
 	return backup, nil
 }
+
+// DownloadVerified resolves only bytes bound to a signed release catalog entry.
+// The caller owns replacement of a standalone executable, not managed state.
+func (u Updater) DownloadVerified(ctx context.Context, version string) ([]byte, error) {
+	if !shaPattern.MatchString(u.ExpectedManifestSHA256) {
+		return nil, fmt.Errorf("signed manifest digest is required")
+	}
+	return u.download(ctx, version)
+}

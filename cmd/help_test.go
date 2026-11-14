@@ -34,6 +34,9 @@ func TestEveryCommandHasMarkdownHelp(t *testing.T) {
 				t.Error("command needs a description")
 			}
 			command.Flags().VisitAll(func(flag *pflag.Flag) {
+				if flag.Hidden {
+					return
+				}
 				if !strings.Contains(output.String(), "--"+flag.Name) {
 					t.Errorf("help omitted flag --%s", flag.Name)
 				}
@@ -49,16 +52,18 @@ func TestEveryCommandHasMarkdownHelp(t *testing.T) {
 	if err := root.Help(); err != nil {
 		t.Fatal(err)
 	}
-	var checkIndex func(*cobra.Command)
-	checkIndex = func(command *cobra.Command) {
-		for _, child := range command.Commands() {
-			if !strings.Contains(output.String(), "`"+child.CommandPath()+"`") {
-				t.Errorf("root index omitted %s", child.CommandPath())
+	for _, child := range root.Commands() {
+		present := strings.Contains(output.String(), "`"+child.CommandPath()+"`")
+		if present == child.Hidden {
+			t.Errorf("unexpected visibility for %s", child.CommandPath())
+		}
+		for _, nested := range child.Commands() {
+			if strings.Contains(output.String(), "`"+nested.CommandPath()+"`") {
+				t.Errorf("root help expands %s", nested.CommandPath())
 			}
-			checkIndex(child)
 		}
 	}
-	checkIndex(root)
+
 }
 
 func TestManagedHelpThroughLauncher(t *testing.T) {

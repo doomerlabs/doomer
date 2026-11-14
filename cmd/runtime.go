@@ -47,7 +47,7 @@ func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr i
 	command, rest, findErr := root.Find(args)
 	// Installation, protocol checks, and diagnostics must remain available
 	// when the checkout pins a missing or broken release.
-	if findErr == nil && (command.Name() == "reset" && command.Parent() != nil && command.Parent().Name() == "onboard" || command.Name() == "prepare" || command.Name() == "task" || command.Parent() != nil && (command.Parent().Name() == "task" || command.Parent().Name() == "bootstrap") || command.Name() == "preflight" || command.Name() == "doctor" || command.Name() == "self-update" || command.Name() == "runtime-info" || command.Name() == "supervise") {
+	if findErr == nil && (command.Name() == "reset" && command.Parent() != nil && command.Parent().Name() == "onboard" || command.Name() == "prepare" || command.Name() == "task" || command.Parent() != nil && (command.Parent().Name() == "task" || command.Parent().Name() == "bootstrap") || command.Name() == "help" || command.Parent() == root && (command.Name() == "upgrade" || command.Name() == "status" || command.Name() == "notices") || command.Parent() != nil && command.Parent().Name() == "support" || command.Name() == "preflight" || command.Name() == "doctor" || command.Name() == "self-update" || command.Name() == "runtime-info" || command.Name() == "supervise") {
 		return false, nil
 	}
 
@@ -111,7 +111,7 @@ func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr i
 
 func newRuntimeInfoCommand() *cobra.Command {
 	return &cobra.Command{Use: "runtime-info", Hidden: true, Args: cobra.NoArgs, PersistentPreRunE: func(*cobra.Command, []string) error { return nil }, RunE: func(c *cobra.Command, _ []string) error {
-		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"protocol": 1, "managed_upgrade": 1, "watch_supervisor": 1, "managed_protocol": managed.Protocol, "instruction_sha256": managedInstructionDigest()})
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"protocol": 1, "capabilities": map[string]bool{"watchAgentHook": true, "hookNotices": true, "cliUpgrade": true}, "managed_upgrade": 1, "watch_supervisor": 1, "managed_protocol": managed.Protocol, "instruction_sha256": managedInstructionDigest()})
 	}}
 }
 
