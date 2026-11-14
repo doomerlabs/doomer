@@ -3,12 +3,16 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/doomerlabs/doomer/internal/livewatch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
 
@@ -100,5 +104,53 @@ func TestForegroundWatchRunsUntilCallerStopsIt(t *testing.T) {
 	entries, err := os.ReadDir(home)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("watch wrote runtime files: %v %v", entries, err)
+	}
+}
+
+func TestWatchConsentTracksUninstallAndAccountRecovery(t *testing.T) {
+	home := t.TempDir()
+	var fail atomic.Bool
+	fail.Store(true)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if fail.Load() {
+			http.Error(w, "unavailable", 503)
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"verified-account"}`))
+	}))
+	defer server.Close()
+	state := map[string]any{"grants": []any{map[string]any{"scope": "global", "api": server.URL, "approvedAt": time.Now()}}}
+	raw, _ := json.Marshal(state)
+	if err := os.WriteFile(filepath.Join(home, "state.json"), raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	config := watchConfiguration{ManagerHome: home}
+	config.API, config.Agent, config.Token = server.URL, "codex", "test-token"
+	environment := watchEnvironment{"DOOMER_TOKEN": "test-token"}
+	command := NewRootCommand()
+	command.SetContext(context.Background())
+	read := func() *livewatch.ConsentEvidence {
+		return currentWatchConsent(command, config, environment, "/credentials", "work")
+	}
+	if read() != nil {
+		t.Fatal("unverified account emitted consent")
+	}
+	fail.Store(false)
+	if got := read(); got == nil || got.Account != "verified-account" {
+		t.Fatal("account verification did not recover", got)
+	}
+	if err := os.WriteFile(filepath.Join(home, "uninstalling.json"), []byte("{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if read() != nil {
+		t.Fatal("uninstall retained consent evidence")
+	}
+	if err := os.Remove(filepath.Join(home, "uninstalling.json")); err != nil {
+		t.Fatal(err)
+	}
+	config.Token = "doomer_anon_" + strings.Repeat("a", 43)
+	environment["DOOMER_TOKEN"] = config.Token
+	if read() != nil {
+		t.Fatal("anonymous token emitted credential-derived evidence")
 	}
 }

@@ -198,33 +198,10 @@ func newForegroundWatchCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		account := "anonymous:" + watching.Key(config.Token)
-		if !adversarylabs.IsAnonymousToken(config.Token) {
-			// Evidence is emitted only for an account verified by the service.
-			verifyCtx, cancelVerify := context.WithTimeout(c.Context(), 5*time.Second)
-			who, verifyErr := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, config.API).Whoami(verifyCtx, config.Token)
-			cancelVerify()
-			if verifyErr == nil {
-				account = who.ID
-			} else {
-				account = ""
-			}
-		}
 		config.Consent = func() *livewatch.ConsentEvidence {
-			var current agentHookState
-			if account == "" || watching.Read(filepath.Join(config.ManagerHome, "state.json"), &current) != nil {
-				return nil
-			}
-			grant, e := agentHookConsent(current, config.API, config.Agent, "")
-			if e != nil {
-				return nil
-			}
-			token, e := watchToken(c, config.API, current, environment)
-			if e != nil || token != config.Token {
-				return nil
-			}
-			return &livewatch.ConsentEvidence{Account: account, Service: config.API, Profile: profile, CredentialDirectory: dir, Agent: config.Agent, AllRepositories: grant.AllRepositories, Repositories: grant.Directories, Includes: []string{"repository_snapshots", "task_context", "finding_responses"}}
+			return currentWatchConsent(c, config, environment, dir, profile)
 		}
+
 		signals := make(chan os.Signal, 1)
 		signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 		defer signal.Stop(signals)
@@ -259,4 +236,31 @@ func newForegroundWatchCommand() *cobra.Command {
 		return livewatch.Serve(ctx, config.Config, client, allowed)
 	}
 	return c
+}
+
+// Resolve evidence at read time so revocation and transient account failures do
+// not leave a stale grant attached to the running watch.
+func currentWatchConsent(c *cobra.Command, config watchConfiguration, environment watchEnvironment, dir, profile string) *livewatch.ConsentEvidence {
+	if _, err := os.Stat(filepath.Join(config.ManagerHome, "uninstalling.json")); err == nil || !os.IsNotExist(err) {
+		return nil
+	}
+	var current agentHookState
+	if watching.Read(filepath.Join(config.ManagerHome, "state.json"), &current) != nil {
+		return nil
+	}
+	grant, err := agentHookConsent(current, config.API, config.Agent, "")
+	if err != nil {
+		return nil
+	}
+	token, err := watchToken(c, config.API, current, environment)
+	if err != nil || token != config.Token || adversarylabs.IsAnonymousToken(token) {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+	defer cancel()
+	who, err := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, config.API).Whoami(ctx, token)
+	if err != nil || who.ID == "" {
+		return nil
+	}
+	return &livewatch.ConsentEvidence{Account: who.ID, Service: config.API, Profile: profile, CredentialDirectory: dir, Agent: config.Agent, AllRepositories: grant.AllRepositories, Repositories: grant.Directories, Includes: []string{"repository_snapshots", "task_context", "finding_responses"}}
 }
