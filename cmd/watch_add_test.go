@@ -99,3 +99,15 @@ func TestWatchCommandSurface(t *testing.T) {
 		t.Fatalf("unexpected findings commands: %v", children)
 	}
 }
+
+func TestExistingHookCommandResolvesToCanonicalAgent(t *testing.T) {
+	root := NewRootCommand()
+	canonical, _, err := root.Find([]string{"watch", "agent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	existing, remaining, err := root.Find([]string{"watch", "agent-hook"})
+	if err != nil || len(remaining) != 0 || existing != canonical {
+		t.Fatalf("installed hook no longer resolves: %v %v", remaining, err)
+	}
+}

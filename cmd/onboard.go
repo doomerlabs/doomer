@@ -18,12 +18,13 @@ import (
 // it does not install hooks or grant permission.
 func newOnboardCommand(app *application.App, api, profile *string) *cobra.Command {
 	var repo, agent, session string
-	var taskStdin, restartRequired, checkHooks, refresh bool
+	var taskStdin, restartRequired, checkHooks, refresh, resume bool
 	c := &cobra.Command{Use: "onboard", Short: "Set up repository reviews and preserve a task across hook installation", Args: cobra.NoArgs}
 	c.Flags().StringVar(&repo, "repo", ".", "repository to review")
 	c.Flags().StringVar(&agent, "agent", "codex", "coding agent: codex or claude")
 	c.Flags().StringVar(&session, "session", "", "current coding-agent session (Codex defaults to CODEX_THREAD_ID)")
 	c.Flags().BoolVar(&taskStdin, "task-stdin", false, "read the original task from stdin for hook activation or restart")
+	c.Flags().BoolVar(&resume, "resume", false, "explicitly resume a paused legacy watcher")
 	c.Flags().BoolVar(&refresh, "refresh", false, "gracefully refresh a running managed watcher after a CLI update")
 	c.Flags().BoolVar(&restartRequired, "restart", false, "Codex: the CLI was installed during this turn and needs fresh prompt capture")
 	c.Flags().BoolVar(&checkHooks, "check-hooks", false, "verify live Codex or Claude hooks without changing setup")
@@ -31,6 +32,8 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 	c.MarkFlagsMutuallyExclusive("check-hooks", "task-stdin")
 	c.MarkFlagsMutuallyExclusive("check-hooks", "restart")
 	c.MarkFlagsMutuallyExclusive("check-hooks", "refresh")
+	c.MarkFlagsMutuallyExclusive("check-hooks", "resume")
+	c.MarkFlagsMutuallyExclusive("refresh", "resume")
 	c.MarkFlagsMutuallyExclusive("refresh", "restart")
 	c.MarkFlagsMutuallyExclusive("refresh", "task-stdin")
 	c.RunE = func(c *cobra.Command, _ []string) error {
@@ -122,7 +125,11 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 		start.SetIn(c.InOrStdin())
 		start.SetOut(c.OutOrStdout())
 		start.SetErr(c.ErrOrStderr())
-		if err := start.ParseFlags([]string{"--agent=" + agent, "--browser"}); err != nil {
+		flags := []string{"--agent=" + agent, "--browser"}
+		if resume {
+			flags = append(flags, "--resume")
+		}
+		if err := start.ParseFlags(flags); err != nil {
 			return err
 		}
 		if err := start.RunE(start, []string{path}); err != nil {

@@ -203,6 +203,7 @@ func inspectWatch(app *application.App, api, profile, path string) (watchStatus,
 // The hidden legacy onboarding command still needs its internal startup path.
 // This helper is not registered as a watch subcommand.
 func newOnboardingWatchCommand(app *application.App, api, profile *string) *cobra.Command {
+	var resume bool
 	start := &cobra.Command{Use: "onboard", Args: cobra.MaximumNArgs(1), RunE: func(c *cobra.Command, args []string) error {
 		path := "."
 		if len(args) > 0 {
@@ -218,8 +219,8 @@ func newOnboardingWatchCommand(app *application.App, api, profile *string) *cobr
 		}
 		pauseBefore, _ := os.ReadFile(filepath.Join(sharedWatchRoot(root), "paused.json"))
 		localPauseBefore, _ := os.ReadFile(filepath.Join(root, "paused.json"))
-		if userPaused(root) || watching.RepositoryRemoved(root, path) {
-			return fmt.Errorf("watching is paused; onboarding does not resume a paused watcher")
+		if (userPaused(root) || watching.RepositoryRemoved(root, path)) && !resume {
+			return fmt.Errorf("watching is paused; run doomer onboard --resume to resume explicitly")
 		}
 		cfg, _, err := prepareWatch(c, app, api, profile, []string{path})
 		if err != nil {
@@ -232,8 +233,18 @@ func newOnboardingWatchCommand(app *application.App, api, profile *string) *cobr
 		defer lock.Close()
 		pauseAfter, _ := os.ReadFile(filepath.Join(sharedWatchRoot(root), "paused.json"))
 		localPauseAfter, _ := os.ReadFile(filepath.Join(root, "paused.json"))
-		if !bytes.Equal(pauseBefore, pauseAfter) || !bytes.Equal(localPauseBefore, localPauseAfter) || userPaused(root) {
+		if !bytes.Equal(pauseBefore, pauseAfter) || !bytes.Equal(localPauseBefore, localPauseAfter) || (userPaused(root) && !resume) {
 			return fmt.Errorf("watching was paused during setup; onboarding was cancelled")
+		}
+		if resume {
+			for _, directory := range []string{root, sharedWatchRoot(root)} {
+				if err := os.Remove(filepath.Join(directory, "paused.json")); err != nil && !os.IsNotExist(err) {
+					return err
+				}
+			}
+			if err := watching.SetRepositorySelection(root, path, false); err != nil {
+				return err
+			}
 		}
 		if err := resumeIdleRuntime(c.Context(), root); err != nil {
 			return err
@@ -268,6 +279,7 @@ func newOnboardingWatchCommand(app *application.App, api, profile *string) *cobr
 		return nil
 	}}
 	addWatchSetupFlags(start)
+	start.Flags().BoolVar(&resume, "resume", false, "explicitly resume a paused legacy watcher")
 	return start
 }
 
@@ -418,8 +430,10 @@ func refreshWorkingDirectory(previous watchProcess) (string, error) {
 	return path, nil
 }
 
+var managedWatchExecutable = os.Executable
+
 func startManagedWatch(ctx context.Context, root, path, api, profile string, directories []string) error {
-	exe, err := os.Executable()
+	exe, err := managedWatchExecutable()
 	if err != nil {
 		return err
 	}

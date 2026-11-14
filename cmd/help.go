@@ -114,8 +114,10 @@ Each command's --help shows its own commands, flags and examples.`
 		"watch findings respond": "Read finding responses from stdin for a turn-scoped watcher request",
 		"watch supervise":        "Run the managed background watcher supervisor for the supplied session",
 	} {
-		command, _, _ := root.Find(strings.Fields(path))
-		command.Short = description
+		command, remaining, err := root.Find(strings.Fields(path))
+		if err == nil && len(remaining) == 0 && command.CommandPath() == root.CommandPath()+" "+path {
+			command.Short = description
+		}
 	}
 	descriptions := map[string]string{
 		"submit":             "Upload the current source and start review for the existing task",

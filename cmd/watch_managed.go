@@ -102,7 +102,7 @@ func newManagedWatchCommand(app *application.App, api, profile *string) *cobra.C
 		}
 		defer lock.Close()
 		if paused(root) {
-			return fmt.Errorf("watching is paused; this managed watcher cannot resume it")
+			return fmt.Errorf("watching is paused; run doomer onboard --resume to resume explicitly")
 		}
 		watchStarted := time.Now()
 		watchSession := watchStarted.UTC().Format(time.RFC3339Nano)
