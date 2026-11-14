@@ -253,14 +253,22 @@ func currentWatchConsent(c *cobra.Command, config watchConfiguration, environmen
 		return nil
 	}
 	token, err := watchToken(c, config.API, current, environment)
-	if err != nil || token != config.Token || adversarylabs.IsAnonymousToken(token) {
+	if err != nil || token != config.Token {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
-	defer cancel()
-	who, err := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, config.API).Whoami(ctx, token)
-	if err != nil || who.ID == "" {
-		return nil
+	// Anonymous identities use the same non-secret scope fingerprint as the
+	// policy proposal and managed consent receipts. The 256-bit token itself
+	// is never included in evidence. Signed-in identities require Whoami.
+	account := "anonymous:" + watching.Key(token)
+	if !adversarylabs.IsAnonymousToken(token) {
+		ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+		defer cancel()
+		who, err := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, config.API).Whoami(ctx, token)
+		if err != nil || who.ID == "" {
+			return nil
+		}
+		account = who.ID
 	}
-	return &livewatch.ConsentEvidence{Account: who.ID, Service: config.API, Profile: profile, CredentialDirectory: dir, Agent: config.Agent, AllRepositories: grant.AllRepositories, Repositories: grant.Directories, Includes: []string{"repository_snapshots", "task_context", "finding_responses"}}
+
+	return &livewatch.ConsentEvidence{Account: account, Service: config.API, Profile: profile, CredentialDirectory: dir, Agent: config.Agent, AllRepositories: grant.AllRepositories, Repositories: grant.Directories, Includes: []string{"repository_snapshots", "task_context", "finding_responses"}}
 }

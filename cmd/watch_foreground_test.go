@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/doomerlabs/doomer/internal/livewatch"
+	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
 
@@ -150,7 +151,18 @@ func TestWatchConsentTracksUninstallAndAccountRecovery(t *testing.T) {
 	}
 	config.Token = "doomer_anon_" + strings.Repeat("a", 43)
 	environment["DOOMER_TOKEN"] = config.Token
+	evidence := read()
+	if evidence == nil || evidence.Account != "anonymous:"+watching.Key(config.Token) {
+		t.Fatal("anonymous scope does not match policy", evidence)
+	}
+	raw, _ = json.Marshal(evidence)
+	if strings.Contains(string(raw), config.Token) {
+		t.Fatal("anonymous token disclosed")
+	}
+	if err := os.WriteFile(filepath.Join(home, "uninstalling.json"), []byte("{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if read() != nil {
-		t.Fatal("anonymous token emitted credential-derived evidence")
+		t.Fatal("uninstall retained anonymous consent")
 	}
 }
