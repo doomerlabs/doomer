@@ -107,7 +107,7 @@ func TestWatchCommandsGoOnlyToPromptContext(t *testing.T) {
 		t.Fatal(specific)
 	}
 	text := specific["additionalContext"].(string)
-	if !strings.Contains(text, "watch findings ls --control "+key) || !strings.Contains(text, "watch results --control "+key) || !strings.Contains(text, "ONE final answer") {
+	if !strings.Contains(text, "watch findings ls --control "+key) || !strings.Contains(text, "watch results --control "+key) || !strings.Contains(text, "ONE final answer") || !strings.Contains(text, "request normal sandbox escalation") || !strings.Contains(text, "Respect any denial") {
 		t.Fatal("missing command in model context")
 	}
 }
