@@ -102,6 +102,19 @@ func TestOnboardReusesConsentAndWatcherWithoutLosingInstructions(t *testing.T) {
 			if err := c.RunE(c, nil); err == nil {
 				t.Fatal("onboarding resumed a paused watcher")
 			}
+			watching.Write(filepath.Join(sharedWatchRoot(root), "paused.json"), true)
+			if err := c.Flags().Set("resume", "true"); err != nil {
+				t.Fatal(err)
+			}
+			c.SetIn(strings.NewReader("Add pagination"))
+			if err := c.RunE(c, nil); err != nil {
+				t.Fatal(err)
+			}
+			for _, dir := range []string{root, sharedWatchRoot(root)} {
+				if _, err := os.Stat(filepath.Join(dir, "paused.json")); !os.IsNotExist(err) {
+					t.Fatalf("explicit resume left pause marker: %v", err)
+				}
+			}
 		})
 	}
 }

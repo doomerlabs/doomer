@@ -2,6 +2,7 @@ package livewatch
 
 import (
 	"context"
+	"fmt"
 
 	"os"
 	"os/exec"
@@ -19,12 +20,16 @@ import (
 type fakeClient struct {
 	mu      sync.Mutex
 	inputs  []adversarylabs.WorkspaceSubmission
+	uploads int
 	started chan adversarylabs.WorkspaceSubmission
 	block   bool
 	release <-chan struct{}
 }
 
 func (f *fakeClient) UploadWorkspaceTree(context.Context, string, string, []sourcesnapshot.Entry, map[string][]byte) (string, string, error) {
+	f.mu.Lock()
+	f.uploads++
+	f.mu.Unlock()
 	return "repo", "snapshot", nil
 }
 func (f *fakeClient) StartWorkspace(ctx context.Context, _ string, in adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {
@@ -172,13 +177,16 @@ func TestRepositoriesCreatedMidTurnAndApprovalBoundaries(t *testing.T) {
 
 func TestSeparateInvocationsSubmitIdenticalContents(t *testing.T) {
 	repo := makeRepository(t, t.TempDir(), "repo")
-	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("same edit\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
 	client := &fakeClient{started: make(chan adversarylabs.WorkspaceSubmission, 10)}
 	namespace := t.TempDir()
 	for _, turn := range []string{"one", "two"} {
+		if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("before this turn\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
 		cfg, done := startWorker(t, repo, client, time.Second, func(context.Context, string) bool { return true }, namespace+turn)
+		if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("same edit\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
 		stopWorker(t, cfg, done)
 	}
 	first, second := <-client.started, <-client.started
@@ -189,11 +197,12 @@ func TestSeparateInvocationsSubmitIdenticalContents(t *testing.T) {
 
 func TestStopDeadlineCancelsPendingWork(t *testing.T) {
 	repo := makeRepository(t, t.TempDir(), "repo")
+
+	client := &fakeClient{block: true, started: make(chan adversarylabs.WorkspaceSubmission, 1)}
+	cfg, done := startWorker(t, repo, client, 50*time.Millisecond, func(context.Context, string) bool { return true })
 	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("edit\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	client := &fakeClient{block: true, started: make(chan adversarylabs.WorkspaceSubmission, 1)}
-	cfg, done := startWorker(t, repo, client, 50*time.Millisecond, func(context.Context, string) bool { return true })
 	result := stopWorker(t, cfg, done)
 	if len(result.Results) != 1 || result.Results[0].Status != "unavailable" {
 		t.Fatalf("expected explicit timeout: %+v", result)
@@ -202,12 +211,13 @@ func TestStopDeadlineCancelsPendingWork(t *testing.T) {
 
 func TestStopDrainsLatestEditBeforeWorkerExits(t *testing.T) {
 	repo := makeRepository(t, t.TempDir(), "repo")
-	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("first edit\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
+
 	release := make(chan struct{})
 	client := &fakeClient{release: release, started: make(chan adversarylabs.WorkspaceSubmission, 5)}
 	cfg, done := startWorker(t, repo, client, 2*time.Second, func(context.Context, string) bool { return true })
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("first edit\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	select {
 	case <-client.started:
 	case <-time.After(time.Second):
@@ -329,5 +339,62 @@ func TestReviewRetainsPublicLinkWhenPollingOmitsIt(t *testing.T) {
 	result := review(context.Background(), &publicLinkClient{}, Config{ID: "watch", API: "http://localhost:3000/api", Token: "test"}, repo, snapshot, 1)
 	if result.Status != "ready" || result.URL != "https://dev.example.exe.xyz/look-closer/org/repo/"+strings.Repeat("a", 64) {
 		t.Fatalf("review link lost: %+v", result)
+	}
+}
+
+func TestWatchStartupDoesNotUploadExistingChanges(t *testing.T) {
+	for _, dirty := range []bool{false, true} {
+		t.Run(fmt.Sprintf("dirty=%t", dirty), func(t *testing.T) {
+			repo := makeRepository(t, t.TempDir(), "repo")
+			if dirty {
+				if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("existing edit\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(repo, "untracked.txt"), []byte("existing new file\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			client := &fakeClient{}
+			for turn := 0; turn < 2; turn++ {
+				cfg, done := startWorker(t, repo, client, time.Second, func(context.Context, string) bool { return true })
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				checkpoint, err := Call(ctx, cfg.ControlKey, "checkpoint")
+				cancel()
+				if err != nil || len(checkpoint.Results) != 0 {
+					t.Fatalf("unchanged checkpoint: %+v %v", checkpoint, err)
+				}
+				result := stopWorker(t, cfg, done)
+				if len(result.Results) != 0 {
+					t.Fatalf("unchanged stop: %+v", result)
+				}
+			}
+			client.mu.Lock()
+			defer client.mu.Unlock()
+			if client.uploads != 0 || len(client.inputs) != 0 {
+				t.Fatalf("startup sent %d uploads and %d reviews", client.uploads, len(client.inputs))
+			}
+		})
+	}
+}
+
+func TestDirtyWatchReviewsAfterNewFileChange(t *testing.T) {
+	repo := makeRepository(t, t.TempDir(), "repo")
+	file := filepath.Join(repo, "file.txt")
+	if err := os.WriteFile(file, []byte("existing edit\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{}
+	cfg, done := startWorker(t, repo, client, time.Second, func(context.Context, string) bool { return true })
+	if err := os.WriteFile(file, []byte("changed after startup\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result := stopWorker(t, cfg, done)
+	if len(result.Results) != 1 || result.Results[0].Status != "ready" {
+		t.Fatalf("missing post-start review: %+v", result)
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.uploads == 0 || len(client.inputs) != 1 || !strings.Contains(client.inputs[0].Diff, "changed after startup") {
+		t.Fatalf("wrong post-start submission: uploads=%d reviews=%+v", client.uploads, client.inputs)
 	}
 }

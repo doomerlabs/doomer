@@ -200,9 +200,11 @@ func inspectWatch(app *application.App, api, profile, path string) (watchStatus,
 	return s, nil
 }
 
-func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api, profile *string) {
+// The hidden legacy onboarding command still needs its internal startup path.
+// This helper is not registered as a watch subcommand.
+func newOnboardingWatchCommand(app *application.App, api, profile *string) *cobra.Command {
 	var resume bool
-	start := &cobra.Command{Use: "start [directory]", Short: "Approve this repository and start or reuse a background watcher", Args: cobra.MaximumNArgs(1), RunE: func(c *cobra.Command, args []string) error {
+	start := &cobra.Command{Use: "onboard", Args: cobra.MaximumNArgs(1), RunE: func(c *cobra.Command, args []string) error {
 		path := "."
 		if len(args) > 0 {
 			path = args[0]
@@ -218,7 +220,7 @@ func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api,
 		pauseBefore, _ := os.ReadFile(filepath.Join(sharedWatchRoot(root), "paused.json"))
 		localPauseBefore, _ := os.ReadFile(filepath.Join(root, "paused.json"))
 		if (userPaused(root) || watching.RepositoryRemoved(root, path)) && !resume {
-			return fmt.Errorf("watching is paused; use watch start --resume to explicitly resume")
+			return fmt.Errorf("watching is paused; run doomer onboard --resume to resume explicitly")
 		}
 		cfg, _, err := prepareWatch(c, app, api, profile, []string{path})
 		if err != nil {
@@ -231,8 +233,8 @@ func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api,
 		defer lock.Close()
 		pauseAfter, _ := os.ReadFile(filepath.Join(sharedWatchRoot(root), "paused.json"))
 		localPauseAfter, _ := os.ReadFile(filepath.Join(root, "paused.json"))
-		if !bytes.Equal(pauseBefore, pauseAfter) || !bytes.Equal(localPauseBefore, localPauseAfter) || userPaused(root) && !resume {
-			return fmt.Errorf("watching was paused during setup; use watch start --resume when ready")
+		if !bytes.Equal(pauseBefore, pauseAfter) || !bytes.Equal(localPauseBefore, localPauseAfter) || (userPaused(root) && !resume) {
+			return fmt.Errorf("watching was paused during setup; onboarding was cancelled")
 		}
 		if resume {
 			for _, directory := range []string{root, sharedWatchRoot(root)} {
@@ -263,7 +265,7 @@ func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api,
 		}
 		if running {
 			if len(current.Directories) != 0 && !containsPath(current.Directories, path) {
-				return fmt.Errorf("the foreground watcher does not cover this repository; stop it before using watch start")
+				return fmt.Errorf("the foreground watcher does not cover this repository; stop it before onboarding")
 			}
 			fmt.Fprintln(c.OutOrStdout(), "Reusing the running watcher.")
 		} else {
@@ -277,7 +279,11 @@ func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api,
 		return nil
 	}}
 	addWatchSetupFlags(start)
-	start.Flags().BoolVar(&resume, "resume", false, "explicitly resume a paused watcher or repository")
+	start.Flags().BoolVar(&resume, "resume", false, "explicitly resume a paused legacy watcher")
+	return start
+}
+
+func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api, profile *string) {
 	var jsonOutput bool
 	status := &cobra.Command{Use: "status [directory]", Short: "Inspect repository consent, hooks, and watcher readiness", Args: cobra.MaximumNArgs(1), RunE: func(c *cobra.Command, args []string) error {
 		path := "."
@@ -299,25 +305,7 @@ func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api,
 		return nil
 	}}
 	status.Flags().BoolVar(&jsonOutput, "json", false, "emit structured readiness without changing setup")
-	stop := &cobra.Command{Use: "stop", Short: "Pause this profile's watcher without revoking upload permission", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
-		root, _, err := watchPaths(*api, *profile)
-		if err != nil {
-			return err
-		}
-		lock, err := lifecycleLock(c.Context(), root)
-		if err != nil {
-			return err
-		}
-		defer lock.Close()
-		if err := watching.Write(filepath.Join(sharedWatchRoot(root), "paused.json"), time.Now()); err != nil {
-			return err
-		}
-		if err := waitWatch(c.Context(), func() (bool, error) { _, live, err := runningWatch(root); return !live, err }); err != nil {
-			return err
-		}
-		fmt.Fprintln(c.OutOrStdout(), "Watching paused for this profile. Use watch start --resume to resume.")
-		return nil
-	}}
+
 	revoke := &cobra.Command{Use: "revoke [directory]", Short: "Revoke this repository's upload permission", Args: cobra.MaximumNArgs(1), RunE: func(c *cobra.Command, args []string) error {
 		path := "."
 		if len(args) > 0 {
@@ -372,10 +360,10 @@ func addWatchLifecycleCommands(parent *cobra.Command, app *application.App, api,
 		if err := waitWatch(c.Context(), func() (bool, error) { _, live, err := runningWatch(root); return !live, err }); err != nil {
 			return err
 		}
-		fmt.Fprintf(c.OutOrStdout(), "Upload permission revoked for %s and its linked worktrees. The profile's watcher has stopped; use watch start in any remaining approved repository to restart it.\n", path)
+		fmt.Fprintf(c.OutOrStdout(), "Upload permission revoked for %s and its linked worktrees. The profile's watcher has stopped.\n", path)
 		return nil
 	}}
-	parent.AddCommand(start, status, stop, revoke)
+	parent.AddCommand(status, revoke)
 }
 
 func containsPath(paths []string, path string) bool {
@@ -442,8 +430,10 @@ func refreshWorkingDirectory(previous watchProcess) (string, error) {
 	return path, nil
 }
 
+var managedWatchExecutable = os.Executable
+
 func startManagedWatch(ctx context.Context, root, path, api, profile string, directories []string) error {
-	exe, err := os.Executable()
+	exe, err := managedWatchExecutable()
 	if err != nil {
 		return err
 	}

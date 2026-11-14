@@ -123,30 +123,7 @@ func addWatchSetupFlags(c *cobra.Command) {
 }
 
 func addWatchRepositoryCommands(parent *cobra.Command, app *application.App, api, profile *string) {
-	var worktrees bool
-	list := &cobra.Command{Use: "ls", Short: "List watched repositories", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
-		root, file, err := watchPaths(*api, *profile)
-		if err != nil {
-			return err
-		}
-		var cfg watching.Config
-		if err = watching.Read(file, &cfg); err != nil {
-			if os.IsNotExist(err) {
-				fmt.Fprintln(c.OutOrStdout(), "No watched repositories. Run doomer watch to get started.")
-				return nil
-			}
-			return err
-		}
-		repos, err := watching.Repositories(root, cfg)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(c.OutOrStdout(), "Doomer watch · %s · %s\n", *profile, *api)
-		return renderWatchRepositories(c, root, cfg, repos, worktrees)
-
-	}}
-	list.Flags().BoolVar(&worktrees, "worktrees", false, "show each repository’s checkouts as a tree")
-	add := &cobra.Command{Use: "add <directories...>", Short: "Enable a repository and its linked worktrees", Args: cobra.MinimumNArgs(1), RunE: func(c *cobra.Command, args []string) error {
+	add := &cobra.Command{Use: "add <directories...>", Short: "Add a repository; use --control to target a running watcher", Args: cobra.MinimumNArgs(1), RunE: func(c *cobra.Command, args []string) error {
 		_, _, err := prepareWatch(c, app, api, profile, args)
 		if err != nil {
 			return err
@@ -170,6 +147,7 @@ func addWatchRepositoryCommands(parent *cobra.Command, app *application.App, api
 		}
 		return nil
 	}}
+	attachWatchAddControl(add)
 	addWatchSetupFlags(add)
 	remove := &cobra.Command{Use: "rm <directories...>", Short: "Stop watching a repository and all its worktrees", Args: cobra.MinimumNArgs(1), RunE: func(c *cobra.Command, args []string) error {
 		root, _, err := watchPaths(*api, *profile)
@@ -206,5 +184,5 @@ func addWatchRepositoryCommands(parent *cobra.Command, app *application.App, api
 		}
 		return setup.RunE(setup, nil)
 	}}
-	parent.AddCommand(list, add, remove, uninstall)
+	parent.AddCommand(add, remove, uninstall)
 }

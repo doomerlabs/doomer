@@ -71,7 +71,7 @@ func TestAgentHookWorkersArePerTurnAndLeaveNoRuntimeFiles(t *testing.T) {
 		}
 		input, _ := json.Marshal(watching.HookInput{Event: event, Session: "session", Turn: turn, CWD: cwd, Prompt: "test"})
 		c := NewRootCommand()
-		c.SetArgs([]string{"watch", "agent-hook", "--manager-home", home, "--agent", agent})
+		c.SetArgs([]string{"watch", "agent", "--manager-home", home, "--agent", agent})
 		c.SetIn(bytes.NewReader(input))
 		var output bytes.Buffer
 		c.SetOut(&output)
@@ -88,7 +88,7 @@ func TestAgentHookWorkersArePerTurnAndLeaveNoRuntimeFiles(t *testing.T) {
 					Context string `json:"additionalContext"`
 				} `json:"hookSpecificOutput"`
 			}
-			wantContext := "watch instructions --control"
+			wantContext := "watch findings ls --control"
 			if agent == "claude" {
 				wantContext = "Stop hook will deliver the review report"
 			}
@@ -291,7 +291,7 @@ func TestAgentHookLeavesDirectoryRoutingToWatch(t *testing.T) {
 	t.Setenv("DOOMER_API_URL", "https://doomer.ai/api")
 	t.Setenv("DOOMER_TOKEN", "production-token")
 	t.Setenv("DOOMER_CONFIG_DIR", t.TempDir())
-	state := `{"version":1,"api":"https://doomer.ai/api","identities":{"http://localhost:3000/api":"local-token"},"grants":[{"scope":"global","api":"http://localhost:3000/api","approvedAt":"2026-11-12T12:00:00Z"}]}`
+	state := `{"version":1,"hookRoot":"/obsolete-global-root","api":"https://doomer.ai/api","identities":{"http://localhost:3000/api":"local-token"},"grants":[{"scope":"global","api":"http://localhost:3000/api","approvedAt":"2026-11-12T12:00:00Z"}]}`
 	if err := os.WriteFile(filepath.Join(home, "state.json"), []byte(state), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +300,7 @@ func TestAgentHookLeavesDirectoryRoutingToWatch(t *testing.T) {
 	}
 	input, _ := json.Marshal(watching.HookInput{Event: "UserPromptSubmit", Session: "directory-test", Turn: "one", CWD: root})
 	c := NewRootCommand()
-	c.SetArgs([]string{"watch", "agent-hook", "--manager-home", home, "--agent", "codex"})
+	c.SetArgs([]string{"watch", "agent", "--manager-home", home, "--agent", "codex"})
 	c.SetIn(bytes.NewReader(input))
 	var out bytes.Buffer
 	c.SetOut(&out)
@@ -315,7 +315,7 @@ func TestAgentHookLeavesDirectoryRoutingToWatch(t *testing.T) {
 	defer cancel()
 	defer livewatch.Call(ctx, id.Key(), "cancel")
 	response, live := livewatch.Available(ctx, id.Key())
-	if !live || response.API != local {
+	if !live || response.API != local || response.Directory != root {
 		t.Fatalf("watch did not select localhost: %+v", response)
 	}
 }

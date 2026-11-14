@@ -104,18 +104,20 @@ Each command's --help shows its own commands, flags and examples.`
 	}
 
 	for path, description := range map[string]string{
-		"agent-hook":        "Process an installed agent lifecycle hook from JSON on stdin",
-		"bootstrap status":  "Inspect installed bootstrap wrappers and available revisions",
-		"bootstrap upgrade": "Apply an offered bootstrap wrapper upgrade with explicit acceptance",
-		"bootstrap defer":   "Save a deferral of the current bootstrap revision in the selected scope",
-		"runtime-info":      "Print runtime protocol capabilities and the instruction digest as JSON",
-		"watch hook":        "Process watcher lifecycle hook JSON from stdin",
-		"watch hypotheses":  "Read edit hypotheses from stdin for a single-use watcher request",
-		"watch respond":     "Read finding responses from stdin for a turn-scoped watcher request",
-		"watch supervise":   "Run the managed background watcher supervisor for the supplied session",
+		"agent-hook":             "Process an installed agent lifecycle hook from JSON on stdin",
+		"bootstrap status":       "Inspect installed bootstrap wrappers and available revisions",
+		"bootstrap upgrade":      "Apply an offered bootstrap wrapper upgrade with explicit acceptance",
+		"bootstrap defer":        "Save a deferral of the current bootstrap revision in the selected scope",
+		"runtime-info":           "Print runtime protocol capabilities and the instruction digest as JSON",
+		"watch hook":             "Process watcher lifecycle hook JSON from stdin",
+		"watch hypotheses":       "Read edit hypotheses from stdin for a single-use watcher request",
+		"watch findings respond": "Read finding responses from stdin for a turn-scoped watcher request",
+		"watch supervise":        "Run the managed background watcher supervisor for the supplied session",
 	} {
-		command, _, _ := root.Find(strings.Fields(path))
-		command.Short = description
+		command, remaining, err := root.Find(strings.Fields(path))
+		if err == nil && len(remaining) == 0 && command.CommandPath() == root.CommandPath()+" "+path {
+			command.Short = description
+		}
 	}
 	descriptions := map[string]string{
 		"submit":             "Upload the current source and start review for the existing task",

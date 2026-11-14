@@ -76,6 +76,7 @@ type Response struct {
 type request struct {
 	Key            string     `json:"key"`
 	Operation      string     `json:"operation"`
+	Directory      string     `json:"directory,omitempty"`
 	Feedback       []Feedback `json:"feedback,omitempty"`
 	NoticeID       string     `json:"notice_id,omitempty"`
 	NoticeRevision int        `json:"notice_revision,omitempty"`

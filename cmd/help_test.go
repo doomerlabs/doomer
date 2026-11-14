@@ -110,3 +110,15 @@ func TestManagedHelpThroughLauncher(t *testing.T) {
 		})
 	}
 }
+
+func TestHelpDescriptionsDoNotRelabelPartialMatches(t *testing.T) {
+	root := NewRootCommand()
+	watch, _, _ := root.Find([]string{"watch"})
+	findings, _, _ := root.Find([]string{"watch", "findings"})
+	watch.RemoveCommand(findings)
+	before := watch.Short
+	configureCommandHelp(root)
+	if watch.Short != before {
+		t.Fatalf("partial lookup replaced watch help: %q", watch.Short)
+	}
+}

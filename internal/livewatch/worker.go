@@ -32,6 +32,8 @@ type completion struct {
 	result  Result
 }
 type control struct {
+	addDirectory string
+
 	cancel         bool
 	checkpoint     bool
 	finish         bool
@@ -46,10 +48,10 @@ type worker struct {
 	cfg           Config
 	client        Client
 	allowed       func(context.Context, string) bool
+	directories   []string
 	repos         map[string]*repository
 	noticeAcks    map[string]bool
 	findings      map[string]Finding
-	direct        string
 	watcher       *fsnotify.Watcher
 	controls      chan control
 	completed     chan completion
@@ -76,13 +78,12 @@ func Serve(ctx context.Context, cfg Config, client Client, allowed func(context.
 func serve(ctx context.Context, listener net.Listener, cfg Config, client Client, allowed func(context.Context, string) bool) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	w := &worker{cfg: cfg, client: client, allowed: allowed, repos: map[string]*repository{}, findings: map[string]Finding{}, noticeAcks: map[string]bool{}, controls: make(chan control), completed: make(chan completion, 64), slots: make(chan struct{}, 4)}
+	w := &worker{directories: []string{cfg.Directory}, cfg: cfg, client: client, allowed: allowed, repos: map[string]*repository{}, findings: map[string]Finding{}, noticeAcks: map[string]bool{}, controls: make(chan control), completed: make(chan completion, 64), slots: make(chan struct{}, 4)}
 	w.closeListener = func() error { return nil }
 	if listener != nil {
 		w.closeListener = listener.Close
 	}
 	defer func() { cancel(); w.jobs.Wait() }()
-	w.direct, _ = Root(ctx, cfg.Directory)
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err
@@ -121,14 +122,18 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 						_ = json.NewEncoder(conn).Encode(Response{Error: "at least one finding response is required"})
 						return
 					}
+					if req.Operation == "add" && req.Directory == "" {
+						_ = json.NewEncoder(conn).Encode(Response{Error: "directory is required"})
+						return
+					}
 					if req.Operation == "status" {
 						_ = json.NewEncoder(conn).Encode(Response{Ready: true, API: cfg.API, Directory: cfg.Directory})
 						return
 					}
-					if req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" {
+					if req.Operation != "add" && req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" {
 						return
 					}
-					command := control{results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, noticeID: req.NoticeID, noticeRevision: req.NoticeRevision, reply: make(chan Response, 1), sent: make(chan struct{})}
+					command := control{addDirectory: req.Directory, results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, noticeID: req.NoticeID, noticeRevision: req.NoticeRevision, reply: make(chan Response, 1), sent: make(chan struct{})}
 					select {
 					case w.controls <- command:
 					case <-ctx.Done():
@@ -162,8 +167,8 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 	return w.run(ctx)
 }
 
-func (w *worker) watchDirectories(ctx context.Context) error {
-	return filepath.WalkDir(w.cfg.Directory, func(path string, entry os.DirEntry, err error) error {
+func (w *worker) watchDirectories(ctx context.Context, directory string) error {
+	return filepath.WalkDir(directory, func(path string, entry os.DirEntry, err error) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -176,7 +181,7 @@ func (w *worker) watchDirectories(ctx context.Context) error {
 		if !entry.IsDir() {
 			return nil
 		}
-		if path != w.cfg.Directory {
+		if path != directory {
 			switch entry.Name() {
 			case ".git", "node_modules", ".venv", "__pycache__", ".cache":
 				return filepath.SkipDir
@@ -190,12 +195,21 @@ func (w *worker) scan(ctx context.Context, initial, freeze bool) error {
 	if !w.allowed(ctx, "") {
 		return fmt.Errorf("upload approval was revoked or the installation was removed")
 	}
-	if !freeze {
-		if err := w.watchDirectories(ctx); err != nil {
+	for _, directory := range w.directories {
+		if err := w.scanDirectory(ctx, directory, initial, freeze); err != nil {
 			return err
 		}
 	}
-	paths, err := DiscoverRepositories(ctx, w.cfg.Directory)
+	return nil
+}
+
+func (w *worker) scanDirectory(ctx context.Context, directory string, initial, freeze bool) error {
+	if !freeze {
+		if err := w.watchDirectories(ctx, directory); err != nil {
+			return err
+		}
+	}
+	paths, err := DiscoverRepositories(ctx, directory)
 	if err != nil {
 		return err
 	}
@@ -213,7 +227,8 @@ func (w *worker) scan(ctx context.Context, initial, freeze bool) error {
 		}
 		r := w.repos[path]
 		if r == nil {
-			r = &repository{observed: fingerprint, pending: !initial || path == w.direct}
+			// Existing changes establish the baseline; only a later change may submit.
+			r = &repository{observed: fingerprint, pending: !initial}
 			w.repos[path] = r
 		} else if fingerprint != r.observed {
 			r.observed = fingerprint
@@ -459,6 +474,21 @@ func (w *worker) run(ctx context.Context) error {
 			return ctx.Err()
 		case command := <-w.controls:
 
+			if command.addDirectory != "" {
+				response := w.response(false)
+				if len(closing) != 0 {
+					response.Error = "watcher is finishing; cannot add a directory"
+				} else {
+					bounded, cancel := context.WithTimeout(ctx, 20*time.Second)
+					err := w.addDirectory(bounded, command.addDirectory)
+					cancel()
+					if err != nil {
+						response.Error = err.Error()
+					}
+				}
+				finish(command, response)
+				continue
+			}
 			if command.noticeID != "" || command.noticeRevision != 0 {
 				response := w.response(false)
 				known := false
@@ -575,4 +605,60 @@ func (w *worker) run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// addDirectory runs on the worker loop, so registration cannot race a scan.
+// Existing repository state is retained, including pending/in-flight reviews.
+func (w *worker) addDirectory(ctx context.Context, directory string) error {
+	if !filepath.IsAbs(directory) {
+		return fmt.Errorf("directory must be absolute")
+	}
+	directory, err := filepath.EvalSymlinks(directory)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(directory)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("path is not a directory")
+	}
+	if !w.allowed(ctx, "") {
+		return fmt.Errorf("upload approval was revoked or the installation was removed")
+	}
+	for _, existing := range w.directories {
+		if existing == directory {
+			return nil
+		}
+	}
+	repos, err := DiscoverRepositories(ctx, directory)
+	if err != nil {
+		return err
+	}
+	if len(repos) == 0 {
+		return fmt.Errorf("no Git repositories found in directory")
+	}
+	baselines := map[string]string{}
+	for _, repo := range repos {
+		if !w.allowed(ctx, repo) {
+			return fmt.Errorf("upload permission is required for %s", repo)
+		}
+		if w.repos[repo] != nil {
+			continue
+		}
+		fingerprint, err := workspaceFingerprint(ctx, repo)
+		if err != nil {
+			return err
+		}
+		baselines[repo] = fingerprint
+	}
+	if err := w.watchDirectories(ctx, directory); err != nil {
+		return err
+	}
+	for repo, fingerprint := range baselines {
+		w.repos[repo] = &repository{observed: fingerprint}
+	}
+	w.directories = append(w.directories, directory)
+	return nil
 }

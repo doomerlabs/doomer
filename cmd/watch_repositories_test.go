@@ -22,7 +22,7 @@ func TestWatchOwnsIntegrationCommandsWithoutTopLevelSetup(t *testing.T) {
 			t.Fatal("obsolete top-level setup command is still registered")
 		}
 	}
-	for _, name := range []string{"ls", "add", "rm", "uninstall"} {
+	for _, name := range []string{"add", "rm", "uninstall"} {
 		command, _, err := root.Find([]string{"watch", name})
 		if err != nil || command.Name() != name {
 			t.Fatalf("missing watch %s: %v", name, err)
@@ -38,7 +38,7 @@ func TestWatchTestIsolationPreservesInheritedCodexHooks(t *testing.T) {
 	if err := os.WriteFile(file, original, 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Run("watch lifecycle", TestWatchAddListRemovePreservesApprovalAndProfileIsolation)
+	t.Run("watch lifecycle", TestWatchRemovePreservesApprovalAndProfileIsolation)
 	after, err := os.ReadFile(file)
 	if err != nil || !bytes.Equal(after, original) {
 		t.Fatalf("watch test modified inherited Codex hooks: %s (%v)", after, err)
@@ -73,7 +73,7 @@ func TestWatchFirstUseRequiresUploadApproval(t *testing.T) {
 	}
 }
 
-func TestWatchAddListRemovePreservesApprovalAndProfileIsolation(t *testing.T) {
+func TestWatchRemovePreservesApprovalAndProfileIsolation(t *testing.T) {
 	store := isolate(t)
 	t.Setenv("HOME", t.TempDir())
 	api, profile := "https://example.com/api", "local"
@@ -95,20 +95,9 @@ func TestWatchAddListRemovePreservesApprovalAndProfileIsolation(t *testing.T) {
 	c.SetContext(context.Background())
 	var output bytes.Buffer
 	c.SetOut(&output)
-	list, _, err := c.Find([]string{"ls"})
-	if err != nil {
-		t.Fatal(err)
-	}
 	path := t.TempDir()
 	if err := watching.RegisterRepository(root, path, "explicit", true, time.Time{}); err != nil {
 		t.Fatal(err)
-	}
-	list.SetContext(context.Background())
-	if err := list.RunE(list, nil); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(output.String(), filepath.Base(path)) || strings.Contains(output.String(), path) || !strings.Contains(output.String(), "Not running") {
-		t.Fatal(output.String())
 	}
 	remove, _, err := c.Find([]string{"rm"})
 	if err != nil {
