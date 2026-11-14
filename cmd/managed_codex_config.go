@@ -125,12 +125,13 @@ func mergeCodexExtraPolicy(existing string, consent managedConsentEvidence) stri
 		}
 		var old struct {
 			Account, Repository, Service, Profile, Agent string
-			AllRepositories                              bool `json:"all_repositories"`
+			CredentialDirectory                          string `json:"credential_directory,omitempty"`
+			AllRepositories                              bool   `json:"all_repositories"`
 		}
-		if err := json.Unmarshal([]byte(lines[2]), &old); err == nil && old.Account == consent.Account && old.Service == consent.Service && old.Profile == consent.Profile &&
+		if err := json.Unmarshal([]byte(lines[2]), &old); err == nil && old.Account == consent.Account && old.Service == consent.Service && old.Profile == consent.Profile && old.CredentialDirectory == consent.CredentialDirectory &&
 			((consent.AllRepositories && !old.AllRepositories && old.Repository != "" && (old.Agent == "" || old.Agent == consent.Agent)) ||
 				(!consent.AllRepositories && old.AllRepositories && old.Agent == "codex")) {
-			legacy := proposedCodexReviewPolicy(managedConsentEvidence{Account: old.Account, Repository: old.Repository, Service: old.Service, Profile: old.Profile, Agent: old.Agent, AllRepositories: old.AllRepositories}).ExtraPolicy
+			legacy := proposedCodexReviewPolicy(managedConsentEvidence{CredentialDirectory: old.CredentialDirectory, Account: old.Account, Repository: old.Repository, Service: old.Service, Profile: old.Profile, Agent: old.Agent, AllRepositories: old.AllRepositories}).ExtraPolicy
 			if strings.HasPrefix(existing[i:], legacy) {
 				existing = existing[:i] + existing[i+len(legacy):]
 				offset = i

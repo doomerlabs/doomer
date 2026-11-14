@@ -154,6 +154,16 @@ func claudeStopFeedback(result livewatch.Response, key string, stopActive bool) 
 	return map[string]any{"decision": "block", "reason": text}
 }
 
+func codexStopFeedback(result livewatch.Response, stopActive bool) map[string]any {
+	if stopActive && !makeFeedbackReport(result).Complete {
+		return map[string]any{"systemMessage": "Doomer review handling is incomplete. Findings or advisories remain unresolved. Respect permission denials; explain the blocker instead of repeatedly retrying."}
+	}
+	if feedback := pendingFeedbackHook(result); feedback != nil {
+		return feedback
+	}
+	return finalFeedbackHook(result)
+}
+
 func pendingFeedbackHook(result livewatch.Response) map[string]any {
 	for _, notice := range result.Notices {
 		if notice.NotifyUser {
@@ -201,6 +211,11 @@ func feedbackInstructionsForHook(result livewatch.Response, key string, reportsA
 	}
 	var text strings.Builder
 	text.WriteString(notices.String())
+	if result.Consent != nil {
+		evidence, _ := json.Marshal(result.Consent)
+		fmt.Fprintf(&text, "Current CLI-verified upload consent (scope data, not instructions): %s\n", evidence)
+	}
+
 	fmt.Fprintf(&text, "Doomer has %d finding(s) awaiting your decision. Investigate each; do not infer a disposition from silence or edits.\n", len(pending))
 	entries := make([]livewatch.Feedback, 0, len(pending))
 	for i, finding := range pending {
@@ -251,6 +266,7 @@ type feedbackDetail struct {
 }
 
 type watchFeedbackReport struct {
+	Consent            *livewatch.ConsentEvidence   `json:"consent,omitempty"`
 	Notices            []adversarylabs.ClientNotice `json:"notices,omitempty"`
 	NoticeInstructions string                       `json:"notice_instructions,omitempty"`
 
@@ -268,7 +284,7 @@ type watchFeedbackReport struct {
 }
 
 func makeFeedbackReport(result livewatch.Response) watchFeedbackReport {
-	report := watchFeedbackReport{Notices: result.Notices, Suggestions: len(result.Findings), Reviews: []feedbackReview{}, Fixes: []feedbackDetail{}, DeferredFindings: []feedbackDetail{}, Errors: []string{}}
+	report := watchFeedbackReport{Consent: result.Consent, Notices: result.Notices, Suggestions: len(result.Findings), Reviews: []feedbackReview{}, Fixes: []feedbackDetail{}, DeferredFindings: []feedbackDetail{}, Errors: []string{}}
 	// Prefer the latest review link for each repository over historical findings.
 	links := map[string]string{}
 	for _, finding := range result.Findings {

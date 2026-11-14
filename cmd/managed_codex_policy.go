@@ -76,18 +76,22 @@ func declineCodexReviewPolicy(s managed.Store, proposal *codexReviewPolicy) erro
 
 func proposedCodexReviewPolicy(consent managedConsentEvidence) *codexReviewPolicy {
 	scope, _ := json.Marshal(struct {
-		Account         string `json:"account"`
-		Repository      string `json:"repository,omitempty"`
-		Service         string `json:"service"`
-		Profile         string `json:"profile"`
-		Agent           string `json:"agent,omitempty"`
-		AllRepositories bool   `json:"all_repositories,omitempty"`
-	}{consent.Account, consent.Repository, consent.Service, consent.Profile, consent.Agent, consent.AllRepositories})
+		CredentialDirectory string `json:"credential_directory,omitempty"`
+		Account             string `json:"account"`
+		Repository          string `json:"repository,omitempty"`
+		Service             string `json:"service"`
+		Profile             string `json:"profile"`
+		Agent               string `json:"agent,omitempty"`
+		AllRepositories     bool   `json:"all_repositories,omitempty"`
+	}{consent.CredentialDirectory, consent.Account, consent.Repository, consent.Service, consent.Profile, consent.Agent, consent.AllRepositories})
 	coverage := "This includes linked Git worktrees with the\nsame repository identity."
 	consentScope := "account, repository, service, and profile"
 	if consent.AllRepositories {
 		coverage = "This covers all current and future repositories, linked worktrees, and chats\nused by the specified coding agent with this Doomer account, service, and profile."
 		consentScope = "account, coding agent, service, and profile, with all_repositories=true"
+	}
+	if consent.CredentialDirectory != "" {
+		consentScope += ", and credential_directory"
 	}
 	changes := []string{"Merge this authorization into auto_review.extra_policy in the active Codex configuration; preserve unrelated policy, settings and comments; save a backup."}
 	if consent.AllRepositories {

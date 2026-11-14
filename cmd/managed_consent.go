@@ -11,17 +11,18 @@ import (
 )
 
 type managedConsentEvidence struct {
-	Receipt         string    `json:"receipt"`
-	Account         string    `json:"account"`
-	Repository      string    `json:"repository"`
-	Service         string    `json:"service"`
-	Profile         string    `json:"profile"`
-	ApprovedAt      time.Time `json:"approved_at"`
-	Source          string    `json:"source"`
-	Includes        []string  `json:"includes"`
-	LinkedWorktrees bool      `json:"linked_worktrees"`
-	AllRepositories bool      `json:"all_repositories,omitempty"`
-	Agent           string    `json:"agent,omitempty"`
+	CredentialDirectory string    `json:"credential_directory,omitempty"`
+	Receipt             string    `json:"receipt"`
+	Account             string    `json:"account"`
+	Repository          string    `json:"repository"`
+	Service             string    `json:"service"`
+	Profile             string    `json:"profile"`
+	ApprovedAt          time.Time `json:"approved_at"`
+	Source              string    `json:"source"`
+	Includes            []string  `json:"includes"`
+	LinkedWorktrees     bool      `json:"linked_worktrees"`
+	AllRepositories     bool      `json:"all_repositories,omitempty"`
+	Agent               string    `json:"agent,omitempty"`
 }
 
 func managedConsentPath(s managed.Store, t managed.Task) string {

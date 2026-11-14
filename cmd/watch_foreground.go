@@ -32,32 +32,9 @@ func watchToken(c *cobra.Command, api string, state agentHookState, env watchEnv
 	if token := env.get("DOOMER_TOKEN"); token != "" {
 		return token, nil
 	}
-	dir := env.get("DOOMER_CONFIG_DIR")
-	if dir == "" {
-		dir = state.CredentialDirs[api]
-	}
-	if dir == "" {
-		var err error
-		dir, err = paths.ConfigDir()
-		if err != nil {
-			return "", err
-		}
-	}
-	settings := viper.New()
-	settings.SetConfigFile(filepath.Join(dir, "settings.yaml"))
-	settings.SetDefault("profile", "default")
-	if profile := env.get("DOOMER_PROFILE"); profile != "" {
-		settings.Set("profile", profile)
-	}
-	if err := settings.ReadInConfig(); err != nil && !os.IsNotExist(err) {
+	dir, profile, err := watchCredentialProfile(c, api, state, env)
+	if err != nil {
 		return "", err
-	}
-	profile := strings.ToLower(strings.TrimSpace(settings.GetString("profile")))
-	if c.Flags().Changed("profile") || c.InheritedFlags().Changed("profile") {
-		profile, _ = c.Flags().GetString("profile")
-	}
-	if !validProfile(profile) {
-		return "", fmt.Errorf("invalid credential profile")
 	}
 	store := adversarylabs.ConfigStore{Path: filepath.Join(dir, "config.json")}
 	auth, exists, err := store.StoredAuthE(adversarylabs.AuthKey(api, profile))
@@ -78,6 +55,37 @@ func watchToken(c *cobra.Command, api string, state agentHookState, env watchEnv
 		return token, nil
 	}
 	return "", fmt.Errorf("credentials are missing; run npx @doomerlabs/doomer onboard")
+}
+
+func watchCredentialProfile(c *cobra.Command, api string, state agentHookState, env watchEnvironment) (string, string, error) {
+	dir := env.get("DOOMER_CONFIG_DIR")
+	if dir == "" {
+		dir = state.CredentialDirs[api]
+	}
+	if dir == "" {
+		var err error
+		dir, err = paths.ConfigDir()
+		if err != nil {
+			return "", "", err
+		}
+	}
+	settings := viper.New()
+	settings.SetConfigFile(filepath.Join(dir, "settings.yaml"))
+	settings.SetDefault("profile", "default")
+	if profile := env.get("DOOMER_PROFILE"); profile != "" {
+		settings.Set("profile", profile)
+	}
+	if err := settings.ReadInConfig(); err != nil && !os.IsNotExist(err) {
+		return "", "", err
+	}
+	profile := strings.ToLower(strings.TrimSpace(settings.GetString("profile")))
+	if c.Flags().Changed("profile") || c.InheritedFlags().Changed("profile") {
+		profile, _ = c.Flags().GetString("profile")
+	}
+	if !validProfile(profile) {
+		return "", "", fmt.Errorf("invalid credential profile")
+	}
+	return dir, profile, nil
 }
 
 func defaultManagerHome() (string, error) {
@@ -109,6 +117,7 @@ func newForegroundWatchCommand() *cobra.Command {
 		return nil
 	}
 	c.PersistentPostRun = func(*cobra.Command, []string) {}
+	c.AddCommand(newNodeCodexPolicyCommand())
 	c.Flags().BoolVar(&fromStdin, "config-stdin", false, "read watch configuration from stdin")
 	_ = c.Flags().MarkHidden("config-stdin")
 	c.RunE = func(c *cobra.Command, args []string) error {
@@ -179,6 +188,42 @@ func newForegroundWatchCommand() *cobra.Command {
 		}
 		if !allowed(c.Context(), "") {
 			return fmt.Errorf("upload approval is required; run npx @doomerlabs/doomer onboard")
+		}
+
+		dir, profile, err := watchCredentialProfile(c, config.API, state, environment)
+		if err != nil {
+			return err
+		}
+		dir, err = filepath.Abs(dir)
+		if err != nil {
+			return err
+		}
+		account := "anonymous:" + watching.Key(config.Token)
+		if !adversarylabs.IsAnonymousToken(config.Token) {
+			// Evidence is emitted only for an account verified by the service.
+			verifyCtx, cancelVerify := context.WithTimeout(c.Context(), 5*time.Second)
+			who, verifyErr := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, config.API).Whoami(verifyCtx, config.Token)
+			cancelVerify()
+			if verifyErr == nil {
+				account = who.ID
+			} else {
+				account = ""
+			}
+		}
+		config.Consent = func() *livewatch.ConsentEvidence {
+			var current agentHookState
+			if account == "" || watching.Read(filepath.Join(config.ManagerHome, "state.json"), &current) != nil {
+				return nil
+			}
+			grant, e := agentHookConsent(current, config.API, config.Agent, "")
+			if e != nil {
+				return nil
+			}
+			token, e := watchToken(c, config.API, current, environment)
+			if e != nil || token != config.Token {
+				return nil
+			}
+			return &livewatch.ConsentEvidence{Account: account, Service: config.API, Profile: profile, CredentialDirectory: dir, Agent: config.Agent, AllRepositories: grant.AllRepositories, Repositories: grant.Directories, Includes: []string{"repository_snapshots", "task_context", "finding_responses"}}
 		}
 		signals := make(chan os.Signal, 1)
 		signal.Notify(signals, os.Interrupt, syscall.SIGTERM)

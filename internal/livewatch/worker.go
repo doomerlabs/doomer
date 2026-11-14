@@ -305,6 +305,9 @@ func (w *worker) schedule(ctx context.Context) {
 
 func (w *worker) response(timeout bool) Response {
 	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory}
+	if w.cfg.Consent != nil {
+		response.Consent = w.cfg.Consent()
+	}
 	if w.cfg.Notices != nil {
 		for _, notice := range w.cfg.Notices() {
 			if w.noticeAcks[fmt.Sprintf("%s:%d", notice.ID, notice.Revision)] {

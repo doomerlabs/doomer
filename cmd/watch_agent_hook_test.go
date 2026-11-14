@@ -133,6 +133,10 @@ func TestAgentHookWorkersArePerTurnAndLeaveNoRuntimeFiles(t *testing.T) {
 }
 
 func TestAgentHookKilledWorkerCanRestartWithoutCleanup(t *testing.T) {
+	t.Setenv("DOOMER_TOKEN", "")
+	t.Setenv("DOOMER_API_URL", "")
+	t.Setenv("DOOMER_CONFIG_DIR", t.TempDir())
+
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux abstract socket crash cleanup")
 	}

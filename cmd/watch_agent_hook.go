@@ -146,10 +146,13 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 			if agent == "claude" {
 				return claudeStopFeedback(result, id.Key(), input.StopActive), nil
 			}
-			if feedback := pendingFeedbackHook(result); feedback != nil {
-				return feedback, nil
+			if input.StopActive && !makeFeedbackReport(result).Complete {
+				// End the normal lifecycle without inventing feedback or retrying a denied action.
+				if _, err := livewatch.Call(ctx, id.Key(), "cancel"); err != nil {
+					return empty, err
+				}
 			}
-			return finalFeedbackHook(result), nil
+			return codexStopFeedback(result, input.StopActive), nil
 		}
 		return empty, nil
 	case "UserPromptSubmit":
