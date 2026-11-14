@@ -159,6 +159,16 @@ func TestWatchConsentTracksUninstallAndAccountRecovery(t *testing.T) {
 	if strings.Contains(string(raw), config.Token) {
 		t.Fatal("anonymous token disclosed")
 	}
+	// Malformed anonymous credentials cannot use the locally validated identity
+	// path. They must pass ordinary service verification, which fails here.
+	fail.Store(true)
+	config.Token = "doomer_anon_bad"
+	environment["DOOMER_TOKEN"] = config.Token
+	if read() != nil {
+		t.Fatal("malformed anonymous credential emitted consent")
+	}
+	config.Token = "doomer_anon_" + strings.Repeat("a", 43)
+	environment["DOOMER_TOKEN"] = config.Token
 	if err := os.WriteFile(filepath.Join(home, "uninstalling.json"), []byte("{}"), 0600); err != nil {
 		t.Fatal(err)
 	}
