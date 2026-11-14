@@ -2,13 +2,11 @@
 
 The correct command to build the Go CLI is `make build`.
 Use `make dev` to build and atomically replace `~/.local/bin/doomer-dev`.
-The user runs local builds. Agents must not run `make build` or `make dev`, substitute
-`go build`, or build or install a CLI binary on the user's behalf. Make the
-requested code changes and leave building and installation to the user.
-This also excludes tests that invoke `go build`: skip
-`TestWatchBackgroundLifecycle` and
-`TestSideBySideUpgradeStartsCurrentSupervisorAndRetries`. Test-executable
-subprocess helpers can exercise the CLI commands without building a CLI binary.
+Agents may run `make build` and automated tests, including E2E tests in isolated
+environments. Do not run `make dev`, replace installed binaries, change live
+configuration, start services in the user's development environment, or stop the
+user's running instances. Agents may start and stop processes and containers they
+create solely for tests.
 
 ## Pull request ownership and monitoring
 
@@ -47,9 +45,9 @@ For changes affecting agent installation, onboarding, review, upgrades, policy,
 hooks, or the lifecycle runner, use `.agents/skills/agent-e2e/SKILL.md` to start
 relevant E2E early and report coverage for the final proposed source.
 
-The shared suite is in `doomerlabs/agent-e2e`, normally cloned alongside this repository. Its README documents component paths/versions and precompiled CLI inputs. Preserve Jev selection, signed R2 reuse, per-case dependencies and recordings. Never build the local CLI on the user's behalf; use a CI-built or user-supplied candidate.
+The shared suite is in `doomerlabs/agent-e2e`, normally cloned alongside this repository. Its README documents component paths/versions and precompiled CLI inputs. Preserve Jev selection, signed R2 reuse, per-case dependencies and recordings. Use a test-only candidate compiled with `make build`, a CI-built candidate, or a user-supplied candidate. Execute it only in an isolated test environment.
 
-For a user-run Linux suite, `scripts/agent-e2e-local-linux.sh --output /tmp/unique-report-directory` delegates to the shared runner. Agents must set `E2E_CANDIDATE_BINARY` to a CI-built or user-supplied executable before running it. Users may explicitly opt into a source build with `E2E_BUILD_CANDIDATE=1`; agents must never enable it. Credentials come from Doppler `doomer/test`. Inspect retained selection evidence and report cache hits separately from executed cases. Matching Linux successes may satisfy CI; native macOS results do not. Do not claim E2E success from unit tests alone.
+For a user-run Linux suite, `scripts/agent-e2e-local-linux.sh --output /tmp/unique-report-directory` delegates to the shared runner. Set `E2E_CANDIDATE_BINARY` to a precompiled test candidate before running it. Prefer an explicit test-candidate path so the binary used by the suite is reviewable. Credentials come from Doppler `doomer/test`. Inspect retained selection evidence and report cache hits separately from executed cases. Matching Linux successes may satisfy CI; native macOS results do not. Do not claim E2E success from unit tests alone.
 
 Never print credentials or copy them into the repository. If Docker or Doppler `doomer/test` is unavailable, report which scenarios CI must execute; do not claim missing runs passed.
 

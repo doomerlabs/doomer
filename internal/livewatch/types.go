@@ -15,7 +15,19 @@ import (
 func Key(value string) string { sum := sha256.Sum256([]byte(value)); return hex.EncodeToString(sum[:]) }
 
 // Config describes one watch invocation. Its caller controls when it stops.
+type ConsentEvidence struct {
+	Account             string   `json:"account"`
+	Service             string   `json:"service"`
+	Profile             string   `json:"profile"`
+	CredentialDirectory string   `json:"credential_directory"`
+	Agent               string   `json:"agent"`
+	AllRepositories     bool     `json:"all_repositories"`
+	Repositories        []string `json:"repositories,omitempty"`
+	Includes            []string `json:"includes"`
+}
+
 type Config struct {
+	Consent           func() *ConsentEvidence             `json:"-"`
 	ID                string                              `json:"id"`
 	ControlKey        string                              `json:"control_key,omitempty"`
 	Directory         string                              `json:"directory"`
@@ -64,6 +76,7 @@ type Finding struct {
 }
 
 type Response struct {
+	Consent   *ConsentEvidence             `json:"consent,omitempty"`
 	Ready     bool                         `json:"ready"`
 	API       string                       `json:"api,omitempty"`
 	Directory string                       `json:"directory,omitempty"`
