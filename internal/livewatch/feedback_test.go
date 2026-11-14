@@ -36,11 +36,12 @@ func (f *feedbackClient) ReportWorkspaceLead(_ context.Context, _ string, review
 
 func TestWatchRecordsFeedbackBeforeFinalStop(t *testing.T) {
 	repo := makeRepository(t, t.TempDir(), "repo")
+
+	client := &feedbackClient{}
+	cfg, done := startWorker(t, repo, client, time.Second, func(context.Context, string) bool { return true })
 	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("edit\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	client := &feedbackClient{}
-	cfg, done := startWorker(t, repo, client, time.Second, func(context.Context, string) bool { return true })
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	result, err := Call(ctx, cfg.ControlKey, "finish")

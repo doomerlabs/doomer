@@ -148,10 +148,11 @@ func TestFeedbackRecoveryPreservesPartialSuccessAndPermissionDenial(t *testing.T
 func TestFixFollowedByNewReviewRequiresNewDecisions(t *testing.T) {
 	repo := makeRepository(t, t.TempDir(), "repo")
 	file := filepath.Join(repo, "file.txt")
+
+	cfg, done := startWorker(t, repo, &feedbackClient{}, time.Second, func(context.Context, string) bool { return true })
 	if err := os.WriteFile(file, []byte("first change\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, done := startWorker(t, repo, &feedbackClient{}, time.Second, func(context.Context, string) bool { return true })
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	first, err := Call(ctx, cfg.ControlKey, "finish")
@@ -210,11 +211,12 @@ func TestFixFollowedByNewReviewRequiresNewDecisions(t *testing.T) {
 
 func TestInterruptCancelsInflightReviewWithoutReportingSuccess(t *testing.T) {
 	repo := makeRepository(t, t.TempDir(), "repo")
+
+	client := &fakeClient{block: true, started: make(chan adversarylabs.WorkspaceSubmission, 1)}
+	cfg, done := startWorker(t, repo, client, time.Second, func(context.Context, string) bool { return true })
 	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("change\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	client := &fakeClient{block: true, started: make(chan adversarylabs.WorkspaceSubmission, 1)}
-	cfg, done := startWorker(t, repo, client, time.Second, func(context.Context, string) bool { return true })
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	select {

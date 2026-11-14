@@ -62,7 +62,7 @@ service advisories, and `doomer support bundle` for a private local diagnostic
 bundle. Sending a bundle requires explicit `--upload`. JSON is available with
 `--json` on status, upgrade and notices.
 
-The direct watcher carries server advisories in `watch report` and `watch
+The direct watcher carries server advisories in `watch results` and `watch
 instructions`. An agent must display a pending notice to the user and execute its
 exact acknowledgement command. Reading the notice or returning a report never
 counts as delivery. The Stop hook keeps the watcher available while delivery is
@@ -73,16 +73,31 @@ to the exact advisory revision. Advisories do not authorize software updates.
 
 For the Node-managed integration, `doomer watch` reviews settled source changes,
 including manual edits, without pre/post-tool attribution. The prompt hook starts
-watch; before answering, the agent runs `doomer watch report` to wait for Quick
+watch; before answering, the agent runs `doomer watch results` to wait for Quick
 results. If there are findings, the agent retrieves them with
-`doomer watch instructions` and records each decision using
-`doomer watch respond`. The prompt
+`doomer watch findings` and records each decision using
+`doomer watch findings respond`. The prompt
 hook supplies these commands through additional model context. Decisions are
 sent to the existing workspace review feedback API as `fixed`, `dismissed`, or
 `deferred`, with agreement and a reason. An unanswered finding stays unanswered
 until the service confirms the response was saved.
 
-After recording decisions, the agent runs `watch report` again to check any
+The installed hook command stays fixed. Each request watches the agent-supplied
+working directory and discovers repositories beneath it; there is no global
+workspace-root override. Starting watch establishes a baseline without reviewing
+pre-existing changes. Before editing a sibling repository outside that directory,
+register it with the running watcher using the control key supplied by the hook:
+
+```sh
+doomer watch add /absolute/path/to/repository --control CONTROL_KEY
+```
+
+Wait for registration to succeed before editing. Adding a repository does not
+start a review, and adding it again preserves pending changes. Existing upload
+permissions still apply. Registration affects only this request's watcher and
+lasts until it stops; other concurrent sessions are unaffected.
+
+After recording decisions, the agent runs `watch results` again to check any
 resulting edits. The command returns counts, fixes, deferred concerns, and the
 latest review link for each repository without stopping watch. The Stop hook
 closes watch once every finding has a recorded response. The agent incorporates
@@ -102,50 +117,11 @@ make build
 ./bin/doomer watch
 ```
 
-For a coding agent, use `watch start` to approve the current repository and
-start or reuse a detached watcher. The CLI opens a local consent page on macOS
-and Linux desktops. People using reviews without an account must approve uploads too; invoking a command,
-installing hooks, or having an anonymous identity is not upload permission.
-
-```sh
-./bin/doomer watch start --browser  # human approves in browser; no terminal input needed
-./bin/doomer watch status --json    # consent, installed hooks, pause state and watcher health
-./bin/doomer watch stop             # pause this profile, preserving upload approval
-./bin/doomer watch start --resume   # explicitly resume after a pause
-./bin/doomer watch revoke .         # revoke this repo and its linked worktrees
-./bin/doomer watch --no-browser     # foreground watcher with terminal approval, including SSH
-```
-
-With no directory argument, new setup is limited to the current Git repository
-and its linked worktrees. Adding a different repository asks again. Approved
-repositories do not ask again unless approval is revoked or the profile's
-identity changes. Older anonymous configurations that treated invocation as
-approval require a fresh human decision. Existing signed-in approvals are retained.
-Base and current source snapshots, including files outside the diff, the task
-prompt behind an agent edit, and agent review responses may be uploaded.
-
-Browser consent is served on a one-time loopback listener by the CLI itself.
-It shows the exact repository scope and API destination; rendering it sends no
-code or credentials to the service. Approval expires after five minutes and
-cancelling leaves existing settings alone. The listener validates the nonce and
-host, and accepts only one decision. On a remote server use `--no-browser` in an
-interactive terminal. Piped text never counts as terminal approval. `--yes` remains
-available for a human deliberately choosing unattended setup; a coding agent must
-never pass it on the user's behalf.
-
-In Codex, open `/hooks` and review/trust the new definitions. Installing hooks
-does not grant that trust. Setup preserves unrelated hooks; repeated startup
-reuses installed definitions. `status --json` deliberately reports hook trust as
-`user_managed`, since installed hooks alone do not prove they have been trusted.
-
-`watch start` maintains one watcher per API endpoint/profile, with private local
-logs. It reuses a running watcher or restarts it after new repository approval.
-The child has detached input/output and survives the launching agent command.
-It does not install an OS service or restart after reboot; a later `watch start`
-can restore it. `watch stop` persists a pause, which ordinary `watch start` refuses
-to undo without `--resume`. Revocation cancels the running watcher; restart it
-from a remaining approved repository if needed. A running foreground watcher can
-be reused only for repositories it already covers.
+For automatic agent reviews, use the Node installer described above. The fixed
+hook command is `doomer watch agent`; the agent supplies its session and working
+directory. For a manually managed foreground watch, run `doomer watch DIRECTORY`
+after approving uploads through the installer. The public `watch start` command
+has been removed.
 
 `watch` prints each repository it watches, detected changes, uploads, and initial
 assessment progress. Starting the watcher never uploads existing changes. Only
@@ -172,8 +148,6 @@ applies independently to each checkout.
 Manage selections independently of upload approval:
 
 ```sh
-./bin/doomer watch ls
-./bin/doomer watch ls --worktrees
 ./bin/doomer watch add /path/to/repo
 ./bin/doomer watch rm /path/to/repo
 ```
@@ -199,7 +173,7 @@ a 20 MiB per-file limit, and a separate 16 MiB diff limit. These are separate fr
 the smaller legacy embedded-upload limits below. Uploads still send only missing
 content blobs; unchanged files are reused.
 
-Start with `watch start` (or keep foreground `watch` running), then edit the approved repository
+Use the installed agent hooks (or keep foreground `watch` running), then edit the approved repository
 in Codex. After files settle, Doomer uploads a bounded snapshot and starts the
 hosted workspace review. The synchronous hook waits at most 30 seconds for the
 initial assessment and otherwise releases the agent silently. For an entitled signed-in profile, any deep review continues on the service;
@@ -224,7 +198,6 @@ references are isolated by destination, profile, login, and checkout.
 ```sh
 ./bin/doomer --profile dev watch add /path/to/repo --agent both
 ./bin/doomer --profile dev watch /path/to/repo
-./bin/doomer --profile dev watch ls
 ./bin/doomer --profile dev watch uninstall
 ```
 
@@ -614,7 +587,7 @@ To test locally without changing your existing login:
 
 ```sh
 ./bin/doomer --profile anonymous-local --api-url http://localhost:3000/api review --path /path/to/repo
-./bin/doomer --profile anonymous-local --api-url http://localhost:3000/api watch start --browser --agent both
+./bin/doomer --profile anonymous-local --api-url http://localhost:3000/api watch /path/to/repo
 ```
 
 Codex still manages hook trust in `/hooks`. Agent feedback keeps using the same

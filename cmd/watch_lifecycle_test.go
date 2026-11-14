@@ -10,12 +10,10 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -184,124 +182,6 @@ func TestWatchStatusDoesNotCreateConsentOrIdentity(t *testing.T) {
 	}
 }
 
-func TestWatchBackgroundLifecycle(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("background watcher supports macOS and Linux")
-	}
-	// Build the actual CLI before isolating HOME so this exercises exec, detached
-	// stdio, config propagation and process cleanup rather than a mocked launcher.
-	binary := filepath.Join(t.TempDir(), "doomer")
-	build := exec.Command("go", "build", "-o", binary, "..")
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build: %s %v", out, err)
-	}
-	isolate(t)
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("CODEX_HOME", t.TempDir())
-	repo, other := newWatchTestRepo(t), newWatchTestRepo(t)
-	var requests atomic.Int32
-	service := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Setup may report consent, but must never submit a review or another
-		// lifecycle milestone before an agent edits a file.
-		if r.URL.Path == "/api/v2/installations/activate" && r.Method == http.MethodPost {
-			var event struct {
-				Stage string `json:"stage"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&event); err == nil && event.Stage == "approved" {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-		}
-		requests.Add(1)
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer service.Close()
-	api, profile := service.URL+"/api", "dev"
-	run := func(args ...string) (string, error) {
-		t.Helper()
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		command := exec.CommandContext(ctx, binary, append([]string{"--api-url", api, "--profile", profile, "watch"}, args...)...)
-		command.Dir = repo
-		out, err := command.CombinedOutput()
-		return string(out), err
-	}
-	t.Cleanup(func() {
-		if out, err := run("stop"); err != nil {
-			t.Errorf("cleanup: %s %v", out, err)
-		}
-	})
-	if out, err := run("start", "--yes"); err != nil {
-		t.Fatalf("start: %s %v", out, err)
-	}
-	root, file, _ := watchPaths(api, profile)
-	first, live, err := runningWatch(root)
-	if err != nil || !live || first.ManagedSession == "" {
-		t.Fatalf("not started: %+v %v", first, err)
-	}
-	if out, err := run("start"); err != nil || !strings.Contains(out, "Reusing") {
-		t.Fatalf("reuse: %s %v", out, err)
-	}
-	second, _, _ := runningWatch(root)
-	if second.PID != first.PID {
-		t.Fatal("duplicate watcher started")
-	}
-	var status watchStatus
-	if out, err := run("status", "--json"); err != nil {
-		t.Fatalf("status: %s %v", out, err)
-	} else if err := json.Unmarshal([]byte(out), &status); err != nil {
-		t.Fatal(err)
-	}
-	if !status.Approved || !status.Running || status.API != api || !status.HooksInstalled["codex"] {
-		t.Fatalf("status: %+v", status)
-	}
-	if out, err := run("start", other, "--no-browser"); err == nil {
-		t.Fatalf("other repo bypassed approval: %s", out)
-	}
-	if out, err := run("start", other, "--yes"); err != nil {
-		t.Fatalf("add repo: %s %v", out, err)
-	}
-	third, _, _ := runningWatch(root)
-	if third.PID == first.PID {
-		t.Fatal("new consent did not replace old watcher")
-	}
-	if out, err := run("stop"); err != nil {
-		t.Fatalf("stop: %s %v", out, err)
-	}
-	if _, live, err := runningWatch(root); err != nil || live {
-		t.Fatalf("still running: %v %v", live, err)
-	}
-	if out, err := run("start"); err == nil || !strings.Contains(out, "paused") {
-		t.Fatalf("pause ignored: %s %v", out, err)
-	}
-	if out, err := run("start", "--resume"); err != nil {
-		t.Fatalf("resume: %s %v", out, err)
-	}
-	// Per-repository revocation cancels the managed watcher and preserves
-	// consent for the other repository without trusting a saved PID.
-	if out, err := run("revoke", repo); err != nil {
-		t.Fatalf("revoke: %s %v", out, err)
-	}
-	var cfg watching.Config
-	if err := watching.Read(file, &cfg); err != nil {
-		t.Fatal(err)
-	}
-	if watching.Allowed(cfg, repo) || !watching.Allowed(cfg, other) {
-		t.Fatal("revocation scope incorrect")
-	}
-	if out, err := run("start", "--resume", "--no-browser"); err == nil {
-		t.Fatalf("revoked consent reused: %s", out)
-	}
-	if requests.Load() != 0 {
-		t.Fatalf("setup or idle watcher contacted service %d times without an agent edit", requests.Load())
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := waitWatch(ctx, func() (bool, error) { _, live, err := runningWatch(root); return !live, err }); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestDefaultWatchSetupScopesToCurrentRepository(t *testing.T) {
 	store := isolate(t)
 	t.Setenv("HOME", t.TempDir())
@@ -342,9 +222,13 @@ func TestWatchLifecycleCommandsInProcess(t *testing.T) {
 	}
 	root, _, _ := watchPaths(api, profile)
 	run := func(name string, args ...string) error {
-		command, _, err := c.Find([]string{name})
-		if err != nil {
-			return err
+		command := newOnboardingWatchCommand(app, &api, &profile)
+		if name != "onboard" {
+			var err error
+			command, _, err = c.Find([]string{name})
+			if err != nil {
+				return err
+			}
 		}
 		command.SetContext(context.Background())
 		return command.RunE(command, args)
@@ -360,7 +244,7 @@ func TestWatchLifecycleCommandsInProcess(t *testing.T) {
 	if err := watching.Write(filepath.Join(root, "heartbeat.json"), time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if err := run("start", repo); err != nil {
+	if err := run("onboard", repo); err != nil {
 		t.Fatal(err)
 	}
 	if err := run("status", repo); err != nil {
@@ -369,11 +253,11 @@ func TestWatchLifecycleCommandsInProcess(t *testing.T) {
 	if err := lock.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := run("stop"); err != nil {
+	if err := watching.Write(filepath.Join(sharedWatchRoot(root), "paused.json"), time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if err := run("start", repo); err == nil {
-		t.Fatal("start ignored pause")
+	if err := run("onboard", repo); err == nil {
+		t.Fatal("onboarding ignored pause")
 	}
 	if err := run("revoke", repo); err != nil {
 		t.Fatal(err)

@@ -24,13 +24,13 @@ func TestFeedbackHookRequestsEveryUnansweredFinding(t *testing.T) {
 	if visible != "Doomer has 1 suggestion ready for review." {
 		t.Fatal(visible)
 	}
-	for _, hidden := range []string{"watch instructions", "--control", "review_id", "lead_id", "status=fixed", "Do not dump", "internal handoff"} {
+	for _, hidden := range []string{"watch findings", "--control", "review_id", "lead_id", "status=fixed", "Do not dump", "internal handoff"} {
 		if strings.Contains(visible, hidden) {
 			t.Fatalf("verbose guidance leaked into hook reason: %s", visible)
 		}
 	}
 	text := feedbackInstructions(response, strings.Repeat("b", 64))
-	for _, want := range []string{"watch respond", "review_id", "lead_id", "status=fixed", "dismissed", "deferred", "Do not dump"} {
+	for _, want := range []string{"watch findings respond", "review_id", "lead_id", "status=fixed", "dismissed", "deferred", "Do not dump"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q", want)
 		}
@@ -107,7 +107,7 @@ func TestWatchCommandsGoOnlyToPromptContext(t *testing.T) {
 		t.Fatal(specific)
 	}
 	text := specific["additionalContext"].(string)
-	if !strings.Contains(text, "watch instructions --control "+key) || !strings.Contains(text, "watch report --control "+key) || !strings.Contains(text, "ONE final answer") {
+	if !strings.Contains(text, "watch findings ls --control "+key) || !strings.Contains(text, "watch results --control "+key) || !strings.Contains(text, "ONE final answer") {
 		t.Fatal("missing command in model context")
 	}
 }
@@ -134,7 +134,7 @@ func TestWatchReportLeavesShutdownToHook(t *testing.T) {
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
-	command := newWatchReportCommand()
+	command := newWatchResultsCommand()
 	command.SetContext(ctx)
 	command.SetArgs([]string{"--control", key})
 	var out bytes.Buffer
@@ -194,7 +194,7 @@ func TestAdvisoryRequiresExplicitDisplayAcknowledgement(t *testing.T) {
 func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
 	key := strings.Repeat("a", 64)
 	context := watchAgentContextForAgent(key, "claude")["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
-	if strings.Contains(context, "watch report --control") {
+	if strings.Contains(context, "watch results --control") {
 		t.Fatal("Claude still requires shell retrieval")
 	}
 	result := livewatch.Response{
@@ -204,7 +204,7 @@ func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
 	}
 	out := claudeStopFeedback(result, key, false)
 	text, _ := out["reason"].(string)
-	for _, want := range []string{"Handle invalid input", "Service maintenance", "watch respond", "notice-ack", "only after user-visible display", "do not bypass"} {
+	for _, want := range []string{"Handle invalid input", "Service maintenance", "watch findings respond", "notice-ack", "only after user-visible display", "do not bypass"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q: %v", want, out)
 		}

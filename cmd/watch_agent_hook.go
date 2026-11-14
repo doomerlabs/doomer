@@ -87,7 +87,7 @@ func agentHookConsent(state agentHookState, api, agent, repo string) (watching.C
 
 func newAgentWatchHookCommand() *cobra.Command {
 	var home, agent, owner string
-	c := &cobra.Command{Use: "agent-hook", Short: "Start and stop watch for an agent", Args: cobra.NoArgs}
+	c := &cobra.Command{Use: "agent", Short: "Start and stop watch for an agent", Args: cobra.NoArgs}
 	// Hook execution must not load or create legacy watcher state as a side effect.
 	c.PersistentPreRunE = func(*cobra.Command, []string) error { return nil }
 	c.PersistentPostRun = func(*cobra.Command, []string) {}
@@ -174,7 +174,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 			if existing.Directory != directory {
 				return empty, fmt.Errorf("this turn already has a watcher with different configuration")
 			}
-			return watchAgentContextForAgent(id.Key(), agent), nil
+			return watchAgentContextForAgent(id.Key(), agent, directory), nil
 		}
 	}
 	requestTurn := turn
@@ -213,7 +213,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 			if result.Directory != directory {
 				return empty, fmt.Errorf("watcher identity collision")
 			}
-			return watchAgentContextForAgent(id.Key(), agent), nil
+			return watchAgentContextForAgent(id.Key(), agent, directory), nil
 		}
 		select {
 		case err := <-exited:

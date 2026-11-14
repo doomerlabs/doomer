@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Onboarding uses the same consent and background-start path as watch start.
+// Legacy onboarding retains an internal consent and background-start path.
 // There is no separate grant, implicit resume, or hook-trust bypass.
 // The reset subcommand independently revokes integrations across discovered homes;
 // it does not install hooks or grant permission.
@@ -117,11 +117,7 @@ func newOnboardCommand(app *application.App, api, profile *string) *cobra.Comman
 		if err != nil {
 			return err
 		}
-		watch := newWatchCommand(app, api, profile)
-		start, _, err := watch.Find([]string{"start"})
-		if err != nil {
-			return err
-		}
+		start := newOnboardingWatchCommand(app, api, profile)
 		start.SetContext(c.Context())
 		start.SetIn(c.InOrStdin())
 		start.SetOut(c.OutOrStdout())

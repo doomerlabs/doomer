@@ -61,3 +61,8 @@ func Available(ctx context.Context, key string) (Response, bool) {
 func AcknowledgeNotice(ctx context.Context, key, id string, revision int) (Response, error) {
 	return call(ctx, key, request{Key: key, Operation: "notice-ack", NoticeID: id, NoticeRevision: revision})
 }
+
+// AddDirectory establishes a baseline before the caller edits another repository.
+func AddDirectory(ctx context.Context, key, directory string) (Response, error) {
+	return call(ctx, key, request{Key: key, Operation: "add", Directory: directory})
+}
