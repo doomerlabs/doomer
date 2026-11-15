@@ -282,7 +282,11 @@ func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
 		}
 	}
 	for _, active := range []bool{false, true} {
-		if codexStopFeedback(response, active)["decision"] != "block" {
+		codex := codexStopFeedback(response, active)
+		if codex["reason"] != "Doomer is checking the latest changes." {
+			t.Fatalf("internal handoff leaked into visible reason: %v", codex)
+		}
+		if codex["decision"] != "block" {
 			t.Fatal("Codex lost handoff")
 		}
 		if claudeStopFeedback(response, strings.Repeat("a", 64), active)["decision"] != "block" {

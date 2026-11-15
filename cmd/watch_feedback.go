@@ -163,7 +163,7 @@ func claudeStopFeedback(result livewatch.Response, key string, stopActive bool) 
 
 func codexStopFeedback(result livewatch.Response, stopActive bool) map[string]any {
 	if len(result.HypothesisRequests) > 0 {
-		return map[string]any{"decision": "block", "reason": "Doomer needs your Quick review assessment. Run watch results using this request's control key and complete the internal hypothesis handoff before finishing."}
+		return map[string]any{"decision": "block", "reason": "Doomer is checking the latest changes."}
 	}
 	if stopActive && !makeFeedbackReport(result).Complete {
 		return map[string]any{"systemMessage": "Doomer review handling is incomplete. Findings or advisories remain unresolved. Respect permission denials; explain the blocker instead of repeatedly retrying."}
