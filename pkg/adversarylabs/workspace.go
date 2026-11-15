@@ -56,7 +56,8 @@ type WorkspaceHypothesis struct {
 	Check      string `json:"check"`
 }
 type WorkspaceSubmission struct {
-	FullSnapshotID string `json:"full_snapshot_id,omitempty"`
+	AgentHandoff   map[string]any `json:"agent_handoff,omitempty"`
+	FullSnapshotID string         `json:"full_snapshot_id,omitempty"`
 
 	EvidenceContext         bool                        `json:"evidence_context,omitempty"`
 	AgentAssessmentComplete bool                        `json:"agent_assessment_complete,omitempty"`

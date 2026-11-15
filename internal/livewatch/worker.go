@@ -358,7 +358,7 @@ func (w *worker) schedule(ctx context.Context) {
 			}
 			cfg.hypotheses = func(ctx context.Context, repo, diff string, revision int) ([]adversarylabs.WorkspaceHypothesis, error) {
 				id := Key(cfg.ID + "\x00" + repo + fmt.Sprint(revision) + "\x00" + diff)
-				task := &hypothesisWait{request: HypothesisRequest{ID: id, Repository: repo, Diff: diff}, reply: make(chan []adversarylabs.WorkspaceHypothesis, 1)}
+				task := &hypothesisWait{request: HypothesisRequest{ID: id, ReviewID: reviewIdentity(cfg, repo, revision), Revision: revision, Snapshot: snapshot.TargetTreeHash, DiffHash: Key(diff), Repository: repo, Diff: diff}, reply: make(chan HypothesisResponse, 1)}
 				if len(task.request.Diff) > 1<<20 {
 					task.request.Diff = task.request.Diff[:1<<20]
 					task.request.Partial = true
@@ -370,7 +370,10 @@ func (w *worker) schedule(ctx context.Context) {
 				}
 				select {
 				case result := <-task.reply:
-					return result, nil
+					if result.Status != "assessed" {
+						return nil, fmt.Errorf("agent assessment %s: %s", result.Status, result.Reason)
+					}
+					return result.Hypotheses, nil
 				case <-ctx.Done():
 					return nil, ctx.Err()
 				}

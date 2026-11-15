@@ -171,7 +171,11 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 	}
 	look, deep := true, false
 	group := Key(cfg.ID + "\x00" + repo)
-	current, err := client.StartWorkspace(ctx, cfg.Token, adversarylabs.WorkspaceSubmission{
+	var handoff map[string]any
+	if cfg.RequireHypotheses {
+		handoff = map[string]any{"request_id": Key(cfg.ID + "\x00" + repo + fmt.Sprint(revision) + "\x00" + latest), "snapshot_id": capture.TargetTreeHash, "diff_hash": Key(latest), "watch_revision": revision, "status": "assessed", "hypothesis_count": len(hypotheses)}
+	}
+	current, err := client.StartWorkspace(ctx, cfg.Token, adversarylabs.WorkspaceSubmission{AgentHandoff: handoff,
 		GitIdentity: capture.GitIdentity, LookCloser: &look, FullReview: &deep, ReviewScope: scope, AgentDiff: latest, Diff: diff,
 		UserRequest: cfg.Request, Hypotheses: hypotheses, AgentAssessmentComplete: cfg.RequireHypotheses, EvidenceContext: cfg.RequireHypotheses, FullSnapshotID: adversarylabs.WorkspaceSnapshotID(repository, manifest.Target, manifest.Blobs),
 		RepositoryID: repoID, BaseSnapshotID: baseID, SnapshotID: headID, Repository: repository, Branch: capture.Source.Branch,
