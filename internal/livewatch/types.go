@@ -27,6 +27,9 @@ type ConsentEvidence struct {
 }
 
 type Config struct {
+	lifecycle    *reviewLifecycle
+	editBaseline map[string]initialFile
+
 	RequireHypotheses bool `json:"require_hypotheses,omitempty"`
 	hypotheses        func(context.Context, string, string, int) ([]adversarylabs.WorkspaceHypothesis, error)
 

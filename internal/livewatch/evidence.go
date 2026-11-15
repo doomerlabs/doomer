@@ -79,14 +79,27 @@ func quickEvidence(m sourcesnapshot.Manifest, hypotheses []adversarylabs.Workspa
 }
 
 type preparationClient interface {
-	PrepareWorkspace(context.Context, string, string, string, string) error
+	PrepareWorkspace(context.Context, string, string, string, string, string) error
 }
 
 // Upload and preparation are independent of Quick and of the hook's deadline.
-func (w *worker) prepareInBackground(repo string, snapshot sourcesnapshot.Capture) {
+func (w *worker) prepareInBackground(repo string, snapshot sourcesnapshot.Capture, lifecycles ...*reviewLifecycle) {
 	w.background.Add(1)
 	go func() {
 		defer w.background.Done()
+		var lifecycle *reviewLifecycle
+		if len(lifecycles) > 0 {
+			lifecycle = lifecycles[0]
+		}
+		lifecycle.event("repository_upload", "running")
+		complete := false
+		defer func() {
+			if complete {
+				lifecycle.event("repository_upload", "completed")
+			} else {
+				lifecycle.event("repository_upload", "failed")
+			}
+		}()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		select {
@@ -117,8 +130,13 @@ func (w *worker) prepareInBackground(repo string, snapshot sourcesnapshot.Captur
 		if err != nil || other != id {
 			return
 		}
+		complete = true
 		if client, ok := w.client.(preparationClient); ok && w.allowed(ctx, repo) {
-			_ = client.PrepareWorkspace(ctx, w.cfg.Token, id, head, base)
+			reviewID := ""
+			if lifecycle != nil {
+				reviewID = lifecycle.id
+			}
+			_ = client.PrepareWorkspace(ctx, w.cfg.Token, id, head, base, reviewID)
 		}
 	}()
 }

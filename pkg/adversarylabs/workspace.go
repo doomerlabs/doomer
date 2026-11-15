@@ -193,8 +193,8 @@ type WorkspaceUpgrade struct {
 }
 
 // PrepareWorkspace queues full snapshot preparation without creating a review.
-func (c Client) PrepareWorkspace(ctx context.Context, token, repo, head, base string) error {
-	return c.postJSON(ctx, "/v1/repositories/prepare", map[string]string{"repository_id": repo, "snapshot_id": head, "base_snapshot_id": base}, token, nil)
+func (c Client) PrepareWorkspace(ctx context.Context, token, repo, head, base, reviewID string) error {
+	return c.postJSON(ctx, "/v1/repositories/prepare", map[string]string{"repository_id": repo, "snapshot_id": head, "base_snapshot_id": base, "review_id": reviewID}, token, nil)
 }
 
 // WorkspaceSnapshotID matches the canonical uploaded manifest (including field order).
@@ -218,4 +218,8 @@ func WorkspaceSnapshotID(repository string, entries []sourcesnapshot.Entry, blob
 		Files      []file `json:"files"`
 	}{strings.TrimSpace(repository), files})
 	return sourcesnapshot.Digest(bytes.TrimSuffix(encoded.Bytes(), []byte("\n")))
+}
+
+func (c Client) ReportWorkspaceLifecycle(ctx context.Context, token string, payload any) error {
+	return c.postJSON(ctx, "/v1/reviews/workspace/lifecycle", payload, token, nil)
 }

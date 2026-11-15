@@ -84,3 +84,20 @@ func TestQuickCompletesWhileFullUploadIsBlocked(t *testing.T) {
 		t.Fatalf("Quick waited for full upload: %+v", result)
 	}
 }
+
+func TestLatestEditExcludesExistingDirtyBranchChanges(t *testing.T) {
+	old := []byte("old\n")
+	branch := []byte("existing branch change\n")
+	latest := []byte("existing branch change\n// comment\n")
+	entry := func(path string, b []byte) sourcesnapshot.Entry {
+		return sourcesnapshot.Entry{Path: path, Hash: sourcesnapshot.Digest(b), Mode: "100644"}
+	}
+	m := sourcesnapshot.Manifest{Base: []sourcesnapshot.Entry{entry("a.go", old), entry("b.go", old)}, Target: []sourcesnapshot.Entry{entry("a.go", latest), entry("b.go", branch)}, Blobs: map[string][]byte{sourcesnapshot.Digest(old): old, sourcesnapshot.Digest(branch): branch, sourcesnapshot.Digest(latest): latest}}
+	diff, err := editScope(context.Background(), m, map[string]initialFile{"a.go": {body: branch, mode: "100644"}, "b.go": {body: branch, mode: "100644"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(diff, "b.go") || !strings.Contains(diff, "+// comment") {
+		t.Fatalf("scope re-reviewed old changes: %s", diff)
+	}
+}

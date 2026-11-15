@@ -20,6 +20,8 @@ import (
 )
 
 type repository struct {
+	baseline map[string]initialFile
+
 	observed         string
 	pending, running bool
 	version          int
@@ -240,7 +242,15 @@ func (w *worker) scanDirectory(ctx context.Context, directory string, initial, f
 		r := w.repos[path]
 		if r == nil {
 			// Existing changes establish the baseline; only a later change may submit.
-			r = &repository{observed: fingerprint, pending: !initial}
+			var baseline map[string]initialFile
+			if w.cfg.RequireHypotheses {
+				var e error
+				baseline, e = initialEditFiles(ctx, path)
+				if e != nil {
+					return e
+				}
+			}
+			r = &repository{baseline: baseline, observed: fingerprint, pending: !initial}
 			w.repos[path] = r
 		} else if fingerprint != r.observed {
 			r.observed = fingerprint
@@ -299,6 +309,7 @@ func (w *worker) schedule(ctx context.Context) {
 		r.cancel = cancel
 		version := r.version
 		w.jobs.Add(1)
+		baseline := r.baseline
 		go func(path string, version int, snapshot sourcesnapshot.Capture) {
 			defer w.jobs.Done()
 			defer cancel()
@@ -308,6 +319,7 @@ func (w *worker) schedule(ctx context.Context) {
 				return
 			}
 			defer func() { <-w.slots }()
+			captureStarted := time.Now()
 			if w.cfg.RequireHypotheses {
 				captured, err := capture(jobCtx, path)
 				if err != nil {
@@ -318,9 +330,14 @@ func (w *worker) schedule(ctx context.Context) {
 					return
 				}
 				snapshot = captured
-				w.prepareInBackground(path, snapshot)
 			}
 			cfg := w.cfg
+			cfg.editBaseline = baseline
+			cfg.lifecycle = newReviewLifecycle(w.client, cfg, path, snapshot, version, captureStarted)
+			cfg.lifecycle.event("capture", "completed")
+			if cfg.RequireHypotheses {
+				w.prepareInBackground(path, snapshot, cfg.lifecycle)
+			}
 			cfg.hypotheses = func(ctx context.Context, repo, diff string, revision int) ([]adversarylabs.WorkspaceHypothesis, error) {
 				id := Key(cfg.ID + "\x00" + repo + fmt.Sprint(revision) + "\x00" + diff)
 				task := &hypothesisWait{request: HypothesisRequest{ID: id, Repository: repo, Diff: diff}, reply: make(chan []adversarylabs.WorkspaceHypothesis, 1)}
@@ -729,7 +746,14 @@ func (w *worker) addDirectory(ctx context.Context, directory string) error {
 		return err
 	}
 	for repo, fingerprint := range baselines {
-		w.repos[repo] = &repository{observed: fingerprint}
+		var baseline map[string]initialFile
+		if w.cfg.RequireHypotheses {
+			baseline, err = initialEditFiles(ctx, repo)
+			if err != nil {
+				return err
+			}
+		}
+		w.repos[repo] = &repository{observed: fingerprint, baseline: baseline}
 	}
 	w.directories = append(w.directories, directory)
 	return nil

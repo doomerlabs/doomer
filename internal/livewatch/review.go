@@ -100,7 +100,11 @@ func diffLines(data []byte) []string {
 
 func review(ctx context.Context, client Client, cfg Config, repo string, capture sourcesnapshot.Capture, revision int) Result {
 	result := Result{Repository: repo, Status: "unavailable"}
-	fail := func(err error) Result { result.Error = err.Error(); return result }
+	fail := func(err error) Result {
+		cfg.lifecycle.event("result_delivery", "failed")
+		result.Error = err.Error()
+		return result
+	}
 	manifest, err := sourcesnapshot.DecodeWorkspace(capture.Bytes)
 	if err != nil {
 		return fail(err)
@@ -113,15 +117,25 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		result.Status = "unchanged"
 		return result
 	}
+	latest := diff
+	if cfg.RequireHypotheses {
+		latest, err = editScope(ctx, manifest, cfg.editBaseline)
+		if err != nil {
+			return fail(err)
+		}
+	}
 	var hypotheses []adversarylabs.WorkspaceHypothesis
 	if cfg.RequireHypotheses {
 		if cfg.hypotheses == nil {
 			return fail(fmt.Errorf("agent hypothesis handoff unavailable"))
 		}
-		hypotheses, err = cfg.hypotheses(ctx, repo, diff, revision)
+		cfg.lifecycle.event("agent_assessment", "running")
+		hypotheses, err = cfg.hypotheses(ctx, repo, latest, revision)
 		if err != nil {
+			cfg.lifecycle.event("agent_assessment", "failed")
 			return fail(err)
 		}
+		cfg.lifecycle.event("agent_assessment", "completed")
 	}
 	repository := capture.Source.Repository
 	if repository == "" {
@@ -129,6 +143,7 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 	}
 	var repoID, baseID, headID string
 	if cfg.RequireHypotheses {
+		cfg.lifecycle.event("evidence_upload", "running")
 		repoID, baseID, headID, err = uploadEvidence(ctx, client, cfg, repository, manifest, hypotheses)
 	} else {
 		repoID, baseID, err = client.UploadWorkspaceTree(ctx, cfg.Token, repository, manifest.Base, manifest.Blobs)
@@ -141,19 +156,28 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		}
 	}
 	if err != nil {
+		cfg.lifecycle.event("evidence_upload", "failed")
 		return fail(err)
+	}
+	cfg.lifecycle.event("evidence_upload", "completed")
+	cfg.lifecycle.event("submission", "running")
+	scope := "diff"
+	if cfg.RequireHypotheses {
+		scope = "latest_edit"
 	}
 	look, deep := true, false
 	group := Key(cfg.ID + "\x00" + repo)
 	current, err := client.StartWorkspace(ctx, cfg.Token, adversarylabs.WorkspaceSubmission{
-		GitIdentity: capture.GitIdentity, LookCloser: &look, FullReview: &deep, ReviewScope: "diff", AgentDiff: diff, Diff: diff,
+		GitIdentity: capture.GitIdentity, LookCloser: &look, FullReview: &deep, ReviewScope: scope, AgentDiff: latest, Diff: diff,
 		UserRequest: cfg.Request, Hypotheses: hypotheses, AgentAssessmentComplete: cfg.RequireHypotheses, EvidenceContext: cfg.RequireHypotheses, FullSnapshotID: adversarylabs.WorkspaceSnapshotID(repository, manifest.Target, manifest.Blobs),
 		RepositoryID: repoID, BaseSnapshotID: baseID, SnapshotID: headID, Repository: repository, Branch: capture.Source.Branch,
-		GroupID: group, ReviewID: Key(fmt.Sprintf("%s\x00%d", group, revision)), Revision: revision, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "agent": cfg.Agent},
+		GroupID: group, ReviewID: reviewIdentity(cfg, repo, revision), Revision: revision, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "agent": cfg.Agent},
 	})
 	if err != nil {
+		cfg.lifecycle.event("submission", "failed")
 		return fail(err)
 	}
+	cfg.lifecycle.event("submission", "completed")
 	for {
 		result.ID = current.ID
 		if link := adversarylabs.WorkspaceLink(cfg.API, current); link != "" {
@@ -163,6 +187,11 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 			result.Status, result.Leads = current.Early.Status, current.Early.Leads
 			if result.Status == "unavailable" {
 				result.Error = current.Early.FailureCode
+			}
+			if result.Status == "ready" {
+				cfg.lifecycle.event("result_delivery", "completed")
+			} else {
+				cfg.lifecycle.event("result_delivery", "failed")
 			}
 			return result
 		}
