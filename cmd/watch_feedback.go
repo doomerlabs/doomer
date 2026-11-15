@@ -173,7 +173,7 @@ func codexStopFeedback(result livewatch.Response, stopActive bool) map[string]an
 			return pendingFeedbackHook(result)
 		}
 	}
-	if stopActive && !makeFeedbackReport(result).Complete && len(result.HypothesisRequests) == 0 {
+	if stopActive && !makeFeedbackReport(result).Complete {
 		return map[string]any{"systemMessage": "Doomer review handling is incomplete. Findings or advisories remain unresolved. Respect permission denials; explain the blocker instead of repeatedly retrying."}
 	}
 	if feedback := pendingFeedbackHook(result); feedback != nil {
