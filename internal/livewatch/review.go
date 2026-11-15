@@ -113,6 +113,16 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		result.Status = "unchanged"
 		return result
 	}
+	var hypotheses []adversarylabs.WorkspaceHypothesis
+	if cfg.RequireHypotheses {
+		if cfg.hypotheses == nil {
+			return fail(fmt.Errorf("agent hypothesis handoff unavailable"))
+		}
+		hypotheses, err = cfg.hypotheses(ctx, repo, diff, revision)
+		if err != nil {
+			return fail(err)
+		}
+	}
 	repository := capture.Source.Repository
 	if repository == "" {
 		repository = sourcesnapshot.LocalRepositoryIdentifier(repo)
@@ -132,7 +142,7 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 	group := Key(cfg.ID + "\x00" + repo)
 	current, err := client.StartWorkspace(ctx, cfg.Token, adversarylabs.WorkspaceSubmission{
 		GitIdentity: capture.GitIdentity, LookCloser: &look, FullReview: &deep, ReviewScope: "diff", AgentDiff: diff, Diff: diff,
-		UserRequest:  cfg.Request,
+		UserRequest: cfg.Request, Hypotheses: hypotheses, AgentAssessmentComplete: cfg.RequireHypotheses,
 		RepositoryID: repoID, BaseSnapshotID: baseID, SnapshotID: headID, Repository: repository, Branch: capture.Source.Branch,
 		GroupID: group, ReviewID: Key(fmt.Sprintf("%s\x00%d", group, revision)), Revision: revision, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "agent": cfg.Agent},
 	})

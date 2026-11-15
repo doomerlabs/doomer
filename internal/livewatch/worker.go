@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 	"github.com/fsnotify/fsnotify"
 )
@@ -32,6 +33,8 @@ type completion struct {
 	result  Result
 }
 type control struct {
+	hypotheses *HypothesisResponse
+
 	addDirectory string
 
 	cancel         bool
@@ -45,6 +48,9 @@ type control struct {
 	sent           chan struct{}
 }
 type worker struct {
+	hypotheses      map[string]*hypothesisWait
+	hypothesisReady chan *hypothesisWait
+
 	cfg           Config
 	client        Client
 	allowed       func(context.Context, string) bool
@@ -79,6 +85,8 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	w := &worker{directories: []string{cfg.Directory}, cfg: cfg, client: client, allowed: allowed, repos: map[string]*repository{}, findings: map[string]Finding{}, noticeAcks: map[string]bool{}, controls: make(chan control), completed: make(chan completion, 64), slots: make(chan struct{}, 4)}
+	w.hypotheses = map[string]*hypothesisWait{}
+	w.hypothesisReady = make(chan *hypothesisWait)
 	w.closeListener = func() error { return nil }
 	if listener != nil {
 		w.closeListener = listener.Close
@@ -130,10 +138,10 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 						_ = json.NewEncoder(conn).Encode(Response{Ready: true, API: cfg.API, Directory: cfg.Directory})
 						return
 					}
-					if req.Operation != "add" && req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" {
+					if req.Operation != "hypotheses" && req.Operation != "add" && req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" {
 						return
 					}
-					command := control{addDirectory: req.Directory, results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, noticeID: req.NoticeID, noticeRevision: req.NoticeRevision, reply: make(chan Response, 1), sent: make(chan struct{})}
+					command := control{hypotheses: req.Hypotheses, addDirectory: req.Directory, results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, noticeID: req.NoticeID, noticeRevision: req.NoticeRevision, reply: make(chan Response, 1), sent: make(chan struct{})}
 					select {
 					case w.controls <- command:
 					case <-ctx.Done():
@@ -294,7 +302,27 @@ func (w *worker) schedule(ctx context.Context) {
 				return
 			}
 			defer func() { <-w.slots }()
-			result := review(jobCtx, w.client, w.cfg, path, snapshot, version)
+			cfg := w.cfg
+			cfg.hypotheses = func(ctx context.Context, repo, diff string, revision int) ([]adversarylabs.WorkspaceHypothesis, error) {
+				id := Key(cfg.ID + "\x00" + repo + fmt.Sprint(revision) + "\x00" + diff)
+				task := &hypothesisWait{request: HypothesisRequest{ID: id, Repository: repo, Diff: diff}, reply: make(chan []adversarylabs.WorkspaceHypothesis, 1)}
+				if len(task.request.Diff) > 1<<20 {
+					task.request.Diff = task.request.Diff[:1<<20]
+					task.request.Partial = true
+				}
+				select {
+				case w.hypothesisReady <- task:
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+				select {
+				case result := <-task.reply:
+					return result, nil
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+			result := review(jobCtx, w.client, cfg, path, snapshot, version)
 			select {
 			case w.completed <- completion{path, version, result}:
 			case <-ctx.Done():
@@ -305,6 +333,10 @@ func (w *worker) schedule(ctx context.Context) {
 
 func (w *worker) response(timeout bool) Response {
 	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory}
+	for _, pending := range w.hypotheses {
+		response.HypothesisRequests = append(response.HypothesisRequests, pending.request)
+	}
+	sort.Slice(response.HypothesisRequests, func(i, j int) bool { return response.HypothesisRequests[i].ID < response.HypothesisRequests[j].ID })
 	if w.cfg.Consent != nil {
 		response.Consent = w.cfg.Consent()
 	}
@@ -349,6 +381,9 @@ func (w *worker) collectFindings() {
 }
 
 func (w *worker) hasPendingFeedback() bool {
+	if len(w.hypotheses) > 0 {
+		return true
+	}
 	for _, notice := range w.response(false).Notices {
 		if notice.NotifyUser {
 			return true
@@ -449,7 +484,7 @@ func (w *worker) run(ctx context.Context) error {
 					busy = true
 				}
 			}
-			if !busy {
+			if !busy || len(w.hypotheses) > 0 {
 				w.collectFindings()
 				response := w.response(false)
 				stop := false
@@ -475,7 +510,18 @@ func (w *worker) run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case task := <-w.hypothesisReady:
+			w.hypotheses[task.request.ID] = task
 		case command := <-w.controls:
+			if command.hypotheses != nil {
+				err := w.recordHypotheses(*command.hypotheses)
+				response := w.response(false)
+				if err != nil {
+					response.Error = err.Error()
+				}
+				finish(command, response)
+				continue
+			}
 
 			if command.addDirectory != "" {
 				response := w.response(false)
@@ -571,6 +617,11 @@ func (w *worker) run(ctx context.Context) error {
 			if r := w.repos[done.path]; r != nil && r.version == done.version {
 				r.running = false
 				r.result = &done.result
+				for id, task := range w.hypotheses {
+					if task.request.Repository == done.path {
+						delete(w.hypotheses, id)
+					}
+				}
 				if w.cfg.Report != nil {
 					w.cfg.Report(done.result)
 				}

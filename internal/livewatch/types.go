@@ -27,6 +27,9 @@ type ConsentEvidence struct {
 }
 
 type Config struct {
+	RequireHypotheses bool `json:"require_hypotheses,omitempty"`
+	hypotheses        func(context.Context, string, string, int) ([]adversarylabs.WorkspaceHypothesis, error)
+
 	Consent           func() *ConsentEvidence             `json:"-"`
 	ID                string                              `json:"id"`
 	ControlKey        string                              `json:"control_key,omitempty"`
@@ -76,6 +79,8 @@ type Finding struct {
 }
 
 type Response struct {
+	HypothesisRequests []HypothesisRequest `json:"hypothesis_requests,omitempty"`
+
 	Consent   *ConsentEvidence             `json:"consent,omitempty"`
 	Ready     bool                         `json:"ready"`
 	API       string                       `json:"api,omitempty"`
@@ -87,6 +92,8 @@ type Response struct {
 }
 
 type request struct {
+	Hypotheses *HypothesisResponse `json:"hypotheses,omitempty"`
+
 	Key            string     `json:"key"`
 	Operation      string     `json:"operation"`
 	Directory      string     `json:"directory,omitempty"`

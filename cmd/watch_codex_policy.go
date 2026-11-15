@@ -101,6 +101,7 @@ func newNodeCodexPolicyCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			if !declined {
 				legacyConsent := consent
 				legacyConsent.CredentialDirectory = ""

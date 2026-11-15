@@ -146,7 +146,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 			if agent == "claude" {
 				return claudeStopFeedback(result, id.Key(), input.StopActive), nil
 			}
-			if input.StopActive && !makeFeedbackReport(result).Complete {
+			if input.StopActive && !makeFeedbackReport(result).Complete && len(result.HypothesisRequests) == 0 {
 				// End the normal lifecycle without inventing feedback or retrying a denied action.
 				if _, err := livewatch.Call(ctx, id.Key(), "cancel"); err != nil {
 					return empty, err
@@ -188,7 +188,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	if len(prompt) > 4000 {
 		prompt = prompt[:4000]
 	}
-	cfg := watchConfiguration{Config: livewatch.Config{ID: rand.Text(), ControlKey: id.Key(), Directory: directory, Agent: agent, Request: &adversarylabs.WorkspaceUserRequest{Prompt: string(prompt), SessionID: input.Session, TurnID: requestTurn}}, ManagerHome: home}
+	cfg := watchConfiguration{Config: livewatch.Config{RequireHypotheses: true, ID: rand.Text(), ControlKey: id.Key(), Directory: directory, Agent: agent, Request: &adversarylabs.WorkspaceUserRequest{Prompt: string(prompt), SessionID: input.Session, TurnID: requestTurn}}, ManagerHome: home}
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return empty, err

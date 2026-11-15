@@ -16,6 +16,9 @@ import (
 )
 
 func runWorkspaceReview(cmd *cobra.Command, clock application.Clock, api, profile, token, path string, capture sourcesnapshot.Capture, format string, look, full, showDiff bool, threshold int, waitFor reviewWaitPolicy, timeout, interval time.Duration) error {
+	if look && !full {
+		return fmt.Errorf("Quick review requires a coding-agent hook; standalone Quick review is not supported")
+	}
 	root, _, err := watchPaths(api, profile)
 	if err != nil {
 		return err
