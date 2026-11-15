@@ -287,6 +287,7 @@ func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
 			if codex["decision"] != nil || codex["systemMessage"] == nil {
 				t.Fatal("Codex retried an incomplete handoff indefinitely")
 			}
+			assertSafeHandoffMessage(t, codex)
 		} else if codex["decision"] != "block" || codex["reason"] != "Doomer is checking the latest changes." {
 			t.Fatal("Codex lost initial handoff")
 		}
@@ -295,8 +296,19 @@ func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
 			if claude["decision"] != nil || claude["systemMessage"] == nil {
 				t.Fatal("Claude retried an incomplete handoff indefinitely")
 			}
+			assertSafeHandoffMessage(t, claude)
 		} else if claude["decision"] != "block" || claude["reason"] != "Doomer is checking the latest changes." {
 			t.Fatal("Claude lost initial handoff")
+		}
+	}
+}
+
+func assertSafeHandoffMessage(t *testing.T, output map[string]any) {
+	t.Helper()
+	message, _ := output["systemMessage"].(string)
+	for _, private := range []string{"watch hypotheses", "--control", strings.Repeat("a", 64)} {
+		if strings.Contains(message, private) {
+			t.Fatalf("internal handoff leaked: %s", private)
 		}
 	}
 }
