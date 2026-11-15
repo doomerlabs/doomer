@@ -289,7 +289,7 @@ func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
 		if codex["decision"] != "block" {
 			t.Fatal("Codex lost handoff")
 		}
-		if claudeStopFeedback(response, strings.Repeat("a", 64), active)["decision"] != "block" {
+		if claude := claudeStopFeedback(response, strings.Repeat("a", 64), active); claude["decision"] != "block" || claude["reason"] != "Doomer is checking the latest changes." {
 			t.Fatal("Claude lost handoff")
 		}
 	}
