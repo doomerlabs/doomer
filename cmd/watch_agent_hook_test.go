@@ -323,3 +323,12 @@ func TestAgentHookLeavesDirectoryRoutingToWatch(t *testing.T) {
 		t.Fatalf("watch did not select localhost: %+v", response)
 	}
 }
+
+func TestSuggestionPromptDoesNotStartWatcher(t *testing.T) {
+	c := NewRootCommand()
+	c.SetIn(strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"suggestion","cwd":"/missing","prompt":"This is an app-generated request for a suggested next user message. The user did not write this message.\n\nSuggest a reply."}`))
+	result, err := runAgentWatchHook(c, t.TempDir(), "codex")
+	if err != nil || len(result) != 0 {
+		t.Fatalf("suggestion started hook: %v %v", result, err)
+	}
+}

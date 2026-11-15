@@ -14,11 +14,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 	"github.com/fsnotify/fsnotify"
 )
 
 type repository struct {
+	baseline map[string]initialFile
+
 	observed         string
 	pending, running bool
 	version          int
@@ -32,6 +35,8 @@ type completion struct {
 	result  Result
 }
 type control struct {
+	hypotheses *HypothesisResponse
+
 	addDirectory string
 
 	cancel         bool
@@ -45,6 +50,12 @@ type control struct {
 	sent           chan struct{}
 }
 type worker struct {
+	background   sync.WaitGroup
+	prepareSlots chan struct{}
+
+	hypotheses      map[string]*hypothesisWait
+	hypothesisReady chan *hypothesisWait
+
 	cfg           Config
 	client        Client
 	allowed       func(context.Context, string) bool
@@ -79,11 +90,14 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	w := &worker{directories: []string{cfg.Directory}, cfg: cfg, client: client, allowed: allowed, repos: map[string]*repository{}, findings: map[string]Finding{}, noticeAcks: map[string]bool{}, controls: make(chan control), completed: make(chan completion, 64), slots: make(chan struct{}, 4)}
+	w.prepareSlots = make(chan struct{}, 1)
+	w.hypotheses = map[string]*hypothesisWait{}
+	w.hypothesisReady = make(chan *hypothesisWait)
 	w.closeListener = func() error { return nil }
 	if listener != nil {
 		w.closeListener = listener.Close
 	}
-	defer func() { cancel(); w.jobs.Wait() }()
+	defer func() { cancel(); w.jobs.Wait(); w.background.Wait() }()
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err
@@ -130,10 +144,10 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 						_ = json.NewEncoder(conn).Encode(Response{Ready: true, API: cfg.API, Directory: cfg.Directory})
 						return
 					}
-					if req.Operation != "add" && req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" {
+					if req.Operation != "hypotheses" && req.Operation != "add" && req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" {
 						return
 					}
-					command := control{addDirectory: req.Directory, results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, noticeID: req.NoticeID, noticeRevision: req.NoticeRevision, reply: make(chan Response, 1), sent: make(chan struct{})}
+					command := control{hypotheses: req.Hypotheses, addDirectory: req.Directory, results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, noticeID: req.NoticeID, noticeRevision: req.NoticeRevision, reply: make(chan Response, 1), sent: make(chan struct{})}
 					select {
 					case w.controls <- command:
 					case <-ctx.Done():
@@ -228,13 +242,21 @@ func (w *worker) scanDirectory(ctx context.Context, directory string, initial, f
 		r := w.repos[path]
 		if r == nil {
 			// Existing changes establish the baseline; only a later change may submit.
-			r = &repository{observed: fingerprint, pending: !initial}
+			var baseline map[string]initialFile
+			if w.cfg.RequireHypotheses {
+				var e error
+				baseline, e = initialEditFiles(ctx, path)
+				if e != nil {
+					return e
+				}
+			}
+			r = &repository{baseline: baseline, observed: fingerprint, pending: !initial}
 			w.repos[path] = r
 		} else if fingerprint != r.observed {
 			r.observed = fingerprint
 			r.pending = true
 		}
-		if freeze && r.pending {
+		if freeze && r.pending && !w.cfg.RequireHypotheses {
 			capture, err := capture(ctx, path)
 			if err != nil {
 				r.pending = false
@@ -266,18 +288,20 @@ func (w *worker) schedule(ctx context.Context) {
 			continue
 		}
 		var snapshot sourcesnapshot.Capture
-		var err error
-		if r.frozen != nil {
-			snapshot = *r.frozen
-			r.frozen = nil
-		} else {
-			snapshot, err = capture(ctx, path)
-		}
-		if err != nil {
-			if !errors.Is(err, sourcesnapshot.ErrNoChanges) {
-				r.result = &Result{Repository: path, Status: "unavailable", Error: err.Error()}
+		if !w.cfg.RequireHypotheses {
+			var err error
+			if r.frozen != nil {
+				snapshot = *r.frozen
+				r.frozen = nil
+			} else {
+				snapshot, err = capture(ctx, path)
 			}
-			continue
+			if err != nil {
+				if !errors.Is(err, sourcesnapshot.ErrNoChanges) {
+					r.result = &Result{Repository: path, Status: "unavailable", Error: err.Error()}
+				}
+				continue
+			}
 		}
 		r.version++
 		r.running = true
@@ -285,6 +309,7 @@ func (w *worker) schedule(ctx context.Context) {
 		r.cancel = cancel
 		version := r.version
 		w.jobs.Add(1)
+		baseline := r.baseline
 		go func(path string, version int, snapshot sourcesnapshot.Capture) {
 			defer w.jobs.Done()
 			defer cancel()
@@ -294,7 +319,83 @@ func (w *worker) schedule(ctx context.Context) {
 				return
 			}
 			defer func() { <-w.slots }()
-			result := review(jobCtx, w.client, w.cfg, path, snapshot, version)
+			captureStarted := time.Now()
+			if w.cfg.RequireHypotheses {
+				captured, err := capture(jobCtx, path)
+				if err != nil {
+					select {
+					case w.completed <- completion{path, version, Result{Repository: path, Status: "unavailable", Error: err.Error()}}:
+					case <-ctx.Done():
+					}
+					return
+				}
+				snapshot = captured
+			}
+			cfg := w.cfg
+			cfg.editBaseline = baseline
+			if cfg.RequireHypotheses {
+				manifest, err := sourcesnapshot.DecodeWorkspace(snapshot.Bytes)
+				var diff string
+				if err == nil {
+					diff, err = editScope(jobCtx, manifest, baseline)
+				}
+				if err != nil || strings.TrimSpace(diff) == "" {
+					result := Result{Repository: path, Status: "unchanged"}
+					if err != nil {
+						result.Status, result.Error = "unavailable", err.Error()
+					}
+					select {
+					case w.completed <- completion{path, version, result}:
+					case <-ctx.Done():
+					}
+					return
+				}
+			}
+			cfg.lifecycle = newReviewLifecycle(w.client, cfg, path, snapshot, version, captureStarted)
+			cfg.lifecycle.event("capture", "completed")
+			if cfg.RequireHypotheses {
+				w.prepareInBackground(path, snapshot, cfg.lifecycle)
+			}
+			assessment := &HypothesisResponse{}
+			cfg.assessment = assessment
+			cfg.hypotheses = func(ctx context.Context, repo, diff string, revision int) ([]adversarylabs.WorkspaceHypothesis, error) {
+				var areas []adversarylabs.WorkspaceReviewArea
+				if triage, ok := w.client.(interface {
+					TriageWorkspace(context.Context, string, string, string) ([]adversarylabs.WorkspaceReviewArea, error)
+				}); ok {
+					cfg.lifecycle.event("risk_selection", "running")
+					var err error
+					areas, err = triage.TriageWorkspace(ctx, cfg.Token, reviewIdentity(cfg, repo, revision), diff)
+					if err != nil {
+						cfg.lifecycle.event("risk_selection", "failed")
+						return nil, err
+					}
+					cfg.lifecycle.event("risk_selection", "completed")
+				}
+				id := Key(cfg.ID + "\x00" + repo + "\x00" + fmt.Sprint(revision) + "\x00" + diff)
+				assessment.RequestID = id
+				task := &hypothesisWait{request: HypothesisRequest{ID: id, ReviewID: reviewIdentity(cfg, repo, revision), Revision: revision, Snapshot: snapshot.TargetTreeHash, DiffHash: Key(diff), Repository: repo, Diff: diff, Areas: areas}, reply: make(chan HypothesisResponse, 1)}
+				if len(task.request.Diff) > 1<<20 {
+					task.request.Diff = task.request.Diff[:1<<20]
+					task.request.Partial = true
+				}
+				select {
+				case w.hypothesisReady <- task:
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+				select {
+				case result := <-task.reply:
+					*assessment = result
+					if result.Status != "assessed" {
+						return nil, fmt.Errorf("agent assessment %s: %s", result.Status, result.Reason)
+					}
+					return result.Hypotheses, nil
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+			result := review(jobCtx, w.client, cfg, path, snapshot, version)
 			select {
 			case w.completed <- completion{path, version, result}:
 			case <-ctx.Done():
@@ -305,6 +406,10 @@ func (w *worker) schedule(ctx context.Context) {
 
 func (w *worker) response(timeout bool) Response {
 	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory}
+	for _, pending := range w.hypotheses {
+		response.HypothesisRequests = append(response.HypothesisRequests, pending.request)
+	}
+	sort.Slice(response.HypothesisRequests, func(i, j int) bool { return response.HypothesisRequests[i].ID < response.HypothesisRequests[j].ID })
 	if w.cfg.Consent != nil {
 		response.Consent = w.cfg.Consent()
 	}
@@ -349,6 +454,9 @@ func (w *worker) collectFindings() {
 }
 
 func (w *worker) hasPendingFeedback() bool {
+	if len(w.hypotheses) > 0 {
+		return true
+	}
 	for _, notice := range w.response(false).Notices {
 		if notice.NotifyUser {
 			return true
@@ -449,7 +557,7 @@ func (w *worker) run(ctx context.Context) error {
 					busy = true
 				}
 			}
-			if !busy {
+			if !busy || len(w.hypotheses) > 0 {
 				w.collectFindings()
 				response := w.response(false)
 				stop := false
@@ -475,7 +583,18 @@ func (w *worker) run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case task := <-w.hypothesisReady:
+			w.hypotheses[task.request.ID] = task
 		case command := <-w.controls:
+			if command.hypotheses != nil {
+				err := w.recordHypotheses(*command.hypotheses)
+				response := w.response(false)
+				if err != nil {
+					response.Error = err.Error()
+				}
+				finish(command, response)
+				continue
+			}
 
 			if command.addDirectory != "" {
 				response := w.response(false)
@@ -571,6 +690,11 @@ func (w *worker) run(ctx context.Context) error {
 			if r := w.repos[done.path]; r != nil && r.version == done.version {
 				r.running = false
 				r.result = &done.result
+				for id, task := range w.hypotheses {
+					if task.request.Repository == done.path {
+						delete(w.hypotheses, id)
+					}
+				}
 				if w.cfg.Report != nil {
 					w.cfg.Report(done.result)
 				}
@@ -660,7 +784,14 @@ func (w *worker) addDirectory(ctx context.Context, directory string) error {
 		return err
 	}
 	for repo, fingerprint := range baselines {
-		w.repos[repo] = &repository{observed: fingerprint}
+		var baseline map[string]initialFile
+		if w.cfg.RequireHypotheses {
+			baseline, err = initialEditFiles(ctx, repo)
+			if err != nil {
+				return err
+			}
+		}
+		w.repos[repo] = &repository{observed: fingerprint, baseline: baseline}
 	}
 	w.directories = append(w.directories, directory)
 	return nil

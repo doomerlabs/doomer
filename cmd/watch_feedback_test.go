@@ -21,7 +21,7 @@ func TestFeedbackHookRequestsEveryUnansweredFinding(t *testing.T) {
 		t.Fatal(out)
 	}
 	visible := out["reason"].(string)
-	if visible != "Doomer has 1 suggestion ready for review." {
+	if visible != "Doomer review is ready." {
 		t.Fatal(visible)
 	}
 	for _, hidden := range []string{"watch findings", "--control", "review_id", "lead_id", "status=fixed", "Do not dump", "internal handoff"} {
@@ -72,7 +72,7 @@ func TestFeedbackReportUsesLatestNaturalLinksPerRepository(t *testing.T) {
 	if !report.Complete || len(report.Reviews) != 2 {
 		t.Fatal(report)
 	}
-	want := "Doomer reviewed the [changes in doomer](https://example.test/cli) and [changes in doomerlabs](https://example.test/app); we considered its suggestions and made no changes based on them."
+	want := "Doomer reviewed the [changes in doomer](https://example.test/cli) and [changes in doomerlabs](https://example.test/app); I checked its concerns and no further changes were needed."
 	if report.SuggestedSummary != want {
 		t.Fatal(report.SuggestedSummary)
 	}
@@ -143,7 +143,7 @@ func TestWatchReportLeavesShutdownToHook(t *testing.T) {
 		t.Fatal(err)
 	}
 	var report watchFeedbackReport
-	if err := json.Unmarshal(out.Bytes(), &report); err != nil || !report.Complete || report.SuggestedSummary != "Doomer found no changes to review." {
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil || !report.Complete || report.SuggestedSummary != "" {
 		t.Fatalf("report: %s (%v)", out.String(), err)
 	}
 	if _, live := livewatch.Available(ctx, key); !live {
@@ -194,8 +194,8 @@ func TestAdvisoryRequiresExplicitDisplayAcknowledgement(t *testing.T) {
 func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
 	key := strings.Repeat("a", 64)
 	context := watchAgentContextForAgent(key, "claude")["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
-	if strings.Contains(context, "watch results --control") {
-		t.Fatal("Claude still requires shell retrieval")
+	if !strings.Contains(context, "If the Stop hook says Doomer is checking the latest changes") || !strings.Contains(context, "silently complete any internal hypothesis requests") || !strings.Contains(context, "watch findings ls --control "+key) || !strings.Contains(context, "Do not wait for another Stop hook") {
+		t.Fatal("Claude is missing internal handoff retrieval guidance")
 	}
 	result := livewatch.Response{
 		Results:  []livewatch.Result{{Status: "ready", URL: "https://example.test/review"}},
@@ -251,5 +251,64 @@ func TestClaudeFailedReviewsStayIncompleteWithoutStopLoop(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPendingFeedbackMessageDoesNotExposeFindingCounts(t *testing.T) {
+	response := livewatch.Response{}
+	for i := 0; i < 11; i++ {
+		response.Findings = append(response.Findings, livewatch.Finding{})
+	}
+	if got := pendingFeedbackHook(response)["reason"]; got != "Doomer review is ready." {
+		t.Fatalf("finding count leaked: %v", got)
+	}
+	text := watchAgentContext("test")["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
+	for _, want := range []string{"not text to repeat", "Never equate returned findings with confirmed defects", "Report the assessed outcome once", "omit all review commentary", "Still deliver required service advisories and report errors"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing outcome guidance: %s", want)
+		}
+	}
+}
+
+func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
+	response := livewatch.Response{HypothesisRequests: []livewatch.HypothesisRequest{{ID: "snapshot-request", Repository: "/repo", Diff: "+change"}}}
+	if makeFeedbackReport(response).Complete {
+		t.Fatal("missing agent assessment reported complete")
+	}
+	text := hypothesisInstructions(response, strings.Repeat("a", 64))
+	for _, want := range []string{"watch hypotheses --control", "explicit empty", "snapshot-request", "do not narrate"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %s", want)
+		}
+	}
+	for _, active := range []bool{false, true} {
+		codex := codexStopFeedback(response, active)
+		if active {
+			if codex["decision"] != nil || codex["systemMessage"] == nil {
+				t.Fatal("Codex retried an incomplete handoff indefinitely")
+			}
+			assertSafeHandoffMessage(t, codex)
+		} else if codex["decision"] != "block" || codex["reason"] != "Doomer is checking the latest changes." {
+			t.Fatal("Codex lost initial handoff")
+		}
+		claude := claudeStopFeedback(response, strings.Repeat("a", 64), active)
+		if active {
+			if claude["decision"] != nil || claude["systemMessage"] == nil {
+				t.Fatal("Claude retried an incomplete handoff indefinitely")
+			}
+			assertSafeHandoffMessage(t, claude)
+		} else if claude["decision"] != "block" || claude["reason"] != "Doomer is checking the latest changes." {
+			t.Fatal("Claude lost initial handoff")
+		}
+	}
+}
+
+func assertSafeHandoffMessage(t *testing.T, output map[string]any) {
+	t.Helper()
+	message, _ := output["systemMessage"].(string)
+	for _, private := range []string{"watch hypotheses", "--control", strings.Repeat("a", 64)} {
+		if strings.Contains(message, private) {
+			t.Fatalf("internal handoff leaked: %s", private)
+		}
 	}
 }

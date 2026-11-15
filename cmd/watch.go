@@ -389,8 +389,11 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 	hook.Flags().StringVar(&hookAgent, "agent", "other", "coding agent identity")
 	c.AddCommand(hook)
 	c.AddCommand(newAgentWatchHookCommand())
-	var hypothesisState, hypothesisID string
+	var hypothesisState, hypothesisID, hypothesisControl string
 	hypotheses := &cobra.Command{Use: "hypotheses", Hidden: true, Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
+		if hypothesisControl != "" {
+			return submitLiveHypotheses(c, hypothesisControl)
+		}
 		expected, _, err := watchPaths(*api, *profile)
 		if err != nil || hypothesisState != expected {
 			return fmt.Errorf("invalid integration state")
@@ -406,6 +409,7 @@ func newWatchCommand(app *application.App, api, profile *string) *cobra.Command 
 		defer cancel()
 		return watching.EmitHypotheses(ctx, expected, hypothesisID, cfg, c.InOrStdin(), c.OutOrStdout())
 	}}
+	hypotheses.Flags().StringVar(&hypothesisControl, "control", "", "watch control key supplied by the hook")
 	hypotheses.Flags().StringVar(&hypothesisState, "state", "", "private integration state directory")
 	hypotheses.Flags().StringVar(&hypothesisID, "request", "", "single-use edit request")
 	c.AddCommand(hypotheses)

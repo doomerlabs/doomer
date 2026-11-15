@@ -398,3 +398,70 @@ func TestDirtyWatchReviewsAfterNewFileChange(t *testing.T) {
 		t.Fatalf("wrong post-start submission: uploads=%d reviews=%+v", client.uploads, client.inputs)
 	}
 }
+
+func TestAgentHypothesesGateSubmissionAndBindSnapshot(t *testing.T) {
+	root := t.TempDir()
+	repo := makeRepository(t, root, "repo")
+	client := &fakeClient{}
+	cfg := Config{ID: Key(t.TempDir()), ControlKey: Key(t.TempDir()), Directory: root, API: "http://localhost/api", Token: "test", RequireHypotheses: true}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- Serve(ctx, cfg, client, func(context.Context, string) bool { return true }) }()
+	for {
+		if _, ok := Available(ctx, cfg.ControlKey); ok {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatal(err)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("after\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var tasks []HypothesisRequest
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		r, err := Call(ctx, cfg.ControlKey, "checkpoint")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(r.HypothesisRequests) > 0 {
+			tasks = r.HypothesisRequests
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(tasks) != 1 || !strings.Contains(tasks[0].Diff, "+after") {
+		t.Fatalf("missing captured request: %+v", tasks)
+	}
+	client.mu.Lock()
+	calls := len(client.inputs)
+	client.mu.Unlock()
+	if calls != 0 {
+		t.Fatal("submitted before agent assessment")
+	}
+	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: "stale", Hypotheses: []adversarylabs.WorkspaceHypothesis{}}); err == nil {
+		t.Fatal("accepted stale request")
+	}
+	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: tasks[0].ID}); err == nil {
+		t.Fatal("accepted missing array")
+	}
+	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: tasks[0].ID, Hypotheses: []adversarylabs.WorkspaceHypothesis{}}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Call(ctx, cfg.ControlKey, "checkpoint")
+	if err != nil || len(result.Results) != 1 || result.Results[0].Status != "ready" {
+		t.Fatalf("completion: %+v %v", result, err)
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if len(client.inputs) != 1 || !client.inputs[0].AgentAssessmentComplete {
+		t.Fatal("explicit assessment completion not sent")
+	}
+	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: tasks[0].ID, Hypotheses: []adversarylabs.WorkspaceHypothesis{}}); err == nil {
+		t.Fatal("accepted replay")
+	}
+}

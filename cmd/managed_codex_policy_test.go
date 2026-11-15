@@ -75,3 +75,64 @@ func TestIntegrationPolicyIsStableAcrossRepositories(t *testing.T) {
 		t.Fatal(policy)
 	}
 }
+
+func TestCodexReviewPolicyIncludesFindingDecisionsAndExplanations(t *testing.T) {
+	policy := proposedCodexReviewPolicy(managedConsentEvidence{Account: "account", Service: "https://example.test/api", Profile: "default", Agent: "codex", AllRepositories: true}).ExtraPolicy
+	for _, want := range []string{"watch findings respond", "fixed, dismissed, and deferred", "repository-specific", "explanations or evidence", "separate approval for each review or response"} {
+		if !strings.Contains(policy, want) {
+			t.Fatalf("missing response authorization: %s", want)
+		}
+	}
+}
+
+func TestCodexReviewPolicyMigratesExactPreviousResponseWording(t *testing.T) {
+	consent := managedConsentEvidence{Account: "account", Service: "https://example.test/api", Profile: "default", Agent: "codex", AllRepositories: true}
+	old := codexReviewPolicyText(consent, false).ExtraPolicy
+	got := mergeCodexExtraPolicy("Keep unrelated policy.\n"+old, consent)
+	if strings.Count(got, "Doomer repository review authorization") != 1 || !strings.Contains(got, "Keep unrelated policy.") || !strings.Contains(got, "watch findings respond") {
+		t.Fatal("migration must replace only exact old policy")
+	}
+	edited := strings.Replace(old, "Finding responses", "Custom finding responses", 1)
+	if !strings.Contains(mergeCodexExtraPolicy(edited, consent), edited) {
+		t.Fatal("custom policy was removed")
+	}
+}
+
+func TestCodexReviewPolicyRetainsDeclineAfterWordingUpgrade(t *testing.T) {
+	t.Setenv("CODEX_HOME", t.TempDir())
+	store := managed.Store{Root: t.TempDir()}
+	consent := managedConsentEvidence{Account: "account", Service: "https://example.test/api", Profile: "default", Agent: "codex", AllRepositories: true}
+	current, _, err := inspectCodexReviewPolicy(consent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := *current
+	previous.ExtraPolicy = codexReviewPolicyText(consent, false).ExtraPolicy
+	if err := declineCodexReviewPolicy(store, &previous); err != nil {
+		t.Fatal(err)
+	}
+	declined, err := codexReviewPolicyDeclined(store, current)
+	if err != nil || !declined {
+		t.Fatalf("prior explicit decline lost: %v", err)
+	}
+}
+
+func TestPreviousPolicyTextMatchesReleasedPolicy(t *testing.T) {
+	consent := managedConsentEvidence{Account: "account", Service: "https://example.test/api", Profile: "default", Agent: "codex", AllRepositories: true}
+	got := codexReviewPolicyText(consent, false).ExtraPolicy
+	if strings.Contains(got, "review.  This") || !strings.Contains(got, "and finding responses for review. This covers") {
+		t.Fatal("previous policy spacing changed")
+	}
+	if strings.Replace(proposedCodexReviewPolicy(consent).ExtraPolicy, codexFindingResponseDetails, "", 1) != got {
+		t.Fatal("previous policy reconstruction differs")
+	}
+}
+
+func TestCodexReviewPolicyDoesNotAuthorizeOtherDestinations(t *testing.T) {
+	policy := proposedCodexReviewPolicy(managedConsentEvidence{Account: "account", Service: "https://example.test/api", Profile: "default", Agent: "codex", AllRepositories: true}).ExtraPolicy
+	for _, restriction := range []string{"other destinations", "credential disclosure", "Respect revoked consent", "Keep host and organization restrictions in force"} {
+		if !strings.Contains(policy, restriction) {
+			t.Fatalf("missing scope restriction: %s", restriction)
+		}
+	}
+}

@@ -3,9 +3,12 @@ package adversarylabs
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
+	"strings"
 
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 )
@@ -53,26 +56,31 @@ type WorkspaceHypothesis struct {
 	Check      string `json:"check"`
 }
 type WorkspaceSubmission struct {
-	GitIdentity         *sourcesnapshot.GitIdentity `json:"git_identity,omitempty"`
-	LookCloserThreshold *int                        `json:"look_closer_threshold,omitempty"`
-	ReviewScope         string                      `json:"review_scope,omitempty"`
-	LookCloser          *bool                       `json:"look_closer,omitempty"`
-	FullReview          *bool                       `json:"full_review,omitempty"`
-	Hypotheses          []WorkspaceHypothesis       `json:"hypotheses,omitempty"`
-	AgentDiff           string                      `json:"agent_diff,omitempty"`
-	UserRequest         *WorkspaceUserRequest       `json:"user_request,omitempty"`
-	RepositoryID        string                      `json:"repository_id"`
-	SnapshotID          string                      `json:"snapshot_id"`
-	BaseSnapshotID      string                      `json:"base_snapshot_id"`
-	ReviewID            string                      `json:"review_id"`
-	GroupID             string                      `json:"review_group_id"`
-	Revision            int                         `json:"revision"`
-	Repository          string                      `json:"repository"`
-	Branch              string                      `json:"branch"`
-	Diff                string                      `json:"diff"`
-	Continuity          bool                        `json:"review_continuity"`
-	Client              map[string]string           `json:"client"`
-	PromptProvenance    any                         `json:"prompt_provenance,omitempty"`
+	AgentHandoff   map[string]any `json:"agent_handoff,omitempty"`
+	FullSnapshotID string         `json:"full_snapshot_id,omitempty"`
+
+	EvidenceContext         bool                        `json:"evidence_context,omitempty"`
+	AgentAssessmentComplete bool                        `json:"agent_assessment_complete,omitempty"`
+	GitIdentity             *sourcesnapshot.GitIdentity `json:"git_identity,omitempty"`
+	LookCloserThreshold     *int                        `json:"look_closer_threshold,omitempty"`
+	ReviewScope             string                      `json:"review_scope,omitempty"`
+	LookCloser              *bool                       `json:"look_closer,omitempty"`
+	FullReview              *bool                       `json:"full_review,omitempty"`
+	Hypotheses              []WorkspaceHypothesis       `json:"hypotheses"`
+	AgentDiff               string                      `json:"agent_diff,omitempty"`
+	UserRequest             *WorkspaceUserRequest       `json:"user_request,omitempty"`
+	RepositoryID            string                      `json:"repository_id"`
+	SnapshotID              string                      `json:"snapshot_id"`
+	BaseSnapshotID          string                      `json:"base_snapshot_id"`
+	ReviewID                string                      `json:"review_id"`
+	GroupID                 string                      `json:"review_group_id"`
+	Revision                int                         `json:"revision"`
+	Repository              string                      `json:"repository"`
+	Branch                  string                      `json:"branch"`
+	Diff                    string                      `json:"diff"`
+	Continuity              bool                        `json:"review_continuity"`
+	Client                  map[string]string           `json:"client"`
+	PromptProvenance        any                         `json:"prompt_provenance,omitempty"`
 }
 type workspaceUpload struct {
 	RepositoryID string             `json:"repository_id"`
@@ -183,4 +191,54 @@ func (c Client) ReportWorkspaceLead(ctx context.Context, token, id, lead, status
 type WorkspaceUpgrade struct {
 	URL     string `json:"url"`
 	Message string `json:"message"`
+}
+
+// PrepareWorkspace queues full snapshot preparation without creating a review.
+func (c Client) PrepareWorkspace(ctx context.Context, token, repo, head, base, reviewID string) error {
+	return c.postJSON(ctx, "/v1/repositories/prepare", map[string]string{"repository_id": repo, "snapshot_id": head, "base_snapshot_id": base, "review_id": reviewID}, token, nil)
+}
+
+// WorkspaceSnapshotID matches the canonical uploaded manifest (including field order).
+func WorkspaceSnapshotID(repository string, entries []sourcesnapshot.Entry, blobs map[string][]byte) string {
+	type file struct {
+		Path string `json:"path"`
+		SHA  string `json:"sha256"`
+		Size int    `json:"size"`
+		Mode string `json:"mode"`
+	}
+	files := make([]file, 0, len(entries))
+	for _, e := range entries {
+		files = append(files, file{e.Path, e.Hash, len(blobs[e.Hash]), e.Mode})
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	var encoded bytes.Buffer
+	encoder := json.NewEncoder(&encoded)
+	encoder.SetEscapeHTML(false)
+	_ = encoder.Encode(struct {
+		Repository string `json:"repository"`
+		Files      []file `json:"files"`
+	}{strings.TrimSpace(repository), files})
+	return sourcesnapshot.Digest(bytes.TrimSuffix(encoded.Bytes(), []byte("\n")))
+}
+
+func (c Client) ReportWorkspaceLifecycle(ctx context.Context, token string, payload any) error {
+	return c.postJSON(ctx, "/v1/reviews/workspace/lifecycle", payload, token, nil)
+}
+
+// WorkspaceReviewArea identifies a scored area requiring an agent assessment.
+type WorkspaceReviewArea struct {
+	ID       string  `json:"id"`
+	Path     string  `json:"path"`
+	Line     int     `json:"line"`
+	Category string  `json:"category"`
+	Question string  `json:"question"`
+	Score    float64 `json:"score"`
+}
+
+func (c Client) TriageWorkspace(ctx context.Context, token, reviewID, diff string) ([]WorkspaceReviewArea, error) {
+	var result struct {
+		Areas []WorkspaceReviewArea `json:"areas"`
+	}
+	err := c.postJSON(ctx, "/v1/reviews/workspace/triage", map[string]string{"review_id": reviewID, "diff": diff}, token, &result)
+	return result.Areas, err
 }

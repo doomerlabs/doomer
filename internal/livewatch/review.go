@@ -100,7 +100,11 @@ func diffLines(data []byte) []string {
 
 func review(ctx context.Context, client Client, cfg Config, repo string, capture sourcesnapshot.Capture, revision int) Result {
 	result := Result{Repository: repo, Status: "unavailable"}
-	fail := func(err error) Result { result.Error = err.Error(); return result }
+	fail := func(err error) Result {
+		cfg.lifecycle.failure("result_delivery", err, cfg.assessment)
+		result.Error = err.Error()
+		return result
+	}
 	manifest, err := sourcesnapshot.DecodeWorkspace(capture.Bytes)
 	if err != nil {
 		return fail(err)
@@ -113,32 +117,78 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		result.Status = "unchanged"
 		return result
 	}
+	latest := diff
+	if cfg.RequireHypotheses {
+		latest, err = editScope(ctx, manifest, cfg.editBaseline)
+		if err != nil {
+			return fail(err)
+		}
+		if strings.TrimSpace(latest) == "" {
+			result.Status = "unchanged"
+			return result
+		}
+	}
+	var hypotheses []adversarylabs.WorkspaceHypothesis
+	if cfg.RequireHypotheses {
+		if cfg.hypotheses == nil {
+			return fail(fmt.Errorf("agent hypothesis handoff unavailable"))
+		}
+		cfg.lifecycle.event("agent_assessment", "running")
+		hypotheses, err = cfg.hypotheses(ctx, repo, latest, revision)
+		if err != nil {
+			cfg.lifecycle.failure("agent_assessment", err, cfg.assessment)
+			return fail(err)
+		}
+		cfg.lifecycle.event("agent_assessment", "completed")
+	}
 	repository := capture.Source.Repository
 	if repository == "" {
 		repository = sourcesnapshot.LocalRepositoryIdentifier(repo)
 	}
-	repoID, baseID, err := client.UploadWorkspaceTree(ctx, cfg.Token, repository, manifest.Base, manifest.Blobs)
+	var repoID, baseID, headID string
+	if cfg.RequireHypotheses {
+		cfg.lifecycle.event("evidence_upload", "running")
+		repoID, baseID, headID, err = uploadEvidence(ctx, client, cfg, repository, manifest, hypotheses)
+	} else {
+		repoID, baseID, err = client.UploadWorkspaceTree(ctx, cfg.Token, repository, manifest.Base, manifest.Blobs)
+		if err == nil {
+			var other string
+			other, headID, err = client.UploadWorkspaceTree(ctx, cfg.Token, repository, manifest.Target, manifest.Blobs)
+			if other != repoID && err == nil {
+				err = fmt.Errorf("base and current repository do not match")
+			}
+		}
+	}
 	if err != nil {
+		cfg.lifecycle.event("evidence_upload", "failed")
 		return fail(err)
 	}
-	headRepo, headID, err := client.UploadWorkspaceTree(ctx, cfg.Token, repository, manifest.Target, manifest.Blobs)
-	if err != nil {
-		return fail(err)
-	}
-	if headRepo != repoID {
-		return fail(fmt.Errorf("base and current repository do not match"))
+	cfg.lifecycle.event("evidence_upload", "completed")
+	cfg.lifecycle.event("submission", "running")
+	scope := "diff"
+	if cfg.RequireHypotheses {
+		scope = "latest_edit"
 	}
 	look, deep := true, false
 	group := Key(cfg.ID + "\x00" + repo)
-	current, err := client.StartWorkspace(ctx, cfg.Token, adversarylabs.WorkspaceSubmission{
-		GitIdentity: capture.GitIdentity, LookCloser: &look, FullReview: &deep, ReviewScope: "diff", AgentDiff: diff, Diff: diff,
-		UserRequest:  cfg.Request,
+	var handoff map[string]any
+	if cfg.RequireHypotheses {
+		handoff = map[string]any{"request_id": Key(cfg.ID + "\x00" + repo + "\x00" + fmt.Sprint(revision) + "\x00" + latest), "snapshot_id": capture.TargetTreeHash, "diff_hash": Key(latest), "watch_revision": revision, "status": "assessed", "hypothesis_count": len(hypotheses)}
+		if cfg.assessment != nil {
+			handoff["assessments"] = cfg.assessment.Assessments
+		}
+	}
+	current, err := client.StartWorkspace(ctx, cfg.Token, adversarylabs.WorkspaceSubmission{AgentHandoff: handoff,
+		GitIdentity: capture.GitIdentity, LookCloser: &look, FullReview: &deep, ReviewScope: scope, AgentDiff: latest, Diff: diff,
+		UserRequest: cfg.Request, Hypotheses: hypotheses, AgentAssessmentComplete: cfg.RequireHypotheses, EvidenceContext: cfg.RequireHypotheses, FullSnapshotID: adversarylabs.WorkspaceSnapshotID(repository, manifest.Target, manifest.Blobs),
 		RepositoryID: repoID, BaseSnapshotID: baseID, SnapshotID: headID, Repository: repository, Branch: capture.Source.Branch,
-		GroupID: group, ReviewID: Key(fmt.Sprintf("%s\x00%d", group, revision)), Revision: revision, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "agent": cfg.Agent},
+		GroupID: group, ReviewID: reviewIdentity(cfg, repo, revision), Revision: revision, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "agent": cfg.Agent},
 	})
 	if err != nil {
+		cfg.lifecycle.event("submission", "failed")
 		return fail(err)
 	}
+	cfg.lifecycle.event("submission", "completed")
 	for {
 		result.ID = current.ID
 		if link := adversarylabs.WorkspaceLink(cfg.API, current); link != "" {
@@ -148,6 +198,11 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 			result.Status, result.Leads = current.Early.Status, current.Early.Leads
 			if result.Status == "unavailable" {
 				result.Error = current.Early.FailureCode
+			}
+			if result.Status == "ready" {
+				cfg.lifecycle.event("result_delivery", "completed")
+			} else {
+				cfg.lifecycle.failure("result_delivery", fmt.Errorf("Quick assessment unavailable: %s", current.Early.FailureCode), cfg.assessment)
 			}
 			return result
 		}
