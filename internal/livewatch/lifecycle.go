@@ -2,10 +2,12 @@ package livewatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/doomerlabs/doomer/internal/version"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 	"time"
+	"unicode/utf8"
 )
 
 type lifecycleClient interface {
@@ -32,12 +34,50 @@ func newReviewLifecycle(client Client, cfg Config, repo string, capture sourcesn
 func reviewIdentity(cfg Config, repo string, revision int) string {
 	return Key(Key(cfg.ID+"\x00"+repo) + "\x00" + fmt.Sprint(revision))
 }
-func (l *reviewLifecycle) event(stage, state string) {
+func (l *reviewLifecycle) failure(stage string, err error, assessment *HypothesisResponse) {
+	code := "review_error"
+	if stage == "agent_assessment" {
+		code = "handoff_error"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		code = "deadline_exceeded"
+	} else if errors.Is(err, context.Canceled) {
+		code = "cancelled"
+	}
+	details := map[string]any{"error_code": code, "reason": boundedFailureReason(err.Error())}
+	if assessment != nil {
+		if assessment.Status == "superseded" || assessment.Status == "incomplete" {
+			details["error_code"] = assessment.Status
+		}
+		if assessment.RequestID != "" {
+			details["request_id"] = assessment.RequestID
+		}
+	}
+	l.event(stage, "failed", details)
+}
+
+func boundedFailureReason(reason string) string {
+	if len(reason) > 1024 {
+		reason = reason[:1024]
+	}
+	for !utf8.ValidString(reason) {
+		reason = reason[:len(reason)-1]
+	}
+	return reason
+}
+
+func (l *reviewLifecycle) event(stage, state string, details ...map[string]any) {
 	if l == nil {
 		return
 	}
 	offset := time.Since(l.started).Milliseconds()
+	event := map[string]any{"stage": stage, "state": state, "offset_ms": offset}
+	if len(details) > 0 {
+		for key, value := range details[0] {
+			event[key] = value
+		}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	_ = l.client.ReportWorkspaceLifecycle(ctx, l.cfg.Token, map[string]any{"review_id": l.id, "repository": l.repository, "repository_id": l.repoID, "snapshot_id": l.snapshot, "branch": l.branch, "user_request": l.cfg.Request, "client": map[string]string{"name": "Doomer CLI", "agent": l.cfg.Agent, "commit": version.Commit}, "event": map[string]any{"stage": stage, "state": state, "offset_ms": offset}})
+	_ = l.client.ReportWorkspaceLifecycle(ctx, l.cfg.Token, map[string]any{"review_id": l.id, "repository": l.repository, "repository_id": l.repoID, "snapshot_id": l.snapshot, "branch": l.branch, "user_request": l.cfg.Request, "client": map[string]string{"name": "Doomer CLI", "agent": l.cfg.Agent, "commit": version.Commit}, "event": event})
 }

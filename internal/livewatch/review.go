@@ -101,7 +101,7 @@ func diffLines(data []byte) []string {
 func review(ctx context.Context, client Client, cfg Config, repo string, capture sourcesnapshot.Capture, revision int) Result {
 	result := Result{Repository: repo, Status: "unavailable"}
 	fail := func(err error) Result {
-		cfg.lifecycle.event("result_delivery", "failed")
+		cfg.lifecycle.failure("result_delivery", err, cfg.assessment)
 		result.Error = err.Error()
 		return result
 	}
@@ -136,7 +136,7 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		cfg.lifecycle.event("agent_assessment", "running")
 		hypotheses, err = cfg.hypotheses(ctx, repo, latest, revision)
 		if err != nil {
-			cfg.lifecycle.event("agent_assessment", "failed")
+			cfg.lifecycle.failure("agent_assessment", err, cfg.assessment)
 			return fail(err)
 		}
 		cfg.lifecycle.event("agent_assessment", "completed")
@@ -202,7 +202,7 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 			if result.Status == "ready" {
 				cfg.lifecycle.event("result_delivery", "completed")
 			} else {
-				cfg.lifecycle.event("result_delivery", "failed")
+				cfg.lifecycle.failure("result_delivery", fmt.Errorf("Quick assessment unavailable: %s", current.Early.FailureCode), cfg.assessment)
 			}
 			return result
 		}

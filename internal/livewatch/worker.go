@@ -373,6 +373,7 @@ func (w *worker) schedule(ctx context.Context) {
 					cfg.lifecycle.event("risk_selection", "completed")
 				}
 				id := Key(cfg.ID + "\x00" + repo + fmt.Sprint(revision) + "\x00" + diff)
+				assessment.RequestID = id
 				task := &hypothesisWait{request: HypothesisRequest{ID: id, ReviewID: reviewIdentity(cfg, repo, revision), Revision: revision, Snapshot: snapshot.TargetTreeHash, DiffHash: Key(diff), Repository: repo, Diff: diff, Areas: areas}, reply: make(chan HypothesisResponse, 1)}
 				if len(task.request.Diff) > 1<<20 {
 					task.request.Diff = task.request.Diff[:1<<20]

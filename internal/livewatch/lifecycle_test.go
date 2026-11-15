@@ -2,9 +2,11 @@ package livewatch
 
 import (
 	"context"
+	"fmt"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -58,5 +60,29 @@ func TestMetadataOnlyChangeDoesNotRegisterOrUploadReview(t *testing.T) {
 	}
 	if len(client.events) != 0 || client.uploads != 0 || len(client.inputs) != 0 {
 		t.Fatalf("no-op produced remote activity: %+v", client)
+	}
+}
+
+func TestLifecycleReportsHandoffFailureDetails(t *testing.T) {
+	for _, tc := range []struct {
+		status string
+		err    error
+		code   string
+	}{
+		{"superseded", fmt.Errorf("new snapshot"), "superseded"},
+		{"incomplete", fmt.Errorf("cannot inspect"), "incomplete"},
+		{"", context.DeadlineExceeded, "deadline_exceeded"},
+		{"", context.Canceled, "cancelled"},
+	} {
+		f := &lifecycleFixture{}
+		l := newReviewLifecycle(f, Config{RequireHypotheses: true}, "/repo", sourcesnapshot.Capture{}, 1, time.Now())
+		l.failure("agent_assessment", tc.err, &HypothesisResponse{Status: tc.status, RequestID: "request"})
+		event := f.events[0]["event"].(map[string]any)
+		if event["error_code"] != tc.code || event["reason"] != tc.err.Error() || event["request_id"] != "request" {
+			t.Fatalf("wrong failure: %+v", event)
+		}
+	}
+	if len(boundedFailureReason(strings.Repeat("x", 2000))) != 1024 {
+		t.Fatal("unbounded reason")
 	}
 }
