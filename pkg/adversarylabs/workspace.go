@@ -224,3 +224,21 @@ func WorkspaceSnapshotID(repository string, entries []sourcesnapshot.Entry, blob
 func (c Client) ReportWorkspaceLifecycle(ctx context.Context, token string, payload any) error {
 	return c.postJSON(ctx, "/v1/reviews/workspace/lifecycle", payload, token, nil)
 }
+
+// WorkspaceReviewArea identifies a scored area requiring an agent assessment.
+type WorkspaceReviewArea struct {
+	ID       string  `json:"id"`
+	Path     string  `json:"path"`
+	Line     int     `json:"line"`
+	Category string  `json:"category"`
+	Question string  `json:"question"`
+	Score    float64 `json:"score"`
+}
+
+func (c Client) TriageWorkspace(ctx context.Context, token, reviewID, diff string) ([]WorkspaceReviewArea, error) {
+	var result struct {
+		Areas []WorkspaceReviewArea `json:"areas"`
+	}
+	err := c.postJSON(ctx, "/v1/reviews/workspace/triage", map[string]string{"review_id": reviewID, "diff": diff}, token, &result)
+	return result.Areas, err
+}

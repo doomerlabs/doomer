@@ -174,6 +174,9 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 	var handoff map[string]any
 	if cfg.RequireHypotheses {
 		handoff = map[string]any{"request_id": Key(cfg.ID + "\x00" + repo + fmt.Sprint(revision) + "\x00" + latest), "snapshot_id": capture.TargetTreeHash, "diff_hash": Key(latest), "watch_revision": revision, "status": "assessed", "hypothesis_count": len(hypotheses)}
+		if cfg.assessment != nil {
+			handoff["assessments"] = cfg.assessment.Assessments
+		}
 	}
 	current, err := client.StartWorkspace(ctx, cfg.Token, adversarylabs.WorkspaceSubmission{AgentHandoff: handoff,
 		GitIdentity: capture.GitIdentity, LookCloser: &look, FullReview: &deep, ReviewScope: scope, AgentDiff: latest, Diff: diff,

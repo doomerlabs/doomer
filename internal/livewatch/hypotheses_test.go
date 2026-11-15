@@ -26,3 +26,16 @@ func TestUnassessedSnapshotRequiresReason(t *testing.T) {
 		}
 	}
 }
+
+func TestEverySelectedAreaRequiresEvidence(t *testing.T) {
+	pending := &hypothesisWait{request: HypothesisRequest{Areas: []adversarylabs.WorkspaceReviewArea{{ID: "auth"}}}, reply: make(chan HypothesisResponse, 1)}
+	w := &worker{hypotheses: map[string]*hypothesisWait{"request": pending}}
+	response := HypothesisResponse{RequestID: "request", Status: "assessed", Hypotheses: []adversarylabs.WorkspaceHypothesis{}}
+	if w.recordHypotheses(response) == nil {
+		t.Fatal("accepted empty blanket assessment")
+	}
+	response.Assessments = []AreaAssessment{{AreaID: "auth", Status: "no_issue", Evidence: "Checked the caller: authorization is enforced before this function."}}
+	if err := w.recordHypotheses(response); err != nil {
+		t.Fatal(err)
+	}
+}

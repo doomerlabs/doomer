@@ -11,20 +11,27 @@ import (
 
 // HypothesisRequest is bound to one immutable capture, never the next edit.
 type HypothesisRequest struct {
-	ID         string `json:"request_id"`
-	ReviewID   string `json:"review_id"`
-	Revision   int    `json:"revision"`
-	Snapshot   string `json:"snapshot_id"`
-	DiffHash   string `json:"diff_hash"`
-	Repository string `json:"repository"`
-	Diff       string `json:"diff"`
-	Partial    bool   `json:"partial,omitempty"`
+	Areas      []adversarylabs.WorkspaceReviewArea `json:"areas,omitempty"`
+	ID         string                              `json:"request_id"`
+	ReviewID   string                              `json:"review_id"`
+	Revision   int                                 `json:"revision"`
+	Snapshot   string                              `json:"snapshot_id"`
+	DiffHash   string                              `json:"diff_hash"`
+	Repository string                              `json:"repository"`
+	Diff       string                              `json:"diff"`
+	Partial    bool                                `json:"partial,omitempty"`
+}
+type AreaAssessment struct {
+	AreaID   string `json:"area_id"`
+	Status   string `json:"status"`
+	Evidence string `json:"evidence"`
 }
 type HypothesisResponse struct {
-	Status     string                              `json:"status,omitempty"`
-	Reason     string                              `json:"reason,omitempty"`
-	RequestID  string                              `json:"request_id"`
-	Hypotheses []adversarylabs.WorkspaceHypothesis `json:"hypotheses"`
+	Assessments []AreaAssessment                    `json:"assessments,omitempty"`
+	Status      string                              `json:"status,omitempty"`
+	Reason      string                              `json:"reason,omitempty"`
+	RequestID   string                              `json:"request_id"`
+	Hypotheses  []adversarylabs.WorkspaceHypothesis `json:"hypotheses"`
 }
 type hypothesisWait struct {
 	request HypothesisRequest
@@ -50,6 +57,27 @@ func (w *worker) recordHypotheses(response HypothesisResponse) error {
 	}
 	if response.Hypotheses == nil || len(response.Hypotheses) > 5 {
 		return fmt.Errorf("hypotheses must be an explicit array of at most five items")
+	}
+	if response.Status == "assessed" && len(pending.request.Areas) > 0 {
+		seen := map[string]bool{}
+		for _, a := range response.Assessments {
+			known := false
+			for _, area := range pending.request.Areas {
+				if area.ID == a.AreaID {
+					known = true
+				}
+			}
+			if !known || seen[a.AreaID] || strings.TrimSpace(a.Evidence) == "" || len([]rune(a.Evidence)) > 1200 || (a.Status != "concern" && a.Status != "no_issue") {
+				return fmt.Errorf("each selected area requires one concern or no_issue assessment with evidence")
+			}
+			seen[a.AreaID] = true
+			if a.Status == "concern" && len(response.Hypotheses) == 0 {
+				return fmt.Errorf("concern assessment requires a hypothesis")
+			}
+		}
+		if len(seen) != len(pending.request.Areas) {
+			return fmt.Errorf("assessment required for every selected area")
+		}
 	}
 	for _, h := range response.Hypotheses {
 		if !validHypothesis(h) {
