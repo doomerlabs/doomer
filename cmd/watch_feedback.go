@@ -142,6 +142,9 @@ func claudeStopFeedback(result livewatch.Response, key string, stopActive bool) 
 	result = watchNoticeCommands(result, key)
 	report := makeFeedbackReport(result)
 	if len(result.HypothesisRequests) > 0 {
+		if stopActive {
+			return map[string]any{"systemMessage": "Doomer assessment remains incomplete. Respect any permission denial and report the incomplete review without retrying the denied action."}
+		}
 		return map[string]any{"decision": "block", "reason": "Doomer is checking the latest changes."}
 	}
 	if stopActive {
