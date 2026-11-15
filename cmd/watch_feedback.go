@@ -162,14 +162,22 @@ func claudeStopFeedback(result livewatch.Response, key string, stopActive bool) 
 }
 
 func codexStopFeedback(result livewatch.Response, stopActive bool) map[string]any {
-	if len(result.HypothesisRequests) > 0 {
-		return map[string]any{"decision": "block", "reason": "Doomer is checking the latest changes."}
+	if len(makeFeedbackReport(result).Errors) > 0 {
+		return finalFeedbackHook(result)
 	}
-	if stopActive && !makeFeedbackReport(result).Complete {
+	for _, notice := range result.Notices {
+		if notice.NotifyUser {
+			return pendingFeedbackHook(result)
+		}
+	}
+	if stopActive && !makeFeedbackReport(result).Complete && len(result.HypothesisRequests) == 0 {
 		return map[string]any{"systemMessage": "Doomer review handling is incomplete. Findings or advisories remain unresolved. Respect permission denials; explain the blocker instead of repeatedly retrying."}
 	}
 	if feedback := pendingFeedbackHook(result); feedback != nil {
 		return feedback
+	}
+	if len(result.HypothesisRequests) > 0 {
+		return map[string]any{"decision": "block", "reason": "Doomer is checking the latest changes."}
 	}
 	return finalFeedbackHook(result)
 }

@@ -86,3 +86,8 @@ func TestLifecycleReportsHandoffFailureDetails(t *testing.T) {
 		t.Fatal("unbounded reason")
 	}
 }
+
+func TestFailureWithoutLifecycleIsSafe(t *testing.T) {
+	var lifecycle *reviewLifecycle
+	lifecycle.failure("capture", fmt.Errorf("capture failed"), nil)
+}

@@ -173,7 +173,7 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 	group := Key(cfg.ID + "\x00" + repo)
 	var handoff map[string]any
 	if cfg.RequireHypotheses {
-		handoff = map[string]any{"request_id": Key(cfg.ID + "\x00" + repo + fmt.Sprint(revision) + "\x00" + latest), "snapshot_id": capture.TargetTreeHash, "diff_hash": Key(latest), "watch_revision": revision, "status": "assessed", "hypothesis_count": len(hypotheses)}
+		handoff = map[string]any{"request_id": Key(cfg.ID + "\x00" + repo + "\x00" + fmt.Sprint(revision) + "\x00" + latest), "snapshot_id": capture.TargetTreeHash, "diff_hash": Key(latest), "watch_revision": revision, "status": "assessed", "hypothesis_count": len(hypotheses)}
 		if cfg.assessment != nil {
 			handoff["assessments"] = cfg.assessment.Assessments
 		}

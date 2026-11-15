@@ -35,6 +35,9 @@ func reviewIdentity(cfg Config, repo string, revision int) string {
 	return Key(Key(cfg.ID+"\x00"+repo) + "\x00" + fmt.Sprint(revision))
 }
 func (l *reviewLifecycle) failure(stage string, err error, assessment *HypothesisResponse) {
+	if l == nil {
+		return
+	}
 	code := "review_error"
 	if stage == "agent_assessment" {
 		code = "handoff_error"
