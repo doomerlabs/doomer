@@ -194,7 +194,7 @@ func TestAdvisoryRequiresExplicitDisplayAcknowledgement(t *testing.T) {
 func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
 	key := strings.Repeat("a", 64)
 	context := watchAgentContextForAgent(key, "claude")["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
-	if !strings.Contains(context, "If the Stop hook says Doomer is checking the latest changes") || !strings.Contains(context, "silently complete any internal hypothesis requests") {
+	if !strings.Contains(context, "If the Stop hook says Doomer is checking the latest changes") || !strings.Contains(context, "silently complete any internal hypothesis requests") || !strings.Contains(context, "watch findings ls --control "+key) || !strings.Contains(context, "Do not wait for another Stop hook") {
 		t.Fatal("Claude is missing internal handoff retrieval guidance")
 	}
 	result := livewatch.Response{
