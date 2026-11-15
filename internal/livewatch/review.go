@@ -123,6 +123,10 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		if err != nil {
 			return fail(err)
 		}
+		if strings.TrimSpace(latest) == "" {
+			result.Status = "unchanged"
+			return result
+		}
 	}
 	var hypotheses []adversarylabs.WorkspaceHypothesis
 	if cfg.RequireHypotheses {

@@ -333,6 +333,24 @@ func (w *worker) schedule(ctx context.Context) {
 			}
 			cfg := w.cfg
 			cfg.editBaseline = baseline
+			if cfg.RequireHypotheses {
+				manifest, err := sourcesnapshot.DecodeWorkspace(snapshot.Bytes)
+				var diff string
+				if err == nil {
+					diff, err = editScope(jobCtx, manifest, baseline)
+				}
+				if err != nil || strings.TrimSpace(diff) == "" {
+					result := Result{Repository: path, Status: "unchanged"}
+					if err != nil {
+						result.Status, result.Error = "unavailable", err.Error()
+					}
+					select {
+					case w.completed <- completion{path, version, result}:
+					case <-ctx.Done():
+					}
+					return
+				}
+			}
 			cfg.lifecycle = newReviewLifecycle(w.client, cfg, path, snapshot, version, captureStarted)
 			cfg.lifecycle.event("capture", "completed")
 			if cfg.RequireHypotheses {

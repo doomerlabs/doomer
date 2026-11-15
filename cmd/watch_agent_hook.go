@@ -120,6 +120,11 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	if input.Session == "" {
 		return empty, nil
 	}
+	// Codex also runs composer suggestions as background tasks in the same
+	// working directory. They must not observe edits made by the real task.
+	if agent == "codex" && input.Event == "UserPromptSubmit" && strings.HasPrefix(strings.TrimSpace(input.Prompt), "This is an app-generated request for a suggested next user message. The user did not write this message.") {
+		return empty, nil
+	}
 	turn := input.Turn
 	if turn == "" {
 		turn = input.PromptID
