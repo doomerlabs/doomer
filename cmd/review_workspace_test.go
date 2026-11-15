@@ -121,6 +121,12 @@ func TestReviewReturnsLookCloserAndPreservesFullReviewChoice(t *testing.T) {
 				args = append(args, "--show-diff")
 			}
 			out, err := execute(t, "", args...)
+			if guest || (mode.look && !mode.full) {
+				if err == nil || !strings.Contains(err.Error(), "standalone Quick review is not supported") {
+					t.Fatalf("expected agent requirement: %v", err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("%v: %s", err, out)
 			}
@@ -198,7 +204,7 @@ func TestRepeatedManualReviewsStartFreshAnalysisOfSameSnapshots(t *testing.T) {
 				t.Error(err)
 			}
 			submissions = append(submissions, submitted)
-			w.Write([]byte(`{"id":"review","status":"queued","look_closer_enabled":true,"look_closer_threshold":80,"full_review":{"enabled":false,"status":"disabled"}}`))
+			w.Write([]byte(`{"id":"review","status":"queued","look_closer_enabled":true,"look_closer_threshold":80,"full_review":{"enabled":true,"status":"queued"}}`))
 		default:
 			t.Errorf("unexpected request %s", r.URL.Path)
 			w.WriteHeader(404)
@@ -208,7 +214,7 @@ func TestRepeatedManualReviewsStartFreshAnalysisOfSameSnapshots(t *testing.T) {
 	if err := store.SetAuth(adversarylabs.AuthKey(server.URL, "local"), adversarylabs.Auth{Token: "test-token"}); err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"--api-url", server.URL, "--profile", "local", "review", "--path", dir, "--base", "HEAD", "--deep-review=false", "--wait=none", "--format=json"}
+	args := []string{"--api-url", server.URL, "--profile", "local", "review", "--path", dir, "--base", "HEAD", "--deep-review=true", "--wait=none", "--format=json"}
 	for i := 0; i < 2; i++ {
 		if out, err := execute(t, "", args...); err != nil {
 			t.Fatalf("%v: %s", err, out)

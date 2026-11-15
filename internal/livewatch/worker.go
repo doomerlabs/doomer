@@ -48,6 +48,9 @@ type control struct {
 	sent           chan struct{}
 }
 type worker struct {
+	background   sync.WaitGroup
+	prepareSlots chan struct{}
+
 	hypotheses      map[string]*hypothesisWait
 	hypothesisReady chan *hypothesisWait
 
@@ -85,13 +88,14 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	w := &worker{directories: []string{cfg.Directory}, cfg: cfg, client: client, allowed: allowed, repos: map[string]*repository{}, findings: map[string]Finding{}, noticeAcks: map[string]bool{}, controls: make(chan control), completed: make(chan completion, 64), slots: make(chan struct{}, 4)}
+	w.prepareSlots = make(chan struct{}, 1)
 	w.hypotheses = map[string]*hypothesisWait{}
 	w.hypothesisReady = make(chan *hypothesisWait)
 	w.closeListener = func() error { return nil }
 	if listener != nil {
 		w.closeListener = listener.Close
 	}
-	defer func() { cancel(); w.jobs.Wait() }()
+	defer func() { cancel(); w.jobs.Wait(); w.background.Wait() }()
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err
@@ -242,7 +246,7 @@ func (w *worker) scanDirectory(ctx context.Context, directory string, initial, f
 			r.observed = fingerprint
 			r.pending = true
 		}
-		if freeze && r.pending {
+		if freeze && r.pending && !w.cfg.RequireHypotheses {
 			capture, err := capture(ctx, path)
 			if err != nil {
 				r.pending = false
@@ -274,18 +278,20 @@ func (w *worker) schedule(ctx context.Context) {
 			continue
 		}
 		var snapshot sourcesnapshot.Capture
-		var err error
-		if r.frozen != nil {
-			snapshot = *r.frozen
-			r.frozen = nil
-		} else {
-			snapshot, err = capture(ctx, path)
-		}
-		if err != nil {
-			if !errors.Is(err, sourcesnapshot.ErrNoChanges) {
-				r.result = &Result{Repository: path, Status: "unavailable", Error: err.Error()}
+		if !w.cfg.RequireHypotheses {
+			var err error
+			if r.frozen != nil {
+				snapshot = *r.frozen
+				r.frozen = nil
+			} else {
+				snapshot, err = capture(ctx, path)
 			}
-			continue
+			if err != nil {
+				if !errors.Is(err, sourcesnapshot.ErrNoChanges) {
+					r.result = &Result{Repository: path, Status: "unavailable", Error: err.Error()}
+				}
+				continue
+			}
 		}
 		r.version++
 		r.running = true
@@ -302,6 +308,18 @@ func (w *worker) schedule(ctx context.Context) {
 				return
 			}
 			defer func() { <-w.slots }()
+			if w.cfg.RequireHypotheses {
+				captured, err := capture(jobCtx, path)
+				if err != nil {
+					select {
+					case w.completed <- completion{path, version, Result{Repository: path, Status: "unavailable", Error: err.Error()}}:
+					case <-ctx.Done():
+					}
+					return
+				}
+				snapshot = captured
+				w.prepareInBackground(path, snapshot)
+			}
 			cfg := w.cfg
 			cfg.hypotheses = func(ctx context.Context, repo, diff string, revision int) ([]adversarylabs.WorkspaceHypothesis, error) {
 				id := Key(cfg.ID + "\x00" + repo + fmt.Sprint(revision) + "\x00" + diff)

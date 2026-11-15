@@ -3,9 +3,12 @@ package adversarylabs
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
+	"strings"
 
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 )
@@ -53,6 +56,9 @@ type WorkspaceHypothesis struct {
 	Check      string `json:"check"`
 }
 type WorkspaceSubmission struct {
+	FullSnapshotID string `json:"full_snapshot_id,omitempty"`
+
+	EvidenceContext         bool                        `json:"evidence_context,omitempty"`
 	AgentAssessmentComplete bool                        `json:"agent_assessment_complete,omitempty"`
 	GitIdentity             *sourcesnapshot.GitIdentity `json:"git_identity,omitempty"`
 	LookCloserThreshold     *int                        `json:"look_closer_threshold,omitempty"`
@@ -184,4 +190,32 @@ func (c Client) ReportWorkspaceLead(ctx context.Context, token, id, lead, status
 type WorkspaceUpgrade struct {
 	URL     string `json:"url"`
 	Message string `json:"message"`
+}
+
+// PrepareWorkspace queues full snapshot preparation without creating a review.
+func (c Client) PrepareWorkspace(ctx context.Context, token, repo, head, base string) error {
+	return c.postJSON(ctx, "/v1/repositories/prepare", map[string]string{"repository_id": repo, "snapshot_id": head, "base_snapshot_id": base}, token, nil)
+}
+
+// WorkspaceSnapshotID matches the canonical uploaded manifest (including field order).
+func WorkspaceSnapshotID(repository string, entries []sourcesnapshot.Entry, blobs map[string][]byte) string {
+	type file struct {
+		Path string `json:"path"`
+		SHA  string `json:"sha256"`
+		Size int    `json:"size"`
+		Mode string `json:"mode"`
+	}
+	files := make([]file, 0, len(entries))
+	for _, e := range entries {
+		files = append(files, file{e.Path, e.Hash, len(blobs[e.Hash]), e.Mode})
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	var encoded bytes.Buffer
+	encoder := json.NewEncoder(&encoded)
+	encoder.SetEscapeHTML(false)
+	_ = encoder.Encode(struct {
+		Repository string `json:"repository"`
+		Files      []file `json:"files"`
+	}{strings.TrimSpace(repository), files})
+	return sourcesnapshot.Digest(bytes.TrimSuffix(encoded.Bytes(), []byte("\n")))
 }

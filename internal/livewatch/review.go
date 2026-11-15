@@ -127,22 +127,27 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 	if repository == "" {
 		repository = sourcesnapshot.LocalRepositoryIdentifier(repo)
 	}
-	repoID, baseID, err := client.UploadWorkspaceTree(ctx, cfg.Token, repository, manifest.Base, manifest.Blobs)
+	var repoID, baseID, headID string
+	if cfg.RequireHypotheses {
+		repoID, baseID, headID, err = uploadEvidence(ctx, client, cfg, repository, manifest, hypotheses)
+	} else {
+		repoID, baseID, err = client.UploadWorkspaceTree(ctx, cfg.Token, repository, manifest.Base, manifest.Blobs)
+		if err == nil {
+			var other string
+			other, headID, err = client.UploadWorkspaceTree(ctx, cfg.Token, repository, manifest.Target, manifest.Blobs)
+			if other != repoID && err == nil {
+				err = fmt.Errorf("base and current repository do not match")
+			}
+		}
+	}
 	if err != nil {
 		return fail(err)
-	}
-	headRepo, headID, err := client.UploadWorkspaceTree(ctx, cfg.Token, repository, manifest.Target, manifest.Blobs)
-	if err != nil {
-		return fail(err)
-	}
-	if headRepo != repoID {
-		return fail(fmt.Errorf("base and current repository do not match"))
 	}
 	look, deep := true, false
 	group := Key(cfg.ID + "\x00" + repo)
 	current, err := client.StartWorkspace(ctx, cfg.Token, adversarylabs.WorkspaceSubmission{
 		GitIdentity: capture.GitIdentity, LookCloser: &look, FullReview: &deep, ReviewScope: "diff", AgentDiff: diff, Diff: diff,
-		UserRequest: cfg.Request, Hypotheses: hypotheses, AgentAssessmentComplete: cfg.RequireHypotheses,
+		UserRequest: cfg.Request, Hypotheses: hypotheses, AgentAssessmentComplete: cfg.RequireHypotheses, EvidenceContext: cfg.RequireHypotheses, FullSnapshotID: adversarylabs.WorkspaceSnapshotID(repository, manifest.Target, manifest.Blobs),
 		RepositoryID: repoID, BaseSnapshotID: baseID, SnapshotID: headID, Repository: repository, Branch: capture.Source.Branch,
 		GroupID: group, ReviewID: Key(fmt.Sprintf("%s\x00%d", group, revision)), Revision: revision, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "agent": cfg.Agent},
 	})
