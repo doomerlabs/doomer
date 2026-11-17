@@ -16,12 +16,16 @@ import (
 // template repair and atomic merge; it never grants uploads or trusts hooks.
 func newNodeCodexPolicyCommand() *cobra.Command {
 	var home, decision, expected string
+	var remove bool
+	var preserveServices []string
 	c := &cobra.Command{Use: "codex-policy", Short: "Inspect or decide the Node installer's scoped Codex reviewer policy", Args: cobra.NoArgs}
 	c.PersistentPreRunE = func(*cobra.Command, []string) error { return nil }
 	c.PersistentPostRun = func(*cobra.Command, []string) {}
 	c.Flags().StringVar(&home, "manager-home", "", "Node installer state directory")
 	c.Flags().StringVar(&decision, "decision", "", "explicit allow or decline decision")
 	c.Flags().StringVar(&expected, "proposal", "", "exact proposal digest returned by inspection")
+	c.Flags().BoolVar(&remove, "remove", false, "Remove recognized permissions owned by this installation offline")
+	c.Flags().StringSliceVar(&preserveServices, "preserve-service", nil, "Keep permissions shared with another installation")
 	c.RunE = func(c *cobra.Command, _ []string) error {
 		if !filepath.IsAbs(home) {
 			return fmt.Errorf("absolute manager home required")
@@ -32,6 +36,12 @@ func newNodeCodexPolicyCommand() *cobra.Command {
 		var state agentHookState
 		if err := watching.Read(filepath.Join(home, "state.json"), &state); err != nil {
 			return err
+		}
+		if remove {
+			if decision != "" || expected != "" {
+				return fmt.Errorf("remove cannot be combined with a policy decision")
+			}
+			return removeNodeCodexPolicies(c, state, preserveServices)
 		}
 		directory, err := os.Getwd()
 		if err != nil {

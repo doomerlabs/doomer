@@ -31,6 +31,10 @@ func (id hookIdentity) Key() string {
 // The manager owns installation and approval. Hooks read that data directly;
 // neither starting a watcher nor delivering a result requires Node at runtime.
 type agentHookState struct {
+	CodexPolicies []struct {
+		ConfigPath  string `json:"configPath"`
+		ExtraPolicy string `json:"extraPolicy"`
+	} `json:"codexPolicies"`
 	Version        int               `json:"version"`
 	API            string            `json:"api"`
 	Identities     map[string]string `json:"identities"`

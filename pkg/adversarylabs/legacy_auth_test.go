@@ -272,7 +272,7 @@ func TestClientBeginLoginSendsNameAndCI(t *testing.T) {
 	if seenPath != "/v1/auth/device/code" {
 		t.Fatalf("path = %q", seenPath)
 	}
-	if seenBody["name"] != "Marc's MacBook Pro" || seenBody["ci"] != true {
+	if seenBody["name"] != "Marc's MacBook Pro" || seenBody["ci"] != true || seenBody["review_uploads"] != false {
 		t.Fatalf("login body = %#v", seenBody)
 	}
 	if login.DeviceCode != "device" || login.UserCode != "ABCD" {

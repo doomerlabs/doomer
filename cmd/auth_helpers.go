@@ -2,10 +2,15 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/doomerlabs/doomer/internal/application"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"io"
+	"net"
+	"net/url"
+	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -35,6 +40,10 @@ func waitForLogin(ctx context.Context, clock application.Clock, client applicati
 			}
 			return adversarylabs.TokenResponse{}, fmt.Errorf("login expired before authentication completed")
 		}
+		var response *adversarylabs.ResponseError
+		if errors.As(err, &response) && response.Code == "access_denied" {
+			return adversarylabs.TokenResponse{}, fmt.Errorf("browser authorization declined")
+		}
 		timer := clock.NewTimer(interval)
 		select {
 		case <-pollCtx.Done():
@@ -48,8 +57,8 @@ func waitForLogin(ctx context.Context, clock application.Clock, client applicati
 	}
 }
 
-func loginWithDevice(ctx context.Context, clock application.Clock, stdout io.Writer, client application.APIClient, opts *loginOptions) (adversarylabs.TokenResponse, error) {
-	login, err := client.BeginLogin(ctx, adversarylabs.LoginOptions{Name: opts.name, CI: opts.ci})
+func loginWithDevice(ctx context.Context, clock application.Clock, stdout io.Writer, client application.APIClient, opts *loginOptions, api string) (adversarylabs.TokenResponse, error) {
+	login, err := client.BeginLogin(ctx, adversarylabs.LoginOptions{Name: opts.name, CI: opts.ci, ReviewUploads: opts.reviewUploads})
 	if err != nil {
 		return adversarylabs.TokenResponse{}, err
 	}
@@ -60,8 +69,50 @@ func loginWithDevice(ctx context.Context, clock application.Clock, stdout io.Wri
 	if verificationURL == "" || login.UserCode == "" {
 		return adversarylabs.TokenResponse{}, fmt.Errorf("device login response was missing verification instructions")
 	}
+	if opts.reviewUploads {
+		if err := validateReviewApprovalURL(api, verificationURL, login.UserCode, os.Getenv("DOOMER_DEV_BROWSER_ORIGIN")); err != nil {
+			return adversarylabs.TokenResponse{}, err
+		}
+		fmt.Fprintf(stdout, "Review permissions in your browser.\n%s\nCode: %s\n", verificationURL, login.UserCode)
+		launch, cancel := context.WithTimeout(ctx, 5*time.Second)
+		_ = openBrowser(launch, verificationURL)
+		cancel()
+		token, err := waitForLogin(ctx, clock, client, login)
+		if err != nil {
+			return adversarylabs.TokenResponse{}, err
+		}
+		if !slices.Contains(strings.Fields(token.Scope), "reviews:upload") {
+			return adversarylabs.TokenResponse{}, fmt.Errorf("the service did not confirm review upload approval")
+		}
+		return token, nil
+	}
 	fmt.Fprintf(stdout, "Open %s\n\nEnter code: %s\n\nWaiting for authentication...\n", verificationURL, login.UserCode)
 	return waitForLogin(ctx, clock, client, login)
+}
+
+// Development proxies can serve the same app at a browser-accessible HTTPS
+// origin while the CLI uses a loopback API. Trust only an explicit origin.
+func validateReviewApprovalURL(api, verificationURL, code, devOrigin string) error {
+	page, pageErr := url.Parse(verificationURL)
+	service, serviceErr := url.Parse(api)
+	if pageErr != nil || serviceErr != nil || page.User != nil || page.Path != "/cli/authorize" ||
+		page.Query().Get("code") != code || page.Fragment != "" {
+		return fmt.Errorf("unexpected browser approval URL")
+	}
+	if page.Scheme == service.Scheme && page.Host == service.Host {
+		return nil
+	}
+	host := service.Hostname()
+	ip := net.ParseIP(host)
+	if devOrigin != "" && (strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback())) {
+		origin, err := url.Parse(devOrigin)
+		if err == nil && origin.Scheme == "https" && origin.Host != "" && origin.User == nil &&
+			(origin.Path == "" || origin.Path == "/") && origin.RawQuery == "" && origin.Fragment == "" &&
+			page.Scheme == origin.Scheme && page.Host == origin.Host {
+			return nil
+		}
+	}
+	return fmt.Errorf("browser approval is on a different origin from the Doomer API")
 }
 
 func readPasswordLine(r io.Reader) (string, error) {

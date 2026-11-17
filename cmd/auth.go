@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"slices"
+
 	"github.com/doomerlabs/doomer/internal/application"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/spf13/cobra"
@@ -12,6 +14,7 @@ type loginOptions struct {
 	ci                                         bool
 	name, emailAddress, registryNamespace      string
 	passwordStdin, tokenStdin, device, replace bool
+	reviewUploads                              bool
 }
 type logoutOptions struct{ localOnly bool }
 
@@ -31,11 +34,16 @@ func newLoginCommand(app *application.App, apiURL, profile *string, settings *vi
 			if opts.device && (opts.emailAddress != "" || opts.passwordStdin) {
 				return fmt.Errorf("--device cannot be combined with password login")
 			}
+			if opts.reviewUploads && (!opts.device || opts.ci || opts.tokenStdin) {
+				return fmt.Errorf("--review-uploads requires interactive device authorization (--device)")
+			}
 			deps := app.Dependencies()
 			stdin, clock, browserAuth, tty := cmd.InOrStdin(), deps.Clock, deps.BrowserAuth, deps.TTY
 			store := deps.Auth
 			var err error
-			targetProfile, newSettings, err := loginProfile(deps, valueOf(apiURL), valueOf(profile), settings, opts.replace)
+			// Browser onboarding reconnects the active review profile. Keep the
+			// compare-and-swap check below for concurrent credential changes.
+			targetProfile, newSettings, err := loginProfile(deps, valueOf(apiURL), valueOf(profile), settings, opts.replace || opts.reviewUploads)
 			if err != nil {
 				return err
 			}
@@ -92,7 +100,7 @@ func newLoginCommand(app *application.App, apiURL, profile *string, settings *vi
 				if opts.registryNamespace != "" {
 					return fmt.Errorf("--registry-namespace requires --token-stdin")
 				}
-				token, err = loginWithDevice(cmd.Context(), clock, cmd.OutOrStdout(), client, opts)
+				token, err = loginWithDevice(cmd.Context(), clock, cmd.OutOrStdout(), client, opts, valueOf(apiURL))
 				if err != nil {
 					return err
 				}
@@ -113,6 +121,32 @@ func newLoginCommand(app *application.App, apiURL, profile *string, settings *vi
 				Namespace:         token.Namespace,
 				Team:              token.Team,
 				RegistryHost:      deps.RegistryHost,
+			}
+			if opts.reviewUploads && existed && previous.Token != "" {
+				if _, active, err := store.ExactAuthE(key); err != nil {
+					return err
+				} else if active {
+					identityClient := adversarylabs.NewClientWithBaseURL(adversarylabs.ConfigStore{}, valueOf(apiURL))
+					existingAccount, err := identityClient.Whoami(cmd.Context(), previous.Token)
+					if err != nil {
+						return fmt.Errorf("verify the existing CLI login before enabling reviews: %w", err)
+					}
+					approvedAccount, err := identityClient.Whoami(cmd.Context(), token.Token)
+					if err != nil {
+						return fmt.Errorf("verify the browser account before enabling reviews: %w", err)
+					}
+					if existingAccount.ID == "" || existingAccount.ID != approvedAccount.ID {
+						return fmt.Errorf("the browser account differs from the selected CLI profile; sign in with the same account or choose another profile")
+					}
+					if !opts.replace {
+						// Keep registry access only after verifying that the
+						// stored credential also works with review uploads.
+						if existingAccount.IsCI || (!slices.Contains(existingAccount.Scopes, "registry:push") && !slices.Contains(existingAccount.Scopes, "reviews:upload")) {
+							return fmt.Errorf("the existing CLI login cannot upload reviews; choose another profile or explicitly replace the login with --replace")
+						}
+						savedAuth = previous
+					}
+				}
 			}
 			if opts.replace {
 				err = store.SetAuth(key, savedAuth)
@@ -137,6 +171,7 @@ func newLoginCommand(app *application.App, apiURL, profile *string, settings *vi
 	}
 	cmd.Flags().BoolVar(&opts.ci, "ci", false, "request a short-lived automation token")
 	cmd.Flags().BoolVar(&opts.device, "device", false, "use device login for a headless environment")
+	cmd.Flags().BoolVar(&opts.reviewUploads, "review-uploads", false, "request explicit source-upload approval in the browser")
 	cmd.Flags().BoolVar(&opts.replace, "replace", false, "replace the selected profile's existing login")
 	cmd.Flags().StringVar(&opts.name, "name", "", "friendly name for this client")
 	cmd.Flags().StringVar(&opts.emailAddress, "email-address", "", "email address for password login")
