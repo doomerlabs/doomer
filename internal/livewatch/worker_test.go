@@ -563,19 +563,9 @@ func TestTurnEndStopsObservingLaterEdits(t *testing.T) {
 
 func TestTerminalReportKeepsNewFindingsAvailable(t *testing.T) {
 	repo := makeRepository(t, t.TempDir(), "repo")
-	cfg := Config{ID: Key(t.TempDir()), ControlKey: Key(t.TempDir()), Directory: repo, API: "http://localhost/api", Token: "test"}
-	ctx, cancel := context.WithCancel(context.Background())
+	cfg, done := startWorker(t, repo, &terminalFindingClient{}, 0, func(context.Context, string) bool { return true }, Key(t.TempDir()))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	done := make(chan error, 1)
-	go func() {
-		done <- Serve(ctx, cfg, &terminalFindingClient{}, func(context.Context, string) bool { return true })
-	}()
-	for {
-		if _, ok := Available(ctx, cfg.ControlKey); ok {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
 	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("after\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
