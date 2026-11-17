@@ -537,3 +537,25 @@ func TestLocalReviewIdentityIgnoresPathSpelling(t *testing.T) {
 		}
 	})
 }
+
+func TestCaptureSkipsUntrackedNestedRepository(t *testing.T) {
+	dir, _ := sourceRepo(t)
+	nested := filepath.Join(dir, "org", "nested")
+	if err := os.MkdirAll(nested, 0700); err != nil {
+		t.Fatal(err)
+	}
+	git(t, nested, "init")
+	sourceFile(t, nested, "hello.py", "print('hello')\n")
+	sourceFile(t, dir, "parent.go", "package parent\n")
+	m := manifest(t, capture(t, dir, ""))
+	found := false
+	for _, entry := range m.Target {
+		if strings.HasPrefix(entry.Path, "org/nested") {
+			t.Fatalf("nested source leaked: %s", entry.Path)
+		}
+		found = found || entry.Path == "parent.go"
+	}
+	if !found {
+		t.Fatal("parent source lost")
+	}
+}

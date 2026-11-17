@@ -465,3 +465,130 @@ func TestAgentHypothesesGateSubmissionAndBindSnapshot(t *testing.T) {
 		t.Fatal("accepted replay")
 	}
 }
+
+func TestAgentWatchRevertToCleanCompletesWithoutReviewError(t *testing.T) {
+	repo := makeRepository(t, t.TempDir(), "repo")
+	file := filepath.Join(repo, "file.txt")
+	if err := os.WriteFile(file, []byte("prior prompt edit\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{}
+	w := &worker{
+		cfg: Config{RequireHypotheses: true}, client: client,
+		allowed: func(context.Context, string) bool { return true },
+		repos:   map[string]*repository{repo: {pending: true}},
+		slots:   make(chan struct{}, 1), completed: make(chan completion, 1),
+	}
+	// The next prompt undoes the previous prompt's edits back to HEAD.
+	if err := os.WriteFile(file, []byte("before\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	w.schedule(t.Context())
+	select {
+	case got := <-w.completed:
+		if got.result.Status != "unchanged" || got.result.Error != "" {
+			t.Fatalf("clean revert failed: %+v", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("clean revert did not complete")
+	}
+	w.jobs.Wait()
+	if client.uploads != 0 || len(client.inputs) != 0 {
+		t.Fatal("clean revert uploaded or submitted a review")
+	}
+}
+
+func TestTurnEndStopsObservingLaterEdits(t *testing.T) {
+	repo := makeRepository(t, t.TempDir(), "repo")
+	file := filepath.Join(repo, "file.txt")
+	cfg := Config{ID: Key(t.TempDir()), ControlKey: Key(t.TempDir()), Directory: repo, API: "http://localhost/api", Token: "test", RequireHypotheses: true}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- Serve(ctx, cfg, &fakeClient{}, func(context.Context, string) bool { return true }) }()
+	for {
+		if _, ok := Available(ctx, cfg.ControlKey); ok {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatal(err)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if err := os.WriteFile(file, []byte("turn edit\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	first, err := Call(ctx, cfg.ControlKey, "finish")
+	if err != nil || len(first.HypothesisRequests) != 1 {
+		t.Fatalf("finish: %+v %v", first, err)
+	}
+	request := first.HypothesisRequests[0]
+	if err := os.WriteFile(file, []byte("later turn edit\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1200 * time.Millisecond)
+	current, err := Call(ctx, cfg.ControlKey, "results")
+	if err != nil || len(current.HypothesisRequests) != 1 || current.HypothesisRequests[0].ID != request.ID {
+		t.Fatalf("observed later edit: %+v %v", current, err)
+	}
+	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: request.ID, Hypotheses: []adversarylabs.WorkspaceHypothesis{}}); err != nil {
+		t.Fatal(err)
+	}
+	// Final Stop closes the watcher, regardless of the review's terminal outcome.
+	final, err := Call(ctx, cfg.ControlKey, "finish")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The explicit final capture can discover a new edit; assess it first.
+	for _, pending := range final.HypothesisRequests {
+		if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: pending.ID, Hypotheses: []adversarylabs.WorkspaceHypothesis{}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(final.HypothesisRequests) > 0 {
+		if _, err := Call(ctx, cfg.ControlKey, "finish"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("watcher survived final Stop")
+	}
+}
+
+func TestTerminalReportKeepsNewFindingsAvailable(t *testing.T) {
+	repo := makeRepository(t, t.TempDir(), "repo")
+	cfg, done := startWorker(t, repo, &terminalFindingClient{}, 0, func(context.Context, string) bool { return true }, Key(t.TempDir()))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("after\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Call(ctx, cfg.ControlKey, "finish")
+	if err != nil || len(report.Findings) != 1 {
+		t.Fatalf("missing pending finding: %+v %v", report, err)
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("closed with pending feedback: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	yes := false
+	if _, err := SubmitFeedback(ctx, cfg.ControlKey, []Feedback{{ReviewID: report.Findings[0].ReviewID, LeadID: "lead", Status: "dismissed", Reason: "Verified fixture", Agrees: &yes}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Call(ctx, cfg.ControlKey, "finish"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type terminalFindingClient struct{ fakeClient }
+
+func (f *terminalFindingClient) StartWorkspace(_ context.Context, _ string, in adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {
+	return adversarylabs.WorkspaceReview{ID: in.ReviewID, Status: "completed", Early: &adversarylabs.WorkspaceAssessment{Status: "ready", Leads: []adversarylabs.WorkspaceLead{{ID: "lead", Path: "file.txt", Line: 1}}}}, nil
+}

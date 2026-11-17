@@ -305,7 +305,11 @@ func (w *worker) schedule(ctx context.Context) {
 		}
 		r.version++
 		r.running = true
-		jobCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		jobCtx, cancel := context.WithCancel(ctx)
+		if !w.cfg.RequireHypotheses {
+			cancel()
+			jobCtx, cancel = context.WithTimeout(ctx, 5*time.Minute)
+		}
 		r.cancel = cancel
 		version := r.version
 		w.jobs.Add(1)
@@ -323,8 +327,12 @@ func (w *worker) schedule(ctx context.Context) {
 			if w.cfg.RequireHypotheses {
 				captured, err := capture(jobCtx, path)
 				if err != nil {
+					result := Result{Repository: path, Status: "unavailable", Error: err.Error()}
+					if errors.Is(err, sourcesnapshot.ErrNoChanges) {
+						result.Status, result.Error = "unchanged", ""
+					}
 					select {
-					case w.completed <- completion{path, version, Result{Repository: path, Status: "unavailable", Error: err.Error()}}:
+					case w.completed <- completion{path, version, result}:
 					case <-ctx.Done():
 					}
 					return
@@ -374,7 +382,7 @@ func (w *worker) schedule(ctx context.Context) {
 				}
 				id := Key(cfg.ID + "\x00" + repo + "\x00" + fmt.Sprint(revision) + "\x00" + diff)
 				assessment.RequestID = id
-				task := &hypothesisWait{request: HypothesisRequest{ID: id, ReviewID: reviewIdentity(cfg, repo, revision), Revision: revision, Snapshot: snapshot.TargetTreeHash, DiffHash: Key(diff), Repository: repo, Diff: diff, Areas: areas}, reply: make(chan HypothesisResponse, 1)}
+				task := &hypothesisWait{request: HypothesisRequest{ID: id, ReviewID: reviewIdentity(cfg, repo, revision), Revision: revision, Snapshot: snapshot.TargetTreeHash, DiffHash: Key(diff), Repository: repo, Diff: diff, Areas: areas}, reply: make(chan HypothesisResponse, 1), delivered: make(chan struct{}), expired: make(chan struct{})}
 				if len(task.request.Diff) > 1<<20 {
 					task.request.Diff = task.request.Diff[:1<<20]
 					task.request.Partial = true
@@ -384,16 +392,15 @@ func (w *worker) schedule(ctx context.Context) {
 				case <-ctx.Done():
 					return nil, ctx.Err()
 				}
-				select {
-				case result := <-task.reply:
-					*assessment = result
-					if result.Status != "assessed" {
-						return nil, fmt.Errorf("agent assessment %s: %s", result.Status, result.Reason)
-					}
-					return result.Hypotheses, nil
-				case <-ctx.Done():
-					return nil, ctx.Err()
+				result, err := task.wait(ctx, agentResponseTimeout)
+				if err != nil {
+					return nil, err
 				}
+				*assessment = result
+				if result.Status != "assessed" {
+					return nil, fmt.Errorf("agent assessment %s: %s", result.Status, result.Reason)
+				}
+				return result.Hypotheses, nil
 			}
 			result := review(jobCtx, w.client, cfg, path, snapshot, version)
 			select {
@@ -407,6 +414,7 @@ func (w *worker) schedule(ctx context.Context) {
 func (w *worker) response(timeout bool) Response {
 	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory}
 	for _, pending := range w.hypotheses {
+
 		response.HypothesisRequests = append(response.HypothesisRequests, pending.request)
 	}
 	sort.Slice(response.HypothesisRequests, func(i, j int) bool { return response.HypothesisRequests[i].ID < response.HypothesisRequests[j].ID })
@@ -536,6 +544,16 @@ func (w *worker) run(ctx context.Context) error {
 		}
 	}()
 	var closing []control
+	// Once Stop is received, only explicit checkpoints may capture review fixes.
+	// A completed/timed-out turn must never observe edits from a later prompt.
+	turnEnded := false
+	var terminalTimer *time.Timer
+	var terminalDeadline <-chan time.Time
+	defer func() {
+		if terminalTimer != nil {
+			terminalTimer.Stop()
+		}
+	}()
 	finish := func(command control, response Response) {
 		command.reply <- response
 		select {
@@ -545,6 +563,24 @@ func (w *worker) run(ctx context.Context) error {
 	}
 	w.schedule(ctx)
 	for {
+		if turnEnded && len(closing) == 0 {
+			w.collectFindings()
+			busy := false
+			for _, r := range w.repos {
+				busy = busy || r.running || r.pending
+			}
+			if busy || w.hasPendingFeedback() {
+				if terminalTimer != nil {
+					terminalTimer.Stop()
+					terminalTimer = nil
+					terminalDeadline = nil
+				}
+			} else if terminalTimer == nil {
+				// Briefly retain the report so the agent can read the terminal result.
+				terminalTimer = time.NewTimer(15 * time.Second)
+				terminalDeadline = terminalTimer.C
+			}
+		}
 		if len(closing) > 0 {
 			busy := false
 			for _, r := range w.repos {
@@ -568,6 +604,9 @@ func (w *worker) run(ctx context.Context) error {
 					_ = w.closeListener()
 				}
 				for _, command := range closing {
+					if command.checkpoint && !command.finish {
+						w.markHypothesesDelivered()
+					}
 					finish(command, response)
 				}
 				if stop {
@@ -583,9 +622,15 @@ func (w *worker) run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-terminalDeadline:
+			_ = w.closeListener()
+			return nil
 		case task := <-w.hypothesisReady:
 			w.hypotheses[task.request.ID] = task
 		case command := <-w.controls:
+			if command.finish {
+				turnEnded = true
+			}
 			if command.hypotheses != nil {
 				err := w.recordHypotheses(*command.hypotheses)
 				response := w.response(false)
@@ -690,6 +735,12 @@ func (w *worker) run(ctx context.Context) error {
 			if r := w.repos[done.path]; r != nil && r.version == done.version {
 				r.running = false
 				r.result = &done.result
+				if strings.Contains(done.result.Error, errAgentResponseTimeout.Error()) {
+					turnEnded = true
+					for _, pending := range w.repos {
+						pending.pending = false
+					}
+				}
 				for id, task := range w.hypotheses {
 					if task.request.Repository == done.path {
 						delete(w.hypotheses, id)
@@ -704,7 +755,7 @@ func (w *worker) run(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			if len(closing) > 0 {
+			if turnEnded || len(closing) > 0 {
 				continue
 			}
 			if debounce == nil {
@@ -717,14 +768,14 @@ func (w *worker) run(ctx context.Context) error {
 			// The fallback scan detects changes even if notification delivery overflows.
 		case <-settled:
 			settled = nil
-			if len(closing) == 0 {
+			if !turnEnded && len(closing) == 0 {
 				if err := scan(); err != nil {
 					return err
 				}
 				w.schedule(ctx)
 			}
 		case <-ticker.C:
-			if len(closing) == 0 && settled == nil {
+			if !turnEnded && len(closing) == 0 && settled == nil {
 				if err := scan(); err != nil {
 					return err
 				}
@@ -795,4 +846,16 @@ func (w *worker) addDirectory(ctx context.Context, directory string) error {
 	}
 	w.directories = append(w.directories, directory)
 	return nil
+}
+
+func (w *worker) markHypothesesDelivered() {
+	for _, p := range w.hypotheses {
+		if p.delivered != nil {
+			select {
+			case <-p.delivered:
+			default:
+				close(p.delivered)
+			}
+		}
+	}
 }

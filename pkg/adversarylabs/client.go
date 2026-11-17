@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -13,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -180,6 +182,11 @@ func (c Client) postJSON(ctx context.Context, path string, payload any, token st
 	if err != nil {
 		return err
 	}
+	// This endpoint addresses immutable manifests by content hash. Repeating the
+	// exact body safely resumes preparation after a lost response.
+	if path == "/v1/repositories" {
+		req = req.WithContext(context.WithValue(req.Context(), retryRepositoryManifestKey{}, true))
+	}
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -265,21 +272,36 @@ type apiRetryTransport struct {
 	now    func() time.Time
 }
 
+type retryRepositoryManifestKey struct{}
+
 func (t apiRetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req.Method != http.MethodGet && req.Method != http.MethodHead {
+	manifest, _ := req.Context().Value(retryRepositoryManifestKey{}).(bool)
+	if req.Method != http.MethodGet && req.Method != http.MethodHead && !(manifest && req.Method == http.MethodPost && req.GetBody != nil) {
 		return t.base.RoundTrip(req)
 	}
 	for attempt := 0; ; attempt++ {
+		if attempt > 0 && req.GetBody != nil {
+			body, err := req.GetBody()
+			if err != nil {
+				return nil, err
+			}
+			req = req.Clone(req.Context())
+			req.Body = body
+		}
 		resp, err := t.base.RoundTrip(req)
-		if err != nil {
-			return nil, err
+		transient := retryableAPIError(err)
+		retryAfter := ""
+		if err == nil {
+			transient = resp.StatusCode == 429 || resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504
+			retryAfter = resp.Header.Get("Retry-After")
 		}
-		transient := resp.StatusCode == 429 || resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504
 		if !transient || attempt == apiRetryAttempts-1 {
-			return resp, nil
+			return resp, err
 		}
-		resp.Body.Close()
-		delay := t.retryDelay(attempt, resp.Header.Get("Retry-After"))
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
+		delay := t.retryDelay(attempt, retryAfter)
 		wait := t.wait
 		if wait == nil {
 			wait = waitForAPIRetry
@@ -288,6 +310,19 @@ func (t apiRetryTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			return nil, err
 		}
 	}
+}
+
+// Only retry transport failures that can resolve on a new connection. Invalid
+// certificates, permanent DNS failures and explicit cancellation remain errors.
+func retryableAPIError(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) {
+		return true
+	}
+	var networkError net.Error
+	return errors.As(err, &networkError) && networkError.Timeout()
 }
 
 func (t apiRetryTransport) retryDelay(attempt int, retryAfter string) time.Duration {

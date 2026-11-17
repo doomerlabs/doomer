@@ -203,13 +203,14 @@ func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
 		Notices:  []adversarylabs.ClientNotice{{ID: "news", Revision: 2, Message: "Service maintenance", NotifyUser: true}},
 	}
 	out := claudeStopFeedback(result, key, false)
-	text, _ := out["reason"].(string)
+	contextOutput, _ := out["hookSpecificOutput"].(map[string]any)
+	text, _ := contextOutput["additionalContext"].(string)
 	for _, want := range []string{"Handle invalid input", "Service maintenance", "watch findings respond", "notice-ack", "only after user-visible display", "do not bypass"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q: %v", want, out)
 		}
 	}
-	if out["decision"] != "block" {
+	if out["decision"] != nil || contextOutput["hookEventName"] != "Stop" {
 		t.Fatal(out)
 	}
 	// A denied response remains pending, but cannot trap Claude in a Stop loop.
@@ -263,7 +264,7 @@ func TestPendingFeedbackMessageDoesNotExposeFindingCounts(t *testing.T) {
 		t.Fatalf("finding count leaked: %v", got)
 	}
 	text := watchAgentContext("test")["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
-	for _, want := range []string{"not text to repeat", "Never equate returned findings with confirmed defects", "Report the assessed outcome once", "omit all review commentary", "Still deliver required service advisories and report errors"} {
+	for _, want := range []string{"not text to repeat", "Never equate returned findings with confirmed defects", "Report the assessed outcome once", "one short sentence naming the specific problem", "Only describe a finding as a bug you fixed if you agreed with it and verified the fix", "do not merely say that Doomer found a problem", "omit all review commentary", "Still deliver required service advisories and report errors"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing outcome guidance: %s", want)
 		}
@@ -292,13 +293,16 @@ func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
 			t.Fatal("Codex lost initial handoff")
 		}
 		claude := claudeStopFeedback(response, strings.Repeat("a", 64), active)
-		if active {
-			if claude["decision"] != nil || claude["systemMessage"] == nil {
-				t.Fatal("Claude retried an incomplete handoff indefinitely")
-			}
-			assertSafeHandoffMessage(t, claude)
-		} else if claude["decision"] != "block" || claude["reason"] != "Doomer is checking the latest changes." {
-			t.Fatal("Claude lost initial handoff")
+		context, ok := claude["hookSpecificOutput"].(map[string]any)
+		if !ok || context["hookEventName"] != "Stop" || claude["decision"] != nil || claude["systemMessage"] != nil {
+			t.Fatal(claude)
+		}
+		text, _ := context["additionalContext"].(string)
+		if active && (!strings.Contains(text, "watch results --control") || strings.Contains(text, "snapshot-request") || len(text) > 600) {
+			t.Fatal("replacement snapshot omitted", claude)
+		}
+		if !active && text != "Doomer is checking the latest changes." {
+			t.Fatal(claude)
 		}
 	}
 }
@@ -310,5 +314,26 @@ func assertSafeHandoffMessage(t *testing.T, output map[string]any) {
 		if strings.Contains(message, private) {
 			t.Fatalf("internal handoff leaked: %s", private)
 		}
+	}
+}
+
+func TestClaudePendingAssessmentUsesNonErrorStopFeedback(t *testing.T) {
+	out := claudeStopFeedback(livewatch.Response{HypothesisRequests: []livewatch.HypothesisRequest{{ID: "pending"}}}, strings.Repeat("a", 64), false)
+	context, ok := out["hookSpecificOutput"].(map[string]any)
+	if !ok || context["hookEventName"] != "Stop" || context["additionalContext"] != "Doomer is checking the latest changes." || out["decision"] != nil {
+		t.Fatal(out)
+	}
+}
+
+func TestUnchangedTurnIsSilentForBothAgents(t *testing.T) {
+	result := livewatch.Response{Results: []livewatch.Result{{Status: "unchanged"}}}
+	for _, out := range []map[string]any{claudeStopFeedback(result, strings.Repeat("a", 64), false), codexStopFeedback(result, false)} {
+		if len(out) != 0 {
+			t.Fatalf("unchanged turn emitted feedback: %v", out)
+		}
+	}
+	text := watchAgentContext(strings.Repeat("a", 64))["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
+	if strings.Contains(text, "Before your final answer, run") || !strings.Contains(text, "do not call watch results") {
+		t.Fatal("unconditional retrieval instruction remains")
 	}
 }

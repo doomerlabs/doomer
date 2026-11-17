@@ -63,7 +63,7 @@ func responseError(resp *http.Response, token string) error {
 			message += ": uploaded file checksum mismatch (the server may have received a truncated body)"
 		case "invalid_request", "invalid_user_request", "invalid_json", "unauthorized", "insufficient_scope", "repository_mismatch",
 			"not_found", "submission_limit", "idempotency_conflict", "payload_too_large", "invalid_snapshot",
-			"digest_mismatch", "source_head_mismatch", "submission_expired_or_finalized", "not_ready", "review_identity_conflict", "review_cancelled":
+			"digest_mismatch", "source_head_mismatch", "submission_expired_or_finalized", "not_ready", "review_identity_conflict", "review_cancelled", "review_superseded", "triage_snapshot_mismatch":
 			safeCode = body.Error
 			message += ": " + body.Error
 		}
