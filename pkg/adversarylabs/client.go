@@ -25,7 +25,7 @@ type Client struct {
 }
 
 type LoginOptions struct {
-	ReviewUploads bool   `json:"review_uploads,omitempty"`
+	ReviewUploads bool   `json:"review_uploads"`
 	Name          string `json:"name,omitempty"`
 	CI            bool   `json:"ci,omitempty"`
 	Team          string `json:"team,omitempty"`

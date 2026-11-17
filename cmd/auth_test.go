@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
@@ -283,15 +284,22 @@ func TestDeviceReviewApprovalRequiresExplicitBrowserScope(t *testing.T) {
 		name, scope, expectedError string
 		declined                   bool
 		existingAccount            string
+		existingScope              string
+		pendingOnce                bool
+		replace                    bool
 	}{
 		{name: "approved", scope: "reviews:upload"},
-		{name: "existing login", scope: "reviews:upload", existingAccount: "reviewer"},
+		{name: "pending response is not denial", scope: "reviews:upload", pendingOnce: true},
+		{name: "existing login", scope: "reviews:upload", existingAccount: "reviewer", existingScope: "registry:push"},
+		{name: "read-only login", scope: "reviews:upload", existingAccount: "reviewer", existingScope: "registry:pull", expectedError: "existing CLI login cannot upload reviews"},
+		{name: "explicit replacement", scope: "reviews:upload", existingAccount: "reviewer", existingScope: "registry:pull", replace: true},
 		{name: "other account", scope: "reviews:upload", existingAccount: "other", expectedError: "browser account differs"},
 		{name: "login only", scope: "registry:pull", expectedError: "did not confirm review upload approval"},
 		{name: "declined", declined: true, expectedError: "browser authorization declined"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store := isolate(t)
+			var polls atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.URL.Path {
 				case "/v1/auth/device/code":
@@ -305,6 +313,10 @@ func TestDeviceReviewApprovalRequiresExplicitBrowserScope(t *testing.T) {
 						ExpiresIn:               60, Interval: 1,
 					})
 				case "/v1/auth/device/token":
+					if polls.Add(1) == 1 && tc.pendingOnce {
+						http.Error(w, `{"error":"authorization_pending"}`, http.StatusForbidden)
+						return
+					}
 					if tc.declined {
 						http.Error(w, `{"error":"access_denied"}`, http.StatusForbidden)
 						return
@@ -312,10 +324,12 @@ func TestDeviceReviewApprovalRequiresExplicitBrowserScope(t *testing.T) {
 					_ = json.NewEncoder(w).Encode(adversarylabs.TokenResponse{Token: "fixture-token", Scope: tc.scope})
 				case "/v1/auth/whoami":
 					account := "reviewer"
+					scope := tc.scope
 					if r.Header.Get("Authorization") == "Bearer registry-token" {
 						account = tc.existingAccount
+						scope = tc.existingScope
 					}
-					_ = json.NewEncoder(w).Encode(map[string]string{"id": account})
+					_ = json.NewEncoder(w).Encode(adversarylabs.WhoamiResponse{ID: account, Scopes: strings.Fields(scope)})
 				default:
 					t.Errorf("unexpected path %s", r.URL.Path)
 					w.WriteHeader(http.StatusNotFound)
@@ -328,7 +342,11 @@ func TestDeviceReviewApprovalRequiresExplicitBrowserScope(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			out, err := execute(t, "", "--api-url", server.URL, "login", "--device", "--review-uploads")
+			args := []string{"--api-url", server.URL, "login", "--device", "--review-uploads"}
+			if tc.replace {
+				args = append(args, "--replace")
+			}
+			out, err := execute(t, "", args...)
 			if !strings.Contains(out, "/cli/authorize?code=ABCD-EFGH") || strings.Contains(out, "fixture-token") {
 				t.Fatalf("incorrect browser handoff output: %s", out)
 			}
@@ -336,8 +354,11 @@ func TestDeviceReviewApprovalRequiresExplicitBrowserScope(t *testing.T) {
 				t.Fatalf("unexpected approval result: %v", err)
 			}
 			auth, saved, loadErr := store.ExactAuthE(key)
-			if tc.existingAccount != "" && auth.Token != "registry-token" {
+			if tc.existingAccount != "" && !tc.replace && auth.Token != "registry-token" {
 				t.Fatal("existing registry login was replaced")
+			}
+			if tc.replace && auth.Token != "fixture-token" {
+				t.Fatal("explicit replacement did not store the approved token")
 			}
 			if loadErr != nil || saved != (tc.expectedError == "" || tc.existingAccount != "") {
 				t.Fatalf("credential saved=%v: %v", saved, loadErr)

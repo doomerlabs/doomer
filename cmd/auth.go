@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"slices"
+
 	"github.com/doomerlabs/doomer/internal/application"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/spf13/cobra"
@@ -136,9 +138,14 @@ func newLoginCommand(app *application.App, apiURL, profile *string, settings *vi
 					if existingAccount.ID == "" || existingAccount.ID != approvedAccount.ID {
 						return fmt.Errorf("the browser account differs from the selected CLI profile; sign in with the same account or choose another profile")
 					}
-					// The new credential proves approval; retain the existing
-					// credential so its registry access remains available.
-					savedAuth = previous
+					if !opts.replace {
+						// Keep registry access only after verifying that the
+						// stored credential also works with review uploads.
+						if existingAccount.IsCI || (!slices.Contains(existingAccount.Scopes, "registry:push") && !slices.Contains(existingAccount.Scopes, "reviews:upload")) {
+							return fmt.Errorf("the existing CLI login cannot upload reviews; choose another profile or explicitly replace the login with --replace")
+						}
+						savedAuth = previous
+					}
 				}
 			}
 			if opts.replace {

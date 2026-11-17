@@ -41,7 +41,7 @@ func waitForLogin(ctx context.Context, clock application.Clock, client applicati
 			return adversarylabs.TokenResponse{}, fmt.Errorf("login expired before authentication completed")
 		}
 		var response *adversarylabs.ResponseError
-		if errors.As(err, &response) && response.StatusCode == 403 {
+		if errors.As(err, &response) && response.Code == "access_denied" {
 			return adversarylabs.TokenResponse{}, fmt.Errorf("browser authorization declined")
 		}
 		timer := clock.NewTimer(interval)

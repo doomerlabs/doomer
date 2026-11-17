@@ -12,6 +12,7 @@ var ErrNotAuthenticated = errors.New("not logged in; run doomer login")
 
 type WhoamiResponse struct {
 	Type              string       `json:"type,omitempty"`
+	IsCI              bool         `json:"is_ci,omitempty"`
 	Scopes            []string     `json:"scopes,omitempty"`
 	ID                string       `json:"id,omitempty"`
 	Name              string       `json:"name,omitempty"`
