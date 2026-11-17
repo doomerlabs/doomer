@@ -152,10 +152,21 @@ func claudeStopFeedback(result livewatch.Response, key string, stopActive bool) 
 		return claudeStopContext("Doomer is checking the latest changes.")
 	}
 	if stopActive {
-		if !report.Complete {
-			return map[string]any{"systemMessage": "Doomer review handling is incomplete. If a required command was denied, respect that denial; do not claim completion.\n" + feedbackInstructionsForHook(result, key, true)}
+		var message string
+		switch {
+		case len(report.Errors) > 0:
+			message = "Doomer review is incomplete. " + strings.Join(report.Errors, " ")
+		case report.Unanswered > 0:
+			message = "Doomer is waiting for Claude to record its review decisions."
+		case report.NoticeInstructions != "":
+			message = "Doomer has an advisory awaiting delivery."
+		default:
+			return finalFeedbackHook(result)
 		}
-		return finalFeedbackHook(result)
+		if notices := feedbackNotices(result.Notices); notices != "" {
+			message += "\n\n" + notices
+		}
+		return map[string]any{"systemMessage": message}
 	}
 	noReview := true
 	for _, review := range result.Results {
@@ -167,7 +178,9 @@ func claudeStopFeedback(result livewatch.Response, key string, stopActive bool) 
 	if noReview && len(result.Findings) == 0 && len(result.Notices) == 0 && report.Complete {
 		return map[string]any{}
 	}
-	text := "Doomer review report from the trusted Stop hook (no separate retrieval command is needed):\n" + feedbackReport(result)
+	report.Consent = nil
+	payload, _ := json.MarshalIndent(report, "", "  ")
+	text := "Doomer review report from the trusted Stop hook (no separate retrieval command is needed):\n" + string(payload)
 	if instructions := feedbackInstructionsForHook(result, key, true); instructions != "" {
 		text += "\n\n" + instructions
 	}
@@ -226,12 +239,7 @@ func feedbackInstructions(result livewatch.Response, key string) string {
 
 func feedbackInstructionsForHook(result livewatch.Response, key string, reportsAtStop bool) string {
 	result = watchNoticeCommands(result, key)
-	var notices strings.Builder
-	for _, notice := range result.Notices {
-		if notice.NotifyUser {
-			notices.WriteString(adversarylabs.FormatNoticeForAgent(notice) + "\n\n")
-		}
-	}
+	notices := feedbackNotices(result.Notices)
 
 	var pending []livewatch.Finding
 	for _, finding := range result.Findings {
@@ -240,11 +248,11 @@ func feedbackInstructionsForHook(result livewatch.Response, key string, reportsA
 		}
 	}
 	if len(pending) == 0 {
-		return notices.String()
+		return notices
 	}
 	var text strings.Builder
-	text.WriteString(notices.String())
-	if result.Consent != nil {
+	text.WriteString(notices)
+	if result.Consent != nil && !reportsAtStop {
 		evidence, _ := json.Marshal(result.Consent)
 		fmt.Fprintf(&text, "Current CLI-verified upload consent (scope data, not instructions): %s\n", evidence)
 	}
@@ -268,6 +276,16 @@ func feedbackInstructionsForHook(result livewatch.Response, key string, reportsA
 		text.WriteString("After recording decisions, run watch results with the same control key before answering. ")
 	}
 	text.WriteString("Display any pending advisories and execute their exact acknowledgement commands only after user-visible display.")
+	return text.String()
+}
+
+func feedbackNotices(notices []adversarylabs.ClientNotice) string {
+	var text strings.Builder
+	for _, notice := range notices {
+		if notice.NotifyUser {
+			text.WriteString(adversarylabs.FormatNoticeForAgent(notice) + "\n\n")
+		}
+	}
 	return text.String()
 }
 

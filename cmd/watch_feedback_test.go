@@ -198,6 +198,7 @@ func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
 		t.Fatal("Claude is missing internal handoff retrieval guidance")
 	}
 	result := livewatch.Response{
+		Consent:  &livewatch.ConsentEvidence{CredentialDirectory: "/private/credentials"},
 		Results:  []livewatch.Result{{Status: "ready", URL: "https://example.test/review"}},
 		Findings: []livewatch.Finding{{ReviewID: "review", Lead: adversarylabs.WorkspaceLead{ID: "lead", Path: "hello.py", Line: 1, Concern: "Handle invalid input"}}},
 		Notices:  []adversarylabs.ClientNotice{{ID: "news", Revision: 2, Message: "Service maintenance", NotifyUser: true}},
@@ -213,16 +214,32 @@ func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
 	if out["decision"] != nil || contextOutput["hookEventName"] != "Stop" {
 		t.Fatal(out)
 	}
+	if strings.Contains(text, "/private/credentials") {
+		t.Fatal("Claude Stop feedback included verified upload consent details")
+	}
 	// A denied response remains pending, but cannot trap Claude in a Stop loop.
 	blocked := claudeStopFeedback(result, key, true)
-	if blocked["decision"] != nil || blocked["systemMessage"] == nil {
+	message, _ := blocked["systemMessage"].(string)
+	if len(blocked) != 1 || !strings.HasPrefix(message, "Doomer is waiting for Claude to record its review decisions.") ||
+		!strings.Contains(message, "Service maintenance") || !strings.Contains(message, `"notice-ack","--control","`+key+`"`) ||
+		strings.Contains(message, "/private/credentials") || strings.Contains(message, "watch findings respond") {
 		t.Fatal(blocked)
 	}
 	if result.Findings[0].Disposition != nil || !result.Notices[0].NotifyUser {
 		t.Fatal("delivery recorded an acknowledgement or decision")
 	}
 	result.Findings[0].Disposition = &livewatch.Feedback{Status: "deferred", Reason: "Needs user input"}
+	advisory := claudeStopFeedback(result, key, true)
+	message, _ = advisory["systemMessage"].(string)
+	if len(advisory) != 1 || !strings.Contains(message, "Service maintenance") || !strings.Contains(message, `"notice-ack","--control","`+key+`"`) {
+		t.Fatal(advisory)
+	}
+	result.Findings[0].Disposition = nil
 	result.Notices[0].NotifyUser = false
+	if out := claudeStopFeedback(result, key, true); len(out) != 1 || out["systemMessage"] != "Doomer is waiting for Claude to record its review decisions." {
+		t.Fatal(out)
+	}
+	result.Findings[0].Disposition = &livewatch.Feedback{Status: "deferred", Reason: "Needs user input"}
 	if out := claudeStopFeedback(result, key, true); len(out) != 0 {
 		t.Fatal(out)
 	}

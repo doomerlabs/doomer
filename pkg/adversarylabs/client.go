@@ -25,9 +25,10 @@ type Client struct {
 }
 
 type LoginOptions struct {
-	Name string `json:"name,omitempty"`
-	CI   bool   `json:"ci,omitempty"`
-	Team string `json:"team,omitempty"`
+	ReviewUploads bool   `json:"review_uploads,omitempty"`
+	Name          string `json:"name,omitempty"`
+	CI            bool   `json:"ci,omitempty"`
+	Team          string `json:"team,omitempty"`
 }
 
 type PasswordLoginOptions struct {
@@ -49,6 +50,7 @@ type DeviceLogin struct {
 }
 
 type TokenResponse struct {
+	Scope             string `json:"scope"`
 	Token             string `json:"token"`
 	ClientID          string `json:"client_id"`
 	ExpiresAt         string `json:"expires_at"`

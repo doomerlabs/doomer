@@ -277,3 +277,93 @@ func TestAccountProfilesKeepPersonalLoginsSeparate(t *testing.T) {
 		t.Fatalf("account leaked into default profile: %v", err)
 	}
 }
+
+func TestDeviceReviewApprovalRequiresExplicitBrowserScope(t *testing.T) {
+	for _, tc := range []struct {
+		name, scope, expectedError string
+		declined                   bool
+		existingAccount            string
+	}{
+		{name: "approved", scope: "reviews:upload"},
+		{name: "existing login", scope: "reviews:upload", existingAccount: "reviewer"},
+		{name: "other account", scope: "reviews:upload", existingAccount: "other", expectedError: "browser account differs"},
+		{name: "login only", scope: "registry:pull", expectedError: "did not confirm review upload approval"},
+		{name: "declined", declined: true, expectedError: "browser authorization declined"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := isolate(t)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/v1/auth/device/code":
+					var opts adversarylabs.LoginOptions
+					if err := json.NewDecoder(r.Body).Decode(&opts); err != nil || !opts.ReviewUploads {
+						t.Errorf("missing dedicated review approval request: %v", err)
+					}
+					_ = json.NewEncoder(w).Encode(adversarylabs.DeviceLogin{
+						DeviceCode: "device", UserCode: "ABCD-EFGH",
+						VerificationURIComplete: "http://" + r.Host + "/cli/authorize?code=ABCD-EFGH",
+						ExpiresIn:               60, Interval: 1,
+					})
+				case "/v1/auth/device/token":
+					if tc.declined {
+						http.Error(w, `{"error":"access_denied"}`, http.StatusForbidden)
+						return
+					}
+					_ = json.NewEncoder(w).Encode(adversarylabs.TokenResponse{Token: "fixture-token", Scope: tc.scope})
+				case "/v1/auth/whoami":
+					account := "reviewer"
+					if r.Header.Get("Authorization") == "Bearer registry-token" {
+						account = tc.existingAccount
+					}
+					_ = json.NewEncoder(w).Encode(map[string]string{"id": account})
+				default:
+					t.Errorf("unexpected path %s", r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
+			key := adversarylabs.AuthKey(server.URL, "default")
+			if tc.existingAccount != "" {
+				if err := store.SetAuth(key, adversarylabs.Auth{Token: "registry-token"}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			out, err := execute(t, "", "--api-url", server.URL, "login", "--device", "--review-uploads")
+			if !strings.Contains(out, "/cli/authorize?code=ABCD-EFGH") || strings.Contains(out, "fixture-token") {
+				t.Fatalf("incorrect browser handoff output: %s", out)
+			}
+			if tc.expectedError == "" && err != nil || tc.expectedError != "" && (err == nil || !strings.Contains(err.Error(), tc.expectedError)) {
+				t.Fatalf("unexpected approval result: %v", err)
+			}
+			auth, saved, loadErr := store.ExactAuthE(key)
+			if tc.existingAccount != "" && auth.Token != "registry-token" {
+				t.Fatal("existing registry login was replaced")
+			}
+			if loadErr != nil || saved != (tc.expectedError == "" || tc.existingAccount != "") {
+				t.Fatalf("credential saved=%v: %v", saved, loadErr)
+			}
+		})
+	}
+}
+
+func TestReviewApprovalBrowserOrigin(t *testing.T) {
+	const dev = "https://dev.example.test"
+	for _, tc := range []struct {
+		name, api, page, override string
+		allowed                   bool
+	}{
+		{"same origin", "https://doomer.ai/api", "https://doomer.ai/cli/authorize?code=ABCD-EFGH", "", true},
+		{"loopback with explicit dev origin", "http://localhost:3000/api", dev + "/cli/authorize?code=ABCD-EFGH", dev, true},
+		{"no override", "http://localhost:3000/api", dev + "/cli/authorize?code=ABCD-EFGH", "", false},
+		{"production cannot use dev override", "https://doomer.ai/api", dev + "/cli/authorize?code=ABCD-EFGH", dev, false},
+		{"different browser origin", "http://localhost:3000/api", "https://other.test/cli/authorize?code=ABCD-EFGH", dev, false},
+		{"different code", "http://localhost:3000/api", dev + "/cli/authorize?code=DIFF-CODE", dev, false},
+		{"wrong path", "http://localhost:3000/api", dev + "/other?code=ABCD-EFGH", dev, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validateReviewApprovalURL(tc.api, tc.page, "ABCD-EFGH", tc.override); (err == nil) != tc.allowed {
+				t.Fatalf("unexpected result: %v", err)
+			}
+		})
+	}
+}
