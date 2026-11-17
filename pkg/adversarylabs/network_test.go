@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -239,4 +241,81 @@ func equalDurations(a, b []time.Duration) bool {
 func FuzzValidateBaseURL(f *testing.F) {
 	f.Add("https://api.example")
 	f.Fuzz(func(t *testing.T, value string) { _, _ = validateBaseURL(value) })
+}
+
+func TestRepositoryManifestRetriesLostResponseWithSameBody(t *testing.T) {
+	for _, failure := range []error{io.EOF, &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}} {
+		t.Run(failure.Error(), func(t *testing.T) {
+			attempts := 0
+			var first string
+			transport := apiRetryTransport{
+				base: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					attempts++
+					data, err := io.ReadAll(req.Body)
+					req.Body.Close()
+					if err != nil {
+						t.Fatal(err)
+					}
+					if attempts == 1 {
+						first = string(data)
+						return nil, failure
+					}
+					if string(data) != first || first == "" {
+						t.Fatalf("replayed body = %q, original = %q", data, first)
+					}
+					return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"repository_id":"repo","snapshot_id":"snapshot","complete":true}`)), Header: make(http.Header)}, nil
+				}),
+				wait: func(context.Context, time.Duration) error { return nil },
+			}
+			client := Client{BaseURL: "https://api.test/api", HTTP: &http.Client{Transport: transport}}
+			var out workspaceUpload
+			if err := client.postJSON(t.Context(), "/v1/repositories", map[string]any{"repository": "org/repo", "files": []any{}}, "fixture", &out); err != nil {
+				t.Fatal(err)
+			}
+			if attempts != 2 || !out.Complete {
+				t.Fatalf("attempts=%d response=%+v", attempts, out)
+			}
+		})
+	}
+}
+
+func TestAPIRetryTransportBoundsConnectionFailures(t *testing.T) {
+	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost} {
+		t.Run(method, func(t *testing.T) {
+			attempts := 0
+			transport := apiRetryTransport{
+				base: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					attempts++
+					if req.Body != nil {
+						req.Body.Close()
+					}
+					return nil, syscall.ECONNRESET
+				}),
+				wait: func(context.Context, time.Duration) error { return nil },
+			}
+			req, _ := http.NewRequestWithContext(t.Context(), method, "https://api.test/api/v1/repositories", strings.NewReader("{}"))
+			_, err := transport.RoundTrip(req)
+			want := apiRetryAttempts
+			if method == http.MethodPost {
+				want = 1
+			}
+			if !errors.Is(err, syscall.ECONNRESET) || attempts != want {
+				t.Fatalf("attempts=%d want=%d error=%v", attempts, want, err)
+			}
+		})
+	}
+}
+
+func TestAPITransportDoesNotRetryPermanentErrors(t *testing.T) {
+	for _, failure := range []error{context.Canceled, context.DeadlineExceeded, errors.New("invalid certificate"), &net.DNSError{Err: "no such host", Name: "invalid.example", IsNotFound: true}} {
+		t.Run(failure.Error(), func(t *testing.T) {
+			attempts := 0
+			transport := apiRetryTransport{base: roundTripFunc(func(*http.Request) (*http.Response, error) { attempts++; return nil, failure })}
+			req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.test/api/v1/reviews/workspace/test", nil)
+			_, err := transport.RoundTrip(req)
+			if !errors.Is(err, failure) || attempts != 1 {
+				t.Fatalf("attempts=%d error=%v", attempts, err)
+			}
+		})
+	}
 }

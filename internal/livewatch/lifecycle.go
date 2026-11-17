@@ -42,7 +42,9 @@ func (l *reviewLifecycle) failure(stage string, err error, assessment *Hypothesi
 	if stage == "agent_assessment" {
 		code = "handoff_error"
 	}
-	if errors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(err, errAgentResponseTimeout) {
+		code = "agent_response_timeout"
+	} else if errors.Is(err, context.DeadlineExceeded) {
 		code = "deadline_exceeded"
 	} else if errors.Is(err, context.Canceled) {
 		code = "cancelled"
