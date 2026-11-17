@@ -375,7 +375,7 @@ func (w *worker) schedule(ctx context.Context) {
 					var err error
 					areas, err = triage.TriageWorkspace(ctx, cfg.Token, reviewIdentity(cfg, repo, revision), diff)
 					if err != nil {
-						cfg.lifecycle.event("risk_selection", "failed")
+						cfg.lifecycle.failure("risk_selection", err, nil)
 						return nil, err
 					}
 					cfg.lifecycle.event("risk_selection", "completed")

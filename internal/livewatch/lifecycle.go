@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/doomerlabs/doomer/internal/version"
+	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
+	"strings"
 	"time"
 	"unicode/utf8"
 )
@@ -48,6 +50,10 @@ func (l *reviewLifecycle) failure(stage string, err error, assessment *Hypothesi
 		code = "deadline_exceeded"
 	} else if errors.Is(err, context.Canceled) {
 		code = "cancelled"
+	}
+	var response *adversarylabs.ResponseError
+	if errors.As(err, &response) && strings.HasPrefix(response.Code, "triage_") {
+		code = response.Code
 	}
 	details := map[string]any{"error_code": code, "reason": boundedFailureReason(err.Error())}
 	if assessment != nil {
