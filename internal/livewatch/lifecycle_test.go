@@ -71,6 +71,7 @@ func TestLifecycleReportsHandoffFailureDetails(t *testing.T) {
 	}{
 		{"superseded", fmt.Errorf("new snapshot"), "superseded"},
 		{"incomplete", fmt.Errorf("cannot inspect"), "incomplete"},
+		{"", errAgentResponseTimeout, "agent_response_timeout"},
 		{"", context.DeadlineExceeded, "deadline_exceeded"},
 		{"", context.Canceled, "cancelled"},
 	} {
