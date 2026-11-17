@@ -8,6 +8,76 @@ configuration, start services in the user's development environment, or stop the
 user's running instances. Agents may start and stop processes and containers they
 create solely for tests.
 
+## Development VM: production and Goblin isolation
+
+This is a development-only note for the `/home/exedev` VM, not a customer
+installation guide or automatic provisioning instruction.
+
+Two separate installations share this host:
+
+| Context | CLI and manager | Service and credentials |
+| --- | --- | --- |
+| `/home/exedev/workspace` | Released `~/.local/bin/doomer`; normal `~/.local/share/doomer-node` manager, skill and hooks | `https://doomer.ai/api`; `~/.doomer-developer/doomer-production` |
+| `/home/exedev/test-apps/goblin-dispatch` | Local `~/.local/share/doomer-node-dev/bin/doomer-dev`; separate development manager, skill and hooks | `http://localhost:3000/api`; `~/.doomer-developer/doomer-testing` |
+
+In an interactive Bash shell, plain `claude` automatically uses the development
+profile in `~/test-apps/goblin-dispatch` and its subdirectories; elsewhere it uses
+the normal production profile. This selection is a function in `~/.bashrc`.
+`goblin-claude` is a launcher command, not a directory. It can also be invoked
+explicitly from elsewhere and changes into Goblin Dispatch. Directly invoking
+the Claude executable bypasses the shell function.
+
+The Goblin launcher uses `~/.doomer-developer/goblin-home` as its private `HOME`
+and sets `CLAUDE_CONFIG_DIR` to that home's `.claude`. This isolates skill
+discovery as well as hooks. Production keeps the normal home and configuration.
+Each profile must have only one Doomer handler per hook event. Do not install
+both production and development handlers into the same profile.
+
+User-run maintenance commands:
+
+```sh
+# Released installation only:
+npx @doomerlabs/doomer@beta update
+
+# Rebuild CLI and refresh manager, skill and hooks in Goblin's isolated profile:
+~/.local/bin/update-goblin-doomer
+
+# Refresh using the existing workspace/doomer/bin/doomer build:
+~/.local/bin/update-goblin-doomer --reuse-build
+```
+
+The development updater uses the sibling `doomer`, `doomer-node`, and `skills`
+checkouts under `~/workspace`. The full updater builds into the development
+manager's build directory. `--reuse-build` may install older bytes if the
+workspace build has not been refreshed. Start a fresh Claude session after
+updating its skill or hooks. Existing processes may still use earlier binaries.
+
+Do not use the older shared `scripts/install-local.sh` workflow on this VM or
+repoint `~/.local/bin/doomer` at a development binary: that breaks isolation.
+For live Goblin updates, use the dedicated updater only when the user authorizes
+installation. Normal builds and isolated tests remain allowed under Local builds.
+Do not restart the user's development server or worker without authorization.
+
+`~/workspace/.doomer.env` routes workspace reviews to production;
+`~/test-apps/.doomer.env` routes test-app reviews to localhost. These files alone
+do not select the CLI, manager, skill or hooks. Preserve both credential stores.
+
+For read-only verification, inspect the shell function/launcher, both manager
+state files and both profiles' hooks, then check effective routing:
+
+```sh
+~/.local/bin/doomer watch diagnose ~/workspace --agent claude \
+  --manager-home ~/.local/share/doomer-node
+~/.local/share/doomer-node-dev/bin/doomer-dev watch diagnose \
+  ~/test-apps/goblin-dispatch --agent claude \
+  --manager-home ~/.local/share/doomer-node-dev
+```
+
+Confirm the resolved executable, service and upload approval. Do not equate
+configuration checks with a completed end-to-end review. Do not print tokens
+or full credential files. Keep version numbers out of this note: verify current
+installed versions/hashes when needed.
+
 ## Pull request ownership and monitoring
 
 Doomer owns pull request merging in this repository. Never run `gh pr merge`,
