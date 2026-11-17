@@ -560,3 +560,45 @@ func TestTurnEndStopsObservingLaterEdits(t *testing.T) {
 		t.Fatal("watcher survived final Stop")
 	}
 }
+
+func TestTerminalReportKeepsNewFindingsAvailable(t *testing.T) {
+	repo := makeRepository(t, t.TempDir(), "repo")
+	cfg := Config{ID: Key(t.TempDir()), ControlKey: Key(t.TempDir()), Directory: repo, API: "http://localhost/api", Token: "test"}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- Serve(ctx, cfg, &terminalFindingClient{}, func(context.Context, string) bool { return true })
+	}()
+	for {
+		if _, ok := Available(ctx, cfg.ControlKey); ok {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("after\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Call(ctx, cfg.ControlKey, "finish")
+	if err != nil || len(report.Findings) != 1 {
+		t.Fatalf("missing pending finding: %+v %v", report, err)
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("closed with pending feedback: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	yes := false
+	if _, err := SubmitFeedback(ctx, cfg.ControlKey, []Feedback{{ReviewID: report.Findings[0].ReviewID, LeadID: "lead", Status: "dismissed", Reason: "Verified fixture", Agrees: &yes}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Call(ctx, cfg.ControlKey, "finish"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type terminalFindingClient struct{ fakeClient }
+
+func (f *terminalFindingClient) StartWorkspace(_ context.Context, _ string, in adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {
+	return adversarylabs.WorkspaceReview{ID: in.ReviewID, Status: "completed", Early: &adversarylabs.WorkspaceAssessment{Status: "ready", Leads: []adversarylabs.WorkspaceLead{{ID: "lead", Path: "file.txt", Line: 1}}}}, nil
+}

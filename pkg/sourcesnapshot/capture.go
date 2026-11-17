@@ -351,9 +351,15 @@ func (g gitReader) worktreeFiles() (worktreeInventory, error) {
 		return result, err
 	}
 	for _, name := range bytes.Split(untracked, []byte{0}) {
-		if len(name) > 0 {
-			names[string(name)] = true
+		if len(name) == 0 {
+			continue
 		}
+		// Git represents an untracked nested repository as a directory entry.
+		// Its own watcher captures it; it is not a source file in this tree.
+		if strings.HasSuffix(string(name), "/") {
+			continue
+		}
+		names[string(name)] = true
 	}
 	if len(names) > MaxFiles {
 		return result, fmt.Errorf("snapshot exceeds the %d file limit", MaxFiles)

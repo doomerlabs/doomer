@@ -38,7 +38,7 @@ func initialEditFiles(ctx context.Context, repo string) (map[string]initialFile,
 	}
 	result := map[string]initialFile{}
 	for _, name := range bytes.Split(append(changed, untracked...), []byte{0}) {
-		if len(name) == 0 {
+		if len(name) == 0 || bytes.HasSuffix(name, []byte("/")) {
 			continue
 		}
 		path := string(name)

@@ -563,12 +563,19 @@ func (w *worker) run(ctx context.Context) error {
 	}
 	w.schedule(ctx)
 	for {
-		if turnEnded && terminalTimer == nil && len(closing) == 0 {
+		if turnEnded && len(closing) == 0 {
+			w.collectFindings()
 			busy := false
 			for _, r := range w.repos {
 				busy = busy || r.running || r.pending
 			}
-			if !busy && !w.hasPendingFeedback() {
+			if busy || w.hasPendingFeedback() {
+				if terminalTimer != nil {
+					terminalTimer.Stop()
+					terminalTimer = nil
+					terminalDeadline = nil
+				}
+			} else if terminalTimer == nil {
 				// Briefly retain the report so the agent can read the terminal result.
 				terminalTimer = time.NewTimer(15 * time.Second)
 				terminalDeadline = terminalTimer.C
