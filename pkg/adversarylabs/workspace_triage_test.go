@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -107,5 +108,13 @@ func TestTriageUsesSerializedSizeForEscapedSmallDiff(t *testing.T) {
 	}
 	if requests != 3 {
 		t.Fatalf("requests=%d", requests)
+	}
+}
+
+func TestLocalTriageBudgetHasStructuredCode(t *testing.T) {
+	_, err := (Client{}).TriageWorkspace(t.Context(), "", "review", strings.Repeat("x", maxTriageBytes+1))
+	var response *ResponseError
+	if !errors.As(err, &response) || response.Code != "triage_diff_too_large" {
+		t.Fatalf("missing code: %v", err)
 	}
 }

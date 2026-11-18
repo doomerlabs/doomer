@@ -24,7 +24,7 @@ type triagePart struct {
 // the only one which runs classification; no partial upload is a clean review.
 func (c Client) TriageWorkspace(ctx context.Context, token, reviewID, diff string) ([]WorkspaceReviewArea, error) {
 	if len(diff) > maxTriageBytes {
-		return nil, fmt.Errorf("triage_diff_too_large: diff exceeds the 4 MiB Quick review budget; split the change")
+		return nil, &ResponseError{StatusCode: 413, Code: "triage_diff_too_large", message: "triage_diff_too_large: diff exceeds the 4 MiB Quick review budget; split the change"}
 	}
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()

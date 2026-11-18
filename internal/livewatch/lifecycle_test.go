@@ -2,7 +2,9 @@ package livewatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 	"os"
 	"path/filepath"
@@ -91,4 +93,23 @@ func TestLifecycleReportsHandoffFailureDetails(t *testing.T) {
 func TestFailureWithoutLifecycleIsSafe(t *testing.T) {
 	var lifecycle *reviewLifecycle
 	lifecycle.failure("capture", fmt.Errorf("capture failed"), nil)
+}
+
+func TestTriageFailureCodesAndCancellationPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		code string
+	}{
+		{&adversarylabs.ResponseError{Code: "invalid_triage_manifest"}, "invalid_triage_manifest"},
+		{&adversarylabs.ResponseError{Code: "triage_diff_too_large"}, "triage_diff_too_large"},
+		{errors.Join(&adversarylabs.ResponseError{Code: "triage_timeout"}, context.Canceled), "cancelled"},
+		{errors.Join(&adversarylabs.ResponseError{Code: "triage_timeout"}, context.DeadlineExceeded), "deadline_exceeded"},
+	} {
+		f := &lifecycleFixture{}
+		l := newReviewLifecycle(f, Config{RequireHypotheses: true}, "/repo", sourcesnapshot.Capture{}, 1, time.Now())
+		l.failure("risk_selection", tc.err, nil)
+		if got := f.events[0]["event"].(map[string]any)["error_code"]; got != tc.code {
+			t.Fatalf("got %v want %s", got, tc.code)
+		}
+	}
 }
