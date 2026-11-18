@@ -3,6 +3,7 @@ package livewatch
 import (
 	"bytes"
 	"context"
+	"errors"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 	"os"
 	"path/filepath"
@@ -17,12 +18,29 @@ type initialFile struct {
 
 // Only dirty files need preservation: the captured Git base supplies the rest.
 func initialEditFiles(ctx context.Context, repo string) (map[string]initialFile, error) {
-	names, head, err := sourcesnapshot.WorkspaceState(ctx, repo)
+	_, head, err := sourcesnapshot.WorkspaceState(ctx, repo)
 	if err != nil {
 		return nil, err
 	}
 	if head == "" {
-		return readInitialFiles(repo, names)
+		// Use the capture reader so a full-directory baseline obeys the same
+		// per-file and total content limits as the subsequent review snapshot.
+		captured, err := sourcesnapshot.CaptureWorktree(ctx, sourcesnapshot.CaptureOptions{Path: repo, Workspace: true})
+		if errors.Is(err, sourcesnapshot.ErrNoChanges) {
+			return map[string]initialFile{}, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		manifest, err := sourcesnapshot.DecodeWorkspace(captured.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		result := make(map[string]initialFile, len(manifest.Target))
+		for _, entry := range manifest.Target {
+			result[entry.Path] = initialFile{body: manifest.Blobs[entry.Hash], mode: entry.Mode}
+		}
+		return result, nil
 	}
 	base := "HEAD"
 	for _, ref := range []string{"refs/remotes/origin/HEAD", "refs/remotes/origin/main", "refs/remotes/origin/master", "refs/heads/main", "refs/heads/master"} {

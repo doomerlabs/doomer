@@ -68,3 +68,32 @@ func TestPlainWorkspaceKeepsNestedRepositoriesSeparate(t *testing.T) {
 		t.Fatalf("nested repository leaked into parent: %v (%s)", names, nested)
 	}
 }
+
+func TestInitialDirectoryBaselineRejectsOversizedFile(t *testing.T) {
+	for _, kind := range []string{"plain", "unborn"} {
+		t.Run(kind, func(t *testing.T) {
+			dir := t.TempDir()
+			if kind == "unborn" {
+				if out, err := exec.Command("git", "-C", dir, "init", "-b", "main").CombinedOutput(); err != nil {
+					t.Fatalf("git init: %s %v", out, err)
+				}
+			}
+			file, err := os.Create(filepath.Join(dir, "oversized.bin"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = file.Truncate(sourcesnapshot.MaxWorkspaceFileBytes + 1)
+			closeErr := file.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if closeErr != nil {
+				t.Fatal(closeErr)
+			}
+			baseline, err := initialEditFiles(context.Background(), dir)
+			if err == nil || !strings.Contains(err.Error(), "no larger than") || baseline != nil {
+				t.Fatalf("oversized baseline was not rejected: %v (files=%d)", err, len(baseline))
+			}
+		})
+	}
+}
