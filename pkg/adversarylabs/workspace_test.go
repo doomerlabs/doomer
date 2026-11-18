@@ -104,3 +104,54 @@ func TestWorkspaceFeedbackRequiresRecordedAcknowledgment(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkspaceAutoDeepFallsBackOnlyForOldEvidenceServers(t *testing.T) {
+	for _, tc := range []struct {
+		name, code string
+		status     int
+		explicit   bool
+		calls      int
+	}{
+		{"old-server", "invalid_evidence_context", 400, false, 2},
+		{"invalid-snapshot", "invalid_snapshot", 400, false, 1},
+		{"access-denied", "invalid_evidence_context", 403, false, 1},
+		{"already-disabled", "invalid_evidence_context", 400, true, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var inputs []WorkspaceSubmission
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var input WorkspaceSubmission
+				if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+					t.Fatal(err)
+				}
+				inputs = append(inputs, input)
+				if len(inputs) == 1 {
+					w.WriteHeader(tc.status)
+					json.NewEncoder(w).Encode(map[string]string{"error": tc.code})
+					return
+				}
+				json.NewEncoder(w).Encode(map[string]any{"id": "review", "full_review": map[string]any{"enabled": false}, "early_assessment": map[string]any{"status": "ready"}})
+			}))
+			defer server.Close()
+			disabled := false
+			input := WorkspaceSubmission{ReviewID: "same-request", EvidenceContext: true, FullSnapshotID: strings.Repeat("a", 64), FullBaseSnapshotID: strings.Repeat("b", 64)}
+			if tc.explicit {
+				input.FullReview = &disabled
+			}
+			out, err := NewClientWithBaseURL(ConfigStore{}, server.URL).StartWorkspace(context.Background(), "token", input)
+			if len(inputs) != tc.calls {
+				t.Fatalf("got %d submissions, want %d", len(inputs), tc.calls)
+			}
+			if tc.calls == 2 {
+				if err != nil || out.Early == nil || out.Early.Status != "ready" {
+					t.Fatalf("fallback: %+v %v", out, err)
+				}
+				if inputs[0].FullReview != nil || inputs[1].FullReview == nil || *inputs[1].FullReview || inputs[1].ReviewID != input.ReviewID || inputs[1].FullSnapshotID != input.FullSnapshotID || inputs[1].FullBaseSnapshotID != input.FullBaseSnapshotID {
+					t.Fatalf("fallback changed request identity: %+v", inputs)
+				}
+			} else if err == nil {
+				t.Fatal("unrelated failure was swallowed")
+			}
+		})
+	}
+}

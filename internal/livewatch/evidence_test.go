@@ -83,6 +83,15 @@ func TestQuickCompletesWhileFullUploadIsBlocked(t *testing.T) {
 	if result.Status != "ready" {
 		t.Fatalf("Quick waited for full upload: %+v", result)
 	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if len(client.inputs) != 1 {
+		t.Fatalf("submissions: %d", len(client.inputs))
+	}
+	input := client.inputs[0]
+	if input.FullReview != nil || !input.EvidenceContext || input.FullSnapshotID != adversarylabs.WorkspaceSnapshotID(sourcesnapshot.LocalRepositoryIdentifier(repo), m.Target, m.Blobs) || input.FullBaseSnapshotID != adversarylabs.WorkspaceSnapshotID(sourcesnapshot.LocalRepositoryIdentifier(repo), m.Base, m.Blobs) {
+		t.Fatalf("missing automatic Deep handoff: %+v", input)
+	}
 }
 
 func TestLatestEditExcludesExistingDirtyBranchChanges(t *testing.T) {

@@ -415,8 +415,8 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 	hostname, _ := os.Hostname()
 	input := adversarylabs.WorkspaceSubmission{GitIdentity: capture.GitIdentity, Hypotheses: requestState.Hypotheses, AgentDiff: requestState.AgentDiff, RepositoryID: baseRepo, SnapshotID: headID, BaseSnapshotID: baseID, ReviewID: rev.ID, GroupID: rev.Group, Revision: rev.Number, Repository: repo, Branch: capture.Source.Branch, Diff: diff, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "hostname": hostname, "agent": requestState.Agent}}
 	if r.Config.AllChanges {
-		look, deep := true, false
-		input.LookCloser, input.FullReview, input.ReviewScope = &look, &deep, "diff"
+		look := true
+		input.LookCloser, input.ReviewScope = &look, "diff"
 	}
 	if r.Config.ActivationReporting {
 		input.Client["installation_id"] = r.Config.InstallationID

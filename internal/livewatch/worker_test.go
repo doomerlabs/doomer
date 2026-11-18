@@ -150,8 +150,8 @@ func TestRecursiveWatchCapturesOnlyChangedRepoAndExits(t *testing.T) {
 	if !strings.Contains(input.Diff, "during this watch") || strings.Contains(input.Diff, "old unrelated change") {
 		t.Fatal(input.Diff)
 	}
-	if input.FullReview == nil || *input.FullReview || input.UserRequest != nil {
-		t.Fatal("standalone watch invented agent context or enabled full review")
+	if input.FullReview != nil || input.UserRequest != nil {
+		t.Fatal("standalone watch invented agent context or overrode automatic Deep eligibility")
 	}
 	if _, live := Available(context.Background(), cfg.ControlKey); live {
 		t.Fatal("watcher endpoint survived stop")
