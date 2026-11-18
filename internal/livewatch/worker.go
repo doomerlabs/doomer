@@ -39,15 +39,16 @@ type control struct {
 
 	addDirectory string
 
-	cancel         bool
-	checkpoint     bool
-	finish         bool
-	results        bool
-	noticeID       string
-	noticeRevision int
-	feedback       []Feedback
-	reply          chan Response
-	sent           chan struct{}
+	cancel          bool
+	checkpoint      bool
+	finish          bool
+	results         bool
+	noticeID        string
+	noticeRevision  int
+	noticeFromReply bool
+	feedback        []Feedback
+	reply           chan Response
+	sent            chan struct{}
 }
 type worker struct {
 	background   sync.WaitGroup
@@ -128,7 +129,7 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 					if json.NewDecoder(io.LimitReader(conn, 256<<10)).Decode(&req) != nil || req.Key != cfg.ControlKey {
 						return
 					}
-					if req.Operation == "notice-ack" && (req.NoticeID == "" || req.NoticeRevision < 1) {
+					if (req.Operation == "notice-ack" || req.Operation == "notice-reply") && (req.NoticeID == "" || req.NoticeRevision < 1) {
 						_ = json.NewEncoder(conn).Encode(Response{Error: "advisory ID and revision are required"})
 						return
 					}
@@ -144,10 +145,10 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 						_ = json.NewEncoder(conn).Encode(Response{Ready: true, API: cfg.API, Directory: cfg.Directory})
 						return
 					}
-					if req.Operation != "hypotheses" && req.Operation != "add" && req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" {
+					if req.Operation != "hypotheses" && req.Operation != "add" && req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" && req.Operation != "notice-reply" {
 						return
 					}
-					command := control{hypotheses: req.Hypotheses, addDirectory: req.Directory, results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, noticeID: req.NoticeID, noticeRevision: req.NoticeRevision, reply: make(chan Response, 1), sent: make(chan struct{})}
+					command := control{hypotheses: req.Hypotheses, addDirectory: req.Directory, results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, noticeID: req.NoticeID, noticeRevision: req.NoticeRevision, noticeFromReply: req.Operation == "notice-reply", reply: make(chan Response, 1), sent: make(chan struct{})}
 					select {
 					case w.controls <- command:
 					case <-ctx.Done():
@@ -423,6 +424,10 @@ func (w *worker) schedule(ctx context.Context) {
 
 func (w *worker) response(timeout bool) Response {
 	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory}
+	for _, repo := range w.repos {
+		response.ReviewPending = response.ReviewPending || repo.running || repo.pending
+	}
+	response.ReviewPending = response.ReviewPending || len(w.hypotheses) > 0
 	for _, pending := range w.hypotheses {
 
 		response.HypothesisRequests = append(response.HypothesisRequests, pending.request)
@@ -668,15 +673,17 @@ func (w *worker) run(ctx context.Context) error {
 			}
 			if command.noticeID != "" || command.noticeRevision != 0 {
 				response := w.response(false)
-				known := false
+				known, blocking := false, false
 				for _, n := range response.Notices {
 					if n.ID == command.noticeID && n.Revision == command.noticeRevision {
-						known = true
+						known, blocking = true, n.Blocking
 						break
 					}
 				}
 				if !known || w.cfg.AcknowledgeNotice == nil {
 					response.Error = "unknown advisory revision"
+				} else if w.cfg.Agent != "" && !blocking && !command.noticeFromReply {
+					response.Error = "Optional notice is still pending. Read the full watch results and append its display_markdown to your final reply. The Stop hook records delivery."
 				} else if err := w.cfg.AcknowledgeNotice(command.noticeID, command.noticeRevision); err != nil {
 					response.Error = err.Error()
 				} else {

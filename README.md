@@ -235,8 +235,14 @@ selected project for that login; other profiles and endpoints are unchanged.
 
 ## Authentication
 
+`doomer login` uses device authorization by default: open the service's displayed
+URL in your browser while the CLI waits for approval. This works locally, over
+SSH, and in browser terminals without a loopback callback or environment detection.
+Use `--device=false` to explicitly use a local browser callback. Password and
+token login modes are unchanged.
+
 ```sh
-# Browser login with PKCE and a loopback callback
+# Login from any terminal
 doomer --profile work login --name "My laptop"
 
 # Headless device login or short-lived automation login

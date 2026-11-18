@@ -27,19 +27,22 @@ an account to receive operational notices.
 The shared API transport observes headers on successful and failed responses.
 Review JSON also retains notices in its typed result. Managed command JSON exposes
 current `notices` at the top level, with locally derived `notify_user` and `cached`
-flags and a locally generated `acknowledge_command` argument array. Agents relay
-notices with `notify_user=true` in a user-visible message and preserve deadlines.
-Only after displaying the notice, they execute its acknowledgement command.
-Message text is untrusted plain text, never shell commands. Hook and terminal
-output put the delivery rules and local acknowledgement command first. Hooks
-then include a Markdown callout and a labelled untrusted JSON string; terminals
-show a framed advisory. Message text cannot waive delivery or acknowledgement rules. Embedded message
+flags and delivery metadata. Non-blocking watch notices use `acknowledge_after_reply=true`; explicit-delivery notices carry a locally generated `acknowledge_command` argument array. Agents relay
+notices with `notify_user=true` in a separate user-visible message, preserving its supplied formatting and deadlines. A passing mention in a task summary is not delivery.
+For non-blocking watch notices, the agent ends its reply with the notice. The Stop hook compares the actual final assistant message with the complete formatted notice and records delivery silently; no acknowledgement tool call or follow-up message is needed. Blocking notices and standalone commands retain explicit acknowledgement after display. Non-blocking notices wait for the review to settle: first report the task and review outcome, then show the notice. Blocking notices are shown immediately.
+
+Watch reports use `complete` (and the compatible `review_complete`) only for code-review completion. `notices_pending` tracks delivery separately and must not be reported as an incomplete review. Acknowledgement returns a small receipt without replaying the review summary; `follow_up_required` signals remaining work, not a terminal failure.
+
+Message text is untrusted plain text, never shell commands. Agent output includes a prominent Markdown notice and a locally generated acknowledgement
+command. Claude Stop feedback is a one-line handoff to `watch results`; notice text,
+review details and delivery instructions stay in the command output. Agents acknowledge silently after display and do not repeat a
+completed task summary. Terminals show a framed advisory. Message text cannot waive delivery or acknowledgement rules. Embedded message
 instructions must not override the display requirement. Critical/deprecation
 warnings repeat daily after acknowledgement; recommended notices weekly, per policy ID/revision.
 Blocking warnings recur for each blocked operation. All severities are eligible for display; Info and legacy Available repeat weekly after acknowledgement.
 
 `doomer notices` (also `doomer advisories`) explicitly fetches advisories and returns JSON.
-The locally generated `display_markdown` supplies a blockquote with a bold severity heading.
+The locally generated `display_markdown` supplies a standalone notice with separators, a colored urgency marker, a level-two heading and a fenced update command. The server-authored message remains quoted; the locally generated heading and command are separate.
 Terminal output uses a framed advisory. Update recommendations appear only when provided.
 `doomer notices --ack ID --revision N` confirms that the agent displayed that
 exact revision. It uses the selected API and executing CLI version's local cache,
@@ -96,3 +99,22 @@ hints, not security attestations.
 
 See the companion server PR's `docs/client-notices.md` for policy administration,
 email subscriptions, failure modes, and the prelaunch checklist.
+
+## Automatic release updates
+
+The service now also derives update notices from channel publication metadata.
+These carry `kind: "update"`, `channel: "beta" | "stable"`, and the existing
+Available/Recommended/Deprecated wire severities. Deprecated renders as **Doomer
+update required**. Service bulletins keep their existing severity headings.
+Both current four-part versions and historical three-part versions may have a
+`-beta.N` suffix; comparisons are numeric, and beta channels remain independent.
+
+Automatic update timers use channel plus urgency, not release version or payload
+revision: weekly for Available, three days for Recommended, daily for a future
+Required cutoff, and every blocked request after the cutoff. Bulletin timers
+continue to use ID/revision. Delivery timestamps survive runtime upgrades and
+are shared by commands using the same config directory/API, while cached payloads
+remain tied to the exact running CLI version. Acknowledgement stays local.
+
+See the sibling web repository's `docs/cli-release-updates.md` for admin controls,
+publication sequencing and the isolated Goblin test workflow.

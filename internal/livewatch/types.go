@@ -83,6 +83,7 @@ type Finding struct {
 }
 
 type Response struct {
+	ReviewPending      bool                `json:"review_pending,omitempty"`
 	HypothesisRequests []HypothesisRequest `json:"hypothesis_requests,omitempty"`
 
 	Consent   *ConsentEvidence             `json:"consent,omitempty"`

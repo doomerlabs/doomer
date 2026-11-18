@@ -62,6 +62,11 @@ func AcknowledgeNotice(ctx context.Context, key, id string, revision int) (Respo
 	return call(ctx, key, request{Key: key, Operation: "notice-ack", NoticeID: id, NoticeRevision: revision})
 }
 
+// RecordNoticeInReply is called by the Stop hook after it verifies the final reply.
+func RecordNoticeInReply(ctx context.Context, key, id string, revision int) (Response, error) {
+	return call(ctx, key, request{Key: key, Operation: "notice-reply", NoticeID: id, NoticeRevision: revision})
+}
+
 // AddDirectory establishes a baseline before the caller edits another repository.
 func AddDirectory(ctx context.Context, key, directory string) (Response, error) {
 	return call(ctx, key, request{Key: key, Operation: "add", Directory: directory})

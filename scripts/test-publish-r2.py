@@ -135,6 +135,17 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(store.data['cli/stable.json'], stable)
         self.assertIn('cli/beta.json', store.data)
 
+    def test_channel_history_retains_verified_releases_and_older_retries(self):
+        store = Store()
+        for version in ['2026.11.18.1-beta.1', '2026.11.18.1-beta.3', '2026.11.18.1-beta.2']:
+            publisher.promote(store, 'bucket', {'version': version, 'commit': 'a' * 40})
+        pointer = json.loads(store.data['cli/beta.json'])
+        self.assertEqual(pointer['version'], '2026.11.18.1-beta.3')
+        self.assertEqual([r['version'] for r in pointer['releases']], ['2026.11.18.1-beta.3', '2026.11.18.1-beta.2', '2026.11.18.1-beta.1'])
+        before = len(store.writes)
+        publisher.promote(store, 'bucket', {'version': '2026.11.18.1-beta.2', 'commit': 'a' * 40})
+        self.assertEqual(len(store.writes), before)
+
     def test_daily_sequence_order_and_manifest(self):
         for earlier, later in [('2026.11.2', '2026.11.2.1'), ('2026.11.2.1', '2026.11.2.2'), ('2026.11.2.9', '2026.11.2.10'), ('2026.11.2.10', '2026.11.3.1')]:
             self.assertLess(publisher.version_key(earlier), publisher.version_key(later))

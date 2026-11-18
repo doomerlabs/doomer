@@ -124,3 +124,12 @@ Stable release completion includes publishing the signed `cli/managed.json`
 catalog with `DOOMER_RELEASE_SIGNING_KEY` from the protected release environment.
 Its public key is embedded in the CLI. Ordinary releases do not change the
 bootstrap skill or repository policies. See [managed runtime](managed-runtime.md).
+
+### Automatic update discovery
+
+Channel pointers include an additive `releases` list of published version/commit
+pairs. Conditional promotion retains concurrent releases and the previous channel
+head. Older clients ignore this field. History begins with that previous head;
+this does not backfill every historical tag. The web service uses this feed for
+its CLI releases admin and automatic update notices. The beta Node package must
+also pin the release before the service advertises it as an installable update.
