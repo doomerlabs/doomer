@@ -374,7 +374,7 @@ func TestCompletedPreAnswerReviewIsSilentForBothAgents(t *testing.T) {
 func TestBothAgentsCompleteEditsBeforeFinalAnswer(t *testing.T) {
 	for _, agent := range []string{"codex", "claude"} {
 		context := watchAgentContextForAgent(strings.Repeat("a", 64), agent)["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
-		for _, want := range []string{"If you edit files or have pending review work, before your final answer run", "not a standalone manual review", "Do not wait for the Stop hook", "after further edits, read results again", "no file changes and has no pending review work", "If a command fails or the report contains errors, stop review handling"} {
+		for _, want := range []string{"If you edit files or have pending review work, before your final answer run", "not a standalone manual review", "Do not wait for the Stop hook", "after further edits, read results again", "no file changes and has no pending review work", "After handling any sandbox connection block through the normal approval flow above, if the command still fails or the report contains errors, stop review handling"} {
 			if !strings.Contains(context, want) {
 				t.Fatalf("%s missing %q", agent, want)
 			}
