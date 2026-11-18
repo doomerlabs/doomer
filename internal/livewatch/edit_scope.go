@@ -3,6 +3,7 @@ package livewatch
 import (
 	"bytes"
 	"context"
+	"errors"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 	"os"
 	"path/filepath"
@@ -17,6 +18,30 @@ type initialFile struct {
 
 // Only dirty files need preservation: the captured Git base supplies the rest.
 func initialEditFiles(ctx context.Context, repo string) (map[string]initialFile, error) {
+	_, head, err := sourcesnapshot.WorkspaceState(ctx, repo)
+	if err != nil {
+		return nil, err
+	}
+	if head == "" {
+		// Use the capture reader so a full-directory baseline obeys the same
+		// per-file and total content limits as the subsequent review snapshot.
+		captured, err := sourcesnapshot.CaptureWorktree(ctx, sourcesnapshot.CaptureOptions{Path: repo, Workspace: true})
+		if errors.Is(err, sourcesnapshot.ErrNoChanges) {
+			return map[string]initialFile{}, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		manifest, err := sourcesnapshot.DecodeWorkspace(captured.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		result := make(map[string]initialFile, len(manifest.Target))
+		for _, entry := range manifest.Target {
+			result[entry.Path] = initialFile{body: manifest.Blobs[entry.Hash], mode: entry.Mode}
+		}
+		return result, nil
+	}
 	base := "HEAD"
 	for _, ref := range []string{"refs/remotes/origin/HEAD", "refs/remotes/origin/main", "refs/remotes/origin/master", "refs/heads/main", "refs/heads/master"} {
 		if _, err := filesystemGit(ctx, repo, "rev-parse", "--verify", ref+"^{commit}").Output(); err == nil {
@@ -36,12 +61,18 @@ func initialEditFiles(ctx context.Context, repo string) (map[string]initialFile,
 	if err != nil {
 		return nil, err
 	}
-	result := map[string]initialFile{}
+	var paths []string
 	for _, name := range bytes.Split(append(changed, untracked...), []byte{0}) {
-		if len(name) == 0 || bytes.HasSuffix(name, []byte("/")) {
-			continue
+		if len(name) > 0 && !bytes.HasSuffix(name, []byte("/")) {
+			paths = append(paths, string(name))
 		}
-		path := string(name)
+	}
+	return readInitialFiles(repo, paths)
+}
+
+func readInitialFiles(repo string, paths []string) (map[string]initialFile, error) {
+	result := map[string]initialFile{}
+	for _, path := range paths {
 		if !sourcesnapshot.ValidPath(path) {
 			continue
 		}

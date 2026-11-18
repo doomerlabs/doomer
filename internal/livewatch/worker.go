@@ -242,13 +242,9 @@ func (w *worker) scanDirectory(ctx context.Context, directory string, initial, f
 		r := w.repos[path]
 		if r == nil {
 			// Existing changes establish the baseline; only a later change may submit.
-			var baseline map[string]initialFile
-			if w.cfg.RequireHypotheses {
-				var e error
-				baseline, e = initialEditFiles(ctx, path)
-				if e != nil {
-					return e
-				}
+			baseline, e := initialEditFiles(ctx, path)
+			if e != nil {
+				return e
 			}
 			r = &repository{baseline: baseline, observed: fingerprint, pending: !initial}
 			w.repos[path] = r
@@ -257,7 +253,7 @@ func (w *worker) scanDirectory(ctx context.Context, directory string, initial, f
 			r.pending = true
 		}
 		if freeze && r.pending && !w.cfg.RequireHypotheses {
-			capture, err := capture(ctx, path)
+			capture, err := capture(ctx, path, r.baseline)
 			if err != nil {
 				r.pending = false
 				if !errors.Is(err, sourcesnapshot.ErrNoChanges) {
@@ -271,10 +267,24 @@ func (w *worker) scanDirectory(ctx context.Context, directory string, initial, f
 	return nil
 }
 
-func capture(ctx context.Context, path string) (sourcesnapshot.Capture, error) {
+func capture(ctx context.Context, path string, baseline ...map[string]initialFile) (sourcesnapshot.Capture, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	return sourcesnapshot.CaptureWorktree(ctx, sourcesnapshot.CaptureOptions{Workspace: true, Path: path})
+	opts := sourcesnapshot.CaptureOptions{Workspace: true, Path: path}
+	if len(baseline) > 0 {
+		initial := sourcesnapshot.Manifest{Target: []sourcesnapshot.Entry{}, Blobs: map[string][]byte{}}
+		for path, f := range baseline[0] {
+			if f.deleted {
+				continue
+			}
+			hash := sourcesnapshot.Digest(f.body)
+			initial.Target = append(initial.Target, sourcesnapshot.Entry{Path: path, Hash: hash, Mode: f.mode})
+			initial.Blobs[hash] = f.body
+		}
+		sort.Slice(initial.Target, func(i, j int) bool { return initial.Target[i].Path < initial.Target[j].Path })
+		opts.Initial = &initial
+	}
+	return sourcesnapshot.CaptureWorktree(ctx, opts)
 }
 
 func (w *worker) schedule(ctx context.Context) {
@@ -325,7 +335,7 @@ func (w *worker) schedule(ctx context.Context) {
 			defer func() { <-w.slots }()
 			captureStarted := time.Now()
 			if w.cfg.RequireHypotheses {
-				captured, err := capture(jobCtx, path)
+				captured, err := capture(jobCtx, path, baseline)
 				if err != nil {
 					result := Result{Repository: path, Status: "unavailable", Error: err.Error()}
 					if errors.Is(err, sourcesnapshot.ErrNoChanges) {
@@ -835,12 +845,9 @@ func (w *worker) addDirectory(ctx context.Context, directory string) error {
 		return err
 	}
 	for repo, fingerprint := range baselines {
-		var baseline map[string]initialFile
-		if w.cfg.RequireHypotheses {
-			baseline, err = initialEditFiles(ctx, repo)
-			if err != nil {
-				return err
-			}
+		baseline, err := initialEditFiles(ctx, repo)
+		if err != nil {
+			return err
 		}
 		w.repos[repo] = &repository{observed: fingerprint, baseline: baseline}
 	}
