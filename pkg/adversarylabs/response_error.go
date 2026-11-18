@@ -55,6 +55,9 @@ func responseError(resp *http.Response, token string) error {
 		case "client_policy_unavailable":
 			safeCode = body.Error
 			message += ": update policy temporarily unavailable; retry this operation later"
+		case "triage_diff_too_large", "triage_budget_exceeded", "triage_line_too_large", "triage_binary_unassessed", "triage_parts_missing", "triage_checksum_mismatch", "invalid_triage_utf8", "invalid_triage_manifest", "invalid_triage_part", "invalid_triage_request", "triage_timeout", "triage_unavailable", "invalid_triage_scores":
+			safeCode = body.Error
+			message += ": " + body.Error + "; Quick review is incomplete"
 		case "missing_review_scope":
 			safeCode = body.Error
 			message += ": " + body.Error

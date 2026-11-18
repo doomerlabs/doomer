@@ -234,11 +234,3 @@ type WorkspaceReviewArea struct {
 	Question string  `json:"question"`
 	Score    float64 `json:"score"`
 }
-
-func (c Client) TriageWorkspace(ctx context.Context, token, reviewID, diff string) ([]WorkspaceReviewArea, error) {
-	var result struct {
-		Areas []WorkspaceReviewArea `json:"areas"`
-	}
-	err := c.postJSON(ctx, "/v1/reviews/workspace/triage", map[string]string{"review_id": reviewID, "diff": diff}, token, &result)
-	return result.Areas, err
-}
