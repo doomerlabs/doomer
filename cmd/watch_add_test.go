@@ -50,6 +50,38 @@ func TestHookContextRegistersOutsideRepositoriesForBothAgents(t *testing.T) {
 	}
 }
 
+// These are developer instructions in Codex: an unconditional registration
+// requirement can prevent the agent from completing even explicitly authorized
+// work after the watcher exits. Keep outage recovery in both agents' payloads.
+func TestHookContextDoesNotBlockAuthorizedWorkOnWatcherOutage(t *testing.T) {
+	for _, agent := range []string{"codex", "claude"} {
+		t.Run(agent, func(t *testing.T) {
+			output := watchAgentContextForAgent(strings.Repeat("a", 64), agent, "/workspace")
+			text := output["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
+			for _, required := range []string{
+				"attempt registration",
+				"For connection-level failures, including connection refused, request normal sandbox escalation once when sandboxing could be responsible, before treating the watcher as unavailable",
+				"connection refused, a missing socket, or an unknown control key",
+				"continue the user's authorized work, including edits, commits, and PR creation",
+				"with automatic review unavailable",
+				"Respect permission denials; do not bypass denied commands or upload consent",
+				"Review failures stop review handling, not the user's task",
+				"When delivering work with unreviewed edits, disclose unavailable review coverage in the final answer",
+				"respect any explicit user requirement to wait for review",
+			} {
+				if !strings.Contains(text, required) {
+					t.Errorf("missing outage or permission instruction %q", required)
+				}
+			}
+			for _, forbidden := range []string{"wait for success", "If registration fails or permission is denied, do not bypass it"} {
+				if strings.Contains(text, forbidden) {
+					t.Errorf("unconditional registration blocker remains: %q", forbidden)
+				}
+			}
+		})
+	}
+}
+
 func TestWatchAddControlIsRegisteredOnRealCommand(t *testing.T) {
 	root := NewRootCommand()
 	command, _, err := root.Find([]string{"watch", "add"})
