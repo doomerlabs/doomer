@@ -60,6 +60,7 @@ func TestHookContextDoesNotBlockAuthorizedWorkOnWatcherOutage(t *testing.T) {
 			text := output["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
 			for _, required := range []string{
 				"attempt registration",
+				"For connection-level failures, including connection refused, request normal sandbox escalation once when sandboxing could be responsible, before treating the watcher as unavailable",
 				"connection refused, a missing socket, or an unknown control key",
 				"continue the user's authorized work, including edits, commits, and PR creation",
 				"with automatic review unavailable",
