@@ -249,7 +249,7 @@ func TestClaudeStopSignalsWithoutDumpingReviewDetails(t *testing.T) {
 	result.Findings[0].Disposition = &livewatch.Feedback{Status: "deferred", Reason: "Needs user input"}
 	advisory := claudeStopFeedback(result, key, true)
 	message, _ = advisory["systemMessage"].(string)
-	if len(advisory) != 1 || message != "Doomer has an advisory awaiting delivery." {
+	if len(advisory) != 1 || !strings.HasPrefix(message, "Doomer has an advisory awaiting delivery.") || !strings.Contains(message, "watch results --control "+key) {
 		t.Fatal(advisory)
 	}
 	result.Findings[0].Disposition = nil
@@ -260,6 +260,28 @@ func TestClaudeStopSignalsWithoutDumpingReviewDetails(t *testing.T) {
 	result.Findings[0].Disposition = &livewatch.Feedback{Status: "deferred", Reason: "Needs user input"}
 	if out := claudeStopFeedback(result, key, true); len(out) != 0 {
 		t.Fatal(out)
+	}
+}
+
+func TestClaudeActiveStopShowsBlockingNoticeBeforePendingReview(t *testing.T) {
+	result := livewatch.Response{
+		Findings: []livewatch.Finding{{ReviewID: "pending"}},
+		Notices: []adversarylabs.ClientNotice{
+			{ID: "cli-update-beta", Kind: "update", Channel: "beta", Severity: "deprecated",
+				Blocking: true, NotifyUser: true, Message: "The installed beta is no longer supported.",
+				RecommendedVersion: "2026.11.17.3-beta.1"},
+			{ID: "service-news", Severity: "info", NotifyUser: true, Message: "Optional bulletin"},
+		},
+	}
+	out := claudeStopFeedback(result, strings.Repeat("a", 64), true)
+	message, _ := out["systemMessage"].(string)
+	for _, want := range []string{"Doomer update required", "no longer supported", "npx @doomerlabs/doomer@beta update"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("blocking notice missing %q: %+v", want, out)
+		}
+	}
+	if len(out) != 1 || strings.Contains(message, "Optional bulletin") || strings.Contains(message, "notice-ack") {
+		t.Fatalf("unexpected output from active Stop: %+v", out)
 	}
 }
 
