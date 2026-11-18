@@ -452,7 +452,7 @@ func watchDirectoryInstructions(executable, key string, directory ...string) str
 	if len(directory) > 0 {
 		scope = fmt.Sprintf("Watch root: %q. ", directory[0]) + scope
 	}
-	return scope + fmt.Sprintf("Before editing a repository outside this session's working directory, run %s watch add /absolute/path/to/repository --control %s and wait for success. This registers its baseline without starting a review. Use this request's control key only; repeat registration is safe. If registration fails or permission is denied, do not bypass it or claim those edits are reviewed. ", watching.Quote(executable), key)
+	return scope + fmt.Sprintf("Before editing a repository outside this session's working directory, attempt registration with %s watch add /absolute/path/to/repository --control %s. This registers its baseline without starting a review. Use this request's control key only; repeat registration is safe. If the sandbox blocks the connection, request normal sandbox escalation once. Respect permission denials; do not bypass denied commands or upload consent. If registration fails because the watcher is unavailable (for example, connection refused, a missing socket, or an unknown control key), report the error once and continue the user's authorized work, including edits, commits, and PR creation, with automatic review unavailable. A watcher outage is not a permission denial. Do not claim unreviewed edits were reviewed, start a substitute watcher, guess another key, or require the user to restart the chat. Review failures stop review handling, not the user's task; respect any explicit user requirement to wait for review. ", watching.Quote(executable), key)
 }
 
 func submitLiveHypotheses(c *cobra.Command, key string) error {
