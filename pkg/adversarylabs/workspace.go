@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -147,6 +148,14 @@ func (c Client) workspaceRequest(ctx context.Context, token, method, path string
 func (c Client) StartWorkspace(ctx context.Context, token string, input WorkspaceSubmission) (WorkspaceReview, error) {
 	var out WorkspaceReview
 	err := c.postJSON(ctx, "/v1/reviews/workspace?view=status", input, token, &out)
+	var response *ResponseError
+	if input.EvidenceContext && input.FullReview == nil && errors.As(err, &response) && response.StatusCode == http.StatusBadRequest && response.Code == "invalid_evidence_context" {
+		// Older servers reject automatic Deep on evidence packets before
+		// creating a review. Preserve Quick with one compatible retry.
+		disabled := false
+		input.FullReview = &disabled
+		err = c.postJSON(ctx, "/v1/reviews/workspace?view=status", input, token, &out)
+	}
 	if err == nil && !workspaceID(out.ID) {
 		err = fmt.Errorf("invalid workspace review identity")
 	}
