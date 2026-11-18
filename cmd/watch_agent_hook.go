@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -31,6 +32,9 @@ func (id hookIdentity) Key() string {
 // The manager owns installation and approval. Hooks read that data directly;
 // neither starting a watcher nor delivering a result requires Node at runtime.
 type agentHookState struct {
+	Managed *struct {
+		Agents []string `json:"agents"`
+	} `json:"managed"`
 	CodexPolicies []struct {
 		ConfigPath  string `json:"configPath"`
 		ExtraPolicy string `json:"extraPolicy"`
@@ -64,6 +68,9 @@ func agentHookAPI(explicit, environment, saved string) (string, error) {
 }
 
 func agentHookConsent(state agentHookState, api, agent, repo string) (watching.Config, error) {
+	if state.Managed != nil && (state.API != api || !slices.Contains(state.Managed.Agents, agent)) {
+		return watching.Config{}, fmt.Errorf("agent or service is outside managed Doomer policy")
+	}
 	cfg := watching.Config{Version: 1, API: api, Profile: "node-" + agent, ExplicitConsent: true, AllChanges: true}
 	for _, grant := range state.Grants {
 		if grant.API != api || grant.ApprovedAt.IsZero() {
@@ -98,7 +105,12 @@ func newAgentWatchHookCommand() *cobra.Command {
 	c.RunE = func(c *cobra.Command, _ []string) error {
 		result, err := runAgentWatchHook(c, home, agent)
 		if err != nil {
-			result = map[string]any{"systemMessage": "Doomer Quick review was not completed: " + err.Error()}
+			var state agentHookState
+			if watching.Read(filepath.Join(home, "state.json"), &state) == nil && state.Managed != nil {
+				result = map[string]any{"managedDoomerError": err.Error()}
+			} else {
+				result = map[string]any{"systemMessage": "Doomer Quick review was not completed: " + err.Error()}
+			}
 		}
 		return json.NewEncoder(c.OutOrStdout()).Encode(result)
 	}

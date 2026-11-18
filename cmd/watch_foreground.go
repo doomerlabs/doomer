@@ -29,7 +29,7 @@ type watchConfiguration struct {
 }
 
 func watchToken(c *cobra.Command, api string, state agentHookState, env watchEnvironment) (string, error) {
-	if token := env.get("DOOMER_TOKEN"); token != "" {
+	if token := env.get("DOOMER_TOKEN"); state.Managed == nil && token != "" {
 		return token, nil
 	}
 	dir, profile, err := watchCredentialProfile(c, api, state, env)
@@ -47,9 +47,15 @@ func watchToken(c *cobra.Command, api string, state agentHookState, env watchEnv
 			return "", err
 		}
 		if !valid || auth.Token == "" {
+			if state.Managed != nil {
+				return "", fmt.Errorf("managed Doomer credential expired")
+			}
 			return "", fmt.Errorf("saved account credentials have expired; run doomer --api-url %s --profile %s login --device, then start a new coding request", watching.Quote(api), watching.Quote(profile))
 		}
 		return active.Token, nil
+	}
+	if state.Managed != nil {
+		return "", fmt.Errorf("managed Doomer credential missing")
 	}
 	if token := state.Identities[api]; token != "" {
 		return token, nil
@@ -58,6 +64,13 @@ func watchToken(c *cobra.Command, api string, state agentHookState, env watchEnv
 }
 
 func watchCredentialProfile(c *cobra.Command, api string, state agentHookState, env watchEnvironment) (string, string, error) {
+	if state.Managed != nil {
+		dir := state.CredentialDirs[api]
+		if api != state.API || !filepath.IsAbs(dir) {
+			return "", "", fmt.Errorf("invalid managed Doomer credential directory")
+		}
+		return dir, "default", nil
+	}
 	dir := env.get("DOOMER_CONFIG_DIR")
 	if dir == "" {
 		dir = state.CredentialDirs[api]
@@ -151,17 +164,24 @@ func newForegroundWatchCommand() *cobra.Command {
 		if !filepath.IsAbs(config.Directory) || !filepath.IsAbs(config.ManagerHome) || config.ID == "" {
 			return fmt.Errorf("invalid watch configuration")
 		}
-		environment, err := directoryWatchEnvironment(config.Directory)
-		if err != nil {
-			return err
-		}
 		var state agentHookState
 		if err := watching.Read(filepath.Join(config.ManagerHome, "state.json"), &state); err != nil {
 			return fmt.Errorf("read upload approval: %w", err)
 		}
+		var environment watchEnvironment
+		var err error
+		if state.Managed == nil {
+			environment, err = directoryWatchEnvironment(config.Directory)
+			if err != nil {
+				return err
+			}
+		}
 		explicit := ""
 		if c.Flags().Changed("api-url") || c.InheritedFlags().Changed("api-url") {
 			explicit, _ = c.Flags().GetString("api-url")
+		}
+		if state.Managed != nil {
+			explicit = state.API
 		}
 		config.API, err = agentHookAPI(explicit, environment.get("DOOMER_API_URL"), state.API)
 		if err != nil {
