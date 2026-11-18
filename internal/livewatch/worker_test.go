@@ -281,7 +281,7 @@ func TestDiscoveryDoesNotFollowSymlinksOutsideWorkspace(t *testing.T) {
 		t.Skip(err)
 	}
 	paths, err := DiscoverRepositories(context.Background(), parent)
-	if err != nil || len(paths) != 1 || paths[0] != inside {
+	if err != nil || len(paths) != 2 || paths[0] != parent || paths[1] != inside {
 		t.Fatalf("discovery escaped the workspace: %v %v", paths, err)
 	}
 }

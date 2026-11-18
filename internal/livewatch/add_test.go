@@ -62,10 +62,13 @@ func TestAddDirectoryRequiresPermissionAndValidDirectory(t *testing.T) {
 	cfg, done := startWorker(t, primary, &fakeClient{}, time.Second, func(_ context.Context, path string) bool { return path != denied })
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	for _, path := range []string{denied, "relative", filepath.Join(primary, "file.txt"), t.TempDir(), filepath.Join(primary, "missing")} {
+	for _, path := range []string{denied, "relative", filepath.Join(primary, "file.txt"), filepath.Join(primary, "missing")} {
 		if _, err := AddDirectory(ctx, cfg.ControlKey, path); err == nil {
 			t.Fatalf("accepted %s", path)
 		}
+	}
+	if _, err := AddDirectory(ctx, cfg.ControlKey, t.TempDir()); err != nil {
+		t.Fatalf("plain directory registration: %v", err)
 	}
 	if _, err := AddDirectory(ctx, Key("another-session"), primary); err == nil {
 		t.Fatal("accepted nonexistent watcher")

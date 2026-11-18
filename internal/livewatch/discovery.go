@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -12,25 +13,17 @@ import (
 	"strings"
 )
 
-// Prompt startup only records Git paths and file metadata. Reading every source
+// Prompt startup only fingerprints source paths and file metadata. Reading every source
 // blob across a large workspace here can exceed the host's hook timeout. Actual
 // changed repositories still get full content snapshots in the watcher.
 func workspaceFingerprint(ctx context.Context, repo string) (string, error) {
-	paths, err := filesystemGit(ctx, repo, "ls-files", "-z", "--cached", "--others", "--exclude-standard").Output()
-	if err != nil {
-		return "", err
-	}
-	head, err := filesystemGit(ctx, repo, "rev-parse", "HEAD").Output()
+	paths, head, err := sourcesnapshot.WorkspaceState(ctx, repo)
 	if err != nil {
 		return "", err
 	}
 	var data bytes.Buffer
-	data.Write(head)
-	for _, raw := range bytes.Split(paths, []byte{0}) {
-		if len(raw) == 0 {
-			continue
-		}
-		name := string(raw)
+	data.WriteString(head)
+	for _, name := range paths {
 		info, err := os.Lstat(filepath.Join(repo, name))
 		if os.IsNotExist(err) {
 			fmt.Fprintf(&data, "%s\x00missing\x00", name)
@@ -44,7 +37,8 @@ func workspaceFingerprint(ctx context.Context, repo string) (string, error) {
 	return Key(data.String()), nil
 }
 
-// DiscoverRepositories follows directory nesting without a depth limit. Git
+// DiscoverRepositories includes the containing repository or plain directory,
+// plus nested repositories without a depth limit. Git
 // metadata and dependency/cache trees are excluded; symlinks are not traversed.
 func DiscoverRepositories(ctx context.Context, directory string) ([]string, error) {
 	directory, err := filepath.Abs(directory)
@@ -58,6 +52,8 @@ func DiscoverRepositories(ctx context.Context, directory string) ([]string, erro
 	found := map[string]bool{}
 	if repo, err := Root(ctx, directory); err == nil {
 		found[repo] = true
+	} else {
+		found[directory] = true
 	}
 	err = filepath.WalkDir(directory, func(path string, entry fs.DirEntry, walkErr error) error {
 		if ctx.Err() != nil {

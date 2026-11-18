@@ -17,6 +17,13 @@ type initialFile struct {
 
 // Only dirty files need preservation: the captured Git base supplies the rest.
 func initialEditFiles(ctx context.Context, repo string) (map[string]initialFile, error) {
+	names, head, err := sourcesnapshot.WorkspaceState(ctx, repo)
+	if err != nil {
+		return nil, err
+	}
+	if head == "" {
+		return readInitialFiles(repo, names)
+	}
 	base := "HEAD"
 	for _, ref := range []string{"refs/remotes/origin/HEAD", "refs/remotes/origin/main", "refs/remotes/origin/master", "refs/heads/main", "refs/heads/master"} {
 		if _, err := filesystemGit(ctx, repo, "rev-parse", "--verify", ref+"^{commit}").Output(); err == nil {
@@ -36,12 +43,18 @@ func initialEditFiles(ctx context.Context, repo string) (map[string]initialFile,
 	if err != nil {
 		return nil, err
 	}
-	result := map[string]initialFile{}
+	var paths []string
 	for _, name := range bytes.Split(append(changed, untracked...), []byte{0}) {
-		if len(name) == 0 || bytes.HasSuffix(name, []byte("/")) {
-			continue
+		if len(name) > 0 && !bytes.HasSuffix(name, []byte("/")) {
+			paths = append(paths, string(name))
 		}
-		path := string(name)
+	}
+	return readInitialFiles(repo, paths)
+}
+
+func readInitialFiles(repo string, paths []string) (map[string]initialFile, error) {
+	result := map[string]initialFile{}
+	for _, path := range paths {
 		if !sourcesnapshot.ValidPath(path) {
 			continue
 		}

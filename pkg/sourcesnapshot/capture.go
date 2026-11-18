@@ -26,6 +26,8 @@ type CaptureOptions struct {
 	Workspace bool
 	Path      string
 	Base      string
+	// Initial supplies the pre-edit tree for workspaces without a commit.
+	Initial *Manifest
 }
 
 type SourceMetadata struct {
@@ -56,6 +58,7 @@ type gitReader struct {
 	workspace bool
 	ctx       context.Context
 	dir       string
+	gitDir    string
 }
 
 type boundedBuffer struct {
@@ -78,6 +81,9 @@ func (b *boundedBuffer) Bytes() []byte { return b.data.Bytes() }
 // ignore inherited repository overrides so --path always selects the source.
 func (g gitReader) run(input []byte, args ...string) ([]byte, error) {
 	all := append([]string{"-C", g.dir, "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"}, args...)
+	if g.gitDir != "" {
+		all = append([]string{"--git-dir=" + g.gitDir, "--work-tree=" + g.dir}, all...)
+	}
 	cmd := exec.CommandContext(g.ctx, "git", all...)
 	for _, value := range os.Environ() {
 		if !strings.HasPrefix(value, "GIT_") {
@@ -115,6 +121,9 @@ func (g gitReader) baseline(explicit, head string) (string, error) {
 		}
 		return base, nil
 	}
+	if head == "" {
+		return "", nil
+	}
 	candidates := []string{"refs/remotes/origin/HEAD", "refs/remotes/origin/main", "refs/remotes/origin/master", "refs/heads/main", "refs/heads/master"}
 	for _, candidate := range candidates {
 		base, err := g.commit(candidate)
@@ -145,21 +154,17 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 	if err != nil {
 		return result, err
 	}
-	g := gitReader{ctx: ctx, dir: directory, workspace: opts.Workspace}
-	limits := limitsForWorkspace(opts.Workspace)
-	topBytes, err := g.run(nil, "rev-parse", "--show-toplevel")
+	g, cleanup, err := workspaceReader(ctx, directory, opts.Workspace)
 	if err != nil {
 		return result, err
 	}
-	top := strings.TrimSuffix(string(topBytes), "\n")
-	if runtime.GOOS == "windows" {
-		top = strings.TrimSuffix(top, "\r")
-	}
-	g.dir = top
+	defer cleanup()
+	limits := limitsForWorkspace(opts.Workspace)
+	top := g.dir
 	if sparse, _ := g.text("config", "--bool", "core.sparseCheckout"); sparse == "true" {
 		return result, fmt.Errorf("sparse worktrees are unsupported; review a full checkout")
 	}
-	head, err := g.commit("HEAD")
+	head, err := g.workspaceHead()
 	if err != nil {
 		return result, err
 	}
@@ -167,7 +172,10 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 	if err != nil {
 		return result, err
 	}
-	headEntries, err := g.treeEntries(head)
+	var headEntries []gitTreeEntry
+	if head != "" {
+		headEntries, err = g.treeEntries(head)
+	}
 	if err != nil {
 		return result, err
 	}
@@ -176,7 +184,17 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 		headTree[entry.path] = entry
 	}
 	m := Manifest{Version: 1, Scope: "worktree", BaseRef: base, HeadRef: head, Blobs: map[string][]byte{}}
-	if m.Base, err = g.readTree(base, m.Blobs); err != nil {
+	m.Base = []Entry{}
+	if base != "" {
+		m.Base, err = g.readTree(base, m.Blobs)
+	}
+	if head == "" && opts.Initial != nil {
+		m.Base = append(m.Base, opts.Initial.Target...)
+		for _, e := range m.Base {
+			m.Blobs[e.Hash] = opts.Initial.Blobs[e.Hash]
+		}
+	}
+	if err != nil {
 		return result, err
 	}
 	before, err := g.worktreeFiles()
@@ -241,7 +259,7 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 	if err != nil {
 		return result, err
 	}
-	endHead, err := g.commit("HEAD")
+	endHead, err := g.workspaceHead()
 	if err != nil {
 		return result, err
 	}
@@ -346,7 +364,13 @@ func (g gitReader) worktreeFiles() (worktreeInventory, error) {
 		}
 		result.entries[name] = gitTreeEntry{path: name, oid: fields[1], mode: fields[0]}
 	}
-	untracked, err := g.run(nil, "ls-files", "--others", "--exclude-standard", "-z")
+	args := []string{"ls-files", "--others", "--exclude-standard", "-z"}
+	if g.gitDir != "" {
+		for _, directory := range []string{"node_modules", ".venv", "__pycache__", ".cache"} {
+			args = append(args, "--exclude="+directory+"/")
+		}
+	}
+	untracked, err := g.run(nil, args...)
 	if err != nil {
 		return result, err
 	}
