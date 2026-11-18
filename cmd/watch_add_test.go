@@ -66,6 +66,7 @@ func TestHookContextDoesNotBlockAuthorizedWorkOnWatcherOutage(t *testing.T) {
 				"with automatic review unavailable",
 				"Respect permission denials; do not bypass denied commands or upload consent",
 				"Review failures stop review handling, not the user's task",
+				"When delivering work with unreviewed edits, disclose unavailable review coverage in the final answer",
 				"respect any explicit user requirement to wait for review",
 			} {
 				if !strings.Contains(text, required) {
