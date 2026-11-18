@@ -182,7 +182,7 @@ func TestAllChangesReviewsManualEditWithoutToolHooks(t *testing.T) {
 				}
 				return
 			}
-			if client.starts != 1 || !strings.Contains(client.input.AgentDiff, "manual edit") || client.input.FullReview == nil || *client.input.FullReview {
+			if client.starts != 1 || !strings.Contains(client.input.AgentDiff, "manual edit") || client.input.FullReview != nil {
 				t.Fatalf("manual edit was not reviewed as Quick: %+v", client.input)
 			}
 			if client.input.Client["agent"] != "filesystem" {

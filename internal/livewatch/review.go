@@ -169,7 +169,7 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 	if cfg.RequireHypotheses {
 		scope = "latest_edit"
 	}
-	look, deep := true, false
+	look := true
 	group := Key(cfg.ID + "\x00" + repo)
 	var handoff map[string]any
 	if cfg.RequireHypotheses {
@@ -179,8 +179,8 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		}
 	}
 	current, err := client.StartWorkspace(ctx, cfg.Token, adversarylabs.WorkspaceSubmission{AgentHandoff: handoff,
-		GitIdentity: capture.GitIdentity, LookCloser: &look, FullReview: &deep, ReviewScope: scope, AgentDiff: latest, Diff: diff,
-		UserRequest: cfg.Request, Hypotheses: hypotheses, AgentAssessmentComplete: cfg.RequireHypotheses, EvidenceContext: cfg.RequireHypotheses, FullSnapshotID: adversarylabs.WorkspaceSnapshotID(repository, manifest.Target, manifest.Blobs),
+		GitIdentity: capture.GitIdentity, LookCloser: &look, ReviewScope: scope, AgentDiff: latest, Diff: diff,
+		UserRequest: cfg.Request, Hypotheses: hypotheses, AgentAssessmentComplete: cfg.RequireHypotheses, EvidenceContext: cfg.RequireHypotheses, FullSnapshotID: adversarylabs.WorkspaceSnapshotID(repository, manifest.Target, manifest.Blobs), FullBaseSnapshotID: adversarylabs.WorkspaceSnapshotID(repository, manifest.Base, manifest.Blobs),
 		RepositoryID: repoID, BaseSnapshotID: baseID, SnapshotID: headID, Repository: repository, Branch: capture.Source.Branch,
 		GroupID: group, ReviewID: reviewIdentity(cfg, repo, revision), Revision: revision, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "agent": cfg.Agent},
 	})
