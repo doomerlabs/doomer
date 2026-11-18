@@ -6,15 +6,16 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 
 	"golang.org/x/sys/unix"
 )
 
-// macOS requires a socket pathname. It is only an IPC endpoint in the OS temp
-// directory; UnixListener removes it on Close, and it contains no saved state.
+// macOS requires a socket pathname shorter than 104 bytes. Use /tmp directly:
+// os.TempDir() can exceed that limit on macOS and can differ between the watcher
+// and its clients. Keep the UID and key in the name for isolation; permissions
+// and peer credentials restrict access. UnixListener removes it on Close.
 func endpoint(key string) (string, error) {
-	return filepath.Join(os.TempDir(), fmt.Sprintf("doomer-%d-%s.sock", os.Getuid(), key[:32])), nil
+	return fmt.Sprintf("/tmp/doomer-%d-%s.sock", os.Getuid(), key[:32]), nil
 }
 func listen(key string) (net.Listener, error) {
 	address, _ := endpoint(key)
