@@ -154,6 +154,9 @@ func claudeStopFeedback(result livewatch.Response, key string, stopActive bool) 
 			}
 		}
 		if len(blocking) > 0 {
+			if len(report.Errors) > 0 {
+				blocking = append([]string{"Doomer review is incomplete. " + strings.Join(report.Errors, " ")}, blocking...)
+			}
 			return map[string]any{"systemMessage": strings.Join(blocking, "\n\n")}
 		}
 	}

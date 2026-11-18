@@ -283,6 +283,13 @@ func TestClaudeActiveStopShowsBlockingNoticeBeforePendingReview(t *testing.T) {
 	if len(out) != 1 || strings.Contains(message, "Optional bulletin") || strings.Contains(message, "notice-ack") {
 		t.Fatalf("unexpected output from active Stop: %+v", out)
 	}
+	result.Results = []livewatch.Result{{Repository: "/repo", Status: "unavailable", Error: "service unavailable"}}
+	out = claudeStopFeedback(result, strings.Repeat("a", 64), true)
+	message, _ = out["systemMessage"].(string)
+	if !strings.HasPrefix(message, "Doomer review is incomplete.") ||
+		!strings.Contains(message, "service unavailable") || !strings.Contains(message, "Doomer update required") {
+		t.Fatalf("blocking notice hid the review failure: %+v", out)
+	}
 }
 
 func TestClaudeFailedReviewsStayIncompleteWithoutStopLoop(t *testing.T) {
