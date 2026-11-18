@@ -194,7 +194,7 @@ func TestAdvisoryRequiresExplicitDisplayAcknowledgement(t *testing.T) {
 func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
 	key := strings.Repeat("a", 64)
 	context := watchAgentContextForAgent(key, "claude")["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
-	if !strings.Contains(context, "If the Stop hook says Doomer is checking the latest changes") || !strings.Contains(context, "silently complete any internal hypothesis requests") || !strings.Contains(context, "watch findings ls --control "+key) || !strings.Contains(context, "Do not wait for another Stop hook") {
+	if !strings.Contains(context, "before your final answer run") || !strings.Contains(context, "watch results --control "+key) || !strings.Contains(context, "watch findings ls --control "+key) || !strings.Contains(context, "Do not wait for the Stop hook") || !strings.Contains(context, "literal executable path") {
 		t.Fatal("Claude is missing internal handoff retrieval guidance")
 	}
 	result := livewatch.Response{
@@ -352,5 +352,32 @@ func TestUnchangedTurnIsSilentForBothAgents(t *testing.T) {
 	text := watchAgentContext(strings.Repeat("a", 64))["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
 	if strings.Contains(text, "Before your final answer, run") || !strings.Contains(text, "do not call watch results") {
 		t.Fatal("unconditional retrieval instruction remains")
+	}
+}
+
+func TestCompletedPreAnswerReviewIsSilentForBothAgents(t *testing.T) {
+	for _, result := range []livewatch.Response{
+		{Results: []livewatch.Result{{Status: "ready", URL: "https://example.test/review"}}},
+		{Results: []livewatch.Result{{Status: "ready"}}, Findings: []livewatch.Finding{{Disposition: &livewatch.Feedback{Status: "dismissed"}}}},
+		{Results: []livewatch.Result{{Status: "ready"}}, Notices: []adversarylabs.ClientNotice{{ID: "delivered", NotifyUser: false}}},
+	} {
+		for _, active := range []bool{false, true} {
+			for _, output := range []map[string]any{claudeStopFeedback(result, strings.Repeat("a", 64), active), codexStopFeedback(result, active)} {
+				if len(output) != 0 {
+					t.Fatalf("completed review emitted another visible message: %v", output)
+				}
+			}
+		}
+	}
+}
+
+func TestBothAgentsCompleteEditsBeforeFinalAnswer(t *testing.T) {
+	for _, agent := range []string{"codex", "claude"} {
+		context := watchAgentContextForAgent(strings.Repeat("a", 64), agent)["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
+		for _, want := range []string{"If you edit files or have pending review work, before your final answer run", "not a standalone manual review", "Do not wait for the Stop hook", "after further edits, read results again", "no file changes and has no pending review work", "After handling any sandbox connection block through the normal approval flow above, if the command still fails or the report contains errors, stop review handling"} {
+			if !strings.Contains(context, want) {
+				t.Fatalf("%s missing %q", agent, want)
+			}
+		}
 	}
 }
