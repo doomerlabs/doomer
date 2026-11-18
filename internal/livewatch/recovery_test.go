@@ -20,7 +20,7 @@ func TestDeniedAndFailedAdvisoryReceiptRemainPendingAcrossReads(t *testing.T) {
 	var calls atomic.Int32
 	var revision atomic.Int32
 	revision.Store(3)
-	cfg := Config{ID: t.TempDir(), ControlKey: Key(t.TempDir()), Directory: repo, DrainTimeout: time.Second,
+	cfg := Config{ID: t.TempDir(), ControlKey: Key(t.TempDir()), Directory: repo, Agent: "claude", DrainTimeout: time.Second,
 		Notices: func() []adversarylabs.ClientNotice {
 			return []adversarylabs.ClientNotice{{ID: "maintenance", Revision: int(revision.Load()), NotifyUser: true}}
 		},
@@ -56,7 +56,11 @@ func TestDeniedAndFailedAdvisoryReceiptRemainPendingAcrossReads(t *testing.T) {
 			t.Fatalf("denied acknowledgement was invented by %s: %+v %v", op, out, err)
 		}
 	}
-	failed, err := AcknowledgeNotice(ctx, cfg.ControlKey, "maintenance", 3)
+	if _, err := AcknowledgeNotice(ctx, cfg.ControlKey, "maintenance", 3); err == nil || !strings.Contains(err.Error(), "still pending") || calls.Load() != 0 {
+		t.Fatalf("manual acknowledgement consumed the optional notice: %v", err)
+	}
+
+	failed, err := RecordNoticeInReply(ctx, cfg.ControlKey, "maintenance", 3)
 	if err == nil || !failed.Notices[0].NotifyUser {
 		t.Fatal("failed receipt marked delivered", failed, err)
 	}
@@ -70,7 +74,7 @@ func TestDeniedAndFailedAdvisoryReceiptRemainPendingAcrossReads(t *testing.T) {
 		t.Fatal("reading or finishing retried the failed write", calls.Load())
 	}
 	fail.Store(false)
-	out, err := AcknowledgeNotice(ctx, cfg.ControlKey, "maintenance", 3)
+	out, err := RecordNoticeInReply(ctx, cfg.ControlKey, "maintenance", 3)
 	if err != nil || out.Notices[0].NotifyUser {
 		t.Fatal(out, err)
 	}
@@ -79,13 +83,13 @@ func TestDeniedAndFailedAdvisoryReceiptRemainPendingAcrossReads(t *testing.T) {
 	if err != nil || !out.Notices[0].NotifyUser {
 		t.Fatal("old receipt hid a new revision", out, err)
 	}
-	if _, err = AcknowledgeNotice(ctx, cfg.ControlKey, "maintenance", 3); err == nil {
+	if _, err = RecordNoticeInReply(ctx, cfg.ControlKey, "maintenance", 3); err == nil {
 		t.Fatal("stale revision accepted")
 	}
 	if calls.Load() != 2 {
 		t.Fatal("stale revision reached persistence")
 	}
-	if _, err = AcknowledgeNotice(ctx, cfg.ControlKey, "maintenance", 4); err != nil {
+	if _, err = RecordNoticeInReply(ctx, cfg.ControlKey, "maintenance", 4); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = Call(ctx, cfg.ControlKey, "finish"); err != nil {

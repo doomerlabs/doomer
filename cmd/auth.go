@@ -31,10 +31,11 @@ func newLoginCommand(app *application.App, apiURL, profile *string, settings *vi
   printf '%s\n' "$DOOMER_PASSWORD" | doomer login --email-address marc@example.com --password-stdin`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if opts.device && (opts.emailAddress != "" || opts.passwordStdin) {
+			device := useDeviceLogin(*opts, cmd.Flags().Changed("device"))
+			if device && (opts.emailAddress != "" || opts.passwordStdin) {
 				return fmt.Errorf("--device cannot be combined with password login")
 			}
-			if opts.reviewUploads && (!opts.device || opts.ci || opts.tokenStdin) {
+			if opts.reviewUploads && (!device || opts.ci || opts.tokenStdin) {
 				return fmt.Errorf("--review-uploads requires interactive device authorization (--device)")
 			}
 			deps := app.Dependencies()
@@ -58,7 +59,7 @@ func newLoginCommand(app *application.App, apiURL, profile *string, settings *vi
 			client := deps.API.New(valueOf(apiURL))
 			var token adversarylabs.TokenResponse
 			if opts.tokenStdin {
-				if opts.emailAddress != "" || opts.passwordStdin || opts.device || opts.ci {
+				if opts.emailAddress != "" || opts.passwordStdin || device || opts.ci {
 					return fmt.Errorf("--token-stdin cannot be combined with password, device, or CI login options")
 				}
 				value, readErr := readSecretLine(stdin, "token")
@@ -96,7 +97,7 @@ func newLoginCommand(app *application.App, apiURL, profile *string, settings *vi
 				if err != nil {
 					return err
 				}
-			} else if opts.ci || opts.device {
+			} else if opts.ci || device {
 				if opts.registryNamespace != "" {
 					return fmt.Errorf("--registry-namespace requires --token-stdin")
 				}
@@ -170,7 +171,7 @@ func newLoginCommand(app *application.App, apiURL, profile *string, settings *vi
 		},
 	}
 	cmd.Flags().BoolVar(&opts.ci, "ci", false, "request a short-lived automation token")
-	cmd.Flags().BoolVar(&opts.device, "device", false, "use device login for a headless environment")
+	cmd.Flags().BoolVar(&opts.device, "device", false, "use device login (default; --device=false uses a local browser callback)")
 	cmd.Flags().BoolVar(&opts.reviewUploads, "review-uploads", false, "request explicit source-upload approval in the browser")
 	cmd.Flags().BoolVar(&opts.replace, "replace", false, "replace the selected profile's existing login")
 	cmd.Flags().StringVar(&opts.name, "name", "", "friendly name for this client")

@@ -83,3 +83,19 @@ func TestAdvisoryKeepsWatchAliveUntilExactRevisionIsAcknowledged(t *testing.T) {
 		t.Fatal("watch did not finish")
 	}
 }
+
+func TestReviewPendingTracksUnfinishedRepositoryWork(t *testing.T) {
+	w := &worker{repos: map[string]*repository{"repo": {running: true}}}
+	if !w.response(false).ReviewPending {
+		t.Fatal("running review looked complete")
+	}
+	w.repos["repo"].running = false
+	w.repos["repo"].pending = true
+	if !w.response(false).ReviewPending {
+		t.Fatal("queued edit looked complete")
+	}
+	w.repos["repo"].pending = false
+	if w.response(false).ReviewPending {
+		t.Fatal("settled review remained pending")
+	}
+}

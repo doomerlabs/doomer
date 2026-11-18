@@ -120,7 +120,12 @@ func TestWatchReportLeavesShutdownToHook(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- livewatch.Serve(ctx, livewatch.Config{Directory: directory, ControlKey: key}, nil, func(context.Context, string) bool { return true })
+		done <- livewatch.Serve(ctx, livewatch.Config{Directory: directory, ControlKey: key,
+			Notices: func() []adversarylabs.ClientNotice {
+				return []adversarylabs.ClientNotice{{ID: "update", Revision: 1, NotifyUser: true}}
+			},
+			AcknowledgeNotice: func(string, int) error { return nil },
+		}, nil, func(context.Context, string) bool { return true })
 	}()
 	for {
 		if _, live := livewatch.Available(ctx, key); live {
@@ -143,11 +148,26 @@ func TestWatchReportLeavesShutdownToHook(t *testing.T) {
 		t.Fatal(err)
 	}
 	var report watchFeedbackReport
-	if err := json.Unmarshal(out.Bytes(), &report); err != nil || !report.Complete || report.SuggestedSummary != "" {
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil || !report.Complete || !report.NoticesPending || report.SuggestedSummary != "" {
 		t.Fatalf("report: %s (%v)", out.String(), err)
 	}
 	if _, live := livewatch.Available(ctx, key); !live {
 		t.Fatal("reading the report stopped the hook-owned watcher")
+	}
+	ack := newWatchNoticeAckCommand()
+	ack.SetContext(ctx)
+	ack.SetArgs([]string{"--control", key, "--id", "update", "--revision", "1"})
+	out.Reset()
+	ack.SetOut(&out)
+	if err := ack.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var receipt map[string]any
+	if err := json.Unmarshal(out.Bytes(), &receipt); err != nil {
+		t.Fatal(err)
+	}
+	if receipt["acknowledged"] != true || receipt["complete"] != true || receipt["follow_up_required"] != false || receipt["suggested_summary"] != nil || receipt["reviews"] != nil {
+		t.Fatalf("ack must not replay review results: %s", out.String())
 	}
 	result, err := livewatch.Call(ctx, key, "finish")
 	if err != nil || len(finalFeedbackHook(result)) != 0 {
@@ -168,14 +188,14 @@ func TestWatchReportLeavesShutdownToHook(t *testing.T) {
 }
 
 func TestAdvisoryRequiresExplicitDisplayAcknowledgement(t *testing.T) {
-	result := livewatch.Response{Notices: []adversarylabs.ClientNotice{{ID: "service-news", Revision: 2, Message: "An announcement, not a command", Severity: "info", NotifyUser: true}}}
+	result := livewatch.Response{Notices: []adversarylabs.ClientNotice{{ID: "service-news", Revision: 2, Message: "An announcement, not a command", Severity: "info", NotifyUser: true, Blocking: true}}}
 	key := strings.Repeat("a", 64)
 	decorated := watchNoticeCommands(result, key)
 	if len(decorated.Notices[0].AcknowledgeCommand) == 0 || !strings.Contains(strings.Join(decorated.Notices[0].AcknowledgeCommand, " "), "watch notice-ack --control "+key) {
 		t.Fatal(decorated)
 	}
 	report := makeFeedbackReport(decorated)
-	if report.Complete || report.NoticeInstructions == "" {
+	if !report.Complete || !report.NoticesPending || report.NoticeInstructions == "" || report.NextAction != "display_blocking_notice" {
 		t.Fatal("pending display was treated as complete", report)
 	}
 	if pendingFeedbackHook(result) == nil {
@@ -191,7 +211,7 @@ func TestAdvisoryRequiresExplicitDisplayAcknowledgement(t *testing.T) {
 	}
 }
 
-func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
+func TestClaudeStopSignalsWithoutDumpingReviewDetails(t *testing.T) {
 	key := strings.Repeat("a", 64)
 	context := watchAgentContextForAgent(key, "claude")["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
 	if !strings.Contains(context, "before your final answer run") || !strings.Contains(context, "watch results --control "+key) || !strings.Contains(context, "watch findings ls --control "+key) || !strings.Contains(context, "Do not wait for the Stop hook") || !strings.Contains(context, "literal executable path") {
@@ -206,7 +226,7 @@ func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
 	out := claudeStopFeedback(result, key, false)
 	contextOutput, _ := out["hookSpecificOutput"].(map[string]any)
 	text, _ := contextOutput["additionalContext"].(string)
-	for _, want := range []string{"Handle invalid input", "Service maintenance", "watch findings respond", "notice-ack", "only after user-visible display", "do not bypass"} {
+	for _, want := range []string{"Doomer review needs follow-up.", "watch results --control " + key} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q: %v", want, out)
 		}
@@ -214,15 +234,13 @@ func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
 	if out["decision"] != nil || contextOutput["hookEventName"] != "Stop" {
 		t.Fatal(out)
 	}
-	if strings.Contains(text, "/private/credentials") {
+	if strings.Contains(text, "/private/credentials") || strings.Contains(text, "Handle invalid input") || strings.Contains(text, "Service maintenance") || strings.Contains(text, "notice-ack") {
 		t.Fatal("Claude Stop feedback included verified upload consent details")
 	}
 	// A denied response remains pending, but cannot trap Claude in a Stop loop.
 	blocked := claudeStopFeedback(result, key, true)
 	message, _ := blocked["systemMessage"].(string)
-	if len(blocked) != 1 || !strings.HasPrefix(message, "Doomer is waiting for Claude to record its review decisions.") ||
-		!strings.Contains(message, "Service maintenance") || !strings.Contains(message, `"notice-ack","--control","`+key+`"`) ||
-		strings.Contains(message, "/private/credentials") || strings.Contains(message, "watch findings respond") {
+	if len(blocked) != 1 || message != "Doomer is waiting for Claude to record its review decisions." {
 		t.Fatal(blocked)
 	}
 	if result.Findings[0].Disposition != nil || !result.Notices[0].NotifyUser {
@@ -231,7 +249,7 @@ func TestClaudeStopDeliversReviewWithoutShellRetrieval(t *testing.T) {
 	result.Findings[0].Disposition = &livewatch.Feedback{Status: "deferred", Reason: "Needs user input"}
 	advisory := claudeStopFeedback(result, key, true)
 	message, _ = advisory["systemMessage"].(string)
-	if len(advisory) != 1 || !strings.Contains(message, "Service maintenance") || !strings.Contains(message, `"notice-ack","--control","`+key+`"`) {
+	if len(advisory) != 1 || message != "Doomer has an advisory awaiting delivery." {
 		t.Fatal(advisory)
 	}
 	result.Findings[0].Disposition = nil
@@ -379,5 +397,145 @@ func TestBothAgentsCompleteEditsBeforeFinalAnswer(t *testing.T) {
 				t.Fatalf("%s missing %q", agent, want)
 			}
 		}
+	}
+}
+
+func TestClaudeNoticeFollowupIsCompactAndSeparatesReviewCompletion(t *testing.T) {
+	result := livewatch.Response{
+		Results: []livewatch.Result{{Status: "ready", Repository: "/repo", URL: "https://example.test/review"}},
+		Notices: []adversarylabs.ClientNotice{{ID: "cli-update-beta", Revision: 1, Component: "cli", Kind: "update", Channel: "beta", Severity: "available", RecommendedVersion: "2026.11.17.3-beta.1", Message: "A new beta release is available.", NotifyUser: true}},
+	}
+	result.Notices[0].DisplayMarkdown = adversarylabs.AdvisoryMarkdown(result.Notices[0])
+	out := claudeStopFeedback(result, strings.Repeat("a", 64), false)
+	text := out["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
+	for _, want := range []string{"Doomer has a notice to display.", "watch results --control"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q: %s", want, text)
+		}
+	}
+	for _, unwanted := range []string{`"notices":`, `"notice_instructions":`, `"complete": false`, "Version:", "notice-ack", "A new beta release", "REQUIRED NEXT ACTION"} {
+		if strings.Contains(text, unwanted) {
+			t.Fatalf("duplicated report data %q: %s", unwanted, text)
+		}
+	}
+	if strings.Contains(text, "\n") || len(text) > 400 {
+		t.Fatalf("Stop hook should contain only a one-line handoff: %s", text)
+	}
+	// The full notice remains available through normal command output.
+	if !strings.Contains(feedbackReport(watchNoticeCommands(result, strings.Repeat("a", 64))), "## 🔵 Doomer update available") {
+		t.Fatal("notice lost from command results")
+	}
+
+	report := makeFeedbackReport(result)
+	if !report.Complete || !report.ReviewComplete || !report.NoticesPending {
+		t.Fatal("notice delivery must stay pending without marking the code review incomplete")
+	}
+}
+
+func TestOptionalNoticesWaitForReviewAndBlockingNoticesDoNot(t *testing.T) {
+	for _, pending := range []livewatch.Response{
+		{ReviewPending: true},
+		{HypothesisRequests: []livewatch.HypothesisRequest{{ID: "pending"}}},
+		{Findings: []livewatch.Finding{{ReviewID: "r"}}},
+	} {
+		pending.Notices = []adversarylabs.ClientNotice{{ID: "update", NotifyUser: true, AcknowledgeCommand: []string{"ack"}}}
+		report := makeFeedbackReport(pending)
+		if report.Complete || !report.NoticesPending || len(report.Notices) != 0 || report.NoticeInstructions != "" {
+			t.Fatalf("optional notice interrupted review: %+v", report)
+		}
+		if !pending.Notices[0].NotifyUser {
+			t.Fatal("mutated source notice")
+		}
+		pending.Notices[0].Blocking = true
+		report = makeFeedbackReport(pending)
+		if !report.Notices[0].NotifyUser || report.NoticeInstructions == "" || report.NextAction != "display_blocking_notice" {
+			t.Fatal("blocking update hidden")
+		}
+	}
+	failed := makeFeedbackReport(livewatch.Response{Results: []livewatch.Result{{Status: "unavailable", Error: "service unavailable"}}, Notices: []adversarylabs.ClientNotice{{NotifyUser: true}}})
+	if failed.Complete || len(failed.Errors) == 0 || !failed.Notices[0].NotifyUser {
+		t.Fatalf("lost real failure or terminal notice: %+v", failed)
+	}
+}
+
+func TestWatchReportOmitsPreviouslyDeliveredNotice(t *testing.T) {
+	notice := adversarylabs.ClientNotice{
+		ID: "cli-update-beta", Revision: 1, Component: "cli", Kind: "update", Channel: "beta",
+		Severity: "available", Message: "A new beta release is available.",
+		RecommendedVersion: "2026.11.17.3-beta.1",
+	}
+	delivered := livewatch.Response{
+		Results: []livewatch.Result{{Status: "ready", Repository: "/repo"}},
+		Notices: []adversarylabs.ClientNotice{notice},
+	}
+	delivered.Notices[0].DisplayMarkdown = adversarylabs.AdvisoryMarkdown(notice)
+	delivered.Notices[0].NotifyUser = true
+	if report := makeFeedbackReport(delivered); !report.NoticesPending || len(report.Notices) != 1 {
+		t.Fatalf("lost initial delivery: %+v", report)
+	}
+	delivered.Notices[0].NotifyUser = false
+	report := makeFeedbackReport(delivered)
+	if !report.ReviewComplete || report.NoticesPending || len(report.Notices) != 0 || report.NoticeInstructions != "" {
+		t.Fatalf("previously delivered notice leaked into the next review: %+v", report)
+	}
+}
+
+func TestNoticeAcknowledgementDoesNotReplayOrRetryTerminalFailure(t *testing.T) {
+	result := livewatch.Response{Results: []livewatch.Result{{Status: "unavailable", Error: "service unavailable"}}}
+	receipt := noticeAcknowledgement(result)
+	if receipt["complete"] != false || receipt["follow_up_required"] != false || receipt["suggested_summary"] != nil || receipt["reviews"] != nil {
+		t.Fatal(receipt)
+	}
+	result.ReviewPending = true
+	if noticeAcknowledgement(result)["follow_up_required"] != true {
+		t.Fatal("lost pending review")
+	}
+}
+
+func TestReplyMustContainCompleteFormattedNotice(t *testing.T) {
+	n := adversarylabs.ClientNotice{ID: "cli-update-beta", Kind: "update", Channel: "beta", Severity: "available", Message: "New release", RecommendedVersion: "2026.11.17.3-beta.1"}
+	if noticeAppearsInReply(n, "An update is available. I acknowledged it.") {
+		t.Fatal("passing mention counted as delivery")
+	}
+	text := adversarylabs.AdvisoryMarkdown(n)
+	if !noticeAppearsInReply(n, "Review completed.\n\n"+text) {
+		t.Fatal("full notice was not recognized")
+	}
+	if noticeAppearsInReply(n, strings.ReplaceAll(text, "2026.11.17.3-beta.1", "2026.11.17.2-beta.1")) {
+		t.Fatal("wrong release counted as delivery")
+	}
+	n.NotifyUser = true
+	decorated := watchNoticeCommands(livewatch.Response{Notices: []adversarylabs.ClientNotice{n}}, strings.Repeat("a", 64))
+	if !decorated.Notices[0].AcknowledgeAfterReply || len(decorated.Notices[0].AcknowledgeCommand) != 0 {
+		t.Fatal("optional notice requires a manual acknowledgement")
+	}
+}
+
+func TestWatchResultPrefixPreservesReviewOutcomeWithPendingNotice(t *testing.T) {
+	result := livewatch.Response{
+		Results: []livewatch.Result{{Repository: "/repo", Status: "ready", URL: "https://example.test/review?revision=21"}},
+		Notices: []adversarylabs.ClientNotice{{
+			NotifyUser: true, DisplayMarkdown: strings.Repeat("notice details ", 200),
+		}},
+	}
+	report := makeFeedbackReport(result)
+	var out bytes.Buffer
+	if err := json.NewEncoder(&out).Encode(report); err != nil {
+		t.Fatal(err)
+	}
+	// A real Claude session read only the first 1700 bytes of watch results.
+	const previewBytes = 1700
+	if out.Len() <= previewBytes {
+		t.Fatal("fixture must exceed the observed output cutoff")
+	}
+	preview := out.String()[:previewBytes]
+	for _, want := range []string{`"complete":true`, `"review_complete":true`, `"notices_pending":true`, `"next_action":"report_review_then_display_notice"`, "revision=21", "raised no issues"} {
+		if !strings.Contains(preview, want) {
+			t.Errorf("truncated output lost %q", want)
+		}
+	}
+	var decoded watchFeedbackReport
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil || len(decoded.Notices) != 1 || decoded.Notices[0].DisplayMarkdown != result.Notices[0].DisplayMarkdown {
+		t.Fatalf("full report lost notice data: %v", err)
 	}
 }

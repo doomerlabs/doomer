@@ -89,7 +89,7 @@ func TestNoticeMessageCannotEscapeQuotedData(t *testing.T) {
 		if strings.Contains(quoted, "\n") {
 			t.Fatal("message injected an unquoted line", formatted)
 		}
-		if strings.Index(formatted, "Acknowledge command (only after user-visible display)") > strings.Index(formatted, "> **Doomer advisory") {
+		if strings.Index(formatted, "Acknowledge command (only after user-visible display)") > strings.Index(formatted, " Doomer advisory") {
 			t.Fatal("command was placed after untrusted content", formatted)
 		}
 	}
@@ -158,6 +158,9 @@ func TestNoticeAcknowledgementSurvivesStaleWriter(t *testing.T) {
 	}
 	// The repeat interval starts at acknowledgement, not receipt or printing.
 	c.acknowledged[n.ID+":1"] = time.Now().Add(-8 * 24 * time.Hour)
+	if err := os.Remove(c.path); err != nil {
+		t.Fatal(err)
+	}
 	if !NoticesFromContext(ctx)[0].NotifyUser {
 		t.Fatal("acknowledgement never expires")
 	}
@@ -437,5 +440,126 @@ func TestHumanNoticeOutputOmitsAgentInstructions(t *testing.T) {
 	}
 	if !NoticesFromContext(ctx)[0].NotifyUser {
 		t.Fatal("terminal output silently acknowledged delivery")
+	}
+}
+
+func updateNotice(severity string) ClientNotice {
+	return ClientNotice{ID: "cli-update-beta", Revision: 1, Component: "cli", Kind: "update", Channel: "beta", Severity: severity, Message: "A beta update is available.", RecommendedVersion: "2026.11.18.1-beta.2", ExpiresAt: time.Now().Add(time.Hour)}
+}
+func TestUpdateNoticeCadenceAcrossReleasesAndChats(t *testing.T) {
+	root, api := t.TempDir(), "https://example.test/api"
+	ctx := WithNoticeCollector(context.Background(), root, api, nil)
+	c := ctx.Value(noticeContextKey{}).(*NoticeCollector)
+	n := updateNotice("available")
+	c.receive(NoticeEnvelope{1, []ClientNotice{n}}, "")
+	other := WithNoticeCollector(context.Background(), root, api, nil)
+	if err := AcknowledgeNotice(ctx, n.ID, n.Revision); err != nil {
+		t.Fatal(err)
+	}
+	if NoticesFromContext(other)[0].NotifyUser {
+		t.Fatal("other active chat ignored shared acknowledgement")
+	}
+	n.RecommendedVersion = "2026.11.19.1-beta.1"
+	c.receive(NoticeEnvelope{1, []ClientNotice{n}}, "")
+	if NoticesFromContext(ctx)[0].NotifyUser {
+		t.Fatal("new beta reset available reminder")
+	}
+	n.Severity = "recommended"
+	c.receive(NoticeEnvelope{1, []ClientNotice{n}}, "")
+	if !NoticesFromContext(ctx)[0].NotifyUser {
+		t.Fatal("escalation suppressed")
+	}
+	c.acknowledged[noticeDeliveryKey(n)] = time.Now().Add(-73 * time.Hour)
+	if !c.shouldShow(n) {
+		t.Fatal("recommended must repeat after three days")
+	}
+	c.acknowledged[noticeDeliveryKey(n)] = time.Now().Add(-71 * time.Hour)
+	if c.shouldShow(n) {
+		t.Fatal("recommended repeated too soon")
+	}
+	n.Severity = "deprecated"
+	if !c.shouldShow(n) {
+		t.Fatal("required escalation suppressed")
+	}
+	c.acknowledged[noticeDeliveryKey(n)] = time.Now()
+	if c.shouldShow(n) {
+		t.Fatal("required repeated before a day")
+	}
+	n.Blocking = true
+	if !c.shouldShow(n) {
+		t.Fatal("blocking must always be shown")
+	}
+}
+func TestUpdateNoticeRenderingAndWireValidation(t *testing.T) {
+	n := updateNotice("available")
+	if len(ValidNotices(NoticeEnvelope{1, []ClientNotice{n}}, time.Now())) != 1 {
+		t.Fatal("beta notice rejected")
+	}
+	for _, rendered := range []string{AdvisoryMarkdown(n), AdvisoryTerminal(n)} {
+		if !strings.Contains(rendered, "Doomer update available") || !strings.Contains(rendered, "npx @doomerlabs/doomer@beta update") {
+			t.Fatal(rendered)
+		}
+	}
+	n.Channel = "stable"
+	if len(ValidNotices(NoticeEnvelope{1, []ClientNotice{n}}, time.Now())) != 0 {
+		t.Fatal("cross-channel metadata accepted")
+	}
+}
+func TestUpdateAcknowledgementSurvivesRuntimeUpgrade(t *testing.T) {
+	root, api := t.TempDir(), "https://example.test/api"
+	ctx := WithNoticeCollector(context.Background(), root, api, nil)
+	c := ctx.Value(noticeContextKey{}).(*NoticeCollector)
+	n := updateNotice("available")
+	c.receive(NoticeEnvelope{1, []ClientNotice{n}}, "")
+	if err := AcknowledgeNotice(ctx, n.ID, n.Revision); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(c.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cache noticeCache
+	if err = json.Unmarshal(raw, &cache); err != nil {
+		t.Fatal(err)
+	}
+	cache.Version = "old-runtime"
+	raw, _ = json.Marshal(cache)
+	if err = os.WriteFile(c.path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	next := WithNoticeCollector(context.Background(), root, api, nil)
+	if len(NoticesFromContext(next)) != 0 {
+		t.Fatal("old runtime notice was reused")
+	}
+	next.Value(noticeContextKey{}).(*NoticeCollector).receive(NoticeEnvelope{1, []ClientNotice{n}}, "")
+	if NoticesFromContext(next)[0].NotifyUser {
+		t.Fatal("runtime change reset delivery history")
+	}
+}
+
+func TestUpdateNoticeRequiresProminentSeparateDelivery(t *testing.T) {
+	n := updateNotice("available")
+	got := AdvisoryMarkdown(n)
+	for _, want := range []string{"---\n\n## 🔵 Doomer update available", "**Version: " + n.RecommendedVersion + "**", "```bash\nnpx @doomerlabs/doomer@beta update\n```"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q: %s", want, got)
+		}
+	}
+	if !strings.HasSuffix(got, "\n---") {
+		t.Fatal(got)
+	}
+	for _, want := range []string{"display_markdown verbatim", "passing mention is not delivery", "Showing notices is required; updating software remains the user's choice"} {
+		if !strings.Contains(NoticeDeliveryInstructions, want) {
+			t.Fatal(want)
+		}
+	}
+}
+
+func TestNoticeUrgencyMarkers(t *testing.T) {
+	for _, tc := range []struct{ severity, marker, label string }{{"available", "🔵", "available"}, {"recommended", "🟡", "recommended"}, {"deprecated", "🔴", "required"}} {
+		n := updateNotice(tc.severity)
+		if !strings.Contains(AdvisoryMarkdown(n), "## "+tc.marker+" Doomer update "+tc.label) {
+			t.Fatal(AdvisoryMarkdown(n))
+		}
 	}
 }

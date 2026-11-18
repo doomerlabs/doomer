@@ -115,7 +115,7 @@ func TestManagedNoticeDeliveryAndNoStopLoop(t *testing.T) {
 	result := managedResult{State: "complete", Notices: []adversarylabs.ClientNotice{{ID: "fix", Severity: "critical", Message: "Update needed", RecommendedVersion: "2026.11.9.1", NotifyUser: true, AcknowledgeCommand: []string{"doomer", "notices", "--ack", "fix", "--revision", "1"}}}}
 	raw, _ := json.Marshal(result)
 	feedback, _ := json.Marshal(managedHookFeedback("PostToolUse", raw, nil))
-	if !strings.Contains(string(feedback), "Update needed") || !strings.Contains(string(feedback), "After displaying") || !strings.Contains(string(feedback), "--ack") {
+	if !strings.Contains(string(feedback), "Update needed") || !strings.Contains(string(feedback), "acknowledgement command only after display") || !strings.Contains(string(feedback), "Do not acknowledge an advisory that you have not displayed") || !strings.Contains(string(feedback), "--ack") {
 		t.Fatal(string(feedback))
 	}
 	result.State = "client_update_required"

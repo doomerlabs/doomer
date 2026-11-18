@@ -15,6 +15,16 @@ import (
 	"time"
 )
 
+// Device authorization works whether the browser and CLI share a computer or
+// not. Use it by default without guessing from the terminal environment, while
+// preserving explicit browser, password, token, and CI login choices.
+func useDeviceLogin(opts loginOptions, explicitlySet bool) bool {
+	if explicitlySet || opts.device || opts.ci || opts.tokenStdin || opts.emailAddress != "" || opts.passwordStdin {
+		return opts.device
+	}
+	return true
+}
+
 func waitForLogin(ctx context.Context, clock application.Clock, client application.APIClient, login adversarylabs.DeviceLogin) (adversarylabs.TokenResponse, error) {
 	interval := adversarylabs.PollInterval(login)
 	expiresAt := clock.Now().Add(time.Duration(login.ExpiresIn) * time.Second)

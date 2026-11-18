@@ -88,8 +88,9 @@ def version_key(version):
 
 def promote(client, bucket, pointer):
     key = OBJECT_PREFIX + ('beta.json' if '-beta.' in pointer['version'] else 'stable.json')
-    data = (json.dumps(pointer, sort_keys=True, indent=2) + '\n').encode()
     for _ in range(5):
+        old = None
+        previous = None
         try:
             current = client.get_object(Bucket=bucket, Key=key)
         except Exception as error:
@@ -99,14 +100,23 @@ def promote(client, bucket, pointer):
         else:
             previous = current['Body'].read()
             old = json.loads(previous)
-            if version_key(old['version']) > version_key(pointer['version']):
-                print('Newer channel version already published; leaving it unchanged.')
-                return
-            if old['version'] == pointer['version']:
-                if previous != data:
-                    raise ValueError('Existing channel points to different release content')
-                return
             condition = {'IfMatch': current['ETag']}
+            if old['version'] == pointer['version']:
+                old_core = {k: v for k, v in old.items() if k != 'releases'}
+                if old_core != pointer:
+                    raise ValueError('Existing channel points to different release content')
+        # Retain every verified publication, including concurrent older releases.
+        # This is discovery metadata, not an installation authority.
+        effective = dict(old if old and version_key(old['version']) > version_key(pointer['version']) else pointer)
+        history = {entry['version']: entry for entry in (old or {}).get('releases', [])}
+        for entry in [old, pointer]:
+            if entry and re.fullmatch(r'[a-f0-9]{40}', entry.get('commit', '')):
+                history[entry['version']] = {'version': entry['version'], 'commit': entry['commit']}
+        if history:
+            effective['releases'] = sorted(history.values(), key=lambda r: version_key(r['version']), reverse=True)
+        data = (json.dumps(effective, sort_keys=True, indent=2) + '\n').encode()
+        if data == previous:
+            return
         try:
             client.put_object(Bucket=bucket, Key=key, Body=data, ContentType='application/json',
                               CacheControl='no-store', **condition)

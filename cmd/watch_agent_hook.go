@@ -152,10 +152,35 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 			return empty, err
 		}
 		if operation == "finish" {
+			// The host supplies the actual final assistant message. A tool result
+			// or a model's assertion that it displayed a notice is not a receipt.
+			settled := !result.ReviewPending && len(result.HypothesisRequests) == 0
+			for _, finding := range result.Findings {
+				settled = settled && finding.Disposition != nil
+			}
+			acknowledged := false
+			if settled {
+				for _, notice := range result.Notices {
+					if notice.NotifyUser && !notice.Blocking && noticeAppearsInReply(notice, input.Message) {
+						result, err = livewatch.RecordNoticeInReply(ctx, id.Key(), notice.ID, notice.Revision)
+						if err != nil {
+							return empty, err
+						}
+						acknowledged = true
+					}
+				}
+			}
+			if acknowledged {
+				result, err = livewatch.Call(ctx, id.Key(), "finish")
+				if err != nil {
+					return empty, err
+				}
+			}
 			if agent == "claude" {
 				return claudeStopFeedback(result, id.Key(), input.StopActive), nil
 			}
-			if input.StopActive && !makeFeedbackReport(result).Complete && len(result.HypothesisRequests) == 0 {
+			report := makeFeedbackReport(result)
+			if input.StopActive && (!report.Complete || report.NoticesPending) && len(result.HypothesisRequests) == 0 {
 				// End the normal lifecycle without inventing feedback or retrying a denied action.
 				if _, err := livewatch.Call(ctx, id.Key(), "cancel"); err != nil {
 					return empty, err

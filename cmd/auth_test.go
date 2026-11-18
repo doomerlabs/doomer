@@ -60,7 +60,7 @@ func isolate(t *testing.T) adversarylabs.ConfigStore {
 	// Codex prefers CODEX_HOME over HOME, including when tests replace HOME.
 	// Never let integration tests write hooks into the invoking agent's profile.
 	t.Setenv("CODEX_HOME", filepath.Join(dir, "codex"))
-	for _, key := range []string{"DOOMER_PROFILE", "DOOMER_API_URL", "DOOMER_REGISTRY_HOST", "ADVERSARY_API_URL", "ADVERSARY_REGISTRY_HOST"} {
+	for _, key := range []string{"DOOMER_PROFILE", "DOOMER_API_URL", "DOOMER_REGISTRY_HOST", "ADVERSARY_API_URL", "ADVERSARY_REGISTRY_HOST", "SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
 		t.Setenv(key, "")
 	}
 	return adversarylabs.ConfigStore{Path: filepath.Join(dir, "config.json")}
@@ -386,5 +386,67 @@ func TestReviewApprovalBrowserOrigin(t *testing.T) {
 				t.Fatalf("unexpected result: %v", err)
 			}
 		})
+	}
+}
+
+func TestLoginUsesPublicDeviceURLWithoutEnvironmentDetection(t *testing.T) {
+	for _, variable := range []string{"no-ssh-markers", "SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
+		t.Run(variable, func(t *testing.T) {
+			store := isolate(t)
+			if variable != "no-ssh-markers" {
+				t.Setenv(variable, "ssh-session")
+			}
+			var starts, polls int
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/v1/auth/device/code":
+					starts++
+					_, _ = w.Write([]byte(`{"device_code":"test-device","user_code":"ABCD-EFGH","verification_uri_complete":"https://dev.example.test/cli/authorize?code=ABCD-EFGH","expires_in":60,"interval":1}`))
+				case "/v1/auth/device/token":
+					polls++
+					_, _ = w.Write([]byte(`{"token":"test-ssh-token"}`))
+				default:
+					t.Errorf("unexpected route: %s", r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
+			out, err := execute(t, "", "--api-url", server.URL, "login")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if starts != 1 || polls != 1 || !strings.Contains(out, "https://dev.example.test/cli/authorize?code=ABCD-EFGH") || strings.Contains(out, "Opening browser") || strings.Contains(out, "test-ssh-token") {
+				t.Fatalf("wrong default login flow: starts=%d polls=%d output=%q", starts, polls, out)
+			}
+			auth, ok, err := store.ExactAuthE(adversarylabs.AuthKey(server.URL, "default"))
+			if err != nil || !ok || auth.Token != "test-ssh-token" {
+				t.Fatal("device credential not saved for selected API/profile")
+			}
+		})
+	}
+}
+
+func TestAutomaticDeviceLoginPreservesExplicitModes(t *testing.T) {
+	isolate(t)
+	if !useDeviceLogin(loginOptions{}, false) {
+		t.Fatal("default login must work without SSH environment markers")
+	}
+	t.Setenv("SSH_CONNECTION", "ssh-session")
+	for _, tc := range []struct {
+		name           string
+		opts           loginOptions
+		explicit, want bool
+	}{
+		{"automatic", loginOptions{}, false, true},
+		{"browser override", loginOptions{}, true, false},
+		{"explicit device", loginOptions{device: true}, true, true},
+		{"token", loginOptions{tokenStdin: true}, false, false},
+		{"password", loginOptions{emailAddress: "user@example.test"}, false, false},
+		{"password stdin", loginOptions{passwordStdin: true}, false, false},
+		{"ci", loginOptions{ci: true}, false, false},
+	} {
+		if got := useDeviceLogin(tc.opts, tc.explicit); got != tc.want {
+			t.Errorf("%s: got %t want %t", tc.name, got, tc.want)
+		}
 	}
 }
