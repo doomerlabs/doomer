@@ -441,7 +441,7 @@ func makeFeedbackReport(result livewatch.Response) watchFeedbackReport {
 	if report.Fixed > 0 && report.Deferred > 0 && report.Complete {
 		report.SuggestedSummary += " Some concerns remain deferred."
 	}
-	if report.Complete && report.SuggestedSummary == "" && len(result.Results) > 0 {
+	if report.Complete && !report.NoticesPending && report.SuggestedSummary == "" && len(result.Results) > 0 {
 		report.ReplyInstructions = "Answer the current user request with the task outcome and material caveats. Give the clean review outcome only if the user asked for review status in this turn. Deliver any required advisories."
 	}
 	for _, notice := range report.Notices {

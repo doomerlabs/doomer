@@ -613,7 +613,7 @@ func TestCleanReviewKeepsItsRecordWithoutSuggestingAReply(t *testing.T) {
 	}
 	result.Notices = []adversarylabs.ClientNotice{{NotifyUser: true, DisplayMarkdown: "Service notice"}}
 	report = makeFeedbackReport(result)
-	if !report.Complete || !report.NoticesPending || report.NextAction != "display_notice" || report.SuggestedSummary != "" || len(report.Notices) != 1 {
+	if !report.Complete || !report.NoticesPending || report.NextAction != "display_notice" || report.SuggestedSummary != "" || report.ReplyInstructions != "" || len(report.Notices) != 1 {
 		t.Fatalf("expected the notice to be delivered without a clean-review summary: %+v", report)
 	}
 }
