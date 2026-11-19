@@ -404,7 +404,7 @@ func TestAgentHypothesesGateSubmissionAndBindSnapshot(t *testing.T) {
 	repo := makeRepository(t, root, "repo")
 	client := &fakeClient{}
 	cfg := Config{ID: Key(t.TempDir()), ControlKey: Key(t.TempDir()), Directory: root, API: "http://localhost/api", Token: "test", Agent: "codex", RequireHypotheses: true}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 	done := make(chan error, 1)
 	go func() { done <- Serve(ctx, cfg, client, func(context.Context, string) bool { return true }) }()
@@ -456,13 +456,32 @@ func TestAgentHypothesesGateSubmissionAndBindSnapshot(t *testing.T) {
 	if err != nil || len(result.Results) != 1 || result.Results[0].Status != "ready" {
 		t.Fatalf("completion: %+v %v", result, err)
 	}
-	client.mu.Lock()
-	defer client.mu.Unlock()
-	if len(client.inputs) != 1 || !client.inputs[0].AgentAssessmentComplete {
-		t.Fatal("explicit assessment completion not sent")
-	}
 	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: tasks[0].ID, Hypotheses: []adversarylabs.WorkspaceHypothesis{}}); err == nil {
 		t.Fatal("accepted replay")
+	}
+
+	if err := os.WriteFile(filepath.Join(repo, "later.txt"), []byte("edit after checkpoint\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err = Call(ctx, cfg.ControlKey, "finish")
+	if err != nil || len(result.HypothesisRequests) != 1 {
+		t.Fatalf("Stop did not hand off the later edit: %+v, %v", result, err)
+	}
+	later := result.HypothesisRequests[0]
+	if later.ID == tasks[0].ID || later.Revision != tasks[0].Revision+1 || !strings.Contains(later.Diff, "+edit after checkpoint\n") {
+		t.Fatalf("Stop handed off the wrong snapshot: %+v", later)
+	}
+	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: later.ID, Hypotheses: []adversarylabs.WorkspaceHypothesis{}}); err != nil {
+		t.Fatal(err)
+	}
+	result, err = Call(ctx, cfg.ControlKey, "finish")
+	if err != nil || len(result.Results) != 1 || result.Results[0].ID != later.ReviewID || result.Results[0].Status != "ready" {
+		t.Fatalf("Stop did not complete the later review: %+v, %v", result, err)
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if len(client.inputs) != 2 || !client.inputs[0].AgentAssessmentComplete || !client.inputs[1].AgentAssessmentComplete {
+		t.Fatalf("expected two explicitly assessed review submissions, got %+v", client.inputs)
 	}
 }
 
