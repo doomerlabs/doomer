@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish a verified release bundle, then atomically promote its channel pointer."""
+"""Publish verified CLI downloads or a signed MDM installer to R2."""
 import argparse
 import hashlib
 import json
@@ -62,6 +62,8 @@ def status(error):
 
 
 def content_type(name):
+    if name.endswith('.pkg'):
+        return 'application/octet-stream'
     return 'application/gzip' if name.endswith('.gz') else 'application/json' if name.endswith('.json') else 'text/plain; charset=utf-8'
 
 
@@ -127,15 +129,46 @@ def promote(client, bucket, pointer):
     raise RuntimeError('Channel changed repeatedly; retry publication')
 
 
-def publish(client, bucket, directory, version, verify_public):
-    files, pointer = release_bundle(directory, version)
+def mdm_bundle(directory, version, manifest):
+    package_name = f'Doomer-MDM-{version}.pkg'
+    metadata_name = 'mdm-release.json'
+    if {p.name for p in directory.iterdir()} != {package_name, metadata_name}:
+        raise ValueError('Unexpected MDM artifact membership')
+    package_path = directory / package_name
+    metadata_path = directory / metadata_name
+    for path, limit in ((package_path, 64 * 1024 * 1024), (metadata_path, 4096)):
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > limit:
+            raise ValueError('Invalid MDM artifact file: ' + path.name)
+    package = package_path.read_bytes()
+    metadata = metadata_path.read_bytes()
+    if not package.startswith(b'xar!') or json.loads(metadata) != {
+        'schemaVersion': 1,
+        'releaseManifestSHA256': digest(manifest),
+        'packageSHA256': digest(package),
+    }:
+        raise ValueError('MDM package or source release checksum mismatch')
+    return {package_name: package, metadata_name: metadata}
+
+
+def publish_files(client, bucket, version, files, verify_public):
     for name, data in files.items():
         put_immutable(client, bucket, f'{OBJECT_PREFIX}releases/{version}/{name}', data)
-    # Publish a discoverable channel only after every public artifact is readable.
     for name, data in files.items():
         verify_public(f'{BASE_URL}/releases/{version}/{name}', data)
+
+
+def publish(client, bucket, directory, version, verify_public):
+    files, pointer = release_bundle(directory, version)
+    publish_files(client, bucket, version, files, verify_public)
     promote(client, bucket, pointer)
     print('Published ' + version + ' to ' + BASE_URL)
+
+
+def publish_mdm(client, bucket, directory, mdm_directory, version, verify_public):
+    release_files, _ = release_bundle(directory, version)
+    files = mdm_bundle(mdm_directory, version, release_files['release-manifest.json'])
+    publish_files(client, bucket, version, files, verify_public)
+    print('Published MDM installer for ' + version + ' to ' + BASE_URL)
 
 
 def validate_managed_signing_key():
@@ -186,6 +219,7 @@ def main():
     import boto3
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dir', type=Path, default=Path('dist'))
+    parser.add_argument('--mdm-dir', type=Path, help='Publish only the MDM installer and provenance from this signing artifact directory')
     parser.add_argument('--version', default=os.environ.get('GITHUB_REF_NAME'))
     args = parser.parse_args()
     bucket = validate_bucket(os.environ['R2_BUCKET'])
@@ -199,6 +233,9 @@ def main():
         with urllib.request.urlopen(request, timeout=60) as response:
             if digest(response.read()) != digest(data):
                 raise ValueError('Public artifact checksum mismatch')
+    if args.mdm_dir is not None:
+        publish_mdm(client, bucket, args.dir, args.mdm_dir, args.version, verify)
+        return
     if '-beta.' not in args.version:
         validate_managed_signing_key()
     publish(client, bucket, args.dir, args.version, verify)

@@ -176,3 +176,33 @@ func TestWatchConsentTracksUninstallAndAccountRecovery(t *testing.T) {
 		t.Fatal("uninstall retained anonymous consent")
 	}
 }
+
+func TestWatchManagedCredentialIgnoresUserOverridesAndFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	api := "https://pilot.example/api"
+	state := agentHookState{API: api, CredentialDirs: map[string]string{api: dir}, Identities: map[string]string{api: "anonymous"}}
+	if err := json.Unmarshal([]byte(`{"managed":{"agents":["codex"]}}`), &state); err != nil {
+		t.Fatal(err)
+	}
+	env := watchEnvironment{"DOOMER_TOKEN": "override", "DOOMER_CONFIG_DIR": t.TempDir(), "DOOMER_PROFILE": "personal"}
+	store := adversarylabs.ConfigStore{Path: filepath.Join(dir, "config.json")}
+	if err := store.SetAuth(adversarylabs.AuthKey(api, "default"), adversarylabs.Auth{Token: "managed-secret"}); err != nil {
+		t.Fatal(err)
+	}
+	c := NewRootCommand()
+	if token, err := watchToken(c, api, state, env); err != nil || token != "managed-secret" {
+		t.Fatalf("managed credential did not win: %v", err)
+	}
+	if _, err := watchToken(c, "https://other.example/api", state, env); err == nil {
+		t.Fatal("managed credential could route to another service")
+	}
+	if err := os.Remove(filepath.Join(dir, "config.json")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := watchToken(c, api, state, env); err == nil || !strings.Contains(err.Error(), "managed Doomer credential missing") {
+		t.Fatalf("managed watch fell back to an alternate identity: %v", err)
+	}
+	if _, err := agentHookConsent(state, api, "claude", ""); err == nil || !strings.Contains(err.Error(), "outside managed") {
+		t.Fatalf("unselected agent passed managed policy: %v", err)
+	}
+}

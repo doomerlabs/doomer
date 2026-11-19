@@ -1,0 +1,83 @@
+name: Sign MDM installer
+run-name: Sign MDM installer ${{ github.ref_name }}
+
+on:
+  push:
+    tags: ["20*.*.*"]
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: mdm-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    runs-on: macos-15
+    timeout-minutes: 85
+    environment: mdm-release
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd81901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify immutable tag checkout
+        run: scripts/verify-release-ref.sh
+      - name: Check for an existing signed artifact
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          artifact_ids="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+            --jq ".artifacts[] | select(.name == \"mdm-$GITHUB_REF_NAME\" and .expired == false) | .id")"
+          if [[ -n "$artifact_ids" ]]; then
+            echo "reuse=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Verify published CLI inputs and combine architectures
+        if: steps.existing.outputs.reuse != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          inputs="$RUNNER_TEMP/mdm-inputs"
+          mkdir "$inputs" "$RUNNER_TEMP/mdm-artifact"
+          for ((attempt=0; attempt<150; attempt++)); do
+            draft="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || true)"
+            if [[ "$draft" == false ]]; then break; fi
+            sleep 30
+          done
+          [[ "$draft" == false ]] || { echo "Timed out waiting for Depot's published Go CLI release" >&2; exit 1; }
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir "$inputs" \
+            --pattern release-manifest.json --pattern "doomer_${GITHUB_REF_NAME}_darwin_*.tar.gz"
+          python3 scripts/prepare-mdm-release.py "$GITHUB_REF_NAME" "$(git rev-parse HEAD)" "$inputs"
+          /usr/bin/lipo -create "$inputs/doomer-arm64" "$inputs/doomer-amd64" -output "$inputs/doomer"
+          /usr/bin/lipo -verify_arch arm64 x86_64 "$inputs/doomer"
+      - name: Sign and verify the macOS installer
+        if: steps.existing.outputs.reuse != 'true'
+        env:
+          MDM_INSTALLER_P12_BASE64: ${{ secrets.MDM_INSTALLER_P12_BASE64 }}
+          MDM_INSTALLER_P12_PASSWORD: ${{ secrets.MDM_INSTALLER_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          inputs="$RUNNER_TEMP/mdm-inputs"
+          package="$RUNNER_TEMP/mdm-artifact/Doomer-MDM-$GITHUB_REF_NAME.pkg"
+          mdm/sign-release-pkg.sh "$inputs/doomer" "$package"
+      - name: Record installer provenance
+        if: steps.existing.outputs.reuse != 'true'
+        run: |
+          set -euo pipefail
+          inputs="$RUNNER_TEMP/mdm-inputs"
+          package="$RUNNER_TEMP/mdm-artifact/Doomer-MDM-$GITHUB_REF_NAME.pkg"
+          python3 scripts/prepare-mdm-release.py "$GITHUB_REF_NAME" "$(git rev-parse HEAD)" "$inputs" --record-package "$package"
+      - name: Retain immutable installer for Depot
+        if: steps.existing.outputs.reuse != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mdm-${{ github.ref_name }}
+          path: ${{ runner.temp }}/mdm-artifact/
+          if-no-files-found: error
+          retention-days: 90

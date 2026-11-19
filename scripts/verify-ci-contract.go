@@ -440,16 +440,74 @@ func validateRelease(workflow *yaml.Node) {
 
 	r2 := requiredValue(jobs, "publish-r2")
 	requireExactSet(value(r2, "needs"), "publish-r2 dependencies", "publish-github")
-	requirePermissions(r2, "publish-r2 job", map[string]string{"contents": "read"})
+	requirePermissions(r2, "publish-r2 job", map[string]string{"actions": "read", "contents": "read"})
 	requireJobEnvironment(r2, "publish-r2")
-	if hasCredentialReferenceBeyondEmptyOverride(r2, "GITHUB_TOKEN") || hasCredentialReferenceBeyondEmptyOverride(r2, "GH_TOKEN") || hasCredentialReferenceBeyondEmptyOverride(r2, "HOMEBREW_TAP_TOKEN") || nodeContains(r2, "github.token") {
-		fail("R2 publication job must not receive GitHub or tap publication authority")
+	r2Publish := "Publish public release downloads"
+	if nodeContains(r2, "scripts/fetch-mdm-release.sh") || nodeContains(r2, "--mdm-dir") || nodeContains(r2, "github.token") {
+		fail("CLI R2 publication must be independent of Apple signing")
 	}
-	validatePublicationOrder(r2, "publish-r2", "Publish public release downloads")
-	for _, secret := range []string{"R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"} {
-		validateSecretBoundary(r2, "publish-r2", secret, "Publish public release downloads")
-	}
+	validatePublicationOrder(r2, "publish-r2", r2Publish)
+	validateSecretBoundary(r2, "publish-r2", "DOOMER_RELEASE_SIGNING_KEY", r2Publish)
 	requireNoPublicationCredentials(findStep(r2, "Verify exact R2 publication state"), "R2 pre-publication verification step")
+
+	mdm := requiredValue(jobs, "publish-mdm-r2")
+	mdmPublish := "Publish signed MDM installer"
+	requireExactSet(value(mdm, "needs"), "publish-mdm-r2 dependencies", "publish-github")
+	requirePermissions(mdm, "publish-mdm-r2 job", map[string]string{"actions": "read", "contents": "read"})
+	requireJobEnvironment(mdm, "publish-mdm-r2")
+	fetchMDM := findStep(mdm, "Fetch signed MDM release artifact")
+	if countNodeText(mdm, "github.token") != 1 || !nodeContains(fetchMDM, "github.token") ||
+		!nodeContains(fetchMDM, "scripts/fetch-mdm-release.sh") ||
+		!nodeContains(findStep(mdm, mdmPublish), "--mdm-dir") ||
+		nodeContains(mdm, "DOOMER_RELEASE_SIGNING_KEY") {
+		fail("MDM publication must fetch the signed installer with read-only Actions authority and publish only the package")
+	}
+	validatePublicationOrder(mdm, "publish-mdm-r2", mdmPublish)
+	requireNoPublicationCredentials(findStep(mdm, "Verify exact MDM source bundle"), "MDM pre-publication verification step")
+
+	for jobID, job := range map[string]*yaml.Node{"publish-r2": r2, "publish-mdm-r2": mdm} {
+		if hasCredentialReferenceBeyondEmptyOverride(job, "GITHUB_TOKEN") || hasCredentialReferenceBeyondEmptyOverride(job, "HOMEBREW_TAP_TOKEN") {
+			fail("%s must not receive GitHub or tap publication authority", jobID)
+		}
+	}
+	for _, secret := range []string{"R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"} {
+		validateSecretBoundary(r2, "publish-r2", secret, r2Publish)
+		validateSecretBoundary(mdm, "publish-mdm-r2", secret, mdmPublish)
+	}
+}
+
+func validateMDMSigning(path string, workflow *yaml.Node) {
+	validatePinnedActions(path, workflow)
+	if !nodeContains(requiredValue(workflow, "on", "push", "tags"), "20*.*.*") {
+		fail("MDM signing must run on release tags")
+	}
+	requirePermissions(workflow, "MDM signing workflow", map[string]string{"actions": "read", "contents": "read"})
+	job := requiredValue(workflow, "jobs", "sign")
+	if scalar(value(job, "runs-on")) != "macos-15" || scalar(value(job, "environment")) != "mdm-release" {
+		fail("MDM signing must use a native Mac and its protected signing environment")
+	}
+	tag, inputs, sign := -1, -1, -1
+	for i, step := range steps(job) {
+		if nodeContains(step, "scripts/verify-release-ref.sh") {
+			tag = i
+		}
+		if stepName(step) == "Verify published CLI inputs and combine architectures" &&
+			nodeContains(step, "scripts/prepare-mdm-release.py") && nodeContains(step, "lipo -verify_arch arm64 x86_64") {
+			inputs = i
+		}
+		if nodeContains(step, "secrets.") {
+			if sign >= 0 || stepName(step) != "Sign and verify the macOS installer" ||
+				!nodeContains(step, "secrets.MDM_INSTALLER_P12_BASE64") ||
+				!nodeContains(step, "secrets.MDM_INSTALLER_P12_PASSWORD") ||
+				!nodeContains(step, "mdm/sign-release-pkg.sh") {
+				fail("Only the native package signing step may receive Apple signing secrets")
+			}
+			sign = i
+		}
+	}
+	if tag < 0 || inputs <= tag || sign <= inputs || nodeContains(workflow, "secrets.R2_") {
+		fail("MDM signing must verify the tag and source archives before signing, without R2 authority")
+	}
 }
 
 func validateAgentRecordings(workflow *yaml.Node) {
@@ -496,6 +554,8 @@ func main() {
 	validatePinnedActions(releasePath, release)
 	validateCI(ci)
 	validateRelease(release)
+	mdmPath := ".github/workflows/mdm-release.yml"
+	validateMDMSigning(mdmPath, parse(mdmPath))
 	validateAgentRecordings(parse(".depot/workflows/agent-e2e.yml"))
 	fmt.Println("CI and release workflow dependency/privilege contract passed")
 }

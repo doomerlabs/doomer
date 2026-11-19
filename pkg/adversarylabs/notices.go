@@ -66,6 +66,7 @@ type ClientNotice struct {
 	Deadline              *time.Time `json:"deadline,omitempty"`
 	Blocking              bool       `json:"blocking"`
 	Cached                bool       `json:"cached,omitempty"`
+	ManagedInstall        bool       `json:"managed_install,omitempty"`
 }
 type NoticeEnvelope struct {
 	Schema  int            `json:"notice_schema"`
@@ -101,6 +102,7 @@ func ValidNotices(envelope NoticeEnvelope, now time.Time) []ClientNotice {
 		}
 		// Plain text only: never interpret server text as commands or terminal control.
 		// Delivery commands are generated locally, never trusted from the wire/cache.
+		n.ManagedInstall = false
 		n.AcknowledgeCommand = nil
 		n.AcknowledgeAfterReply = false
 		n.DisplayMarkdown = ""
@@ -126,14 +128,15 @@ type noticeCache struct {
 // NoticeCollector belongs to one command. It never grants update authorization
 // or blocks offline work using cached policy; only the server enforces support.
 type NoticeCollector struct {
-	mu           sync.Mutex
-	path         string
-	writer       io.Writer
-	humanOutput  bool
-	api          string
-	notices      []ClientNotice
-	acknowledged map[string]time.Time
-	deferred     map[string]time.Time
+	mu             sync.Mutex
+	path           string
+	writer         io.Writer
+	humanOutput    bool
+	managedInstall bool
+	api            string
+	notices        []ClientNotice
+	acknowledged   map[string]time.Time
+	deferred       map[string]time.Time
 }
 
 func WithNoticeCollector(ctx context.Context, configDir, api string, writer io.Writer) context.Context {
@@ -160,6 +163,14 @@ func WithHumanNoticeOutput(ctx context.Context) context.Context {
 	return ctx
 }
 
+// Managed installations receive the advisory with IT ownership of updates.
+func WithManagedInstallNoticeOutput(ctx context.Context) context.Context {
+	if c, ok := ctx.Value(noticeContextKey{}).(*NoticeCollector); ok {
+		c.managedInstall = true
+	}
+	return ctx
+}
+
 func NoticesFromContext(ctx context.Context) []ClientNotice {
 	c, _ := ctx.Value(noticeContextKey{}).(*NoticeCollector)
 	if c == nil {
@@ -173,6 +184,7 @@ func NoticesFromContext(ctx context.Context) []ClientNotice {
 	}
 	result := append([]ClientNotice(nil), ValidNotices(NoticeEnvelope{Schema: 1, Notices: c.notices}, time.Now())...)
 	for i := range result {
+		result[i].ManagedInstall = c.managedInstall
 		result[i].NotifyUser = c.shouldShow(result[i])
 		result[i].DisplayMarkdown = AdvisoryMarkdown(result[i])
 		if result[i].NotifyUser {
@@ -257,6 +269,7 @@ func FlushNotices(ctx context.Context) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, n := range ValidNotices(NoticeEnvelope{Schema: 1, Notices: c.notices}, time.Now()) {
+		n.ManagedInstall = c.managedInstall
 		if !c.shouldShow(n) {
 			continue
 		}
@@ -439,7 +452,9 @@ func advisoryLines(n ClientNotice) []string {
 		}
 		lines = append(lines, label+n.RecommendedVersion)
 	}
-	if n.Kind == "update" && n.RecommendedVersion != "" {
+	if n.Kind == "update" && n.ManagedInstall {
+		lines = append(lines, "Contact your IT administrator for updates.")
+	} else if n.Kind == "update" && n.RecommendedVersion != "" {
 		lines = append(lines, "Run in your terminal: "+updateCommand(n))
 	}
 	if n.Cached {
@@ -467,7 +482,9 @@ func AdvisoryMarkdown(n ClientNotice) string {
 	if n.Deadline != nil {
 		result += "**Deadline: " + n.Deadline.UTC().Format(time.RFC3339) + "**\n\n"
 	}
-	if n.Kind == "update" && n.RecommendedVersion != "" {
+	if n.Kind == "update" && n.ManagedInstall {
+		result += "Contact your IT administrator for updates.\n\n"
+	} else if n.Kind == "update" && n.RecommendedVersion != "" {
 		result += "Run in your terminal:\n\n```bash\n" + updateCommand(n) + "\n```\n\n"
 	}
 	if n.Cached {

@@ -112,6 +112,9 @@ func newRootCommand(injected *application.App) *cobra.Command {
 			return err
 		}
 		noticeContext := adversarylabs.WithNoticeCollector(command.Context(), dir, apiURL, command.ErrOrStderr())
+		if actual, err := filepath.EvalSymlinks(mustExecutable()); err == nil && actual == mdmExecutable {
+			noticeContext = adversarylabs.WithManagedInstallNoticeOutput(noticeContext)
+		}
 		top := command
 		for top.Parent() != nil && top.Parent() != root {
 			top = top.Parent()
@@ -147,7 +150,7 @@ func newRootCommand(injected *application.App) *cobra.Command {
 	root.AddCommand(newLoginCommand(app, &apiURL, &profile, settings), newLogoutCommand(app, &apiURL, &profile), newProfileCommand(app, settings))
 	root.PersistentPostRun = func(command *cobra.Command, args []string) { adversarylabs.FlushNotices(command.Context()) }
 	root.AddCommand(newNoticesCommand(&apiURL), newUpgradeCommand(), newStatusCommand(), newSupportCommand(app, &apiURL, &profile))
-	root.AddCommand(newVersionCommand(), newSelfUpdateCommand(), newRuntimeInfoCommand())
+	root.AddCommand(newVersionCommand(), newSelfUpdateCommand(), newRuntimeInfoCommand(), newNPMSetupCommand(), newMDMCommand())
 	root.AddCommand(newPrepareCommand(app, &apiURL, &profile), newManagedTaskCommand(app, &apiURL, &profile), newManagedInstallCommand(), newManagedBootstrapCommand(), newManagedHooksCommand(app, &apiURL, &profile), newManagedAgentHookCommand(app, &apiURL, &profile))
 	root.AddCommand(newPreflightCommand(&apiURL, &profile))
 	wrapManagedStateRecovery(root, &apiURL, &profile)

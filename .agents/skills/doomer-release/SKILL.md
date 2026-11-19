@@ -75,6 +75,10 @@ outputs are:
   verified release bundle; the tap receives it separately through its PR.
 - Public files under `https://downloads.doomer.ai/cli/releases/VERSION/` whose
   bytes match the GitHub release and SHA-256 checksums.
+- A universal Developer ID Installer–signed MDM product archive and its
+  provenance under `cli/releases/VERSION/`. Verify the public package and
+  check the signature on macOS. Follow the native signing run and the Depot R2
+  job. Both must succeed.
 - `https://downloads.doomer.ai/cli/stable.json` or `beta.json` pointing to that
   version, commit, and verified platform assets. If a newer release legitimately
   won a concurrent promotion, report it rather than regressing the channel.

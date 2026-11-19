@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/doomerlabs/doomer/internal/managed"
 	"github.com/doomerlabs/doomer/internal/rootreplace"
 	"github.com/doomerlabs/doomer/internal/runtimeversion"
@@ -23,10 +24,11 @@ import (
 )
 
 type cliInstallation struct {
-	Manager     string   `json:"manager"`
-	Executable  string   `json:"executable"`
-	ManagerHome string   `json:"manager_home,omitempty"`
-	Command     []string `json:"upgrade_command,omitempty"`
+	Manager        string   `json:"manager"`
+	Executable     string   `json:"executable"`
+	ManagerHome    string   `json:"manager_home,omitempty"`
+	Command        []string `json:"upgrade_command,omitempty"`
+	upgradeBlocked string
 }
 
 var upgradeExecutable = os.Executable
@@ -57,6 +59,10 @@ func identifyCLIInstallation(path string) (cliInstallation, error) {
 		return cliInstallation{}, err
 	}
 	result := cliInstallation{Manager: "direct", Executable: actual}
+	if sameInstallationPath(path, actual, mdmExecutable) {
+		result.Manager = "mdm"
+		return result, nil
+	}
 	// Homebrew's versioned Cellar path is authoritative; never replace its file.
 	cellar := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(actual))))
 	if filepath.Base(actual) == "doomer" && filepath.Base(filepath.Dir(actual)) == "bin" && filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(actual)))) == "doomer" && filepath.Base(cellar) == "Cellar" {
@@ -80,7 +86,9 @@ func identifyCLIInstallation(path string) (cliInstallation, error) {
 				Path string `json:"path"`
 				SHA  string `json:"sha256"`
 			} `json:"native"`
-			Runtime string `json:"runtime"`
+			Runtime        string `json:"runtime"`
+			Installer      string `json:"installer"`
+			PackageVersion string `json:"cliVersion"`
 		}
 		raw, readErr := os.ReadFile(filepath.Join(home, "state.json"))
 		if os.IsNotExist(readErr) {
@@ -104,6 +112,25 @@ func identifyCLIInstallation(path string) (cliInstallation, error) {
 		if hex.EncodeToString(sum[:]) != state.Native.SHA {
 			return result, fmt.Errorf("Node-managed CLI differs from its recorded checksum")
 		}
+		if state.Installer == "go" {
+			result.Manager = "node"
+			result.ManagerHome = home
+			if strings.HasSuffix(home, "-dev") || home == os.Getenv("DOOMER_DEV_HOME") {
+				result.upgradeBlocked = "this is a development build; rebuild it yourself"
+				return result, nil
+			}
+			pkgVersion, err := semver.StrictNewVersion(state.PackageVersion)
+			if err != nil {
+				result.upgradeBlocked = "cannot determine the npm release channel; run update with your original npm package tag"
+				return result, nil
+			}
+			pkg := "@doomerlabs/doomer"
+			if pkgVersion.Prerelease() != "" {
+				pkg += "@beta"
+			}
+			result.Command = []string{"npx", pkg, "upgrade", "--home", home}
+			return result, nil
+		}
 		if !filepath.IsAbs(state.Runtime) {
 			return result, fmt.Errorf("Node manager executable is unavailable; run npx @doomerlabs/doomer update")
 		}
@@ -123,6 +150,14 @@ func identifyCLIInstallation(path string) (cliInstallation, error) {
 	return result, nil
 }
 
+func sameInstallationPath(path, actual, managedPath string) bool {
+	if filepath.Clean(path) == managedPath || actual == managedPath {
+		return true
+	}
+	resolved, err := filepath.EvalSymlinks(managedPath)
+	return err == nil && actual == resolved
+}
+
 func newUpgradeCommand() *cobra.Command {
 	var check, asJSON bool
 	c := &cobra.Command{Use: "upgrade", Short: "Update only the CLI through its installation manager", Args: cobra.NoArgs, Long: "Update the CLI without installing skills or changing hooks. Homebrew installations use brew upgrade doomer; Node-managed installations use the installed manager's CLI-only upgrade. Direct stable binaries use the signed release catalog. Development and legacy pinned runtimes are not replaced."}
@@ -135,6 +170,9 @@ func newUpgradeCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
+		if installation.Manager == "mdm" {
+			return fmt.Errorf("Doomer is managed by your organization; contact IT for updates")
+		}
 		if installation.Manager == "unrecognized" {
 			return fmt.Errorf("cannot determine this versioned or symlinked CLI installation owner; upgrade it with its original installer")
 		}
@@ -142,6 +180,9 @@ func newUpgradeCommand() *cobra.Command {
 			return fmt.Errorf("this runtime is pinned by the legacy skill; update that installation instead")
 		}
 		if installation.Manager == "node" {
+			if installation.upgradeBlocked != "" {
+				return fmt.Errorf("%s", installation.upgradeBlocked)
+			}
 			command := append([]string{}, installation.Command...)
 			if check {
 				command = append(command, "--check")
