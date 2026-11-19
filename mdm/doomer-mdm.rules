@@ -1,0 +1,6 @@
+# Review operations require a live, local Doomer watch control key.
+prefix_rule(pattern = ["/usr/local/libexec/doomer-mdm/doomer", "watch", "hypotheses", "--control"], decision = "allow")
+prefix_rule(pattern = ["/usr/local/libexec/doomer-mdm/doomer", "watch", "findings", "respond", "--control"], decision = "allow")
+prefix_rule(pattern = ["/usr/local/libexec/doomer-mdm/doomer", "watch", "findings", "ls", "--control"], decision = "allow")
+prefix_rule(pattern = ["/usr/local/libexec/doomer-mdm/doomer", "watch", "results", "--control"], decision = "allow")
+prefix_rule(pattern = ["/usr/local/libexec/doomer-mdm/doomer", "watch", "notice-ack", "--control"], decision = "allow")

@@ -99,6 +99,37 @@ same bucket-scoped environment variables, including
 `R2_BUCKET=doomer-macos-releases`. Never rebuild or overwrite that tag's
 published assets.
 
+### Managed macOS installer
+
+Each stable or beta tag also produces a Developer ID Installer–signed
+`Doomer-MDM-VERSION.pkg` for Apple Silicon and Intel Macs. The native
+[GitHub signing workflow](../.github/workflows/mdm-release.yml) verifies the
+published GitHub CLI manifest and its two macOS archives, then combines those
+exact binaries. The package contains both agent integrations. The managed
+profile still selects which agents can enroll and run hooks.
+
+Before tagging, provision the GitHub `mdm-release` environment in
+`doomerlabs/doomer` with `MDM_INSTALLER_P12_BASE64` and
+`MDM_INSTALLER_P12_PASSWORD` from the Apple signing credentials. Restrict
+deployments to release tags. The macOS job uses a temporary keychain.
+Depot reads the signed build artifact with its read-only GitHub Actions
+token and uses the existing R2 secrets for publication.
+
+The package and its provenance file are available at
+`https://downloads.doomer.ai/cli/releases/VERSION/Doomer-MDM-VERSION.pkg` and
+`https://downloads.doomer.ai/cli/releases/VERSION/mdm-release.json`. Depot
+compares their hashes against the verified CLI manifest and verifies both
+public downloads before promoting the CLI channel. The provenance file
+records the SHA-256 of the package and its source release manifest. The GitHub
+CLI release bundle keeps its existing membership.
+
+If the native signing job fails, rerun it and retry Depot's R2 job on the
+same tag. The signing workflow reuses its retained artifact on a rerun.
+To recover after it expires, use the exact retained or already published
+package and provenance file with `publish-r2.py --mdm-dir PATH`. Timestamped
+signatures can change on rebuild, so already published package bytes are
+immutable.
+
 ### Cloudflare download-client compatibility
 
 The active configuration rule **Allow public CLI download clients** disables

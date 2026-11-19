@@ -141,9 +141,10 @@ jobs:
   publish-r2:
     needs: publish-github
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 40
     environment: release
     permissions:
+      actions: read
       contents: read
     env:
       GITHUB_REF_NAME: ${{ github.ref_name }}
@@ -172,6 +173,10 @@ jobs:
           GH_TOKEN: ""
           HOMEBREW_TAP_TOKEN: ""
         run: scripts/publish-homebrew.sh
+      - name: Fetch signed MDM release artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/fetch-mdm-release.sh "$RUNNER_TEMP/doomer-mdm-release"
       - name: Install R2 publishing client
         run: |
           python3 -m venv /tmp/doomer-r2-venv
@@ -183,4 +188,4 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           DOOMER_RELEASE_SIGNING_KEY: ${{ secrets.DOOMER_RELEASE_SIGNING_KEY }}
-        run: /tmp/doomer-r2-venv/bin/python scripts/publish-r2.py
+        run: /tmp/doomer-r2-venv/bin/python scripts/publish-r2.py --mdm-dir "$RUNNER_TEMP/doomer-mdm-release"

@@ -1,6 +1,10 @@
 import importlib.util
 import io
 import json
+import os
+import subprocess
+import sys
+import tarfile
 from pathlib import Path
 import tempfile
 import unittest
@@ -99,6 +103,109 @@ class PublicationTests(unittest.TestCase):
             writes = len(store.writes)
             publisher.publish(store, 'bucket', path, '2026.11.2', lambda *args: None)
             self.assertEqual(len(store.writes), writes)
+
+    def test_signed_package_is_verified_and_immutable_before_promoting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cli, mdm = root / 'cli', root / 'mdm'
+            cli.mkdir()
+            mdm.mkdir()
+            version = '2026.11.2.1-beta.1'
+            files = self.fixture(cli, version)
+            name = f'Doomer-MDM-{version}.pkg'
+            package = b'xar!signed-pkg-placeholder'
+            (mdm / name).write_bytes(package)
+            # Exercise the actual provenance output from the signing workflow.
+            prepare = Path(__file__).with_name('prepare-mdm-release.py')
+            subprocess.run([sys.executable, str(prepare), version, 'a' * 40, str(cli),
+                            '--record-package', str(mdm / name)], check=True)
+
+            store = Store()
+            checked = []
+            def verify(url, data):
+                self.assertNotIn('cli/beta.json', store.data)
+                checked.append(url)
+            publisher.publish(store, publisher.RELEASE_BUCKET, cli, version, verify, mdm)
+            key = f'cli/releases/{version}/{name}'
+            self.assertEqual(store.data[key], package)
+            self.assertIn(f'{publisher.BASE_URL}/releases/{version}/{name}', checked)
+            self.assertEqual(store.writes[-1], 'cli/beta.json')
+            expected_writes = len(store.writes)
+            publisher.publish(store, publisher.RELEASE_BUCKET, cli, version, lambda *args: None, mdm)
+            self.assertEqual(len(store.writes), expected_writes)
+
+            metadata = json.loads((mdm / 'mdm-release.json').read_bytes())
+            metadata['releaseManifestSHA256'] = '0' * 64
+            (mdm / 'mdm-release.json').write_text(json.dumps(metadata))
+            invalid = Store()
+            with self.assertRaisesRegex(ValueError, 'source release checksum mismatch'):
+                publisher.publish(invalid, publisher.RELEASE_BUCKET, cli, version, lambda *args: None, mdm)
+            self.assertEqual(invalid.writes, [])
+
+            metadata['releaseManifestSHA256'] = publisher.digest(files['release-manifest.json'])
+            (mdm / 'mdm-release.json').write_text(json.dumps(metadata))
+            (mdm / name).write_bytes(b'xar!different')
+            with self.assertRaisesRegex(ValueError, 'source release checksum mismatch'):
+                publisher.publish(invalid, publisher.RELEASE_BUCKET, cli, version, lambda *args: None, mdm)
+            self.assertEqual(invalid.writes, [])
+
+            metadata['packageSHA256'] = publisher.digest(b'xar!different')
+            (mdm / 'mdm-release.json').write_text(json.dumps(metadata))
+            with self.assertRaisesRegex(ValueError, 'Published object differs'):
+                publisher.publish(store, publisher.RELEASE_BUCKET, cli, version, lambda *args: None, mdm)
+            self.assertEqual(store.data[key], package)
+
+    def test_mac_archives_must_match_manifest_before_packaging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            version = '2026.11.2.1'
+            manifest = {'schemaVersion': 1, 'version': version, 'commit': 'b' * 40, 'artifacts': {}}
+            for arch in ('arm64', 'amd64'):
+                archive = root / f'doomer_{version}_darwin_{arch}.tar.gz'
+                with tarfile.open(archive, 'w:gz') as tar:
+                    member = tarfile.TarInfo('doomer')
+                    member.size = len(arch)
+                    tar.addfile(member, io.BytesIO(arch.encode()))
+                manifest['artifacts'][archive.name] = 'sha256:' + publisher.digest(archive.read_bytes())
+            (root / 'release-manifest.json').write_text(json.dumps(manifest))
+            prepare = Path(__file__).with_name('prepare-mdm-release.py')
+            args = [sys.executable, str(prepare), version, 'b' * 40, str(root)]
+            subprocess.run(args, check=True)
+            self.assertEqual((root / 'doomer-arm64').read_bytes(), b'arm64')
+            self.assertEqual((root / 'doomer-amd64').read_bytes(), b'amd64')
+            archive.write_bytes(b'tampered')
+            failed = subprocess.run(args, capture_output=True)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn(b'checksum mismatch', failed.stderr)
+
+    def test_fetch_uses_the_matching_successful_signing_workflow(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            calls = root / 'calls'
+            gh = root / 'gh'
+            gh.write_text(
+                '#!/usr/bin/env bash\n'
+                'printf "%s\\n" "$*" >> "$TEST_CALLS"\n'
+                'if [[ "$1" == api ]]; then printf "123\\tcompleted\\t%s\\n" "$TEST_CONCLUSION"; fi\n'
+            )
+            gh.chmod(0o755)
+            fetch = Path(__file__).with_name('fetch-mdm-release.sh')
+            env = os.environ | {'PATH': f'{root}:{os.environ["PATH"]}',
+                                'GITHUB_REPOSITORY': 'doomerlabs/doomer',
+                                'GITHUB_REF_NAME': '2026.11.2.1',
+                                'TEST_CALLS': str(calls), 'TEST_CONCLUSION': 'failure'}
+            args = ['bash', str(fetch), str(root / 'artifact')]
+            failed = subprocess.run(args, env=env, capture_output=True)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertNotIn('run download', calls.read_text())
+            calls.unlink()
+            env['TEST_CONCLUSION'] = 'success'
+            subprocess.run(args, env=env, check=True)
+            commands = calls.read_text().splitlines()
+            commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+            self.assertIn(f'head_sha={commit}', commands[0])
+            self.assertIn('Sign MDM installer 2026.11.2.1', commands[0])
+            self.assertIn('run download 123 --repo doomerlabs/doomer --name mdm-2026.11.2.1', commands[1])
 
     def test_tamper_and_public_failure_never_promote(self):
         with tempfile.TemporaryDirectory() as directory:
