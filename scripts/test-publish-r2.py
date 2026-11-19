@@ -104,7 +104,7 @@ class PublicationTests(unittest.TestCase):
             publisher.publish(store, 'bucket', path, '2026.11.2', lambda *args: None)
             self.assertEqual(len(store.writes), writes)
 
-    def test_signed_package_is_verified_and_immutable_before_promoting(self):
+    def test_signed_package_is_verified_and_immutable(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             cli, mdm = root / 'cli', root / 'mdm'
@@ -125,13 +125,13 @@ class PublicationTests(unittest.TestCase):
             def verify(url, data):
                 self.assertNotIn('cli/beta.json', store.data)
                 checked.append(url)
-            publisher.publish(store, publisher.RELEASE_BUCKET, cli, version, verify, mdm)
+            publisher.publish_mdm(store, publisher.RELEASE_BUCKET, cli, mdm, version, verify)
             key = f'cli/releases/{version}/{name}'
             self.assertEqual(store.data[key], package)
             self.assertIn(f'{publisher.BASE_URL}/releases/{version}/{name}', checked)
-            self.assertEqual(store.writes[-1], 'cli/beta.json')
+            self.assertEqual(store.writes, [key, f'cli/releases/{version}/mdm-release.json'])
             expected_writes = len(store.writes)
-            publisher.publish(store, publisher.RELEASE_BUCKET, cli, version, lambda *args: None, mdm)
+            publisher.publish_mdm(store, publisher.RELEASE_BUCKET, cli, mdm, version, lambda *args: None)
             self.assertEqual(len(store.writes), expected_writes)
 
             metadata = json.loads((mdm / 'mdm-release.json').read_bytes())
@@ -139,20 +139,20 @@ class PublicationTests(unittest.TestCase):
             (mdm / 'mdm-release.json').write_text(json.dumps(metadata))
             invalid = Store()
             with self.assertRaisesRegex(ValueError, 'source release checksum mismatch'):
-                publisher.publish(invalid, publisher.RELEASE_BUCKET, cli, version, lambda *args: None, mdm)
+                publisher.publish_mdm(invalid, publisher.RELEASE_BUCKET, cli, mdm, version, lambda *args: None)
             self.assertEqual(invalid.writes, [])
 
             metadata['releaseManifestSHA256'] = publisher.digest(files['release-manifest.json'])
             (mdm / 'mdm-release.json').write_text(json.dumps(metadata))
             (mdm / name).write_bytes(b'xar!different')
             with self.assertRaisesRegex(ValueError, 'source release checksum mismatch'):
-                publisher.publish(invalid, publisher.RELEASE_BUCKET, cli, version, lambda *args: None, mdm)
+                publisher.publish_mdm(invalid, publisher.RELEASE_BUCKET, cli, mdm, version, lambda *args: None)
             self.assertEqual(invalid.writes, [])
 
             metadata['packageSHA256'] = publisher.digest(b'xar!different')
             (mdm / 'mdm-release.json').write_text(json.dumps(metadata))
             with self.assertRaisesRegex(ValueError, 'Published object differs'):
-                publisher.publish(store, publisher.RELEASE_BUCKET, cli, version, lambda *args: None, mdm)
+                publisher.publish_mdm(store, publisher.RELEASE_BUCKET, cli, mdm, version, lambda *args: None)
             self.assertEqual(store.data[key], package)
 
     def test_mac_archives_must_match_manifest_before_packaging(self):
@@ -178,7 +178,7 @@ class PublicationTests(unittest.TestCase):
             self.assertNotEqual(failed.returncode, 0)
             self.assertIn(b'checksum mismatch', failed.stderr)
 
-    def test_fetch_uses_the_matching_successful_signing_workflow(self):
+    def test_signing_failure_allows_cli_publication_and_same_tag_package_retry(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             calls = root / 'calls'
@@ -190,22 +190,48 @@ class PublicationTests(unittest.TestCase):
             )
             gh.chmod(0o755)
             fetch = Path(__file__).with_name('fetch-mdm-release.sh')
+            version = '2026.11.2.1-beta.1'
+            cli = root / 'cli'
+            cli.mkdir()
+            self.fixture(cli, version)
+            package_name = f'Doomer-MDM-{version}.pkg'
+            package_key = f'cli/releases/{version}/{package_name}'
+            store = Store()
+            def verify(url, data):
+                key = 'cli/' + url.removeprefix(publisher.BASE_URL + '/')
+                self.assertEqual(store.data[key], data)
             env = os.environ | {'PATH': f'{root}:{os.environ["PATH"]}',
                                 'GITHUB_REPOSITORY': 'doomerlabs/doomer',
-                                'GITHUB_REF_NAME': '2026.11.2.1',
+                                'GITHUB_REF_NAME': version,
                                 'TEST_CALLS': str(calls), 'TEST_CONCLUSION': 'failure'}
-            args = ['bash', str(fetch), str(root / 'artifact')]
+            mdm = root / 'artifact'
+            args = ['bash', str(fetch), str(mdm)]
             failed = subprocess.run(args, env=env, capture_output=True)
             self.assertNotEqual(failed.returncode, 0)
             self.assertNotIn('run download', calls.read_text())
+            publisher.publish(store, publisher.RELEASE_BUCKET, cli, version, verify)
+            pointer = store.data['cli/beta.json']
+            self.assertEqual(json.loads(pointer)['version'], version)
+            self.assertNotIn(package_key, store.data)
+            first_writes = list(store.writes)
             calls.unlink()
             env['TEST_CONCLUSION'] = 'success'
             subprocess.run(args, env=env, check=True)
             commands = calls.read_text().splitlines()
             commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
             self.assertIn(f'head_sha={commit}', commands[0])
-            self.assertIn('Sign MDM installer 2026.11.2.1', commands[0])
-            self.assertIn('run download 123 --repo doomerlabs/doomer --name mdm-2026.11.2.1', commands[1])
+            self.assertIn(f'Sign MDM installer {version}', commands[0])
+            self.assertIn(f'run download 123 --repo doomerlabs/doomer --name mdm-{version}', commands[1])
+            mdm.mkdir()
+            package = b'xar!signed-pkg-placeholder'
+            (mdm / package_name).write_bytes(package)
+            prepare = Path(__file__).with_name('prepare-mdm-release.py')
+            subprocess.run([sys.executable, str(prepare), version, 'a' * 40, str(cli),
+                            '--record-package', str(mdm / package_name)], check=True)
+            publisher.publish_mdm(store, publisher.RELEASE_BUCKET, cli, mdm, version, verify)
+            self.assertEqual(store.data[package_key], package)
+            self.assertEqual(store.data['cli/beta.json'], pointer)
+            self.assertEqual(store.writes, first_writes + [package_key, f'cli/releases/{version}/mdm-release.json'])
 
     def test_tamper_and_public_failure_never_promote(self):
         with tempfile.TemporaryDirectory() as directory:

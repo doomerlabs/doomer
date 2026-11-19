@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish a verified release bundle, then atomically promote its channel pointer."""
+"""Publish verified CLI downloads or a signed MDM installer to R2."""
 import argparse
 import hashlib
 import json
@@ -150,17 +150,25 @@ def mdm_bundle(directory, version, manifest):
     return {package_name: package, metadata_name: metadata}
 
 
-def publish(client, bucket, directory, version, verify_public, mdm_directory=None):
-    files, pointer = release_bundle(directory, version)
-    if mdm_directory is not None:
-        files.update(mdm_bundle(mdm_directory, version, files['release-manifest.json']))
+def publish_files(client, bucket, version, files, verify_public):
     for name, data in files.items():
         put_immutable(client, bucket, f'{OBJECT_PREFIX}releases/{version}/{name}', data)
-    # Publish a discoverable channel only after every public artifact is readable.
     for name, data in files.items():
         verify_public(f'{BASE_URL}/releases/{version}/{name}', data)
+
+
+def publish(client, bucket, directory, version, verify_public):
+    files, pointer = release_bundle(directory, version)
+    publish_files(client, bucket, version, files, verify_public)
     promote(client, bucket, pointer)
     print('Published ' + version + ' to ' + BASE_URL)
+
+
+def publish_mdm(client, bucket, directory, mdm_directory, version, verify_public):
+    release_files, _ = release_bundle(directory, version)
+    files = mdm_bundle(mdm_directory, version, release_files['release-manifest.json'])
+    publish_files(client, bucket, version, files, verify_public)
+    print('Published MDM installer for ' + version + ' to ' + BASE_URL)
 
 
 def validate_managed_signing_key():
@@ -211,7 +219,7 @@ def main():
     import boto3
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dir', type=Path, default=Path('dist'))
-    parser.add_argument('--mdm-dir', type=Path, help='Verified macOS signing workflow artifact directory')
+    parser.add_argument('--mdm-dir', type=Path, help='Publish only the MDM installer and provenance from this signing artifact directory')
     parser.add_argument('--version', default=os.environ.get('GITHUB_REF_NAME'))
     args = parser.parse_args()
     bucket = validate_bucket(os.environ['R2_BUCKET'])
@@ -225,9 +233,12 @@ def main():
         with urllib.request.urlopen(request, timeout=60) as response:
             if digest(response.read()) != digest(data):
                 raise ValueError('Public artifact checksum mismatch')
+    if args.mdm_dir is not None:
+        publish_mdm(client, bucket, args.dir, args.mdm_dir, args.version, verify)
+        return
     if '-beta.' not in args.version:
         validate_managed_signing_key()
-    publish(client, bucket, args.dir, args.version, verify, args.mdm_dir)
+    publish(client, bucket, args.dir, args.version, verify)
     if '-beta.' not in args.version:
         publish_managed(client, bucket, args.dir)
 

@@ -117,18 +117,19 @@ token and uses the existing R2 secrets for publication.
 
 The package and its provenance file are available at
 `https://downloads.doomer.ai/cli/releases/VERSION/Doomer-MDM-VERSION.pkg` and
-`https://downloads.doomer.ai/cli/releases/VERSION/mdm-release.json`. Depot
-compares their hashes against the verified CLI manifest and verifies both
-public downloads before promoting the CLI channel. The provenance file
-records the SHA-256 of the package and its source release manifest. The GitHub
-CLI release bundle keeps its existing membership.
+`https://downloads.doomer.ai/cli/releases/VERSION/mdm-release.json`. Depot's
+`publish-mdm-r2` job verifies the signing run's tag and commit, checks the
+package against its provenance and source CLI manifest, then verifies both
+public downloads. The separate `publish-r2` job advances the CLI channel as
+soon as the CLI downloads pass verification.
 
-If the native signing job fails, rerun it and retry Depot's R2 job on the
-same tag. The signing workflow reuses its retained artifact on a rerun.
+If the native signing job fails, rerun it and retry only `publish-mdm-r2` on
+the same tag. The signing workflow reuses its retained artifact on a rerun.
 To recover after it expires, use the exact retained or already published
-package and provenance file with `publish-r2.py --mdm-dir PATH`. Timestamped
-signatures can change on rebuild, so already published package bytes are
-immutable.
+package and provenance with
+`publish-r2.py --dir CLI_BUNDLE --version VERSION --mdm-dir MDM_BUNDLE`.
+Timestamped signatures can change on rebuild, so already published package
+bytes are immutable.
 
 ### Cloudflare download-client compatibility
 
