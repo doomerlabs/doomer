@@ -182,11 +182,19 @@ class PublicationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             calls = root / 'calls'
+            clock = root / 'clock'
+            clock.write_text('sleep() { SECONDS=$((SECONDS + $1)); }\n')
             gh = root / 'gh'
             gh.write_text(
                 '#!/usr/bin/env bash\n'
                 'printf "%s\\n" "$*" >> "$TEST_CALLS"\n'
-                'if [[ "$1" == api ]]; then printf "123\\tcompleted\\t%s\\n" "$TEST_CONCLUSION"; fi\n'
+                'if [[ "$1" == api ]]; then\n'
+                '  if (( $(wc -l < "$TEST_CALLS") <= TEST_PENDING_POLLS )); then\n'
+                '    printf "123\\tin_progress\\t\\n"\n'
+                '  else\n'
+                '    printf "123\\tcompleted\\t%s\\n" "$TEST_CONCLUSION"\n'
+                '  fi\n'
+                'fi\n'
             )
             gh.chmod(0o755)
             fetch = Path(__file__).with_name('fetch-mdm-release.sh')
@@ -203,6 +211,7 @@ class PublicationTests(unittest.TestCase):
             env = os.environ | {'PATH': f'{root}:{os.environ["PATH"]}',
                                 'GITHUB_REPOSITORY': 'doomerlabs/doomer',
                                 'GITHUB_REF_NAME': version,
+                                'BASH_ENV': str(clock), 'TEST_PENDING_POLLS': '0',
                                 'TEST_CALLS': str(calls), 'TEST_CONCLUSION': 'failure'}
             mdm = root / 'artifact'
             args = ['bash', str(fetch), str(mdm)]
@@ -216,12 +225,14 @@ class PublicationTests(unittest.TestCase):
             first_writes = list(store.writes)
             calls.unlink()
             env['TEST_CONCLUSION'] = 'success'
-            subprocess.run(args, env=env, check=True)
+            env['TEST_PENDING_POLLS'] = str(85 * 60 // 15)
+            subprocess.run(args, env=env, check=True, timeout=20)
             commands = calls.read_text().splitlines()
+            self.assertEqual(len(commands), int(env['TEST_PENDING_POLLS']) + 2)
             commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
             self.assertIn(f'head_sha={commit}', commands[0])
             self.assertIn(f'Sign MDM installer {version}', commands[0])
-            self.assertIn(f'run download 123 --repo doomerlabs/doomer --name mdm-{version}', commands[1])
+            self.assertIn(f'run download 123 --repo doomerlabs/doomer --name mdm-{version}', commands[-1])
             mdm.mkdir()
             package = b'xar!signed-pkg-placeholder'
             (mdm / package_name).write_bytes(package)

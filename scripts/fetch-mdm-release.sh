@@ -8,7 +8,9 @@ tag="$GITHUB_REF_NAME"
 [[ "$tag" =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}(\.[1-9][0-9]*)?(-beta\.[0-9]+)?$ ]] || exit 2
 commit="$(git rev-parse HEAD)"
 
-for ((attempt=0; attempt<80; attempt++)); do
+# Allow the 85-minute signing job plus 15 minutes for runner scheduling.
+deadline=$((SECONDS + 100 * 60))
+while ((SECONDS < deadline)); do
   runs="$(gh api --method GET --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/mdm-release.yml/runs" \
     -f event=push -f "head_sha=$commit" -f per_page=100 \
     --jq ".workflow_runs[] | select(.display_title == \"Sign MDM installer $tag\") | [.id, .status, .conclusion] | @tsv")"

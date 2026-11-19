@@ -123,6 +123,10 @@ package against its provenance and source CLI manifest, then verifies both
 public downloads. The separate `publish-r2` job advances the CLI channel as
 soon as the CLI downloads pass verification.
 
+Depot waits up to 100 minutes for the signer. This covers its 85-minute job
+timeout plus 15 minutes for runner scheduling. The Depot package job has
+a 120-minute limit to leave time for setup and publication.
+
 If the native signing job fails, rerun it and retry only `publish-mdm-r2` on
 the same tag. The signing workflow reuses its retained artifact on a rerun.
 To recover after it expires, use the exact retained or already published

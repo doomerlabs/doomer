@@ -189,7 +189,8 @@ jobs:
   publish-mdm-r2:
     needs: publish-github
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    # Allow 100 minutes of polling plus time for setup and publication.
+    timeout-minutes: 120
     environment: release
     permissions:
       actions: read
