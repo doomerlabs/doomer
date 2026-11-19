@@ -16,7 +16,86 @@ import (
 	"github.com/doomerlabs/doomer/internal/livewatch"
 	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
+	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 )
+
+type stopHandoffClient struct{ livewatch.Client }
+
+func (stopHandoffClient) UploadWorkspaceTree(context.Context, string, string, []sourcesnapshot.Entry, map[string][]byte) (string, string, error) {
+	return "fixture-repository", "fixture-tree", nil
+}
+
+func TestClaudeStopEndsUnansweredAssessmentWithoutRequestingItAgain(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("local worker IPC requires Linux or macOS")
+	}
+	for _, checkpoint := range []bool{false, true} {
+		t.Run(fmt.Sprintf("checkpoint=%t", checkpoint), func(t *testing.T) {
+			home, repo := t.TempDir(), newWatchTestRepo(t)
+			id := hookIdentity{Namespace: home, Agent: "claude", Session: "fixture"}
+			cfg := livewatch.Config{ID: id.Key(), ControlKey: id.Key(), Directory: repo, RequireHypotheses: true}
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			done := make(chan error, 1)
+			go func() {
+				done <- livewatch.Serve(ctx, cfg, stopHandoffClient{}, func(context.Context, string) bool { return true })
+			}()
+			for {
+				if _, live := livewatch.Available(ctx, id.Key()); live {
+					break
+				}
+				select {
+				case err := <-done:
+					t.Fatalf("worker exited during startup: %v", err)
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				case <-time.After(10 * time.Millisecond):
+				}
+			}
+			if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("edited\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			stop := func(active bool) map[string]any {
+				t.Helper()
+				input, err := json.Marshal(watching.HookInput{Event: "Stop", Session: id.Session, StopActive: active})
+				if err != nil {
+					t.Fatal(err)
+				}
+				cmd := NewRootCommand()
+				cmd.SetContext(ctx)
+				cmd.SetIn(bytes.NewReader(input))
+				out, err := runAgentWatchHook(cmd, home, "claude")
+				if err != nil {
+					t.Fatal(err)
+				}
+				return out
+			}
+			if checkpoint {
+				result, err := livewatch.Call(ctx, id.Key(), "checkpoint")
+				if err != nil || len(result.HypothesisRequests) != 1 {
+					t.Fatalf("assessment not handed off: %+v, %v", result, err)
+				}
+			} else if out := stop(false); out["hookSpecificOutput"] == nil || out["systemMessage"] != nil {
+				t.Fatalf("fresh assessment did not get a Stop handoff: %v", out)
+			}
+			// Simulate Claude's permission classifier rejecting the submission.
+			if out := stop(!checkpoint); len(out) != 1 || !strings.Contains(fmt.Sprint(out["systemMessage"]), "review is incomplete") {
+				t.Fatalf("pending assessment reopened the turn: %v", out)
+			}
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-ctx.Done():
+				t.Fatal("watcher stayed alive after the terminal Stop")
+			}
+			if out := stop(true); len(out) != 0 {
+				t.Fatalf("later Stop repeated the message: %v", out)
+			}
+		})
+	}
+}
 
 // Exercise subprocesses with the test executable, without building or replacing
 // the developer's CLI. No Node runtime is involved.

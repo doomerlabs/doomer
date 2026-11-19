@@ -98,3 +98,14 @@ func TestAgentResponseDeadlineStartsOnceOnRetrieval(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestStopCanHandOffNewAssessmentAfterEarlierRequests(t *testing.T) {
+	w := &worker{hypotheses: map[string]*hypothesisWait{"first": {}}}
+	if w.repeatStopHandoff() || !w.repeatStopHandoff() {
+		t.Fatal("the first request should get one Stop handoff")
+	}
+	w.hypotheses["replacement"] = &hypothesisWait{delivered: make(chan struct{})}
+	if w.repeatStopHandoff() || !w.repeatStopHandoff() {
+		t.Fatal("a replacement request should get its own Stop handoff")
+	}
+}

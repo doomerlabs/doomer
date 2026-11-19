@@ -191,6 +191,11 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 				}
 			}
 			if agent == "claude" {
+				if result.RepeatedStopHandoff {
+					if _, err := livewatch.Call(ctx, id.Key(), "cancel"); err != nil {
+						return empty, err
+					}
+				}
 				return claudeStopFeedback(result, id.Key(), input.StopActive), nil
 			}
 			report := makeFeedbackReport(result)

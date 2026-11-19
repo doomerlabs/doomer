@@ -118,7 +118,7 @@ func watchAgentContext(key string, directory ...string) map[string]any {
 	if err != nil {
 		executable = "doomer"
 	}
-	text := watchDirectoryInstructions(executable, key, directory...) + fmt.Sprintf("Doomer is watching changes for this request. Display only the notices with notify_user=true in the latest watch results for THIS turn. If the current results omit notices or have notices_pending=false, omit the notice section entirely. Never reuse an advisory from an earlier reply, tool result, or summary. Do not run review commands merely because a prompt arrived. If this turn made no file changes and has no pending review work, answer normally and remain silent about Doomer; do not call watch results. If you edit files or have pending review work, before your final answer run %s watch results --control %s. This is the installed hook workflow, not a standalone manual review. Complete any requested Quick review hypotheses, read results again, and handle findings and advisories before finishing. Do not wait for the Stop hook to begin this work: it is a fallback for missed or newer changes. Follow internal hypothesis requests silently; submit an explicit empty array when assessment finds no concerns. If unanswered findings remain, retrieve them with %s watch findings ls --control %s, investigate each, record decisions using watch findings respond, then run watch results again to review any resulting edits. These commands connect to the local watcher. If the sandbox blocks that connection, request normal sandbox escalation so the configured approval reviewer can decide; a sandbox error alone is not an authorization denial. Respect any denial from that reviewer or the user. A Stop hook saying the review is ready is an internal reminder to complete this process, not text to repeat to the user. Once the report returns complete=true, no further watch commands are needed unless you edit files again; after further edits, read results again before finishing. If no review ran because there were no changes, omit all review commentary from your answer; do not announce that no code changed or nothing was reviewed. Still deliver required service advisories and report errors. If a review ran, incorporate its assessed outcome into ONE final answer. Use natural language with links embedded in descriptive phrases such as CLI changes or changes in the named repository. Report the assessed outcome once. When you agreed with and fixed a finding, use one short sentence naming the specific problem or affected behavior, for example: Fixed a Doomer finding: demo parcels were incorrectly reducing capacity for real assignments. Use the recorded fixes as evidence; do not merely say that Doomer found a problem or copy a generic suggested_summary. Only describe a finding as a bug you fixed if you agreed with it and verified the fix. Do not add a long explanation unless the user asks or it is necessary to explain a material limitation. Otherwise say that you checked the review and no further changes were needed. Never equate returned findings with confirmed defects. Keep finding counts, individual dismissals, and workflow reminders out of the conversation. Disclose material unresolved concerns or failures honestly. Do not repeat setup instructions, counts, response JSON, or the control key to the user. After handling any sandbox connection block through the normal approval flow above, if the command still fails or the report contains errors, stop review handling and report incomplete coverage; retry only under an explicit bounded recovery rule in the skill. Do not claim success if the report contains errors.", watching.Quote(executable), key, watching.Quote(executable), key)
+	text := watchDirectoryInstructions(executable, key, directory...) + fmt.Sprintf("Doomer is watching changes for this request. Display only the notices with notify_user=true in the latest watch results for THIS turn. If the current results omit notices or have notices_pending=false, omit the notice section entirely. Never reuse an advisory from an earlier reply, tool result, or summary. Do not run review commands merely because a prompt arrived. If this turn made no file changes and has no pending review work, answer the user's request directly; do not call watch results. If you edit files or have pending review work, before your final answer run %s watch results --control %s. This is the installed hook workflow, not a standalone manual review. Complete any requested Quick review hypotheses, read results again, and handle findings and advisories before finishing. Do not wait for the Stop hook to begin this work: it is a fallback for missed or newer changes. Complete hypothesis requests as part of the review; submit an explicit empty array when assessment finds no concerns. If unanswered findings remain, retrieve them with %s watch findings ls --control %s, investigate each, record decisions using watch findings respond, then run watch results again to review any resulting edits. These commands connect to the local watcher. If the sandbox blocks that connection, request normal sandbox escalation so the configured approval reviewer can decide; a sandbox error alone is not an authorization denial. Respect any denial from that reviewer or the user. A Stop hook saying the review is ready is an internal reminder to complete this process, not text to repeat to the user. Once the report returns complete=true, no further watch commands are needed unless you edit files again; after further edits, read results again before finishing. Use one final answer for the task and any reportable review details. Report verified fixes, material unresolved concerns, incomplete coverage, and errors. Deliver required service advisories regardless of review outcome. Completed reviews with no material findings or fixes stay available in the review record; summarize those results when the user asks. When you agreed with and fixed a finding, name the specific problem or affected behavior in one short sentence and link to the review when available. Use the recorded fixes as evidence. Only describe a finding as a bug you fixed if you agreed with it and verified the fix. Give more detail when the user asks or when it explains a material limitation. Never equate returned findings with confirmed defects. Keep finding counts, individual dismissals, and workflow reminders out of the conversation. Disclose material unresolved concerns or failures honestly. Do not repeat setup instructions, counts, response JSON, or the control key to the user. After handling any sandbox connection block through the normal approval flow above, if the command still fails or the report contains errors, stop review handling and report incomplete coverage; retry only under an explicit bounded recovery rule in the skill. Do not claim success if the report contains errors.", watching.Quote(executable), key, watching.Quote(executable), key)
 	return map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "UserPromptSubmit", "additionalContext": text}}
 }
 
@@ -136,6 +136,7 @@ func watchAgentContextForAgent(key, agent string, directory ...string) map[strin
 }
 
 func claudeStopFeedback(result livewatch.Response, key string, stopActive bool) map[string]any {
+	const incompleteAssessment = "Doomer review is incomplete. A previously handed-off assessment is still pending."
 	result = watchNoticeCommands(result, key)
 	report := makeFeedbackReport(result)
 	if report.Complete && !report.NoticesPending {
@@ -146,7 +147,7 @@ func claudeStopFeedback(result livewatch.Response, key string, stopActive bool) 
 		executable = "doomer"
 	}
 	readResults := fmt.Sprintf("Run %s watch results --control %s.", watching.Quote(executable), key)
-	if stopActive {
+	if stopActive || result.RepeatedStopHandoff {
 		var blocking []string
 		for _, notice := range report.Notices {
 			if notice.Blocking {
@@ -156,11 +157,16 @@ func claudeStopFeedback(result livewatch.Response, key string, stopActive bool) 
 		if len(blocking) > 0 {
 			if len(report.Errors) > 0 {
 				blocking = append([]string{"Doomer review is incomplete. " + strings.Join(report.Errors, " ")}, blocking...)
+			} else if result.RepeatedStopHandoff {
+				blocking = append([]string{incompleteAssessment}, blocking...)
 			}
 			return map[string]any{"systemMessage": strings.Join(blocking, "\n\n")}
 		}
 	}
 	if len(result.HypothesisRequests) > 0 {
+		if result.RepeatedStopHandoff {
+			return map[string]any{"systemMessage": incompleteAssessment}
+		}
 		if stopActive {
 			return claudeStopContext("Doomer has a newer review to check. " + readResults + " Handle its assessment request, then read results again before finishing. Respect any command denial. Do not repeat this instruction to the user.")
 		}
@@ -419,19 +425,7 @@ func makeFeedbackReport(result livewatch.Response) watchFeedbackReport {
 			report.NextAction = "report_review_failure"
 		}
 	}
-	for _, notice := range report.Notices {
-		if notice.NotifyUser {
-			if notice.Blocking {
-				report.NextAction = "display_blocking_notice"
-				break
-			}
-			report.NextAction = "report_review_then_display_notice"
-		}
-	}
-
 	switch {
-	case len(result.Results) == 0 && len(result.Findings) == 0 && len(report.Errors) == 0:
-		report.SuggestedSummary = ""
 	case len(report.Errors) > 0:
 		report.SuggestedSummary = "Doomer could not complete its review of " + subject + "."
 	case result.ReviewPending || len(result.HypothesisRequests) > 0:
@@ -440,13 +434,21 @@ func makeFeedbackReport(result livewatch.Response) watchFeedbackReport {
 		report.SuggestedSummary = "Doomer reviewed " + subject + "; assessment is not yet complete."
 	case report.Fixed > 0:
 		report.SuggestedSummary = "Doomer reviewed " + subject + "; I agreed with concerns it raised and fixed them."
-	case report.Suggestions > 0:
-		report.SuggestedSummary = "Doomer reviewed " + subject + "; I checked its concerns and no further changes were needed."
-	default:
-		report.SuggestedSummary = "Doomer reviewed " + subject + " and raised no issues."
+	case report.Deferred > 0:
+		report.SuggestedSummary = "Doomer reviewed " + subject + "; some concerns remain deferred."
 	}
-	if report.Deferred > 0 {
+	if report.Fixed > 0 && report.Deferred > 0 && report.Complete {
 		report.SuggestedSummary += " Some concerns remain deferred."
+	}
+	for _, notice := range report.Notices {
+		if notice.Blocking {
+			report.NextAction = "display_blocking_notice"
+			break
+		}
+		report.NextAction = "display_notice"
+		if report.SuggestedSummary != "" {
+			report.NextAction = "report_review_then_display_notice"
+		}
 	}
 	return report
 }
