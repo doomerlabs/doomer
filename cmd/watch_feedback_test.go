@@ -368,7 +368,7 @@ func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
 			t.Fatalf("Codex reopened a turn for an assessment it already fetched: %v", out)
 		}
 		alreadyFetched.OtherReviewPending = true
-		if out := codexStopFeedback(alreadyFetched, active); active && out["systemMessage"] == nil ||
+		if out := codexStopFeedback(alreadyFetched, active); active && out["systemMessage"] != "Doomer has another Quick review in progress." ||
 			!active && (out["decision"] != "block" || !strings.Contains(out["reason"].(string), "another Quick review")) {
 			t.Fatalf("Codex lost another review after a fetched handoff: %v", out)
 		}
