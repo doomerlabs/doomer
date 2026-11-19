@@ -72,9 +72,8 @@ func TestFeedbackReportUsesLatestNaturalLinksPerRepository(t *testing.T) {
 	if !report.Complete || len(report.Reviews) != 2 {
 		t.Fatal(report)
 	}
-	want := "Doomer reviewed the [changes in doomer](https://example.test/cli) and [changes in doomerlabs](https://example.test/app); I checked its concerns and no further changes were needed."
-	if report.SuggestedSummary != want {
-		t.Fatal(report.SuggestedSummary)
+	if report.SuggestedSummary != "" || report.Reviews[0].URL != "https://example.test/cli" || report.Reviews[1].URL != "https://example.test/app" {
+		t.Fatalf("dismissed findings should leave review links available without a routine summary: %+v", report)
 	}
 	if strings.Contains(feedbackReport(response), "https://example.test/old") {
 		t.Fatal("historical review duplicated the current repository link")
@@ -87,7 +86,7 @@ func TestPartialFeedbackReportDoesNotClaimCompletion(t *testing.T) {
 		{Results: []livewatch.Result{{Status: "unavailable", Error: "upload failed"}}},
 	} {
 		report := makeFeedbackReport(response)
-		if report.Complete || strings.Contains(report.SuggestedSummary, "raised no issues") {
+		if report.Complete || report.SuggestedSummary == "" {
 			t.Fatal(report)
 		}
 	}
@@ -107,7 +106,7 @@ func TestWatchCommandsGoOnlyToPromptContext(t *testing.T) {
 		t.Fatal(specific)
 	}
 	text := specific["additionalContext"].(string)
-	if !strings.Contains(text, "watch findings ls --control "+key) || !strings.Contains(text, "watch results --control "+key) || !strings.Contains(text, "ONE final answer") || !strings.Contains(text, "request normal sandbox escalation") || !strings.Contains(text, "Respect any denial") {
+	if !strings.Contains(text, "watch findings ls --control "+key) || !strings.Contains(text, "watch results --control "+key) || !strings.Contains(text, "one final answer") || !strings.Contains(text, "request normal sandbox escalation") || !strings.Contains(text, "Respect any denial") {
 		t.Fatal("missing command in model context")
 	}
 }
@@ -283,6 +282,13 @@ func TestClaudeActiveStopShowsBlockingNoticeBeforePendingReview(t *testing.T) {
 	if len(out) != 1 || strings.Contains(message, "Optional bulletin") || strings.Contains(message, "notice-ack") {
 		t.Fatalf("unexpected output from active Stop: %+v", out)
 	}
+	result.HypothesisRequests = []livewatch.HypothesisRequest{{ID: "already-delivered"}}
+	result.RepeatedStopHandoff = true
+	out = claudeStopFeedback(result, strings.Repeat("a", 64), false)
+	message, _ = out["systemMessage"].(string)
+	if len(out) != 1 || !strings.Contains(message, "review is incomplete") || !strings.Contains(message, "Doomer update required") {
+		t.Fatalf("terminal Stop lost its blocking notice: %+v", out)
+	}
 	result.Results = []livewatch.Result{{Repository: "/repo", Status: "unavailable", Error: "service unavailable"}}
 	out = claudeStopFeedback(result, strings.Repeat("a", 64), true)
 	message, _ = out["systemMessage"].(string)
@@ -328,7 +334,7 @@ func TestPendingFeedbackMessageDoesNotExposeFindingCounts(t *testing.T) {
 		t.Fatalf("finding count leaked: %v", got)
 	}
 	text := watchAgentContext("test")["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
-	for _, want := range []string{"not text to repeat", "Never equate returned findings with confirmed defects", "Report the assessed outcome once", "one short sentence naming the specific problem", "Only describe a finding as a bug you fixed if you agreed with it and verified the fix", "do not merely say that Doomer found a problem", "omit all review commentary", "Still deliver required service advisories and report errors"} {
+	for _, want := range []string{"not text to repeat", "Never equate returned findings with confirmed defects", "Report verified fixes, material unresolved concerns, incomplete coverage, and errors", "name the specific problem or affected behavior in one short sentence", "Only describe a finding as a bug you fixed if you agreed with it and verified the fix", "Provide the review outcome when the user asks for it in this turn", "Deliver required service advisories regardless of review outcome"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing outcome guidance: %s", want)
 		}
@@ -568,7 +574,8 @@ func TestReplyMustContainCompleteFormattedNotice(t *testing.T) {
 
 func TestWatchResultPrefixPreservesReviewOutcomeWithPendingNotice(t *testing.T) {
 	result := livewatch.Response{
-		Results: []livewatch.Result{{Repository: "/repo", Status: "ready", URL: "https://example.test/review?revision=21"}},
+		Results:  []livewatch.Result{{Repository: "/repo", Status: "ready", URL: "https://example.test/review?revision=21"}},
+		Findings: []livewatch.Finding{{Repository: "/repo", Disposition: &livewatch.Feedback{Status: "fixed"}}},
 		Notices: []adversarylabs.ClientNotice{{
 			NotifyUser: true, DisplayMarkdown: strings.Repeat("notice details ", 200),
 		}},
@@ -584,7 +591,7 @@ func TestWatchResultPrefixPreservesReviewOutcomeWithPendingNotice(t *testing.T) 
 		t.Fatal("fixture must exceed the observed output cutoff")
 	}
 	preview := out.String()[:previewBytes]
-	for _, want := range []string{`"complete":true`, `"review_complete":true`, `"notices_pending":true`, `"next_action":"report_review_then_display_notice"`, "revision=21", "raised no issues"} {
+	for _, want := range []string{`"complete":true`, `"review_complete":true`, `"notices_pending":true`, `"next_action":"report_review_then_display_notice"`, "revision=21", "fixed them"} {
 		if !strings.Contains(preview, want) {
 			t.Errorf("truncated output lost %q", want)
 		}
@@ -592,5 +599,21 @@ func TestWatchResultPrefixPreservesReviewOutcomeWithPendingNotice(t *testing.T) 
 	var decoded watchFeedbackReport
 	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil || len(decoded.Notices) != 1 || decoded.Notices[0].DisplayMarkdown != result.Notices[0].DisplayMarkdown {
 		t.Fatalf("full report lost notice data: %v", err)
+	}
+}
+
+func TestCleanReviewKeepsItsRecordWithoutSuggestingAReply(t *testing.T) {
+	const reviewURL = "https://example.test/review"
+	result := livewatch.Response{
+		Results: []livewatch.Result{{Repository: "/repo", Status: "ready", URL: reviewURL}},
+	}
+	report := makeFeedbackReport(result)
+	if !report.Complete || report.SuggestedSummary != "" || len(report.Reviews) != 1 || report.Reviews[0].URL != reviewURL || !strings.Contains(report.ReplyInstructions, "only if the user asked for review status in this turn") {
+		t.Fatalf("expected a completed review record without a suggested reply: %+v", report)
+	}
+	result.Notices = []adversarylabs.ClientNotice{{NotifyUser: true, DisplayMarkdown: "Service notice"}}
+	report = makeFeedbackReport(result)
+	if !report.Complete || !report.NoticesPending || report.NextAction != "display_notice" || report.SuggestedSummary != "" || report.ReplyInstructions != "" || len(report.Notices) != 1 {
+		t.Fatalf("expected the notice to be delivered without a clean-review summary: %+v", report)
 	}
 }

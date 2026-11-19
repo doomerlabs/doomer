@@ -570,6 +570,9 @@ func (w *worker) run(ctx context.Context) error {
 		}
 	}()
 	finish := func(command control, response Response) {
+		if command.finish && len(response.HypothesisRequests) > 0 {
+			response.RepeatedStopHandoff = w.repeatStopHandoff()
+		}
 		command.reply <- response
 		select {
 		case <-command.sent:
@@ -860,6 +863,24 @@ func (w *worker) addDirectory(ctx context.Context, directory string) error {
 	}
 	w.directories = append(w.directories, directory)
 	return nil
+}
+
+// A Stop hook may surface each request once. A checkpoint already handed the
+// request to the agent, even if the host later denied its submission command.
+func (w *worker) repeatStopHandoff() bool {
+	repeated := true
+	for _, pending := range w.hypotheses {
+		if pending.stopOffered {
+			continue
+		}
+		select {
+		case <-pending.delivered:
+		default:
+			repeated = false
+		}
+		pending.stopOffered = true
+	}
+	return repeated
 }
 
 func (w *worker) markHypothesesDelivered() {

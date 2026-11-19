@@ -41,8 +41,9 @@ var errAgentResponseTimeout = errors.New("agent response timed out after retriev
 const agentResponseTimeout = 10 * time.Minute
 
 type hypothesisWait struct {
-	delivered chan struct{}
-	expired   chan struct{}
+	delivered   chan struct{}
+	expired     chan struct{}
+	stopOffered bool
 
 	request HypothesisRequest
 	reply   chan HypothesisResponse
