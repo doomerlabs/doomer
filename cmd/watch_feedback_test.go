@@ -334,7 +334,7 @@ func TestPendingFeedbackMessageDoesNotExposeFindingCounts(t *testing.T) {
 		t.Fatalf("finding count leaked: %v", got)
 	}
 	text := watchAgentContext("test")["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
-	for _, want := range []string{"not text to repeat", "Never equate returned findings with confirmed defects", "Report verified fixes, material unresolved concerns, incomplete coverage, and errors", "name the specific problem or affected behavior in one short sentence", "Only describe a finding as a bug you fixed if you agreed with it and verified the fix", "summarize those results when the user asks", "Deliver required service advisories regardless of review outcome"} {
+	for _, want := range []string{"not text to repeat", "Never equate returned findings with confirmed defects", "Report verified fixes, material unresolved concerns, incomplete coverage, and errors", "name the specific problem or affected behavior in one short sentence", "Only describe a finding as a bug you fixed if you agreed with it and verified the fix", "Provide the review outcome when the user asks for it in this turn", "Deliver required service advisories regardless of review outcome"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing outcome guidance: %s", want)
 		}
@@ -608,7 +608,7 @@ func TestCleanReviewKeepsItsRecordWithoutSuggestingAReply(t *testing.T) {
 		Results: []livewatch.Result{{Repository: "/repo", Status: "ready", URL: reviewURL}},
 	}
 	report := makeFeedbackReport(result)
-	if !report.Complete || report.SuggestedSummary != "" || len(report.Reviews) != 1 || report.Reviews[0].URL != reviewURL {
+	if !report.Complete || report.SuggestedSummary != "" || len(report.Reviews) != 1 || report.Reviews[0].URL != reviewURL || !strings.Contains(report.ReplyInstructions, "only if the user asked for review status in this turn") {
 		t.Fatalf("expected a completed review record without a suggested reply: %+v", report)
 	}
 	result.Notices = []adversarylabs.ClientNotice{{NotifyUser: true, DisplayMarkdown: "Service notice"}}
