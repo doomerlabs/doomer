@@ -9,11 +9,14 @@ The Depot release workflow runs on CalVer tag pushes: `YYYY.M.D.N` or
 `YYYY.M.D.N-beta.B`. New stable releases always include a daily sequence, starting
 at `.1` and incrementing for each stable release that day. Successive betas for
 the same stable version keep the base and increment the beta suffix, such as
-`2026.11.18.1-beta.1` followed by `2026.11.18.1-beta.2`. Legacy three-component
-tags remain valid for retries and comparisons. Tags must point to commits reachable from `origin/main` and
-must never move after publication. A release tag starts a read-only build/test
-job that cross-builds macOS and Linux amd64/arm64, validates SPDX 2.3 metadata,
-and produces deterministic archives, checksums, and a release manifest.
+`2026.11.18.1-beta.1` followed by `2026.11.18.1-beta.2`. If that day's beta tags
+already use a higher base, continue the highest series and increment its beta
+suffix so the next beta sorts after existing tags. For a new base, start at
+`-beta.1`. Legacy three-component tags remain valid for retries and comparisons.
+Tags must point to commits reachable from `origin/main` and must never move
+after publication. A release tag starts a read-only build/test job that
+cross-builds macOS and Linux amd64/arm64, validates SPDX 2.3 metadata, and
+produces deterministic archives, checksums, and a release manifest.
 
 Two separate jobs in the `release` environment recheck the immutable tag and
 exact bundle. The GitHub publication job creates/verifies assets and promotes
