@@ -80,3 +80,30 @@ func TestNPMHookRepairPreservesHealthyHookPositions(t *testing.T) {
 		t.Fatal("Claude refresh failed to preserve unrelated settings or remove obsolete owned rule")
 	}
 }
+
+func TestNativeSetupInstallsClaudeBashPermissionDeniedHook(t *testing.T) {
+	const owner, command = "--owner=doomer-node", "doomer watch agent --owner=doomer-node"
+	file := filepath.Join(t.TempDir(), "settings.json")
+	if err := installNPMHookFile(file, "claude", owner, command); err != nil {
+		t.Fatal(err)
+	}
+	settings, _, err := npmReadSettings(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hooks, err := npmValidateHooks(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups, _ := npmObjects(hooks["PermissionDenied"])
+	if len(groups) != 1 || groups[0]["matcher"] != "Bash" {
+		t.Fatalf("expected only a Bash permission denial handler: %v", groups)
+	}
+	if mergeNPMHooks(hooks, "claude", owner, command) {
+		t.Fatal("healthy setup rewrote the hooks")
+	}
+	mergeNPMHooks(hooks, "codex", owner, command)
+	if _, exists := hooks["PermissionDenied"]; exists {
+		t.Fatal("Claude-only hook remained after switching to Codex")
+	}
+}

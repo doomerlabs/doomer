@@ -90,15 +90,18 @@ func TestCodexStopIgnoresWorkspaceEditsWithoutCheckpoint(t *testing.T) {
 	}
 }
 
-func TestClaudeStopEndsUnansweredAssessmentWithoutRequestingItAgain(t *testing.T) {
+func TestStopHandlesUnansweredAssessmentsByAgent(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("local worker IPC requires Linux or macOS")
 	}
-	for _, checkpoint := range []bool{false, true} {
-		t.Run(fmt.Sprintf("checkpoint=%t", checkpoint), func(t *testing.T) {
+	for _, tc := range []struct {
+		agent      string
+		checkpoint bool
+	}{{"claude", false}, {"claude", true}, {"codex", true}} {
+		t.Run(fmt.Sprintf("%s/checkpoint=%t", tc.agent, tc.checkpoint), func(t *testing.T) {
 			home, repo := t.TempDir(), newWatchTestRepo(t)
-			id := hookIdentity{Namespace: home, Agent: "claude", Session: "fixture"}
-			cfg := livewatch.Config{ID: id.Key(), ControlKey: id.Key(), Directory: repo, RequireHypotheses: true}
+			id := hookIdentity{Namespace: home, Agent: tc.agent, Session: "fixture"}
+			cfg := livewatch.Config{ID: id.Key(), ControlKey: id.Key(), Directory: repo, Agent: id.Agent, RequireHypotheses: true}
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 			done := make(chan error, 1)
@@ -129,23 +132,32 @@ func TestClaudeStopEndsUnansweredAssessmentWithoutRequestingItAgain(t *testing.T
 				cmd := NewRootCommand()
 				cmd.SetContext(ctx)
 				cmd.SetIn(bytes.NewReader(input))
-				out, err := runAgentWatchHook(cmd, home, "claude")
+				out, err := runAgentWatchHook(cmd, home, id.Agent)
 				if err != nil {
 					t.Fatal(err)
 				}
 				return out
 			}
-			if checkpoint {
+			if tc.checkpoint {
 				result, err := livewatch.Call(ctx, id.Key(), "checkpoint")
 				if err != nil || len(result.HypothesisRequests) != 1 {
 					t.Fatalf("assessment not handed off: %+v, %v", result, err)
 				}
-			} else if out := stop(false); out["hookSpecificOutput"] == nil || out["systemMessage"] != nil {
-				t.Fatalf("fresh assessment did not get a Stop handoff: %v", out)
 			}
-			// Simulate Claude's permission classifier rejecting the submission.
-			if out := stop(!checkpoint); len(out) != 1 || !strings.Contains(fmt.Sprint(out["systemMessage"]), "review is incomplete") {
-				t.Fatalf("pending assessment reopened the turn: %v", out)
+			out := stop(false)
+			if id.Agent == "codex" {
+				if len(out) != 0 {
+					t.Fatalf("Codex reopened a turn for a fetched assessment: %v", out)
+				}
+			} else {
+				// Claude can recover a checkpoint whose output was truncated.
+				context, ok := out["hookSpecificOutput"].(map[string]any)
+				if !ok || out["systemMessage"] != nil || !strings.Contains(fmt.Sprint(context["additionalContext"]), "Read the full output") {
+					t.Fatalf("unanswered assessment did not get a Stop handoff: %v", out)
+				}
+				if out := stop(true); len(out) != 1 || !strings.Contains(fmt.Sprint(out["systemMessage"]), "review is incomplete") {
+					t.Fatalf("pending assessment reopened the turn: %v", out)
+				}
 			}
 			select {
 			case err := <-done:

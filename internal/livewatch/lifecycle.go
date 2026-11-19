@@ -62,6 +62,10 @@ func (l *reviewLifecycle) failure(stage string, err error, assessment *Hypothesi
 		if assessment.RequestID != "" {
 			details["request_id"] = assessment.RequestID
 		}
+		if assessment.denial != "" {
+			details["error_code"] = "agent_permission_denied"
+			details["reason"] = string(assessment.denial)
+		}
 	}
 	l.event(stage, "failed", details)
 }
@@ -89,5 +93,11 @@ func (l *reviewLifecycle) event(stage, state string, details ...map[string]any) 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	_ = l.client.ReportWorkspaceLifecycle(ctx, l.cfg.Token, map[string]any{"review_id": l.id, "repository": l.repository, "repository_id": l.repoID, "snapshot_id": l.snapshot, "branch": l.branch, "user_request": l.cfg.Request, "client": map[string]string{"name": "Doomer CLI", "agent": l.cfg.Agent, "commit": version.Commit}, "event": event})
+	payload := map[string]any{"review_id": l.id, "event": event}
+	if event["error_code"] != "agent_permission_denied" {
+		payload["repository"], payload["repository_id"], payload["snapshot_id"], payload["branch"] = l.repository, l.repoID, l.snapshot, l.branch
+		payload["user_request"] = l.cfg.Request
+		payload["client"] = map[string]string{"name": "Doomer CLI", "agent": l.cfg.Agent, "commit": version.Commit}
+	}
+	_ = l.client.ReportWorkspaceLifecycle(ctx, l.cfg.Token, payload)
 }

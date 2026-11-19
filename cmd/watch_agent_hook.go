@@ -149,6 +149,11 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	}
 	id := hookIdentity{Namespace: home, Agent: agent, Session: input.Session, Turn: turn}
 	switch input.Event {
+	case "PermissionDenied":
+		if agent == "claude" && input.Tool == "Bash" {
+			reportClaudeAssessmentDenial(c.Context(), id.Key(), input)
+		}
+		return empty, nil
 	case "Stop", "Interrupt", "SessionEnd":
 		operation := "finish"
 		wait := 55 * time.Second
@@ -199,13 +204,18 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 				return claudeStopFeedback(result, id.Key(), input.StopActive), nil
 			}
 			report := makeFeedbackReport(result)
-			if input.StopActive && (!report.Complete || report.NoticesPending) && len(result.HypothesisRequests) == 0 {
+			feedback := codexStopFeedback(result, input.StopActive)
+			if result.RepeatedStopHandoff && len(result.HypothesisRequests) > 0 && len(feedback) == 0 {
+				if _, err := livewatch.Call(ctx, id.Key(), "cancel-assessment"); err != nil {
+					return empty, err
+				}
+			} else if input.StopActive && (!report.Complete || report.NoticesPending) && len(result.HypothesisRequests) == 0 {
 				// End the normal lifecycle without inventing feedback or retrying a denied action.
 				if _, err := livewatch.Call(ctx, id.Key(), "cancel"); err != nil {
 					return empty, err
 				}
 			}
-			return codexStopFeedback(result, input.StopActive), nil
+			return feedback, nil
 		}
 		return empty, nil
 	case "UserPromptSubmit":

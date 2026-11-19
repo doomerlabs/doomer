@@ -84,6 +84,7 @@ type Finding struct {
 
 type Response struct {
 	ReviewPending       bool                `json:"review_pending,omitempty"`
+	OtherReviewPending  bool                `json:"other_review_pending,omitempty"`
 	HypothesisRequests  []HypothesisRequest `json:"hypothesis_requests,omitempty"`
 	RepeatedStopHandoff bool                `json:"repeated_stop_handoff,omitempty"`
 
@@ -98,7 +99,9 @@ type Response struct {
 }
 
 type request struct {
-	Hypotheses *HypothesisResponse `json:"hypotheses,omitempty"`
+	Hypotheses       *HypothesisResponse `json:"hypotheses,omitempty"`
+	AssessmentID     string              `json:"assessment_id,omitempty"`
+	AssessmentDenial AssessmentDenial    `json:"assessment_denial,omitempty"`
 
 	Key            string     `json:"key"`
 	Operation      string     `json:"operation"`
