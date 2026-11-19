@@ -459,10 +459,30 @@ func TestUpdateNoticeCadenceAcrossReleasesAndChats(t *testing.T) {
 	if NoticesFromContext(other)[0].NotifyUser {
 		t.Fatal("other active chat ignored shared acknowledgement")
 	}
-	n.RecommendedVersion = "2026.11.19.1-beta.1"
+	n.Revision++
 	c.receive(NoticeEnvelope{1, []ClientNotice{n}}, "")
 	if NoticesFromContext(ctx)[0].NotifyUser {
-		t.Fatal("new beta reset available reminder")
+		t.Fatal("a new notice revision repeated the same beta")
+	}
+	c.acknowledged["update:beta:available"] = time.Now() // Saved by an earlier CLI.
+	firstVersion := n.RecommendedVersion
+	if err := DeferNotice(ctx, n.ID); err != nil {
+		t.Fatal(err)
+	}
+	n.RecommendedVersion = "2026.11.19.1-beta.1"
+	n.Revision++
+	c.receive(NoticeEnvelope{1, []ClientNotice{n}}, "")
+	if !NoticesFromContext(ctx)[0].NotifyUser {
+		t.Fatal("an acknowledgement or deferral suppressed a different beta")
+	}
+	if err := AcknowledgeNotice(ctx, n.ID, n.Revision); err != nil {
+		t.Fatal(err)
+	}
+	n.RecommendedVersion = firstVersion
+	n.Revision++
+	c.receive(NoticeEnvelope{1, []ClientNotice{n}}, "")
+	if NoticesFromContext(ctx)[0].NotifyUser {
+		t.Fatal("delivery history for the first beta was lost")
 	}
 	n.Severity = "recommended"
 	c.receive(NoticeEnvelope{1, []ClientNotice{n}}, "")
