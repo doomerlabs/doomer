@@ -37,7 +37,7 @@ security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password"
   echo "Expected one valid Developer ID Installer identity." >&2
   exit 1
 }
-/usr/bin/lipo -verify_arch arm64 x86_64 "$1"
+/usr/bin/lipo "$1" -verify_arch arm64 x86_64
 DOOMER_PKG_SIGN_IDENTITY="$identity" DOOMER_PKG_SIGN_KEYCHAIN="$keychain" \
   "$(dirname "$0")/build-pkg.sh" "$1" codex,claude "$2"
 signature="$(/usr/sbin/pkgutil --check-signature "$2")"
