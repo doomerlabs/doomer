@@ -40,6 +40,7 @@ type HypothesisResponse struct {
 type AssessmentDenial string
 
 const (
+	assessmentStatusDenied                           = "denied"
 	AssessmentDenied                AssessmentDenial = "permission_denied"
 	AssessmentOversightDenied       AssessmentDenial = "undermining_oversight"
 	AssessmentClassifierUnavailable AssessmentDenial = "classifier_unavailable"
@@ -66,7 +67,7 @@ func (w *worker) recordAssessmentDenial(ctx context.Context, id string, denial A
 		return
 	default:
 	}
-	pending.reply <- HypothesisResponse{RequestID: id, denial: denial}
+	pending.reply <- HypothesisResponse{RequestID: id, Status: assessmentStatusDenied, denial: denial}
 	delete(w.hypotheses, id)
 }
 

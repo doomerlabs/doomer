@@ -212,7 +212,12 @@ func codexStopFeedback(result livewatch.Response, stopActive bool) map[string]an
 		}
 	}
 	if result.RepeatedStopHandoff && len(result.HypothesisRequests) > 0 && report.Unanswered == 0 {
-		return map[string]any{}
+		if !result.OtherReviewPending {
+			return map[string]any{}
+		}
+		if !stopActive {
+			return map[string]any{"decision": "block", "reason": "Doomer has another Quick review in progress. Read the watch results for its next request. If blocked, explain why the review is incomplete."}
+		}
 	}
 	if stopActive && !report.Complete {
 		return map[string]any{"systemMessage": "Doomer review handling is incomplete. Findings or advisories remain unresolved. Respect permission denials; explain the blocker instead of repeatedly retrying."}

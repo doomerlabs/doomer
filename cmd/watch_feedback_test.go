@@ -367,6 +367,11 @@ func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
 		if out := codexStopFeedback(alreadyFetched, active); len(out) != 0 {
 			t.Fatalf("Codex reopened a turn for an assessment it already fetched: %v", out)
 		}
+		alreadyFetched.OtherReviewPending = true
+		if out := codexStopFeedback(alreadyFetched, active); active && out["systemMessage"] == nil ||
+			!active && (out["decision"] != "block" || !strings.Contains(out["reason"].(string), "another Quick review")) {
+			t.Fatalf("Codex lost another review after a fetched handoff: %v", out)
+		}
 		claude := claudeStopFeedback(response, strings.Repeat("a", 64), active)
 		context, ok := claude["hookSpecificOutput"].(map[string]any)
 		if !ok || context["hookEventName"] != "Stop" || claude["decision"] != nil || claude["systemMessage"] != nil {

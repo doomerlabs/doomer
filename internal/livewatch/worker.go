@@ -41,16 +41,17 @@ type control struct {
 
 	addDirectory string
 
-	cancel          bool
-	checkpoint      bool
-	finish          bool
-	results         bool
-	noticeID        string
-	noticeRevision  int
-	noticeFromReply bool
-	feedback        []Feedback
-	reply           chan Response
-	sent            chan struct{}
+	cancel           bool
+	cancelAssessment bool
+	checkpoint       bool
+	finish           bool
+	results          bool
+	noticeID         string
+	noticeRevision   int
+	noticeFromReply  bool
+	feedback         []Feedback
+	reply            chan Response
+	sent             chan struct{}
 }
 type worker struct {
 	background   sync.WaitGroup
@@ -150,10 +151,11 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 					if req.Operation == "assessment-denied" && req.AssessmentID == "" {
 						return
 					}
-					if req.Operation != "assessment-denied" && req.Operation != "hypotheses" && req.Operation != "add" && req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" && req.Operation != "notice-reply" {
+					if req.Operation != "assessment-denied" && req.Operation != "hypotheses" && req.Operation != "add" && req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "cancel-assessment" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" && req.Operation != "notice-reply" {
 						return
 					}
 					command := control{hypotheses: req.Hypotheses, addDirectory: req.Directory, results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, noticeID: req.NoticeID, noticeRevision: req.NoticeRevision, noticeFromReply: req.Operation == "notice-reply", reply: make(chan Response, 1), sent: make(chan struct{})}
+					command.cancelAssessment = req.Operation == "cancel-assessment"
 					if req.Operation == "assessment-denied" {
 						command.assessmentID, command.assessmentDenial = req.AssessmentID, req.AssessmentDenial
 					}
@@ -416,7 +418,7 @@ func (w *worker) schedule(ctx context.Context) {
 					return nil, err
 				}
 				*assessment = result
-				if result.denial != "" {
+				if result.Status == assessmentStatusDenied {
 					return nil, errAssessmentDenied
 				}
 				if result.Status != "assessed" {
@@ -434,11 +436,9 @@ func (w *worker) schedule(ctx context.Context) {
 }
 
 func (w *worker) response(timeout bool) Response {
-	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory}
-	for _, repo := range w.repos {
-		response.ReviewPending = response.ReviewPending || repo.running || repo.pending
-	}
-	response.ReviewPending = response.ReviewPending || len(w.hypotheses) > 0
+	otherPending := w.otherReviewPending()
+	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory,
+		ReviewPending: otherPending || len(w.hypotheses) > 0, OtherReviewPending: otherPending}
 	for _, pending := range w.hypotheses {
 
 		response.HypothesisRequests = append(response.HypothesisRequests, pending.request)
@@ -474,6 +474,20 @@ func (w *worker) response(timeout bool) Response {
 	return response
 }
 
+func (w *worker) otherReviewPending() bool {
+	waiting := make(map[string]int, len(w.hypotheses))
+	for _, task := range w.hypotheses {
+		waiting[task.request.Repository] = task.request.Revision
+	}
+	for path, repo := range w.repos {
+		revision, hasRequest := waiting[path]
+		if repo.pending || (repo.running && (!hasRequest || revision != repo.version)) {
+			return true
+		}
+	}
+	return false
+}
+
 func (w *worker) collectFindings() {
 	for _, repo := range w.repos {
 		if repo.result != nil {
@@ -488,16 +502,17 @@ func (w *worker) collectFindings() {
 }
 
 func (w *worker) hasPendingFeedback() bool {
-	if len(w.hypotheses) > 0 {
-		return true
-	}
-	for _, notice := range w.response(false).Notices {
+	return len(w.hypotheses) > 0 || hasPendingUserFeedback(w.response(false))
+}
+
+func hasPendingUserFeedback(response Response) bool {
+	for _, notice := range response.Notices {
 		if notice.NotifyUser {
 			return true
 		}
 	}
 
-	for _, finding := range w.findings {
+	for _, finding := range response.Findings {
 		if finding.Disposition == nil {
 			return true
 		}
@@ -738,6 +753,17 @@ func (w *worker) run(ctx context.Context) error {
 				finish(command, response)
 				continue
 			}
+			if command.cancelAssessment {
+				// Recheck in the worker before canceling. Another review can change
+				// state after the Stop response is sent to the hook.
+				w.collectFindings()
+				response := w.response(false)
+				if w.cfg.Agent != "codex" || !turnEnded || response.OtherReviewPending || hasPendingUserFeedback(response) || len(w.hypotheses) == 0 || !w.assessmentsOfferedAtStop() {
+					finish(command, response)
+					continue
+				}
+				command.cancel = true
+			}
 			if command.cancel {
 				_ = w.closeListener()
 				finish(command, w.response(true))
@@ -915,6 +941,15 @@ func (w *worker) repeatStopHandoff() bool {
 		repeated = false
 	}
 	return repeated
+}
+
+func (w *worker) assessmentsOfferedAtStop() bool {
+	for _, pending := range w.hypotheses {
+		if !pending.stopOffered {
+			return false
+		}
+	}
+	return true
 }
 
 func (w *worker) markHypothesesDelivered() {

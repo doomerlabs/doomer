@@ -121,3 +121,48 @@ func TestCodexStopOnlyOffersUnreadAssessments(t *testing.T) {
 		t.Fatal("an unread replacement should get exactly one Stop handoff")
 	}
 }
+
+func TestAssessmentDenialIsAnExplicitInternalOutcome(t *testing.T) {
+	pending := &hypothesisWait{request: HypothesisRequest{Repository: "/repo"}, reply: make(chan HypothesisResponse, 1)}
+	w := &worker{
+		cfg:        Config{Agent: "claude"},
+		allowed:    func(context.Context, string) bool { return true },
+		hypotheses: map[string]*hypothesisWait{"request": pending},
+	}
+	if err := w.recordHypotheses(HypothesisResponse{RequestID: "request", Status: assessmentStatusDenied}); err == nil {
+		t.Fatal("accepted a denial through the assessment submission endpoint")
+	}
+	w.recordAssessmentDenial(context.Background(), "request", AssessmentOversightDenied)
+	select {
+	case result := <-pending.reply:
+		if result.Status != assessmentStatusDenied || result.denial != AssessmentOversightDenied {
+			t.Fatalf("lost the denial outcome: %+v", result)
+		}
+	default:
+		t.Fatal("did not release the waiter after denial")
+	}
+}
+
+func TestOnlyMatchingAssessmentWaitsAreExcludedFromOtherReviewWork(t *testing.T) {
+	w := &worker{
+		repos:      map[string]*repository{"/awaiting": {running: true, version: 3}},
+		hypotheses: map[string]*hypothesisWait{"request": {request: HypothesisRequest{Repository: "/awaiting", Revision: 3}}},
+	}
+	if response := w.response(false); !response.ReviewPending || response.OtherReviewPending {
+		t.Fatalf("assessment was counted as other work: %+v", response)
+	}
+	w.repos["/running"] = &repository{running: true}
+	if !w.response(false).OtherReviewPending {
+		t.Fatal("missed a different repository's running review")
+	}
+	delete(w.repos, "/running")
+	w.repos["/awaiting"].pending = true
+	if !w.response(false).OtherReviewPending {
+		t.Fatal("missed a queued change in the same repository")
+	}
+	w.repos["/awaiting"].pending = false
+	w.repos["/awaiting"].version++
+	if !w.response(false).OtherReviewPending {
+		t.Fatal("mistook an earlier assessment wait for the current revision")
+	}
+}
