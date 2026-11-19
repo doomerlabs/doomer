@@ -539,10 +539,19 @@ func (w *worker) recordFeedback(ctx context.Context, entries []Feedback) error {
 }
 
 func (w *worker) run(ctx context.Context) error {
+	// The Codex watcher sees writes from every process in the workspace.
+	// Wait for the turn to claim review work via its pre-answer checkpoint.
+	reviewStarted := w.cfg.Agent != "codex" || !w.cfg.RequireHypotheses
 	scan := func() error {
 		bounded, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		return w.scan(bounded, false, false)
+		if err := w.scan(bounded, false, false); err != nil {
+			return err
+		}
+		if reviewStarted {
+			w.schedule(ctx)
+		}
+		return nil
 	}
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -579,7 +588,6 @@ func (w *worker) run(ctx context.Context) error {
 		case <-time.After(time.Second):
 		}
 	}
-	w.schedule(ctx)
 	for {
 		if turnEnded && len(closing) == 0 {
 			w.collectFindings()
@@ -648,6 +656,9 @@ func (w *worker) run(ctx context.Context) error {
 		case command := <-w.controls:
 			if command.finish {
 				turnEnded = true
+			}
+			if command.checkpoint && !turnEnded {
+				reviewStarted = true
 			}
 			if command.hypotheses != nil {
 				err := w.recordHypotheses(*command.hypotheses)
@@ -723,12 +734,18 @@ func (w *worker) run(ctx context.Context) error {
 				}
 				drain = time.NewTimer(timeout)
 				deadline = drain.C
-				finalCtx, stop := context.WithTimeout(ctx, timeout)
-				err := w.scan(finalCtx, false, true)
-				stop()
-				if err != nil {
-					finish(command, Response{Error: fmt.Sprintf("capture final changes: %v", err)})
-					return err
+				if reviewStarted {
+					finalCtx, stop := context.WithTimeout(ctx, timeout)
+					err := w.scan(finalCtx, false, true)
+					stop()
+					if err != nil {
+						finish(command, Response{Error: fmt.Sprintf("capture final changes: %v", err)})
+						return err
+					}
+				} else {
+					for _, repo := range w.repos {
+						repo.pending = false
+					}
 				}
 			}
 			closing = append(closing, command)
@@ -792,14 +809,12 @@ func (w *worker) run(ctx context.Context) error {
 				if err := scan(); err != nil {
 					return err
 				}
-				w.schedule(ctx)
 			}
 		case <-ticker.C:
 			if !turnEnded && len(closing) == 0 && settled == nil {
 				if err := scan(); err != nil {
 					return err
 				}
-				w.schedule(ctx)
 			}
 		}
 	}
