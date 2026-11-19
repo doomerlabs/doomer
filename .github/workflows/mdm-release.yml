@@ -4,6 +4,10 @@ run-name: Sign MDM installer ${{ github.ref_name }}
 on:
   push:
     tags: ["20*.*.*"]
+  pull_request:
+    paths:
+      - '.github/workflows/mdm-release.yml'
+      - 'mdm/**'
 
 permissions:
   actions: read
@@ -14,7 +18,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  package-preflight:
+    if: github.event_name == 'pull_request'
+    runs-on: macos-15
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version-file: go.mod
+      - name: Build and inspect the unsigned universal installer
+        run: |
+          set -euo pipefail
+          inputs="$RUNNER_TEMP/mdm-preflight"
+          mkdir "$inputs"
+          for arch in arm64 amd64; do
+            CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" make build \
+              BINARY="$inputs/doomer-$arch" VERSION=2099.1.1.1-beta.1
+          done
+          bash mdm/combine-binaries.sh "$inputs"
+          mdm/build-pkg.sh "$inputs/doomer" codex,claude "$inputs/doomer.pkg"
+          /usr/sbin/pkgutil --expand "$inputs/doomer.pkg" "$inputs/expanded"
+          test -s "$inputs/expanded/Distribution"
+
   sign:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: macos-15
     timeout-minutes: 85
     environment: mdm-release
@@ -54,8 +86,7 @@ jobs:
           gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir "$inputs" \
             --pattern release-manifest.json --pattern "doomer_${GITHUB_REF_NAME}_darwin_*.tar.gz"
           python3 scripts/prepare-mdm-release.py "$GITHUB_REF_NAME" "$(git rev-parse HEAD)" "$inputs"
-          /usr/bin/lipo -create "$inputs/doomer-arm64" "$inputs/doomer-amd64" -output "$inputs/doomer"
-          /usr/bin/lipo -verify_arch arm64 x86_64 "$inputs/doomer"
+          bash mdm/combine-binaries.sh "$inputs"
       - name: Sign and verify the macOS installer
         if: steps.existing.outputs.reuse != 'true'
         env:

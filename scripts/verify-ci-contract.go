@@ -492,7 +492,7 @@ func validateMDMSigning(path string, workflow *yaml.Node) {
 			tag = i
 		}
 		if stepName(step) == "Verify published CLI inputs and combine architectures" &&
-			nodeContains(step, "scripts/prepare-mdm-release.py") && nodeContains(step, "lipo -verify_arch arm64 x86_64") {
+			nodeContains(step, "scripts/prepare-mdm-release.py") && nodeContains(step, "mdm/combine-binaries.sh") {
 			inputs = i
 		}
 		if nodeContains(step, "secrets.") {
