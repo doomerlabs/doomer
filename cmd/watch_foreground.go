@@ -230,6 +230,9 @@ func newForegroundWatchCommand() *cobra.Command {
 		// A watcher owns its advisory cache; its responses carry notices to the
 		// agent. Background stderr is not evidence of user-visible delivery.
 		ctx = adversarylabs.WithNoticeCollector(ctx, config.ManagerHome, config.API, io.Discard)
+		if state.Managed != nil {
+			ctx = adversarylabs.WithManagedInstallNoticeOutput(ctx)
+		}
 		config.Notices = func() []adversarylabs.ClientNotice { return adversarylabs.NoticesFromContext(ctx) }
 		config.AcknowledgeNotice = func(id string, revision int) error { return adversarylabs.AcknowledgeNotice(ctx, id, revision) }
 

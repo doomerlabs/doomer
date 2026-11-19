@@ -39,17 +39,19 @@ type agentHookState struct {
 		ConfigPath  string `json:"configPath"`
 		ExtraPolicy string `json:"extraPolicy"`
 	} `json:"codexPolicies"`
-	Version        int               `json:"version"`
-	API            string            `json:"api"`
-	Identities     map[string]string `json:"identities"`
-	CredentialDirs map[string]string `json:"credentialDirs"`
-	Grants         []struct {
-		Scope      string    `json:"scope"`
-		API        string    `json:"api"`
-		Repo       string    `json:"repo"`
-		Agents     []string  `json:"agents"`
-		ApprovedAt time.Time `json:"approvedAt"`
-	} `json:"grants"`
+	Version        int                `json:"version"`
+	API            string             `json:"api"`
+	Identities     map[string]string  `json:"identities"`
+	CredentialDirs map[string]string  `json:"credentialDirs"`
+	Grants         []agentUploadGrant `json:"grants"`
+}
+
+type agentUploadGrant struct {
+	Scope      string    `json:"scope"`
+	API        string    `json:"api"`
+	Repo       string    `json:"repo,omitempty"`
+	Agents     []string  `json:"agents,omitempty"`
+	ApprovedAt time.Time `json:"approvedAt"`
 }
 
 func agentHookAPI(explicit, environment, saved string) (string, error) {

@@ -57,6 +57,10 @@ func identifyCLIInstallation(path string) (cliInstallation, error) {
 		return cliInstallation{}, err
 	}
 	result := cliInstallation{Manager: "direct", Executable: actual}
+	if actual == mdmExecutable {
+		result.Manager = "mdm"
+		return result, nil
+	}
 	// Homebrew's versioned Cellar path is authoritative; never replace its file.
 	cellar := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(actual))))
 	if filepath.Base(actual) == "doomer" && filepath.Base(filepath.Dir(actual)) == "bin" && filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(actual)))) == "doomer" && filepath.Base(cellar) == "Cellar" {
@@ -80,7 +84,9 @@ func identifyCLIInstallation(path string) (cliInstallation, error) {
 				Path string `json:"path"`
 				SHA  string `json:"sha256"`
 			} `json:"native"`
-			Runtime string `json:"runtime"`
+			Runtime        string `json:"runtime"`
+			Installer      string `json:"installer"`
+			PackageVersion string `json:"cliVersion"`
 		}
 		raw, readErr := os.ReadFile(filepath.Join(home, "state.json"))
 		if os.IsNotExist(readErr) {
@@ -103,6 +109,19 @@ func identifyCLIInstallation(path string) (cliInstallation, error) {
 		sum := sha256.Sum256(data)
 		if hex.EncodeToString(sum[:]) != state.Native.SHA {
 			return result, fmt.Errorf("Node-managed CLI differs from its recorded checksum")
+		}
+		if state.Installer == "go" {
+			result.Manager = "node"
+			result.ManagerHome = home
+			pkg := "@doomerlabs/doomer"
+			if strings.Contains(state.PackageVersion, "-beta.") {
+				pkg += "@beta"
+			}
+			result.Command = []string{"npx", pkg, "upgrade", "--home", home}
+			if strings.HasSuffix(home, "-dev") || home == os.Getenv("DOOMER_DEV_HOME") {
+				return result, fmt.Errorf("this is a development build; rebuild it yourself")
+			}
+			return result, nil
 		}
 		if !filepath.IsAbs(state.Runtime) {
 			return result, fmt.Errorf("Node manager executable is unavailable; run npx @doomerlabs/doomer update")
@@ -134,6 +153,9 @@ func newUpgradeCommand() *cobra.Command {
 		installation, err := inspectCLIInstallation()
 		if err != nil {
 			return err
+		}
+		if installation.Manager == "mdm" {
+			return fmt.Errorf("Doomer is managed by your organization; contact IT for updates")
 		}
 		if installation.Manager == "unrecognized" {
 			return fmt.Errorf("cannot determine this versioned or symlinked CLI installation owner; upgrade it with its original installer")
