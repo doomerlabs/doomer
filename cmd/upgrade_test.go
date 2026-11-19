@@ -2,12 +2,94 @@ package cmd
 
 import (
 	"context"
-	"github.com/spf13/cobra"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
+
+func TestNodeInstallationStatusAndUpgradeChannel(t *testing.T) {
+	home, devHome := t.TempDir(), t.TempDir()
+	t.Setenv("DOOMER_HOME", home)
+	t.Setenv("DOOMER_DEV_HOME", devHome)
+	resolvedHome, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(resolvedHome, "doomer")
+	binary := []byte("node-managed binary")
+	if err = os.WriteFile(path, binary, 0755); err != nil {
+		t.Fatal(err)
+	}
+	receipt := func(dir, pkgVersion string) {
+		t.Helper()
+		raw, err := json.Marshal(map[string]any{
+			"installer": "go", "cliVersion": pkgVersion,
+			"native": map[string]string{"path": path, "sha256": fmt.Sprintf("%x", sha256.Sum256(binary))},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = os.WriteFile(filepath.Join(dir, "state.json"), raw, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	receipt(home, "1.2.3-beta1")
+	installation, err := identifyCLIInstallation(path)
+	if err != nil || len(installation.Command) < 2 || installation.Command[1] != "@doomerlabs/doomer@beta" {
+		t.Fatalf("unexpected beta installation: %+v (%v)", installation, err)
+	}
+	receipt(home, "")
+	installation, err = identifyCLIInstallation(path)
+	if err != nil || installation.Manager != "node" || len(installation.Command) != 0 || installation.upgradeBlocked == "" {
+		t.Fatalf("unknown channel was not blocked: %+v (%v)", installation, err)
+	}
+	if err = os.Remove(filepath.Join(home, "state.json")); err != nil {
+		t.Fatal(err)
+	}
+	receipt(devHome, "1.2.3-beta1")
+	oldExecutable, oldRun := upgradeExecutable, upgradeRun
+	t.Cleanup(func() { upgradeExecutable, upgradeRun = oldExecutable, oldRun })
+	upgradeExecutable = func() (string, error) { return path, nil }
+	upgradeRun = func(context.Context, *cobra.Command, []string) error {
+		t.Fatal("development upgrade invoked the package manager")
+		return nil
+	}
+	var out strings.Builder
+	status := newStatusCommand()
+	status.SetOut(&out)
+	if err = status.Execute(); err != nil || !strings.Contains(out.String(), "Installation: node") {
+		t.Fatalf("development status: %q (%v)", out.String(), err)
+	}
+	if err = newUpgradeCommand().Execute(); err == nil || !strings.Contains(err.Error(), "development build") {
+		t.Fatalf("development upgrade: %v", err)
+	}
+}
+
+func TestManagedExecutableAllowsSymlinkAliases(t *testing.T) {
+	root := t.TempDir()
+	binary := filepath.Join(root, "binary")
+	if err := os.WriteFile(binary, []byte("managed binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	managed, alias := filepath.Join(root, "managed"), filepath.Join(root, "alias")
+	if err := os.Symlink(binary, managed); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := os.Symlink(managed, alias); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(alias)
+	if err != nil || !sameInstallationPath(alias, resolved, managed) {
+		t.Fatalf("managed alias was not recognized: %q (%v)", resolved, err)
+	}
+}
 
 func TestUpgradeDelegatesHomebrewWithoutReplacingItsBinary(t *testing.T) {
 	root := t.TempDir()

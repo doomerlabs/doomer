@@ -505,6 +505,26 @@ func TestUpdateNoticeRenderingAndWireValidation(t *testing.T) {
 		t.Fatal("cross-channel metadata accepted")
 	}
 }
+func TestManagedUpdateNoticeUsesLocalInstallationMode(t *testing.T) {
+	n := updateNotice("available")
+	n.ManagedInstall = true
+	envelope := NoticeEnvelope{NoticeSchema, []ClientNotice{n}}
+	if notices := ValidNotices(envelope, time.Now()); len(notices) != 1 || notices[0].ManagedInstall {
+		t.Fatalf("wire notice set local installation mode: %+v", notices)
+	}
+	ctx := WithManagedInstallNoticeOutput(WithNoticeCollector(context.Background(), t.TempDir(), "https://example.test/api", nil))
+	ctx.Value(noticeContextKey{}).(*NoticeCollector).receive(envelope, "")
+	notices := NoticesFromContext(ctx)
+	if len(notices) != 1 || !notices[0].ManagedInstall {
+		t.Fatalf("local managed installation mode was lost: %+v", notices)
+	}
+	for _, rendered := range []string{notices[0].DisplayMarkdown, AdvisoryTerminal(notices[0])} {
+		if !strings.Contains(rendered, "Contact your IT administrator for updates.") || strings.Contains(rendered, "npx @doomerlabs/doomer") {
+			t.Fatal(rendered)
+		}
+	}
+}
+
 func TestUpdateAcknowledgementSurvivesRuntimeUpgrade(t *testing.T) {
 	root, api := t.TempDir(), "https://example.test/api"
 	ctx := WithNoticeCollector(context.Background(), root, api, nil)

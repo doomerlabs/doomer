@@ -29,6 +29,10 @@ func (p npmSetupPrompt) choose(c *cobra.Command, label string, choices []npmChoi
 		}
 	}
 	draw()
+	redraw := func() {
+		fmt.Fprintf(p.output, "\x1b[%dA\r\x1b[J", len(choices)+2)
+		draw()
+	}
 	for {
 		key, err := p.input.ReadByte()
 		if err != nil {
@@ -39,11 +43,14 @@ func (p npmSetupPrompt) choose(c *cobra.Command, label string, choices []npmChoi
 			return "", errNPMSetupCanceled
 		case ' ', '\n', '\r':
 			if toggle != nil && toggle(focus) {
-				draw()
+				redraw()
 			} else if key != ' ' {
 				return choices[focus].value, nil
 			}
 		case 27:
+			if p.input.Buffered() == 0 {
+				return "", errNPMSetupCanceled
+			}
 			next, err := p.input.ReadByte()
 			if err != nil || next != '[' {
 				return "", errNPMSetupCanceled
@@ -60,8 +67,7 @@ func (p npmSetupPrompt) choose(c *cobra.Command, label string, choices []npmChoi
 			default:
 				continue
 			}
-			fmt.Fprintf(p.output, "\x1b[%dA\r\x1b[J", len(choices)+2)
-			draw()
+			redraw()
 		}
 	}
 }

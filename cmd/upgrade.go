@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/doomerlabs/doomer/internal/managed"
 	"github.com/doomerlabs/doomer/internal/rootreplace"
 	"github.com/doomerlabs/doomer/internal/runtimeversion"
@@ -23,10 +24,11 @@ import (
 )
 
 type cliInstallation struct {
-	Manager     string   `json:"manager"`
-	Executable  string   `json:"executable"`
-	ManagerHome string   `json:"manager_home,omitempty"`
-	Command     []string `json:"upgrade_command,omitempty"`
+	Manager        string   `json:"manager"`
+	Executable     string   `json:"executable"`
+	ManagerHome    string   `json:"manager_home,omitempty"`
+	Command        []string `json:"upgrade_command,omitempty"`
+	upgradeBlocked string
 }
 
 var upgradeExecutable = os.Executable
@@ -57,7 +59,7 @@ func identifyCLIInstallation(path string) (cliInstallation, error) {
 		return cliInstallation{}, err
 	}
 	result := cliInstallation{Manager: "direct", Executable: actual}
-	if actual == mdmExecutable {
+	if sameInstallationPath(path, actual, mdmExecutable) {
 		result.Manager = "mdm"
 		return result, nil
 	}
@@ -113,14 +115,20 @@ func identifyCLIInstallation(path string) (cliInstallation, error) {
 		if state.Installer == "go" {
 			result.Manager = "node"
 			result.ManagerHome = home
+			if strings.HasSuffix(home, "-dev") || home == os.Getenv("DOOMER_DEV_HOME") {
+				result.upgradeBlocked = "this is a development build; rebuild it yourself"
+				return result, nil
+			}
+			pkgVersion, err := semver.StrictNewVersion(state.PackageVersion)
+			if err != nil {
+				result.upgradeBlocked = "cannot determine the npm release channel; run update with your original npm package tag"
+				return result, nil
+			}
 			pkg := "@doomerlabs/doomer"
-			if strings.Contains(state.PackageVersion, "-beta.") {
+			if pkgVersion.Prerelease() != "" {
 				pkg += "@beta"
 			}
 			result.Command = []string{"npx", pkg, "upgrade", "--home", home}
-			if strings.HasSuffix(home, "-dev") || home == os.Getenv("DOOMER_DEV_HOME") {
-				return result, fmt.Errorf("this is a development build; rebuild it yourself")
-			}
 			return result, nil
 		}
 		if !filepath.IsAbs(state.Runtime) {
@@ -140,6 +148,14 @@ func identifyCLIInstallation(path string) (cliInstallation, error) {
 		result.Manager = "legacy"
 	}
 	return result, nil
+}
+
+func sameInstallationPath(path, actual, managedPath string) bool {
+	if filepath.Clean(path) == managedPath || actual == managedPath {
+		return true
+	}
+	resolved, err := filepath.EvalSymlinks(managedPath)
+	return err == nil && actual == resolved
 }
 
 func newUpgradeCommand() *cobra.Command {
@@ -164,6 +180,9 @@ func newUpgradeCommand() *cobra.Command {
 			return fmt.Errorf("this runtime is pinned by the legacy skill; update that installation instead")
 		}
 		if installation.Manager == "node" {
+			if installation.upgradeBlocked != "" {
+				return fmt.Errorf("%s", installation.upgradeBlocked)
+			}
 			command := append([]string{}, installation.Command...)
 			if check {
 				command = append(command, "--check")
