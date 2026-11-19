@@ -98,7 +98,9 @@ type Response struct {
 }
 
 type request struct {
-	Hypotheses *HypothesisResponse `json:"hypotheses,omitempty"`
+	Hypotheses       *HypothesisResponse `json:"hypotheses,omitempty"`
+	AssessmentID     string              `json:"assessment_id,omitempty"`
+	AssessmentDenial AssessmentDenial    `json:"assessment_denial,omitempty"`
 
 	Key            string     `json:"key"`
 	Operation      string     `json:"operation"`

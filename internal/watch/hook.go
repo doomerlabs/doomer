@@ -29,6 +29,7 @@ type HookInput struct {
 	CWD        string `json:"cwd"`
 	Event      string `json:"hook_event_name"`
 	ToolID     string `json:"tool_use_id"`
+	Reason     string `json:"reason"`
 	StopActive bool   `json:"stop_hook_active"`
 	Message    string `json:"last_assistant_message"`
 	Prompt     string `json:"prompt"`

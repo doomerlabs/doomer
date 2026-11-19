@@ -109,3 +109,15 @@ func TestStopCanHandOffNewAssessmentAfterEarlierRequests(t *testing.T) {
 		t.Fatal("a replacement request should get its own Stop handoff")
 	}
 }
+
+func TestCodexStopOnlyOffersUnreadAssessments(t *testing.T) {
+	w := &worker{cfg: Config{Agent: "codex"}, hypotheses: map[string]*hypothesisWait{"fetched": {delivered: make(chan struct{})}}}
+	w.markHypothesesDelivered()
+	if !w.repeatStopHandoff() {
+		t.Fatal("a fetched assessment should not reopen the Codex turn")
+	}
+	w.hypotheses["replacement"] = &hypothesisWait{delivered: make(chan struct{})}
+	if w.repeatStopHandoff() || !w.repeatStopHandoff() {
+		t.Fatal("an unread replacement should get exactly one Stop handoff")
+	}
+}

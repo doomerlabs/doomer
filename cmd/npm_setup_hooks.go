@@ -14,7 +14,7 @@ import (
 	watching "github.com/doomerlabs/doomer/internal/watch"
 )
 
-var npmHookEvents = []string{"UserPromptSubmit", "Stop", "Interrupt", "SessionEnd", "PreToolUse", "PostToolUse", "PostToolUseFailure"}
+var npmHookEvents = []string{"UserPromptSubmit", "Stop", "Interrupt", "SessionEnd", "PermissionDenied", "PreToolUse", "PostToolUse", "PostToolUseFailure"}
 
 type npmSettings struct {
 	files     map[string][]string
@@ -212,6 +212,10 @@ func npmEventTimeout(agent, event string) int {
 		if agent == "claude" {
 			return 15
 		}
+	case "PermissionDenied":
+		if agent == "claude" {
+			return 5
+		}
 	case "Interrupt":
 		if agent == "codex" {
 			return 15
@@ -230,14 +234,18 @@ func mergeNPMHooks(hooks npmJSONObject, agent, owner, command string) bool {
 	for _, event := range npmHookEvents {
 		groups, _ := npmObjects(hooks[event])
 		timeout := npmEventTimeout(agent, event)
+		matcher := ""
+		if event == "PermissionDenied" {
+			matcher = "Bash"
+		}
 		ownedCount, matches := 0, false
 		for _, group := range groups {
 			handlers, _ := npmObjects(group["hooks"])
 			for _, h := range handlers {
 				if npmOwnsHook(h, owner) {
 					ownedCount++
-					matcher, _ := group["matcher"].(string)
-					matches = h["type"] == "command" && h["command"] == command && h["async"] != true && (matcher == "" || matcher == ".*")
+					configuredMatcher, _ := group["matcher"].(string)
+					matches = h["type"] == "command" && h["command"] == command && h["async"] != true && (configuredMatcher == matcher || matcher == "" && configuredMatcher == ".*")
 				}
 			}
 		}
@@ -283,7 +291,11 @@ func mergeNPMHooks(hooks npmJSONObject, agent, owner, command string) bool {
 					index++
 				}
 			}
-			kept = slices.Insert(kept, index, npmJSONObject{"hooks": []npmJSONObject{handler}})
+			group := npmJSONObject{"hooks": []npmJSONObject{handler}}
+			if matcher != "" {
+				group["matcher"] = matcher
+			}
+			kept = slices.Insert(kept, index, group)
 		}
 		if len(kept) == 0 {
 			delete(hooks, event)

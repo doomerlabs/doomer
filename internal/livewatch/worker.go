@@ -35,7 +35,9 @@ type completion struct {
 	result  Result
 }
 type control struct {
-	hypotheses *HypothesisResponse
+	assessmentID     string
+	assessmentDenial AssessmentDenial
+	hypotheses       *HypothesisResponse
 
 	addDirectory string
 
@@ -145,10 +147,16 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 						_ = json.NewEncoder(conn).Encode(Response{Ready: true, API: cfg.API, Directory: cfg.Directory})
 						return
 					}
-					if req.Operation != "hypotheses" && req.Operation != "add" && req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" && req.Operation != "notice-reply" {
+					if req.Operation == "assessment-denied" && req.AssessmentID == "" {
+						return
+					}
+					if req.Operation != "assessment-denied" && req.Operation != "hypotheses" && req.Operation != "add" && req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" && req.Operation != "notice-reply" {
 						return
 					}
 					command := control{hypotheses: req.Hypotheses, addDirectory: req.Directory, results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, noticeID: req.NoticeID, noticeRevision: req.NoticeRevision, noticeFromReply: req.Operation == "notice-reply", reply: make(chan Response, 1), sent: make(chan struct{})}
+					if req.Operation == "assessment-denied" {
+						command.assessmentID, command.assessmentDenial = req.AssessmentID, req.AssessmentDenial
+					}
 					select {
 					case w.controls <- command:
 					case <-ctx.Done():
@@ -408,6 +416,9 @@ func (w *worker) schedule(ctx context.Context) {
 					return nil, err
 				}
 				*assessment = result
+				if result.denial != "" {
+					return nil, errAssessmentDenied
+				}
 				if result.Status != "assessed" {
 					return nil, fmt.Errorf("agent assessment %s: %s", result.Status, result.Reason)
 				}
@@ -654,6 +665,11 @@ func (w *worker) run(ctx context.Context) error {
 		case task := <-w.hypothesisReady:
 			w.hypotheses[task.request.ID] = task
 		case command := <-w.controls:
+			if command.assessmentID != "" {
+				w.recordAssessmentDenial(ctx, command.assessmentID, command.assessmentDenial)
+				finish(command, Response{})
+				continue
+			}
 			if command.finish {
 				turnEnded = true
 			}
@@ -880,20 +896,23 @@ func (w *worker) addDirectory(ctx context.Context, directory string) error {
 	return nil
 }
 
-// A Stop hook may surface each request once. A checkpoint already handed the
-// request to the agent, even if the host later denied its submission command.
+// Offer each pending request once at Stop. Codex already sees checkpoint
+// requests before answering. Claude can recover a truncated checkpoint at Stop.
 func (w *worker) repeatStopHandoff() bool {
 	repeated := true
 	for _, pending := range w.hypotheses {
 		if pending.stopOffered {
 			continue
 		}
-		select {
-		case <-pending.delivered:
-		default:
-			repeated = false
-		}
 		pending.stopOffered = true
+		if w.cfg.Agent == "codex" {
+			select {
+			case <-pending.delivered:
+				continue
+			default:
+			}
+		}
+		repeated = false
 	}
 	return repeated
 }

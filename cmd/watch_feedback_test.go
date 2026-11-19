@@ -359,8 +359,13 @@ func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
 				t.Fatal("Codex retried an incomplete handoff indefinitely")
 			}
 			assertSafeHandoffMessage(t, codex)
-		} else if codex["decision"] != "block" || codex["reason"] != "Doomer is checking the latest changes." {
+		} else if codex["decision"] != "block" || !strings.Contains(codex["reason"].(string), "Read the watch results before finishing") {
 			t.Fatal("Codex lost initial handoff")
+		}
+		alreadyFetched := response
+		alreadyFetched.RepeatedStopHandoff = true
+		if out := codexStopFeedback(alreadyFetched, active); len(out) != 0 {
+			t.Fatalf("Codex reopened a turn for an assessment it already fetched: %v", out)
 		}
 		claude := claudeStopFeedback(response, strings.Repeat("a", 64), active)
 		context, ok := claude["hookSpecificOutput"].(map[string]any)
@@ -368,11 +373,8 @@ func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
 			t.Fatal(claude)
 		}
 		text, _ := context["additionalContext"].(string)
-		if active && (!strings.Contains(text, "watch results --control") || strings.Contains(text, "snapshot-request") || len(text) > 600) {
-			t.Fatal("replacement snapshot omitted", claude)
-		}
-		if !active && text != "Doomer is checking the latest changes." {
-			t.Fatal(claude)
+		if !strings.Contains(text, "watch results --control") || !strings.Contains(text, "report the denial and end the turn") || strings.Contains(text, "snapshot-request") || len(text) > 700 {
+			t.Fatal("missing bounded recovery instructions", claude)
 		}
 	}
 }
@@ -396,6 +398,10 @@ func TestHypothesisHandoffIncludesVerifiedConsentBeforeCapturedDiff(t *testing.T
 	if !strings.HasPrefix(output, header) || !strings.Contains(output, "Captured requests: ") {
 		t.Fatal("pending handoff must show the current consent scope before the captured diff")
 	}
+	prefix := output[:min(len(output), 1500)]
+	if !strings.Contains(prefix, "watch results --control "+key) || !strings.Contains(prefix, "missing or cut off") || strings.Contains(prefix, "Captured requests: ") {
+		t.Fatal("clipped output must tell the agent how to recover the request")
+	}
 
 	response.Consent = nil
 	if output := hypothesisInstructions(response, key); strings.Contains(output, "CLI-verified upload consent") {
@@ -416,7 +422,8 @@ func assertSafeHandoffMessage(t *testing.T, output map[string]any) {
 func TestClaudePendingAssessmentUsesNonErrorStopFeedback(t *testing.T) {
 	out := claudeStopFeedback(livewatch.Response{HypothesisRequests: []livewatch.HypothesisRequest{{ID: "pending"}}}, strings.Repeat("a", 64), false)
 	context, ok := out["hookSpecificOutput"].(map[string]any)
-	if !ok || context["hookEventName"] != "Stop" || context["additionalContext"] != "Doomer is checking the latest changes." || out["decision"] != nil {
+	message, _ := context["additionalContext"].(string)
+	if !ok || context["hookEventName"] != "Stop" || !strings.Contains(message, "watch results --control") || out["decision"] != nil {
 		t.Fatal(out)
 	}
 }

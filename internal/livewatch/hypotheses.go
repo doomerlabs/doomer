@@ -34,9 +34,44 @@ type HypothesisResponse struct {
 	Reason      string                              `json:"reason,omitempty"`
 	RequestID   string                              `json:"request_id"`
 	Hypotheses  []adversarylabs.WorkspaceHypothesis `json:"hypotheses"`
+	denial      AssessmentDenial
+}
+
+type AssessmentDenial string
+
+const (
+	AssessmentDenied                AssessmentDenial = "permission_denied"
+	AssessmentOversightDenied       AssessmentDenial = "undermining_oversight"
+	AssessmentClassifierUnavailable AssessmentDenial = "classifier_unavailable"
+	AssessmentNoClassifierVerdict   AssessmentDenial = "no_classifier_verdict"
+)
+
+func RecordAssessmentDenial(ctx context.Context, key, id string, denial AssessmentDenial) error {
+	_, err := call(ctx, key, request{Key: key, Operation: "assessment-denied", AssessmentID: id, AssessmentDenial: denial})
+	return err
+}
+
+func (w *worker) recordAssessmentDenial(ctx context.Context, id string, denial AssessmentDenial) {
+	switch denial {
+	case AssessmentDenied, AssessmentOversightDenied, AssessmentClassifierUnavailable, AssessmentNoClassifierVerdict:
+	default:
+		return
+	}
+	pending := w.hypotheses[id]
+	if w.cfg.Agent != "claude" || pending == nil || !w.allowed(ctx, pending.request.Repository) {
+		return
+	}
+	select {
+	case <-pending.expired:
+		return
+	default:
+	}
+	pending.reply <- HypothesisResponse{RequestID: id, denial: denial}
+	delete(w.hypotheses, id)
 }
 
 var errAgentResponseTimeout = errors.New("agent response timed out after retrieval")
+var errAssessmentDenied = errors.New("Claude Code blocked the Quick review assessment submission")
 
 const agentResponseTimeout = 10 * time.Minute
 
