@@ -25,6 +25,71 @@ func (stopHandoffClient) UploadWorkspaceTree(context.Context, string, string, []
 	return "fixture-repository", "fixture-tree", nil
 }
 
+func TestCodexStopIgnoresWorkspaceEditsWithoutCheckpoint(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("local worker IPC requires Linux or macOS")
+	}
+	home, repo := t.TempDir(), newWatchTestRepo(t)
+	id := hookIdentity{Namespace: home, Agent: "codex", Session: "read-only", Turn: "fixture-turn"}
+	cfg := livewatch.Config{ID: id.Key(), ControlKey: id.Key(), Directory: filepath.Dir(repo), Agent: id.Agent, RequireHypotheses: true}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- livewatch.Serve(ctx, cfg, stopHandoffClient{}, func(context.Context, string) bool { return true })
+	}()
+	for {
+		if _, live := livewatch.Available(ctx, id.Key()); live {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("worker exited during startup: %v", err)
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+
+	// Another process writes to a watched repository during the read-only turn.
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("concurrent edit\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		result, err := livewatch.Call(ctx, id.Key(), "results")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.ReviewPending {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("watcher did not observe the concurrent edit")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	input, err := json.Marshal(watching.HookInput{Event: "Stop", Session: id.Session, Turn: id.Turn, Message: "The requested version is published."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := NewRootCommand()
+	command.SetContext(ctx)
+	command.SetIn(bytes.NewReader(input))
+	out, err := runAgentWatchHook(command, home, id.Agent)
+	if err != nil || len(out) != 0 {
+		t.Fatalf("read-only turn received Stop feedback: %v, %v", out, err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("watcher stayed alive after the read-only turn")
+	}
+}
+
 func TestClaudeStopEndsUnansweredAssessmentWithoutRequestingItAgain(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("local worker IPC requires Linux or macOS")

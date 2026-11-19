@@ -403,7 +403,7 @@ func TestAgentHypothesesGateSubmissionAndBindSnapshot(t *testing.T) {
 	root := t.TempDir()
 	repo := makeRepository(t, root, "repo")
 	client := &fakeClient{}
-	cfg := Config{ID: Key(t.TempDir()), ControlKey: Key(t.TempDir()), Directory: root, API: "http://localhost/api", Token: "test", RequireHypotheses: true}
+	cfg := Config{ID: Key(t.TempDir()), ControlKey: Key(t.TempDir()), Directory: root, API: "http://localhost/api", Token: "test", Agent: "codex", RequireHypotheses: true}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)
