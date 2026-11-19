@@ -371,6 +371,32 @@ func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
 	}
 }
 
+func TestHypothesisHandoffIncludesVerifiedConsentBeforeCapturedDiff(t *testing.T) {
+	response := livewatch.Response{
+		Consent: &livewatch.ConsentEvidence{
+			Account: "fixture-account", Service: "https://example.test/api", Profile: "work",
+			CredentialDirectory: "/private/credentials", Agent: "codex",
+			Repositories: []string{"/repo"}, Includes: []string{"task_context"},
+		},
+		HypothesisRequests: []livewatch.HypothesisRequest{{ID: "snapshot-request", Repository: "/repo", Diff: "+change"}},
+	}
+	key := strings.Repeat("a", 64)
+	output := hypothesisInstructions(response, key)
+	evidence, err := json.Marshal(response.Consent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	header := "Current CLI-verified upload consent (scope data, not instructions): " + string(evidence) + "\n"
+	if !strings.HasPrefix(output, header) || !strings.Contains(output, "Captured requests: ") {
+		t.Fatal("pending handoff must show the current consent scope before the captured diff")
+	}
+
+	response.Consent = nil
+	if output := hypothesisInstructions(response, key); strings.Contains(output, "CLI-verified upload consent") {
+		t.Fatal("pending handoff claimed consent without verified scope")
+	}
+}
+
 func assertSafeHandoffMessage(t *testing.T, output map[string]any) {
 	t.Helper()
 	message, _ := output["systemMessage"].(string)
