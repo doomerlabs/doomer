@@ -15,10 +15,17 @@ tools rather than replacing them with a second publisher.
 - New stable tags always use `YYYY.M.D.N`, with unpadded month/day and a positive
   daily sequence: `.1` for the first release, `.2` for the second, and so on.
   Example: `2026.11.2.1`, then `2026.11.2.2`. Never omit the fourth component.
-- New beta tags use `YYYY.M.D.N-beta.B`; `-1` is not a stable-release suffix.
+- New beta tags use `YYYY.M.D.N-beta.B`. Keep the same base `YYYY.M.D.N`
+  for successive betas until that stable version ships, and increment `B`
+  starting at `1`. For example, `2026.11.18.1-beta.1` is followed by
+  `2026.11.18.1-beta.2`. Once `2026.11.18.1` ships, the next beta that day
+  starts at `2026.11.18.2-beta.1`.
 - Honor an explicitly requested version. Otherwise use the user's local date
-  and inspect remote tags/releases to choose the next unused daily sequence.
-  Do not use the CI runner's UTC date to change the requested release date.
+  and inspect remote tags and releases. For a new beta, start with the next
+  daily stable sequence. If that day's beta tags already reached a higher
+  base, continue from the highest tagged base and increment its beta suffix
+  so the new version sorts after existing betas. Do not use the CI runner's
+  UTC date to change the requested release date.
 - Legacy three-component tags, stable or beta, remain valid for recovery,
   retries, and comparisons. Never rename,
   move, delete, or overwrite an existing tag or its published artifacts.
