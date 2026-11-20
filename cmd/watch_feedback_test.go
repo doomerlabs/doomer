@@ -14,20 +14,15 @@ import (
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
 
-func TestFeedbackHookRequestsEveryUnansweredFinding(t *testing.T) {
+func TestCodexStopWarnsAboutUnansweredFindingsWithoutContinuing(t *testing.T) {
 	response := livewatch.Response{Findings: []livewatch.Finding{{ReviewID: "review", Lead: adversarylabs.WorkspaceLead{ID: strings.Repeat("a", 64), Path: "file.go", Line: 12, Concern: "Check the guard"}}}}
-	out := pendingFeedbackHook(response)
-	if out["decision"] != "block" {
-		t.Fatal(out)
-	}
-	visible := out["reason"].(string)
-	if visible != "Doomer review is ready." {
-		t.Fatal(visible)
-	}
-	for _, hidden := range []string{"watch findings", "--control", "review_id", "lead_id", "status=fixed", "Do not dump", "internal handoff"} {
-		if strings.Contains(visible, hidden) {
-			t.Fatalf("verbose guidance leaked into hook reason: %s", visible)
+	for _, active := range []bool{false, true} {
+		out := codexStopFeedback(response, active)
+		warning, _ := out["systemMessage"].(string)
+		if len(out) != 1 || !strings.Contains(warning, "incomplete") {
+			t.Fatalf("Stop must warn without creating a continuation (active=%v): %v", active, out)
 		}
+		assertSafeHandoffMessage(t, out)
 	}
 	text := feedbackInstructions(response, strings.Repeat("b", 64))
 	for _, want := range []string{"watch findings respond", "review_id", "lead_id", "status=fixed", "dismissed", "deferred", "Do not dump"} {
@@ -36,8 +31,8 @@ func TestFeedbackHookRequestsEveryUnansweredFinding(t *testing.T) {
 		}
 	}
 	response.Findings[0].Disposition = &livewatch.Feedback{Status: "dismissed"}
-	if pendingFeedbackHook(response) != nil {
-		t.Fatal("asked for recorded response again")
+	if out := codexStopFeedback(response, false); len(out) != 0 {
+		t.Fatalf("recorded findings generated Stop feedback: %v", out)
 	}
 }
 
@@ -197,7 +192,7 @@ func TestAdvisoryRequiresExplicitDisplayAcknowledgement(t *testing.T) {
 	if !report.Complete || !report.NoticesPending || report.NoticeInstructions == "" || report.NextAction != "display_blocking_notice" {
 		t.Fatal("pending display was treated as complete", report)
 	}
-	if pendingFeedbackHook(result) == nil {
+	if codexStopFeedback(result, false)["decision"] != "block" {
 		t.Fatal("stop failed to request advisory delivery")
 	}
 	text := feedbackInstructions(result, key)
@@ -205,7 +200,7 @@ func TestAdvisoryRequiresExplicitDisplayAcknowledgement(t *testing.T) {
 		t.Fatal(text)
 	}
 	result.Notices[0].NotifyUser = false
-	if !makeFeedbackReport(result).Complete || pendingFeedbackHook(result) != nil {
+	if !makeFeedbackReport(result).Complete || len(codexStopFeedback(result, false)) != 0 {
 		t.Fatal("acknowledged advisory still blocks completion")
 	}
 }
@@ -325,16 +320,9 @@ func TestClaudeFailedReviewsStayIncompleteWithoutStopLoop(t *testing.T) {
 	}
 }
 
-func TestPendingFeedbackMessageDoesNotExposeFindingCounts(t *testing.T) {
-	response := livewatch.Response{}
-	for i := 0; i < 11; i++ {
-		response.Findings = append(response.Findings, livewatch.Finding{})
-	}
-	if got := pendingFeedbackHook(response)["reason"]; got != "Doomer review is ready." {
-		t.Fatalf("finding count leaked: %v", got)
-	}
+func TestCodexPromptIncludesReviewOutcomeGuidance(t *testing.T) {
 	text := watchAgentContext("test")["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
-	for _, want := range []string{"not text to repeat", "Never equate returned findings with confirmed defects", "Report verified fixes, material unresolved concerns, incomplete coverage, and errors", "name the specific problem or affected behavior in one short sentence", "Only describe a finding as a bug you fixed if you agreed with it and verified the fix", "Provide the review outcome when the user asks for it in this turn", "Deliver required service advisories regardless of review outcome"} {
+	for _, want := range []string{"Never equate returned findings with confirmed defects", "Report verified fixes, material unresolved concerns, incomplete coverage, and errors", "name the specific problem or affected behavior in one short sentence", "Only describe a finding as a bug you fixed if you agreed with it and verified the fix", "Provide the review outcome when the user asks for it in this turn", "Deliver required service advisories regardless of review outcome"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing outcome guidance: %s", want)
 		}

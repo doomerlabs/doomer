@@ -95,14 +95,6 @@ func TestNodePolicyMergePreservesOtherCredentialDirectory(t *testing.T) {
 
 func TestCodexPendingFeedbackDoesNotClaimCompletion(t *testing.T) {
 	result := livewatch.Response{Findings: []livewatch.Finding{{ReviewID: "r", Lead: adversarylabs.WorkspaceLead{ID: "l"}}}}
-	if codexStopFeedback(result, false)["decision"] != "block" {
-		t.Fatal("first notification missing")
-	}
-	for i := 0; i < 3; i++ {
-		if out := codexStopFeedback(result, true); out["decision"] != nil || out["systemMessage"] == nil {
-			t.Fatal("repeated blocking notification", out)
-		}
-	}
 	if makeFeedbackReport(result).Complete {
 		t.Fatal("pending finding reported complete")
 	}
