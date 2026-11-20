@@ -58,6 +58,8 @@ type Client interface {
 }
 
 type Result struct {
+	assessmentExpired bool
+
 	Repository string                        `json:"repository"`
 	ID         string                        `json:"id,omitempty"`
 	URL        string                        `json:"url,omitempty"`

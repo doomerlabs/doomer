@@ -3,6 +3,7 @@ package livewatch
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -101,7 +102,10 @@ func diffLines(data []byte) []string {
 func review(ctx context.Context, client Client, cfg Config, repo string, capture sourcesnapshot.Capture, revision int) Result {
 	result := Result{Repository: repo, Status: "unavailable"}
 	fail := func(err error) Result {
-		cfg.lifecycle.failure("result_delivery", err, cfg.assessment)
+		result.assessmentExpired = errors.Is(err, adversarylabs.ErrAgentAssessmentExpired)
+		if !result.assessmentExpired {
+			cfg.lifecycle.failure("result_delivery", err, cfg.assessment)
+		}
 		result.Error = err.Error()
 		return result
 	}
@@ -136,7 +140,9 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		cfg.lifecycle.event("agent_assessment", "running")
 		hypotheses, err = cfg.hypotheses(ctx, repo, latest, revision)
 		if err != nil {
-			cfg.lifecycle.failure("agent_assessment", err, cfg.assessment)
+			if !errors.Is(err, adversarylabs.ErrAgentAssessmentExpired) {
+				cfg.lifecycle.failure("agent_assessment", err, cfg.assessment)
+			}
 			return fail(err)
 		}
 		cfg.lifecycle.event("agent_assessment", "completed")
@@ -185,7 +191,9 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		GroupID: group, ReviewID: reviewIdentity(cfg, repo, revision), Revision: revision, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "agent": cfg.Agent},
 	})
 	if err != nil {
-		cfg.lifecycle.event("submission", "failed")
+		if !errors.Is(err, adversarylabs.ErrAgentAssessmentExpired) {
+			cfg.lifecycle.event("submission", "failed")
+		}
 		return fail(err)
 	}
 	cfg.lifecycle.event("submission", "completed")

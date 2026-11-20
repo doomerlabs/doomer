@@ -27,6 +27,9 @@ func (e *ResponseError) Unwrap() error { return e.cause }
 // ErrMissingReviewScope identifies a rejected submission with no usable edit scope.
 var ErrMissingReviewScope = errors.New("missing_review_scope")
 
+// ErrAgentAssessmentExpired identifies an attempt the service has closed.
+var ErrAgentAssessmentExpired = errors.New("Doomer timed out waiting for the agent assessment")
+
 var requestIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 var validationFieldPattern = regexp.MustCompile(`^(body|repository|repository_id|pull_request|review_node_id|head_sha|comments(\[[0-9]{1,2}\](\.(adversary|package_name|package_version|finding_id|rule_id|path|body))?)?)$`)
 
@@ -62,6 +65,12 @@ func responseError(resp *http.Response, token string) error {
 			safeCode = body.Error
 			message += ": " + body.Error
 			cause = ErrMissingReviewScope
+		case "agent_response_timeout":
+			if resp.StatusCode == http.StatusConflict {
+				safeCode = body.Error
+				message = ErrAgentAssessmentExpired.Error()
+				cause = ErrAgentAssessmentExpired
+			}
 		case "Content does not match SHA-256":
 			message += ": uploaded file checksum mismatch (the server may have received a truncated body)"
 		case "invalid_request", "invalid_user_request", "invalid_json", "unauthorized", "insufficient_scope", "repository_mismatch", "access_denied",
@@ -110,7 +119,7 @@ func responseError(resp *http.Response, token string) error {
 	if requestIDPattern.MatchString(requestID) {
 		message += " [request_id=" + requestID + "]"
 	}
-	if cause != nil {
+	if cause == ErrMissingReviewScope {
 		message = cause.Error() + ": " + message
 	}
 	if safeCode == "client_update_required" {

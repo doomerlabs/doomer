@@ -147,14 +147,24 @@ func (c Client) workspaceRequest(ctx context.Context, token, method, path string
 }
 func (c Client) StartWorkspace(ctx context.Context, token string, input WorkspaceSubmission) (WorkspaceReview, error) {
 	var out WorkspaceReview
-	err := c.postJSON(ctx, "/v1/reviews/workspace?view=status", input, token, &out)
+	submit := func() error {
+		const endpoint = "/v1/reviews/workspace?view=status"
+		err := c.postJSON(ctx, endpoint, input, token, &out)
+		if workspaceID(input.ReviewID) && ctx.Err() == nil && (retryableAPIError(err) || errors.Is(err, context.DeadlineExceeded)) {
+			// A submission can be accepted before its response is lost. Replay
+			// the same payload so the service returns the existing review.
+			err = c.postJSON(ctx, endpoint, input, token, &out)
+		}
+		return err
+	}
+	err := submit()
 	var response *ResponseError
 	if input.EvidenceContext && input.FullReview == nil && errors.As(err, &response) && response.StatusCode == http.StatusBadRequest && response.Code == "invalid_evidence_context" {
 		// Older servers reject automatic Deep on evidence packets before
 		// creating a review. Preserve Quick with one compatible retry.
 		disabled := false
 		input.FullReview = &disabled
-		err = c.postJSON(ctx, "/v1/reviews/workspace?view=status", input, token, &out)
+		err = submit()
 	}
 	if err == nil && !workspaceID(out.ID) {
 		err = fmt.Errorf("invalid workspace review identity")

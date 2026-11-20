@@ -22,17 +22,19 @@ import (
 type repository struct {
 	baseline map[string]initialFile
 
-	observed         string
-	pending, running bool
-	version          int
-	frozen           *sourcesnapshot.Capture
-	result           *Result
-	cancel           context.CancelFunc
+	observed          string
+	pending, running  bool
+	version           int
+	retriedAssessment bool
+	frozen            *sourcesnapshot.Capture
+	result            *Result
+	cancel            context.CancelFunc
 }
 type completion struct {
 	path    string
 	version int
 	result  Result
+	capture sourcesnapshot.Capture
 }
 type control struct {
 	assessmentID     string
@@ -314,14 +316,12 @@ func (w *worker) schedule(ctx context.Context) {
 			continue
 		}
 		var snapshot sourcesnapshot.Capture
-		if !w.cfg.RequireHypotheses {
+		if r.frozen != nil {
+			snapshot = *r.frozen
+			r.frozen = nil
+		} else if !w.cfg.RequireHypotheses {
 			var err error
-			if r.frozen != nil {
-				snapshot = *r.frozen
-				r.frozen = nil
-			} else {
-				snapshot, err = capture(ctx, path)
-			}
+			snapshot, err = capture(ctx, path)
 			if err != nil {
 				if !errors.Is(err, sourcesnapshot.ErrNoChanges) {
 					r.result = &Result{Repository: path, Status: "unavailable", Error: err.Error()}
@@ -350,7 +350,7 @@ func (w *worker) schedule(ctx context.Context) {
 			}
 			defer func() { <-w.slots }()
 			captureStarted := time.Now()
-			if w.cfg.RequireHypotheses {
+			if w.cfg.RequireHypotheses && snapshot.Bytes == nil {
 				captured, err := capture(jobCtx, path, baseline)
 				if err != nil {
 					result := Result{Repository: path, Status: "unavailable", Error: err.Error()}
@@ -358,7 +358,7 @@ func (w *worker) schedule(ctx context.Context) {
 						result.Status, result.Error = "unchanged", ""
 					}
 					select {
-					case w.completed <- completion{path, version, result}:
+					case w.completed <- completion{path: path, version: version, result: result}:
 					case <-ctx.Done():
 					}
 					return
@@ -379,7 +379,7 @@ func (w *worker) schedule(ctx context.Context) {
 						result.Status, result.Error = "unavailable", err.Error()
 					}
 					select {
-					case w.completed <- completion{path, version, result}:
+					case w.completed <- completion{path: path, version: version, result: result}:
 					case <-ctx.Done():
 					}
 					return
@@ -401,7 +401,9 @@ func (w *worker) schedule(ctx context.Context) {
 					var err error
 					areas, err = triage.TriageWorkspace(ctx, cfg.Token, reviewIdentity(cfg, repo, revision), diff)
 					if err != nil {
-						cfg.lifecycle.failure("risk_selection", err, nil)
+						if !errors.Is(err, adversarylabs.ErrAgentAssessmentExpired) {
+							cfg.lifecycle.failure("risk_selection", err, nil)
+						}
 						return nil, err
 					}
 					cfg.lifecycle.event("risk_selection", "completed")
@@ -432,8 +434,12 @@ func (w *worker) schedule(ctx context.Context) {
 				return result.Hypotheses, nil
 			}
 			result := review(jobCtx, w.client, cfg, path, snapshot, version)
+			done := completion{path: path, version: version, result: result}
+			if result.assessmentExpired {
+				done.capture = snapshot
+			}
 			select {
-			case w.completed <- completion{path, version, result}:
+			case w.completed <- done:
 			case <-ctx.Done():
 			}
 		}(path, version, snapshot)
@@ -818,16 +824,35 @@ func (w *worker) run(ctx context.Context) error {
 		case done := <-w.completed:
 			if r := w.repos[done.path]; r != nil && r.version == done.version {
 				r.running = false
+				for id, task := range w.hypotheses {
+					if task.request.Repository == done.path {
+						delete(w.hypotheses, id)
+					}
+				}
+				if w.cfg.RequireHypotheses && done.result.assessmentExpired && !r.retriedAssessment {
+					if turnEnded && !r.pending {
+						// Keep an ended turn scoped to the source it already captured.
+						r.frozen = &done.capture
+					} else if !turnEnded {
+						// The replacement captures the latest source. Mark it observed
+						// so the next scan does not queue that edit a second time.
+						bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+						if fingerprint, err := workspaceFingerprint(bounded, done.path); err == nil {
+							r.observed = fingerprint
+						}
+						cancel()
+					}
+					r.retriedAssessment = true
+					r.pending = true
+					w.schedule(ctx)
+					continue
+				}
+				r.retriedAssessment = false
 				r.result = &done.result
 				if strings.Contains(done.result.Error, errAgentResponseTimeout.Error()) {
 					turnEnded = true
 					for _, pending := range w.repos {
 						pending.pending = false
-					}
-				}
-				for id, task := range w.hypotheses {
-					if task.request.Repository == done.path {
-						delete(w.hypotheses, id)
 					}
 				}
 				if w.cfg.Report != nil {
