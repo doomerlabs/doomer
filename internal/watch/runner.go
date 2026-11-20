@@ -360,10 +360,12 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 			// Release a hook immediately on upload/request failure. The feed
 			// belongs only to this edit; a successful retry can replace it.
 			code := phase + "_failed"
-			if errors.Is(err, adversarylabs.ErrMissingReviewScope) {
+			switch {
+			case errors.Is(err, adversarylabs.ErrMissingReviewScope):
 				code = "missing_review_scope"
-			}
-			if errors.Is(err, context.DeadlineExceeded) {
+			case errors.Is(err, adversarylabs.ErrAgentAssessmentExpired):
+				code = "agent_response_timeout"
+			case errors.Is(err, context.DeadlineExceeded):
 				code = phase + "_timeout"
 			}
 			_ = Write(FeedPath(r.Root, path), Feed{Owner: requestState.Owner, Fingerprint: capture.Digest, Updated: time.Now(), AssessmentStatus: "unavailable", FailureCode: code})

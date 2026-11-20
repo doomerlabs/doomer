@@ -55,7 +55,7 @@ func (f *expiredReviewLifecycle) GetWorkspace(context.Context, string, string) (
 	return adversarylabs.WorkspaceReview{}, adversarylabs.ErrAgentAssessmentExpired
 }
 
-func TestExpiredReviewReportsFailedLifecycleWithoutRetryingAnAcceptedReview(t *testing.T) {
+func TestReviewClassifiesExpiryAndReportsTerminalLifecycleStages(t *testing.T) {
 	repo := makeRepository(t, t.TempDir(), "repo")
 	baseline, err := initialEditFiles(t.Context(), repo)
 	if err != nil {
@@ -77,8 +77,14 @@ func TestExpiredReviewReportsFailedLifecycleWithoutRetryingAnAcceptedReview(t *t
 			}
 			cfg.lifecycle = newReviewLifecycle(client, cfg, repo, snapshot, 1, time.Now())
 			got := review(t.Context(), client, cfg, repo, snapshot, 1)
-			if got.Status != "unavailable" || got.assessmentExpired != client.expireAtSubmission || got.Error != adversarylabs.ErrAgentAssessmentExpired.Error() {
+			if got.Status != "unavailable" || got.Error != adversarylabs.ErrAgentAssessmentExpired.Error() {
 				t.Fatalf("unexpected expiry outcome: %+v", got)
+			}
+			if stage == "submission" && (!got.assessmentExpired || got.ID != "") {
+				t.Fatalf("submission expiry did not request a new assessment: %+v", got)
+			}
+			if stage == "result_delivery" && (got.assessmentExpired || got.ID != reviewIdentity(cfg, repo, 1)) {
+				t.Fatalf("delivery expiry did not preserve the accepted review identity: %+v", got)
 			}
 			failures := map[string]bool{}
 			for _, entry := range client.events {

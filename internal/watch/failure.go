@@ -28,7 +28,19 @@ func reviewProgressMessage(feed Feed) string {
 	case "retrying":
 		return "Doomer could not complete the review and is retrying."
 	case "unavailable":
-		reason := map[string]string{"upload_timeout": "the repository upload timed out", "upload_failed": "the repository upload failed", "analysis_timeout": "analysis timed out", "repository_context": "the server could not prepare repository context", "repository_context_timeout": "repository context preparation timed out", "missing_review_scope": "the server could not identify the edited code to review", "capture_edit_scope": "the agent edit scope could not be captured", "timeout": "analysis timed out", "model_request_failed": "the analysis service failed", "model_configuration": "the analysis service is not configured"}[feed.FailureCode]
+		reason := map[string]string{
+			"upload_timeout":             "the repository upload timed out",
+			"upload_failed":              "the repository upload failed",
+			"analysis_timeout":           "analysis timed out",
+			"agent_response_timeout":     "Doomer timed out waiting for the agent assessment",
+			"repository_context":         "the server could not prepare repository context",
+			"repository_context_timeout": "repository context preparation timed out",
+			"missing_review_scope":       "the server could not identify the edited code to review",
+			"capture_edit_scope":         "the agent edit scope could not be captured",
+			"timeout":                    "analysis timed out",
+			"model_request_failed":       "the analysis service failed",
+			"model_configuration":        "the analysis service is not configured",
+		}[feed.FailureCode]
 		if reason == "" {
 			reason = "the review service was unavailable"
 		}
