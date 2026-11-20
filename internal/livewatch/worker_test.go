@@ -72,9 +72,63 @@ func TestHookWatcherPollsSparinglyAndExpiresWithoutControl(t *testing.T) {
 				t.Fatal(err)
 			}
 		default:
-			t.Fatal("filesystem activity kept an abandoned watcher alive")
+			t.Fatal("watcher survived its renewed idle deadline")
 		}
 	})
+}
+
+func TestHookWatcherSourceChangesExtendIdleTimeUntilControlDeadline(t *testing.T) {
+	repo := makeRepository(t, t.TempDir(), "repo")
+	cfg := Config{
+		Directory:         repo,
+		Agent:             "codex",
+		RequireHypotheses: true,
+		IdleTimeout:       3 * time.Second,
+		ControlTimeout:    5 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	baseline := make(chan struct{})
+	var discovered sync.Once
+	allowed := func(_ context.Context, path string) bool {
+		if path != "" {
+			discovered.Do(func() { close(baseline) })
+		}
+		return true
+	}
+	done := make(chan error, 1)
+	go func() { done <- Serve(ctx, cfg, &fakeClient{}, allowed) }()
+	select {
+	case <-baseline:
+	case err := <-done:
+		t.Fatalf("watcher failed during startup: %v", err)
+	case <-ctx.Done():
+		t.Fatal("watcher did not scan the repository")
+	}
+
+	started := time.Now()
+	edits := time.NewTicker(time.Second)
+	defer edits.Stop()
+	overdue := time.NewTimer(7 * time.Second)
+	defer overdue.Stop()
+	for {
+		select {
+		case edit := <-edits.C:
+			if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte(edit.String()), 0600); err != nil {
+				t.Fatal(err)
+			}
+		case err := <-done:
+			if err != nil {
+				t.Fatal(err)
+			}
+			if elapsed := time.Since(started); elapsed < cfg.ControlTimeout-500*time.Millisecond {
+				t.Fatalf("watcher expired after %v despite ongoing edits", elapsed)
+			}
+			return
+		case <-overdue.C:
+			t.Fatal("ongoing edits extended the watcher past the control deadline")
+		}
+	}
 }
 
 type fakeClient struct {

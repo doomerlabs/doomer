@@ -247,7 +247,7 @@ func newForegroundWatchCommand() *cobra.Command {
 			}
 		}()
 		config.Stop = stop
-		if fromStdin && config.RequireHypotheses {
+		if fromStdin {
 			// Detached hook workers can outlive their host when a cleanup hook is missed.
 			config.IdleTimeout = 30 * time.Minute
 			config.ControlTimeout = time.Hour

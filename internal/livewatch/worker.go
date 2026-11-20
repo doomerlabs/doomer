@@ -616,7 +616,7 @@ func (w *worker) run(ctx context.Context) error {
 		return nil
 	}
 	scanInterval := time.Second
-	if w.cfg.RequireHypotheses {
+	if w.cfg.IdleTimeout > 0 {
 		// Filesystem events and checkpoints still trigger scans. Poll less
 		// often for changes the backend couldn't report.
 		scanInterval = 30 * time.Second
