@@ -85,6 +85,15 @@ type hypothesisWait struct {
 	reply   chan HypothesisResponse
 }
 
+func (p *hypothesisWait) isExpired() bool {
+	select {
+	case <-p.expired:
+		return true
+	default:
+		return false
+	}
+}
+
 func SubmitHypotheses(ctx context.Context, key string, response HypothesisResponse) (Response, error) {
 	return call(ctx, key, request{Key: key, Operation: "hypotheses", Hypotheses: &response})
 }
@@ -93,10 +102,8 @@ func (w *worker) recordHypotheses(response HypothesisResponse) error {
 	if pending == nil {
 		return fmt.Errorf("unknown or expired hypothesis request")
 	}
-	select {
-	case <-pending.expired:
+	if pending.isExpired() {
 		return errAgentResponseTimeout
-	default:
 	}
 	if response.Status == "" {
 		response.Status = "assessed"

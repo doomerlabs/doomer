@@ -445,13 +445,14 @@ func (w *worker) schedule(ctx context.Context) {
 }
 
 func (w *worker) response(timeout bool) Response {
-	otherPending := w.otherReviewPending()
-	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory,
-		ReviewPending: otherPending || len(w.hypotheses) > 0, OtherReviewPending: otherPending}
+	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory}
 	for _, pending := range w.hypotheses {
-
-		response.HypothesisRequests = append(response.HypothesisRequests, pending.request)
+		if !pending.isExpired() {
+			response.HypothesisRequests = append(response.HypothesisRequests, pending.request)
+		}
 	}
+	response.OtherReviewPending = w.otherReviewPending(response.HypothesisRequests)
+	response.ReviewPending = response.OtherReviewPending || len(response.HypothesisRequests) > 0
 	sort.Slice(response.HypothesisRequests, func(i, j int) bool { return response.HypothesisRequests[i].ID < response.HypothesisRequests[j].ID })
 	if w.cfg.Consent != nil {
 		response.Consent = w.cfg.Consent()
@@ -483,10 +484,10 @@ func (w *worker) response(timeout bool) Response {
 	return response
 }
 
-func (w *worker) otherReviewPending() bool {
-	waiting := make(map[string]int, len(w.hypotheses))
-	for _, task := range w.hypotheses {
-		waiting[task.request.Repository] = task.request.Revision
+func (w *worker) otherReviewPending(requests []HypothesisRequest) bool {
+	waiting := make(map[string]int, len(requests))
+	for _, request := range requests {
+		waiting[request.Repository] = request.Revision
 	}
 	for path, repo := range w.repos {
 		revision, hasRequest := waiting[path]
@@ -510,8 +511,8 @@ func (w *worker) collectFindings() {
 	}
 }
 
-func (w *worker) hasPendingFeedback() bool {
-	return len(w.hypotheses) > 0 || hasPendingUserFeedback(w.response(false))
+func hasPendingFeedback(response Response) bool {
+	return len(response.HypothesisRequests) > 0 || hasPendingUserFeedback(response)
 }
 
 func hasPendingUserFeedback(response Response) bool {
@@ -630,7 +631,7 @@ func (w *worker) run(ctx context.Context) error {
 			for _, r := range w.repos {
 				busy = busy || r.running || r.pending
 			}
-			if busy || w.hasPendingFeedback() {
+			if busy || hasPendingFeedback(w.response(false)) {
 				if terminalTimer != nil {
 					terminalTimer.Stop()
 					terminalTimer = nil
@@ -654,12 +655,12 @@ func (w *worker) run(ctx context.Context) error {
 					busy = true
 				}
 			}
-			if !busy || len(w.hypotheses) > 0 {
-				w.collectFindings()
-				response := w.response(false)
+			w.collectFindings()
+			response := w.response(false)
+			if !busy || len(response.HypothesisRequests) > 0 {
 				stop := false
 				for _, command := range closing {
-					stop = stop || !command.checkpoint || (command.finish && !w.hasPendingFeedback())
+					stop = stop || !command.checkpoint || (command.finish && !hasPendingFeedback(response))
 				}
 				if stop {
 					_ = w.closeListener()
@@ -767,7 +768,7 @@ func (w *worker) run(ctx context.Context) error {
 				// state after the Stop response is sent to the hook.
 				w.collectFindings()
 				response := w.response(false)
-				if w.cfg.Agent != "codex" || !turnEnded || response.OtherReviewPending || hasPendingUserFeedback(response) || len(w.hypotheses) == 0 || !w.assessmentsOfferedAtStop() {
+				if w.cfg.Agent != "codex" || !turnEnded || response.OtherReviewPending || hasPendingUserFeedback(response) || len(response.HypothesisRequests) == 0 || !w.assessmentsOfferedAtStop() {
 					finish(command, response)
 					continue
 				}
@@ -806,7 +807,7 @@ func (w *worker) run(ctx context.Context) error {
 			response := w.response(true)
 			stop := false
 			for _, command := range closing {
-				stop = stop || !command.checkpoint || (command.finish && !w.hasPendingFeedback())
+				stop = stop || !command.checkpoint || (command.finish && !hasPendingFeedback(response))
 			}
 			if stop {
 				_ = w.closeListener()
@@ -955,7 +956,7 @@ func (w *worker) addDirectory(ctx context.Context, directory string) error {
 func (w *worker) repeatStopHandoff() bool {
 	repeated := true
 	for _, pending := range w.hypotheses {
-		if pending.stopOffered {
+		if pending.stopOffered || pending.isExpired() {
 			continue
 		}
 		pending.stopOffered = true
@@ -973,7 +974,7 @@ func (w *worker) repeatStopHandoff() bool {
 
 func (w *worker) assessmentsOfferedAtStop() bool {
 	for _, pending := range w.hypotheses {
-		if !pending.stopOffered {
+		if !pending.stopOffered && !pending.isExpired() {
 			return false
 		}
 	}

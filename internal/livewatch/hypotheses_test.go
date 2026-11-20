@@ -63,9 +63,16 @@ func TestAgentResponseTimeoutStartsAfterRetrieval(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("retrieved request never expired")
 	}
-	w := &worker{hypotheses: map[string]*hypothesisWait{"late": p}}
+	p.request = HypothesisRequest{ID: "late", Repository: "/repo", Revision: 1}
+	w := &worker{
+		hypotheses: map[string]*hypothesisWait{"late": p},
+		repos:      map[string]*repository{"/repo": {running: true, version: 1}},
+	}
 	if err := w.recordHypotheses(HypothesisResponse{RequestID: "late", Hypotheses: []adversarylabs.WorkspaceHypothesis{}}); !errors.Is(err, errAgentResponseTimeout) {
 		t.Fatalf("accepted late response: %v", err)
+	}
+	if report := w.response(false); len(report.HypothesisRequests) != 0 || !report.OtherReviewPending {
+		t.Fatalf("expired request should be hidden while its review finishes: %+v", report)
 	}
 }
 

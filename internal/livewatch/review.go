@@ -137,7 +137,7 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		cfg.lifecycle.event("agent_assessment", "running")
 		hypotheses, err = cfg.hypotheses(ctx, repo, latest, revision)
 		if err != nil {
-			result.assessmentExpired = errors.Is(err, adversarylabs.ErrAgentAssessmentExpired)
+			result.assessmentExpired = errors.Is(err, errAgentResponseTimeout) || errors.Is(err, adversarylabs.ErrAgentAssessmentExpired)
 			cfg.lifecycle.failure("agent_assessment", err, cfg.assessment)
 			return fail(err)
 		}
