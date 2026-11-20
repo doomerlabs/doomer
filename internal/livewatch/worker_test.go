@@ -673,6 +673,56 @@ func TestTerminalReportKeepsNewFindingsAvailable(t *testing.T) {
 	}
 }
 
+func TestClaudeFindingStopFollowupRequiresAnUnansweredHandoff(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		delivery   control
+		resolved   bool
+		denied     bool
+		wantFollow bool
+	}{
+		{name: "no findings", delivery: control{checkpoint: true}},
+		{name: "unseen finding", delivery: control{results: true}},
+		{name: "checkpoint handoff", delivery: control{checkpoint: true}, wantFollow: true},
+		{name: "explicit list handoff", delivery: control{listFindings: true}, wantFollow: true},
+		{name: "answered after delivery", delivery: control{checkpoint: true}, resolved: true},
+		{name: "denied after delivery", delivery: control{checkpoint: true}, denied: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := worker{findings: map[string]Finding{}}
+			if tc.name != "no findings" {
+				w.findings["review/lead"] = Finding{ReviewID: "review", Lead: adversarylabs.WorkspaceLead{ID: "lead"}}
+			}
+			report := w.response(false)
+			// The report can contain a published finding and a later assessment.
+			report.HypothesisRequests = []HypothesisRequest{{ID: "new-assessment"}}
+			w.prepareClaudeFindingHandoff(tc.delivery, &report)
+			wantHandoff := len(report.Findings) > 0 && !tc.delivery.results
+			if report.FindingHandoff != wantHandoff {
+				t.Fatalf("finding handoff = %v, want %v", report.FindingHandoff, wantHandoff)
+			}
+			if tc.resolved {
+				finding := w.findings["review/lead"]
+				finding.Disposition = &Feedback{Status: "dismissed"}
+				w.findings["review/lead"] = finding
+			}
+			w.findingToolDenied = tc.denied
+			stop := control{finish: true, checkpoint: true}
+			w.prepareClaudeFindingHandoff(stop, &report)
+			if report.FindingStopFollowup {
+				t.Fatal("finding follow-up displaced the pending assessment")
+			}
+			for _, want := range []bool{tc.wantFollow, false} {
+				report = w.response(false)
+				w.prepareClaudeFindingHandoff(stop, &report)
+				if report.FindingStopFollowup != want {
+					t.Fatalf("finding follow-up = %v, want %v", report.FindingStopFollowup, want)
+				}
+			}
+		})
+	}
+}
+
 type terminalFindingClient struct{ fakeClient }
 
 func (f *terminalFindingClient) StartWorkspace(_ context.Context, _ string, in adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {

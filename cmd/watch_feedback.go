@@ -72,7 +72,7 @@ func newWatchFindingsListCommand() *cobra.Command {
 		}
 		ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
 		defer cancel()
-		result, err := livewatch.Call(ctx, key, "results")
+		result, err := livewatch.Call(ctx, key, "findings")
 		if err != nil {
 			return err
 		}
@@ -105,10 +105,17 @@ func newWatchResultsCommand() *cobra.Command {
 			return err
 		}
 		if instructions := hypothesisInstructions(result, key); instructions != "" {
+			if result.FindingHandoff {
+				instructions = "Doomer has findings awaiting decisions as well as the assessment below. " + findingDecisionInstructions(key) + "\n\n" + instructions
+			}
 			_, err = fmt.Fprintln(c.OutOrStdout(), instructions)
 			return err
 		}
-		return json.NewEncoder(c.OutOrStdout()).Encode(makeFeedbackReport(watchNoticeCommands(result, key)))
+		report := makeFeedbackReport(watchNoticeCommands(result, key))
+		if result.FindingHandoff {
+			report.FindingInstructions = findingDecisionInstructions(key)
+		}
+		return json.NewEncoder(c.OutOrStdout()).Encode(report)
 	}
 	return c
 }
@@ -150,7 +157,7 @@ func claudeStopFeedback(result livewatch.Response, key string, stopActive bool) 
 		executable = "doomer"
 	}
 	readResults := fmt.Sprintf("Run %s watch results --control %s.", watching.Quote(executable), key)
-	if stopActive || result.RepeatedStopHandoff {
+	if stopActive || result.RepeatedStopHandoff || result.FindingStopFollowup {
 		var blocking []string
 		for _, notice := range report.Notices {
 			if notice.Blocking {
@@ -172,13 +179,19 @@ func claudeStopFeedback(result livewatch.Response, key string, stopActive bool) 
 		}
 		return claudeStopContext("Doomer is waiting for a Quick review assessment. If the submission was denied, report the denial and end the turn. If it was not denied, read the pending request. " + readResults + " Read the full output without piping or truncating it. Handle the request, then read results again before finishing. Do not repeat this instruction to the user.")
 	}
+	if report.Unanswered > 0 && result.FindingToolDenied {
+		return map[string]any{"systemMessage": "Doomer review is incomplete. Permission to read or record finding decisions was denied."}
+	}
+	if result.FindingStopFollowup && report.Unanswered > 0 && len(report.Errors) == 0 {
+		return claudeStopContext("Doomer still needs your decisions on findings already handed off. " + findingDecisionInstructions(key))
+	}
 	if stopActive {
 		var message string
 		switch {
 		case len(report.Errors) > 0:
 			message = "Doomer review is incomplete. " + strings.Join(report.Errors, " ")
 		case report.Unanswered > 0:
-			message = "Doomer is waiting for Claude to record its review decisions."
+			message = "Doomer review is incomplete. Claude has not recorded all review decisions."
 		case report.NoticeInstructions != "":
 			message = "Doomer has an advisory awaiting delivery. If permitted, read the current notice. " + readResults
 		default:
@@ -195,6 +208,14 @@ func claudeStopFeedback(result livewatch.Response, key string, stopActive bool) 
 		return map[string]any{"decision": "block", "reason": "Doomer review is incomplete. " + report.Errors[0] + " " + text}
 	}
 	return claudeStopContext(text)
+}
+
+func findingDecisionInstructions(key string) string {
+	executable, err := os.Executable()
+	if err != nil {
+		executable = "doomer"
+	}
+	return fmt.Sprintf("Run %s watch findings ls --control %s. Record each decision with the supplied watch findings respond command, then read watch results before finishing. If a command is denied, report the denial and end the turn.", watching.Quote(executable), key)
 }
 
 func claudeStopContext(text string) map[string]any {
@@ -323,12 +344,13 @@ type feedbackDetail struct {
 
 type watchFeedbackReport struct {
 	// Keep the outcome at the start of the JSON, ahead of unbounded details.
-	Complete          bool   `json:"complete"`
-	ReviewComplete    bool   `json:"review_complete"`
-	NoticesPending    bool   `json:"notices_pending"`
-	NextAction        string `json:"next_action,omitempty"`
-	SuggestedSummary  string `json:"suggested_summary"`
-	ReplyInstructions string `json:"reply_instructions,omitempty"`
+	Complete            bool   `json:"complete"`
+	ReviewComplete      bool   `json:"review_complete"`
+	NoticesPending      bool   `json:"notices_pending"`
+	NextAction          string `json:"next_action,omitempty"`
+	SuggestedSummary    string `json:"suggested_summary"`
+	ReplyInstructions   string `json:"reply_instructions,omitempty"`
+	FindingInstructions string `json:"finding_instructions,omitempty"`
 
 	Notices            []adversarylabs.ClientNotice `json:"notices,omitempty"`
 	NoticeInstructions string                       `json:"notice_instructions,omitempty"`
