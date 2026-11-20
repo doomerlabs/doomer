@@ -379,17 +379,43 @@ for the findings belonging to a specific CLI worktree review.
 
 The default baseline is the merge base of HEAD and origin's local default-branch
 ref, falling back to origin/main, origin/master, main, master, then HEAD. No refs
-are fetched. `--base` uses the specified local ref or commit directly. An
-unchanged snapshot is rejected; use a baseline containing the changes you want
-reviewed. Both clean feature branches and uncommitted work are supported.
+are fetched. `--base` uses the specified local ref or commit directly. If the baseline and worktree have no eligible changes, the CLI exits without submitting a review. Both clean feature branches and uncommitted work are supported.
 
 Snapshots include tracked files and non-ignored untracked files, with current
-working bytes taking precedence over the index. Deleted files appear only in the
-baseline. Git metadata and ignored untracked files are excluded. No commits,
-index changes, builds, hooks, filters, or local review processes are performed.
-The default workspace path permits regular files up to 20 MiB and 1 GiB of
-source; each tree can contain at most 20,000 files. All review modes use this upload path. Symlinks, submodules, sparse
-checkouts, unresolved merges, and Git LFS pointers cause an explicit error.
+working bytes taking precedence over the index. Manual and hook-triggered
+reviews apply the same exclusions:
+
+- Git ignore rules apply to untracked files and directories. Git still tracks
+  a file if you add its name to `.gitignore` later.
+- A root `.doomerignore` applies to tracked and untracked paths in the worktree
+  and baseline. It uses Git's ignore syntax, including globs, leading `/` for
+  root-relative patterns, directory patterns and `!` negation. To re-include a
+  file inside a directory, keep its parent directories eligible. Negation only
+  affects `.doomerignore` rules.
+- A path is excluded from both trees if either version contains a NUL byte,
+  contains invalid UTF-8, or is larger than 1 MiB (1,048,576 bytes). Set
+  `DOOMER_REVIEW_MAX_FILE_BYTES` in the CLI or hook process environment to an
+  integer from 1 through 20,971,520 to override the default.
+
+For example, an iOS repository can add:
+
+```gitignore
+/DerivedData/
+**/*.xcuserstate
+/Generated/*
+!/Generated/README.md
+```
+
+Run `doomer review --show-skipped` to list excluded paths and reasons on stderr.
+The list can include unchanged paths and directory summaries for Git-ignored
+content. Exclusions are intentional. If every change is excluded, the CLI
+reports “No eligible changes to review.” Coverage is incomplete only if an
+eligible change could not be assessed.
+
+Captures skip symlinks and Git metadata. No commits, index changes, builds,
+hooks, or filters are run during capture. The upload path supports 1 GiB of
+eligible source and at most 20,000 eligible files per tree. Submodules, sparse
+checkouts, unresolved merges and eligible Git LFS pointers cause an explicit error.
 
 SaaS stores repository identity, branch, HEAD SHA, and dirty status alongside verified
 baseline and target tree fingerprints. Fingerprints cover every captured path,

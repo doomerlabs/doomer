@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -80,5 +81,28 @@ func TestWorkspacePreservesTrailingSpaceInRepositoryPath(t *testing.T) {
 	m := manifest(t, snapshot)
 	if len(m.Target) != 1 || m.Target[0].Path != "code.go" {
 		t.Fatalf("captured the wrong source: %+v", m.Target)
+	}
+}
+
+func TestInitialWorktreePathReplacedBySymlinkDoesNotBlockCapture(t *testing.T) {
+	dir := t.TempDir()
+	git(t, dir, "init", "-b", "main")
+	sourceFile(t, dir, "source/old.txt", "before\n")
+	sourceFile(t, dir, "code.go", "before\n")
+	initial := manifest(t, captureWorkspace(t, dir, nil))
+
+	if err := os.RemoveAll(filepath.Join(dir, "source")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(dir, "source")); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	sourceFile(t, dir, "code.go", "after\n")
+	m := manifest(t, captureWorkspace(t, dir, &initial))
+	if len(m.Target) != 1 || m.Target[0].Path != "code.go" || string(m.Blobs[m.Target[0].Hash]) != "after\n" {
+		t.Fatalf("unexpected target: %+v", m.Target)
 	}
 }

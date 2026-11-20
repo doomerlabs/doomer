@@ -102,7 +102,7 @@ func TestLatestEditExcludesExistingDirtyBranchChanges(t *testing.T) {
 		return sourcesnapshot.Entry{Path: path, Hash: sourcesnapshot.Digest(b), Mode: "100644"}
 	}
 	m := sourcesnapshot.Manifest{Base: []sourcesnapshot.Entry{entry("a.go", old), entry("b.go", old)}, Target: []sourcesnapshot.Entry{entry("a.go", latest), entry("b.go", branch)}, Blobs: map[string][]byte{sourcesnapshot.Digest(old): old, sourcesnapshot.Digest(branch): branch, sourcesnapshot.Digest(latest): latest}}
-	diff, err := editScope(context.Background(), m, map[string]initialFile{"a.go": {body: branch, mode: "100644"}, "b.go": {body: branch, mode: "100644"}})
+	diff, err := editScope(context.Background(), m, map[string]initialFile{"a.go": {body: branch, mode: "100644"}, "b.go": {body: branch, mode: "100644"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

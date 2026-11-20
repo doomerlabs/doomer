@@ -4,16 +4,16 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
-	"os"
-	"path/filepath"
 	"sort"
+
+	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 )
 
 type initialFile struct {
-	body    []byte
-	mode    string
-	deleted bool
+	body     []byte
+	mode     string
+	deleted  bool
+	excluded string
 }
 
 // Only dirty files need preservation: the captured Git base supplies the rest.
@@ -27,7 +27,7 @@ func initialEditFiles(ctx context.Context, repo string) (map[string]initialFile,
 		// per-file and total content limits as the subsequent review snapshot.
 		captured, err := sourcesnapshot.CaptureWorktree(ctx, sourcesnapshot.CaptureOptions{Path: repo, Workspace: true})
 		if errors.Is(err, sourcesnapshot.ErrNoChanges) {
-			return map[string]initialFile{}, nil
+			return initialExclusions(captured), nil
 		}
 		if err != nil {
 			return nil, err
@@ -36,7 +36,7 @@ func initialEditFiles(ctx context.Context, repo string) (map[string]initialFile,
 		if err != nil {
 			return nil, err
 		}
-		result := make(map[string]initialFile, len(manifest.Target))
+		result := initialExclusions(captured)
 		for _, entry := range manifest.Target {
 			result[entry.Path] = initialFile{body: manifest.Blobs[entry.Hash], mode: entry.Mode}
 		}
@@ -67,39 +67,22 @@ func initialEditFiles(ctx context.Context, repo string) (map[string]initialFile,
 			paths = append(paths, string(name))
 		}
 	}
-	return readInitialFiles(repo, paths)
+	result := map[string]initialFile{}
+	err = sourcesnapshot.ReadReviewFiles(ctx, repo, paths, func(path string, data []byte, mode, reason string) {
+		result[path] = initialFile{body: data, mode: mode, deleted: mode == "" && reason == "", excluded: reason}
+	})
+	return result, err
 }
 
-func readInitialFiles(repo string, paths []string) (map[string]initialFile, error) {
-	result := map[string]initialFile{}
-	for _, path := range paths {
-		if !sourcesnapshot.ValidPath(path) {
-			continue
-		}
-		info, err := os.Lstat(filepath.Join(repo, path))
-		if os.IsNotExist(err) {
-			result[path] = initialFile{deleted: true}
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		if !info.Mode().IsRegular() {
-			continue
-		}
-		body, err := os.ReadFile(filepath.Join(repo, path))
-		if err != nil {
-			return nil, err
-		}
-		mode := "100644"
-		if info.Mode()&0111 != 0 {
-			mode = "100755"
-		}
-		result[path] = initialFile{body: body, mode: mode}
+func initialExclusions(capture sourcesnapshot.Capture) map[string]initialFile {
+	result := make(map[string]initialFile, len(capture.Skipped))
+	for path, reason := range capture.Skipped {
+		result[path] = initialFile{excluded: reason}
 	}
-	return result, nil
+	return result
 }
-func editScope(ctx context.Context, m sourcesnapshot.Manifest, baseline map[string]initialFile) (string, error) {
+
+func editScope(ctx context.Context, m sourcesnapshot.Manifest, baseline map[string]initialFile, excluded map[string]string) (string, error) {
 	before := map[string]sourcesnapshot.Entry{}
 	for _, e := range m.Base {
 		before[e.Path] = e
@@ -109,6 +92,9 @@ func editScope(ctx context.Context, m sourcesnapshot.Manifest, baseline map[stri
 		blobs[h] = b
 	}
 	for path, f := range baseline {
+		if f.excluded != "" || excluded[path] != "" {
+			continue
+		}
 		if f.deleted {
 			delete(before, path)
 			continue

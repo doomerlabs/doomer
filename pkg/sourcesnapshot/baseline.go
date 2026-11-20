@@ -1,14 +1,17 @@
 package sourcesnapshot
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
 
-// CaptureBaseline reads committed objects only, so an agent can keep editing
-// while its already-consented repository baseline is prepared for upload.
+// CaptureBaseline prepares committed source for upload. It checks eligibility
+// against the worktree without including worktree contents in the manifest.
 func CaptureBaseline(ctx context.Context, opts CaptureOptions) (Manifest, string, error) {
 	path, err := filepath.Abs(opts.Path)
 	if err != nil {
@@ -29,7 +32,47 @@ func CaptureBaseline(ctx context.Context, opts CaptureOptions) (Manifest, string
 		return Manifest{}, "", err
 	}
 	m := Manifest{Version: 1, Scope: "worktree", BaseRef: base, HeadRef: head, Blobs: map[string][]byte{}}
-	m.Base, err = g.readTree(base, m.Blobs)
+	root, err := os.OpenRoot(top)
+	if err != nil {
+		return Manifest{}, "", err
+	}
+	defer root.Close()
+	maxFile, err := reviewFileLimit(true)
+	if err != nil {
+		return Manifest{}, "", err
+	}
+	entries, err := g.treeEntries(base)
+	if err != nil {
+		return Manifest{}, "", err
+	}
+	policy, err := readIgnorePolicy(root)
+	if err != nil {
+		return Manifest{}, "", err
+	}
+	excluded, err := g.ignoredPaths(policy, treePaths(entries))
+	if err != nil {
+		return Manifest{}, "", err
+	}
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return Manifest{}, "", err
+		}
+		if excluded[entry.path] != "" {
+			continue
+		}
+		data, _, err := readWorktreeFile(root, entry.path, maxFile)
+		switch {
+		case errors.Is(err, errSourceTooLarge):
+			excluded[entry.path] = SkipSize
+		case os.IsNotExist(err), errors.Is(err, errSourceSymlink), errors.Is(err, errSourceNonRegular):
+			// Deletions and paths replaced by a directory can have a reviewable base.
+		case err != nil:
+			return Manifest{}, "", fmt.Errorf("capture %q: %w", entry.path, err)
+		case binarySource(data):
+			excluded[entry.path] = SkipBinary
+		}
+	}
+	m.Base, err = g.readTreeEntries(entries, m.Blobs, excluded, maxFile)
 	if err != nil {
 		return Manifest{}, "", err
 	}
@@ -39,6 +82,13 @@ func CaptureBaseline(ctx context.Context, opts CaptureOptions) (Manifest, string
 	}
 	if total > MaxWorkspaceBytes {
 		return Manifest{}, "", fmt.Errorf("baseline exceeds workspace limit")
+	}
+	currentPolicy, err := readIgnorePolicy(root)
+	if err != nil {
+		return Manifest{}, "", err
+	}
+	if !bytes.Equal(policy, currentPolicy) {
+		return Manifest{}, "", fmt.Errorf("%s changed while capturing; try again after edits finish", ignoreFileName)
 	}
 	repo := LocalRepositoryIdentifier(top)
 	if remote, e := g.text("config", "--get", "remote.origin.url"); e == nil {
