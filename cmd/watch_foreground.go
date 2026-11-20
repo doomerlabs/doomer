@@ -247,6 +247,11 @@ func newForegroundWatchCommand() *cobra.Command {
 			}
 		}()
 		config.Stop = stop
+		if fromStdin {
+			// Detached hook workers can outlive their host when a cleanup hook is missed.
+			config.IdleTimeout = 30 * time.Minute
+			config.ControlTimeout = time.Hour
+		}
 		if !fromStdin {
 			config.Report = func(result livewatch.Result) { _ = json.NewEncoder(c.OutOrStdout()).Encode(result) }
 		}

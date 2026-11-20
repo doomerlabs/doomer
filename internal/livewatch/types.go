@@ -48,6 +48,11 @@ type Config struct {
 	Notices           func() []adversarylabs.ClientNotice `json:"-"`
 	AcknowledgeNotice func(string, int) error             `json:"-"`
 	Report            func(Result)                        `json:"-"`
+
+	// IdleTimeout bounds the time without source changes or control requests.
+	IdleTimeout time.Duration `json:"-"`
+	// ControlTimeout bounds the time without a control request, even on a busy workspace.
+	ControlTimeout time.Duration `json:"-"`
 }
 
 type Client interface {

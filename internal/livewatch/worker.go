@@ -69,6 +69,7 @@ type worker struct {
 	allowed            func(context.Context, string) bool
 	directories        []string
 	repos              map[string]*repository
+	sourceChanged      bool
 	noticeAcks         map[string]bool
 	findings           map[string]Finding
 	findingToolDenied  bool
@@ -269,9 +270,11 @@ func (w *worker) scanDirectory(ctx context.Context, directory string, initial, f
 			}
 			r = &repository{baseline: baseline, observed: fingerprint, pending: !initial}
 			w.repos[path] = r
+			w.sourceChanged = w.sourceChanged || !initial
 		} else if fingerprint != r.observed {
 			r.observed = fingerprint
 			r.pending = true
+			w.sourceChanged = true
 		}
 		if freeze && r.pending && !w.cfg.RequireHypotheses {
 			capture, err := capture(ctx, path, r.baseline)
@@ -583,21 +586,42 @@ func (w *worker) recordFeedback(ctx context.Context, entries []Feedback) error {
 }
 
 func (w *worker) run(ctx context.Context) error {
+	var idleTimer *time.Timer
+	var idleDeadline <-chan time.Time
+	var controlDeadline time.Time
+	if w.cfg.IdleTimeout > 0 {
+		idleTimer = time.NewTimer(min(w.cfg.IdleTimeout, w.cfg.ControlTimeout))
+		defer idleTimer.Stop()
+		idleDeadline = idleTimer.C
+		controlDeadline = time.Now().Add(w.cfg.ControlTimeout)
+	}
 	// The Codex watcher sees writes from every process in the workspace.
 	// Wait for the turn to claim review work via its pre-answer checkpoint.
 	reviewStarted := w.cfg.Agent != "codex" || !w.cfg.RequireHypotheses
 	scan := func() error {
 		bounded, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
+		w.sourceChanged = false
 		if err := w.scan(bounded, false, false); err != nil {
 			return err
+		}
+		if idleTimer != nil && w.sourceChanged {
+			// Another turn may be editing this workspace. Only the owner can
+			// renew the control deadline.
+			idleTimer.Reset(min(w.cfg.IdleTimeout, time.Until(controlDeadline)))
 		}
 		if reviewStarted {
 			w.schedule(ctx)
 		}
 		return nil
 	}
-	ticker := time.NewTicker(time.Second)
+	scanInterval := time.Second
+	if w.cfg.IdleTimeout > 0 {
+		// Filesystem events and checkpoints still trigger scans. Poll less
+		// often for changes the backend couldn't report.
+		scanInterval = 30 * time.Second
+	}
+	ticker := time.NewTicker(scanInterval)
 	defer ticker.Stop()
 	var debounce *time.Timer
 	var settled <-chan time.Time
@@ -695,12 +719,19 @@ func (w *worker) run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-idleDeadline:
+			return nil
 		case <-terminalDeadline:
 			_ = w.closeListener()
 			return nil
 		case task := <-w.hypothesisReady:
 			w.hypotheses[task.request.ID] = task
 		case command := <-w.controls:
+			// Status probes bypass this loop and do not extend either deadline.
+			if idleTimer != nil {
+				controlDeadline = time.Now().Add(w.cfg.ControlTimeout)
+				idleTimer.Reset(min(w.cfg.IdleTimeout, w.cfg.ControlTimeout))
+			}
 			if command.findingDenied {
 				w.findingToolDenied = true
 				finish(command, Response{})

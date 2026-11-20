@@ -10,12 +10,126 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
+	"github.com/fsnotify/fsnotify"
 )
+
+func TestHookWatcherPollsSparinglyAndExpiresWithoutControl(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var scans atomic.Int32
+		events := make(chan fsnotify.Event)
+		w := &worker{
+			cfg:      Config{Agent: "codex", RequireHypotheses: true, IdleTimeout: time.Minute, ControlTimeout: 2 * time.Minute},
+			watcher:  &fsnotify.Watcher{Events: events},
+			allowed:  func(context.Context, string) bool { scans.Add(1); return true },
+			controls: make(chan control),
+		}
+		done := make(chan error, 1)
+		go func() { done <- w.run(context.Background()) }()
+
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		if got := scans.Load(); got != 0 {
+			t.Fatalf("idle hook watcher scanned within two seconds: %d", got)
+		}
+		time.Sleep(29 * time.Second)
+		synctest.Wait()
+		if got := scans.Load(); got != 1 {
+			t.Fatalf("expected a fallback scan at 30 seconds, got %d", got)
+		}
+		// Renew the idle deadline at 31 seconds.
+		sent := make(chan struct{})
+		close(sent)
+		reply := make(chan Response, 1)
+		w.controls <- control{results: true, reply: reply, sent: sent}
+		<-reply
+
+		time.Sleep(58 * time.Second)
+		synctest.Wait()
+		select {
+		case err := <-done:
+			t.Fatalf("watcher expired before its renewed deadline: %v", err)
+		default:
+		}
+		before := scans.Load()
+		events <- fsnotify.Event{Op: fsnotify.Write}
+		time.Sleep(800 * time.Millisecond)
+		synctest.Wait()
+		if got := scans.Load() - before; got != 1 {
+			t.Fatalf("expected an event-driven scan before the next fallback, got %d", got)
+		}
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatal(err)
+			}
+		default:
+			t.Fatal("watcher survived its renewed idle deadline")
+		}
+	})
+}
+
+func TestHookWatcherSourceChangesExtendIdleTimeUntilControlDeadline(t *testing.T) {
+	repo := makeRepository(t, t.TempDir(), "repo")
+	cfg := Config{
+		Directory:         repo,
+		Agent:             "codex",
+		RequireHypotheses: true,
+		IdleTimeout:       3 * time.Second,
+		ControlTimeout:    5 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	baseline := make(chan struct{})
+	var discovered sync.Once
+	allowed := func(_ context.Context, path string) bool {
+		if path != "" {
+			discovered.Do(func() { close(baseline) })
+		}
+		return true
+	}
+	done := make(chan error, 1)
+	go func() { done <- Serve(ctx, cfg, &fakeClient{}, allowed) }()
+	select {
+	case <-baseline:
+	case err := <-done:
+		t.Fatalf("watcher failed during startup: %v", err)
+	case <-ctx.Done():
+		t.Fatal("watcher did not scan the repository")
+	}
+
+	started := time.Now()
+	edits := time.NewTicker(time.Second)
+	defer edits.Stop()
+	overdue := time.NewTimer(7 * time.Second)
+	defer overdue.Stop()
+	for {
+		select {
+		case edit := <-edits.C:
+			if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte(edit.String()), 0600); err != nil {
+				t.Fatal(err)
+			}
+		case err := <-done:
+			if err != nil {
+				t.Fatal(err)
+			}
+			if elapsed := time.Since(started); elapsed < cfg.ControlTimeout-500*time.Millisecond {
+				t.Fatalf("watcher expired after %v despite ongoing edits", elapsed)
+			}
+			return
+		case <-overdue.C:
+			t.Fatal("ongoing edits extended the watcher past the control deadline")
+		}
+	}
+}
 
 type fakeClient struct {
 	mu      sync.Mutex
