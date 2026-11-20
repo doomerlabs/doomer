@@ -6,11 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/doomerlabs/doomer/internal/livewatch"
+	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
 
@@ -211,6 +213,9 @@ func TestClaudeStopSignalsWithoutDumpingReviewDetails(t *testing.T) {
 	if !strings.Contains(context, "before your final answer run") || !strings.Contains(context, "watch results --control "+key) || !strings.Contains(context, "watch findings ls --control "+key) || !strings.Contains(context, "Do not wait for the Stop hook") || !strings.Contains(context, "literal executable path") {
 		t.Fatal("Claude is missing internal handoff retrieval guidance")
 	}
+	if !strings.Contains(context, "use a quoted heredoc attached directly to Doomer") {
+		t.Fatal("Claude prompt hook is missing the stdin submission guidance")
+	}
 	result := livewatch.Response{
 		Consent:  &livewatch.ConsentEvidence{CredentialDirectory: "/private/credentials"},
 		Results:  []livewatch.Result{{Status: "ready", URL: "https://example.test/review"}},
@@ -334,11 +339,22 @@ func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
 	if makeFeedbackReport(response).Complete {
 		t.Fatal("missing agent assessment reported complete")
 	}
-	text := hypothesisInstructions(response, strings.Repeat("a", 64))
+	key := strings.Repeat("a", 64)
+	text := hypothesisInstructions(response, key)
 	for _, want := range []string{"watch hypotheses --control", "explicit empty", "snapshot-request", "do not narrate"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %s", want)
 		}
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := "\n" + watching.Quote(executable) + " watch hypotheses --control " + key + " <<'DOOMER_HYPOTHESES'\n"
+	_, heredoc, found := strings.Cut(text, start)
+	payload, _, closed := strings.Cut(heredoc, "\nDOOMER_HYPOTHESES\n")
+	if !found || !closed || !json.Valid([]byte(payload)) {
+		t.Fatal("assessment handoff must provide a standalone Doomer command with a quoted JSON heredoc")
 	}
 	for _, active := range []bool{false, true} {
 		codex := codexStopFeedback(response, active)
