@@ -240,13 +240,26 @@ jobs:
           version="${GITHUB_REF_NAME#mdm-bootstrap-}"
           pkg="Doomer-MDM-Bootstrap-$version.pkg"
           sha256sum "$pkg" > checksums.txt
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            published="$(mktemp -d)"
-            gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir "$published"
-            cmp "$pkg" "$published/$pkg"
-            cmp checksums.txt "$published/checksums.txt"
-            test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = false
-          else
-            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --latest=false \
-              --title "Doomer MDM Bootstrap $version" "$pkg" checksums.txt
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --latest=false \
+              --title "Doomer MDM Bootstrap $version"
+          fi
+          draft="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+          names="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          if [[ -n "$names" ]] && grep -Fvx -e "$pkg" -e checksums.txt <<< "$names"; then
+            echo "Unexpected bootstrap release assets." >&2
+            exit 1
+          fi
+          published="$(mktemp -d)"
+          for asset in "$pkg" checksums.txt; do
+            if ! grep -Fxq -- "$asset" <<< "$names"; then
+              # Published releases are immutable. A draft can resume an incomplete upload.
+              test "$draft" = true
+              gh release upload "$GITHUB_REF_NAME" "$asset" --repo "$GITHUB_REPOSITORY"
+            fi
+            gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$published"
+            cmp "$asset" "$published/$asset"
+          done
+          if [[ "$draft" == true ]]; then
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
           fi

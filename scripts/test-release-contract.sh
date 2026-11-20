@@ -9,6 +9,7 @@ fail() { printf 'release contract: %s\n' "$*" >&2; exit 1; }
 
 bash scripts/test-release-tags.sh
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-publish-r2.py
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-publish-mdm-bootstrap.py
 
 for workflow in .depot/workflows/*.yml; do
   while IFS= read -r use; do
