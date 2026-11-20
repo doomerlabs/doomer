@@ -19,7 +19,9 @@ def main():
     parser.add_argument('commit')
     parser.add_argument('inputs', type=Path)
     parser.add_argument('--record-package', type=Path)
-    parser.add_argument('--bootstrap-package', type=Path)
+    packaging = parser.add_mutually_exclusive_group()
+    packaging.add_argument('--bootstrap-package', type=Path)
+    packaging.add_argument('--runtime-only', action='store_true', help='Record a staged runtime package without a bootstrap')
     args = parser.parse_args()
     if not re.fullmatch(r'20\d{2}\.\d{1,2}\.\d{1,2}(?:\.[1-9]\d*)?(?:-beta\.\d+)?', args.version):
         parser.error('invalid tag')
@@ -29,15 +31,15 @@ def main():
     if metadata['schemaVersion'] != 1 or metadata['version'] != args.version or metadata['commit'] != args.commit:
         parser.error('release manifest does not match the tag checkout')
 
-    if args.bootstrap_package and not args.record_package:
-        parser.error('--bootstrap-package requires --record-package')
+    if (args.bootstrap_package or args.runtime_only) and not args.record_package:
+        parser.error('a package format requires --record-package')
 
     if args.record_package:
         package = args.record_package
         if package.name != f'Doomer-MDM-{args.version}.pkg':
             parser.error('unexpected package name')
         provenance = {
-            'schemaVersion': 1,
+            'schemaVersion': 2 if args.runtime_only else 1,
             'releaseManifestSHA256': sha256(manifest),
             'packageSHA256': sha256(package.read_bytes()),
         }

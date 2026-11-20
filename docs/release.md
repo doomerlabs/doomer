@@ -107,54 +107,48 @@ published assets.
 
 ### Managed macOS installer
 
-Each stable or beta tag produces two Developer ID Installer–signed universal
-packages for Apple Silicon and Intel. The native
-[GitHub signing workflow](../.github/workflows/mdm-release.yml) verifies the
-published GitHub CLI manifest and both macOS archives, then combines those
-exact binaries.
+IT uploads one independently versioned, Developer ID Installer–signed
+bootstrap for Apple Silicon and Intel. It installs the system downloader,
+launchers, and agent integration settings. The first usable CLI comes from
+the Mac's configured channel. The same bootstrap can provision Macs across
+many CLI releases.
 
-- `Doomer-MDM-Bootstrap-VERSION.pkg` is the package IT uploads once to its MDM.
-  It contains both agent integrations, a fallback CLI, and the system updater.
-  It pins the exact Developer ID Installer identity from the Doomer release
-  signing keychain. Renewal under the same identity requires no change to the
-  bootstrap. A signing identity change requires an updated bootstrap.
-- `Doomer-MDM-VERSION.pkg` stages the versioned runtime when invoked by the
-  system updater. The updater checks the channel, verifies the checksum and
-  Apple Installer signature, and activates the new runtime after Installer
-  returns success.
+To publish a bootstrap, use a separate annotated tag such as
+`mdm-bootstrap-2026.11.20.1` at a verified main commit. Pick a fresh CalVer
+above any existing bootstrap receipt for that deployment. The
+[native workflow](../.github/workflows/mdm-release.yml) builds and signs the
+universal downloader, verifies the package on macOS 15, 26, and 27, and
+publishes the package and `checksums.txt` to that tag's GitHub release.
+Bootstrap publication leaves the GitHub latest CLI release and channel feeds
+alone. The bootstrap pins the signing identity used for later downloads.
+Renewal under the same identity needs no new bootstrap. An identity change
+requires a new signed bootstrap upload.
 
-Before tagging, provision the GitHub `mdm-release` environment in
-`doomerlabs/doomer` with `MDM_INSTALLER_P12_BASE64` and
-`MDM_INSTALLER_P12_PASSWORD` from the Apple signing credentials. Restrict
-deployments to release tags. The macOS job uses a temporary keychain.
-Depot reads the signed build artifact with its read-only GitHub Actions
-token and uses the existing R2 secrets for publication.
+Each stable or beta CLI tag produces only `Doomer-MDM-VERSION.pkg` for
+automatic managed updates. The native signing workflow verifies the GitHub
+CLI manifest and both macOS archives, combines those exact binaries, and
+signs the staged runtime package. Before either type of tag, provision
+`MDM_INSTALLER_P12_BASE64` and `MDM_INSTALLER_P12_PASSWORD` in the protected
+`mdm-release` GitHub environment. If deployment rules restrict tag names,
+include both CLI release tags and `mdm-bootstrap-*` tags.
 
-Both packages and `mdm-release.json` are available under
-`https://downloads.doomer.ai/cli/releases/VERSION/`. The versioned manifest
-records `packageSHA256`, `bootstrapSHA256`, and the source release manifest
-checksum. Depot's `publish-mdm-r2` job verifies the signing run's tag and
-commit, then checks and verifies the public downloads before adding the
-`managed_package` version and manifest SHA-256 to `cli/beta.json` or
-`cli/stable.json`. The CLI head advances independently and retains the
-most recent verified managed package until another is ready. Legacy managed
-packages are available at their original versioned URLs.
+Both the managed runtime package and its `mdm-release.json` are published
+under `https://downloads.doomer.ai/cli/releases/VERSION/`. Depot verifies
+the signing run's tag and commit, checks the artifact and its source release
+manifest, then verifies the public downloads before adding the
+`managed_package` version and manifest digest to `cli/beta.json` or
+`cli/stable.json`. Legacy packages and previously published bootstraps
+remain available at their original URLs.
 
-Before Depot promotes a release, the GitHub workflow runs the updater's
-signature check against both newly signed packages on macOS 15, 26, and 27.
-Pull requests run the same verifier against a previously published signed
-package pinned by SHA-256. Depot waits up to 120 minutes for signing, native
-verification, and runner scheduling. The package publication job has a
-140-minute limit to leave time for setup and publication.
-
-If the native signing job fails, rerun it and retry only `publish-mdm-r2` on
-the same tag. The signing workflow reuses its retained artifact on a rerun.
-To recover after it expires, use the exact retained or already published
-packages and provenance with
+Depot waits up to 120 minutes for signing, native verification, and runner
+scheduling. If signing fails, rerun it and retry `publish-mdm-r2` on the
+same tag. The native workflow reuses its retained artifacts on retries.
+After artifact expiration, recover using the exact retained or already
+published bytes with
 `publish-r2.py --dir CLI_BUNDLE --version VERSION --mdm-dir MDM_BUNDLE`.
-Timestamped signatures can change on rebuild, so already published package
-bytes are immutable. Use the [pilot deployment guide](https://doomer.ai/docs/installation/managed-deployments#verify-automatic-updates-across-two-releases)
-to verify the signed artifacts end to end.
+Timestamped package signatures can change on rebuild. Use the
+[pilot deployment guide](https://doomer.ai/docs/installation/managed-deployments#verify-automatic-updates-across-two-releases)
+to verify that the same MDM upload provisions Macs across two releases.
 
 ### Cloudflare download-client compatibility
 

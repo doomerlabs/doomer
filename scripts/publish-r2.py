@@ -160,14 +160,15 @@ def mdm_bundle(directory, version, manifest):
         files[name] = path.read_bytes()
         if name.endswith('.pkg') and not files[name].startswith(b'xar!'):
             raise ValueError('Invalid MDM package: ' + name)
+    metadata = json.loads(files[metadata_name])
     expected = {
-        'schemaVersion': 1,
+        'schemaVersion': 2 if metadata.get('schemaVersion') == 2 else 1,
         'releaseManifestSHA256': digest(manifest),
         'packageSHA256': digest(files[package_name]),
     }
     if bootstrap_name in files:
         expected.update(schemaVersion=2, bootstrapSHA256=digest(files[bootstrap_name]))
-    if json.loads(files[metadata_name]) != expected:
+    if metadata != expected:
         raise ValueError('MDM package or source release checksum mismatch')
     return files
 

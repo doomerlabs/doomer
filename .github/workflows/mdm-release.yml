@@ -3,12 +3,14 @@ run-name: Sign MDM installer ${{ github.ref_name }}
 
 on:
   push:
-    tags: ["20*.*.*"]
+    tags: ["20*.*.*", "mdm-bootstrap-20*.*.*"]
   pull_request:
     paths:
       - '.github/workflows/mdm-release.yml'
       - 'mdm/**'
       - 'cmd/mdm*.go'
+      - 'cmd/mdm-bootstrap/**'
+      - 'scripts/prepare-mdm-release.py'
 
 permissions:
   actions: read
@@ -41,18 +43,29 @@ jobs:
             CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" make build \
               BINARY="$inputs/doomer-$arch" VERSION=2099.1.1.1-beta.1
           done
+          bootstrap_inputs="$inputs/bootstrap"
+          # Exercise the documented script from outside the checkout.
+          (cd "$inputs" && bash "$GITHUB_WORKSPACE/mdm/build-bootstrap-binary.sh" bootstrap)
           bash mdm/combine-binaries.sh "$inputs"
           # Release archives are extracted as data before the builder stages them.
           chmod 0644 "$inputs/doomer"
+          DOOMER_MDM_BOOTSTRAP_VERSION=2099.1.1.1 \
+            mdm/build-pkg.sh bootstrap "$bootstrap_inputs/doomer" codex,claude "$inputs/bootstrap.pkg"
+          mdm/build-pkg.sh runtime "$inputs/doomer" codex,claude "$inputs/runtime.pkg"
           for kind in bootstrap runtime; do
-            mdm/build-pkg.sh "$kind" "$inputs/doomer" codex,claude "$inputs/$kind.pkg"
             /usr/sbin/pkgutil --expand-full "$inputs/$kind.pkg" "$inputs/expanded-$kind"
             test -s "$inputs/expanded-$kind/Distribution"
             sudo /usr/sbin/installer -pkg "$inputs/$kind.pkg" -target /
           done
           test -f "$inputs/expanded-bootstrap/component.pkg/Payload/Library/DoomerMDM/installer-identity"
           /bin/launchctl print system/com.doomerlabs.doomer.mdm.update >/dev/null
-          /usr/local/libexec/doomer-mdm/doomer --version | grep -F 2099.1.1.1-beta.1
+          test ! -e /Library/DoomerMDM/bootstrap-doomer
+          test "$(/usr/local/libexec/doomer-mdm/doomer mdm hook --agent codex)" = '{}'
+          if /Library/DoomerMDM/run-doomer --version > "$inputs/pending" 2>&1; then
+            echo "Bootstrap exposed a runtime before activation" >&2
+            exit 1
+          fi
+          grep -F 'waiting for its first verified runtime' "$inputs/pending"
           /Library/DoomerMDM/incoming/doomer --version | grep -F 2099.1.1.1-beta.1
           test ! -e /Library/DoomerMDM/doomer
           if sudo /Library/DoomerMDM/run-doomer mdm update > "$inputs/guard" 2>&1; then
@@ -60,6 +73,9 @@ jobs:
             exit 1
           fi
           grep -F 'require active macOS MDM enrollment' "$inputs/guard"
+          # Simulate activation to check that the same launcher now exposes Doomer.
+          sudo /bin/mv /Library/DoomerMDM/incoming/doomer /Library/DoomerMDM/doomer
+          /usr/local/libexec/doomer-mdm/doomer --version | grep -F 2099.1.1.1-beta.1
 
   sign:
     if: github.event_name == 'push' && github.ref_type == 'tag'
@@ -73,7 +89,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Verify immutable tag checkout
-        run: scripts/verify-release-ref.sh
+        run: |
+          case "$GITHUB_REF_NAME" in
+            mdm-bootstrap-*) scripts/verify-release-ref.sh --mdm-bootstrap ;;
+            *) scripts/verify-release-ref.sh ;;
+          esac
       - name: Check for an existing signed artifact
         id: existing
         env:
@@ -85,8 +105,18 @@ jobs:
           if [[ -n "$artifact_ids" ]]; then
             echo "reuse=true" >> "$GITHUB_OUTPUT"
           fi
+      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        if: steps.existing.outputs.reuse != 'true' && startsWith(github.ref_name, 'mdm-bootstrap-')
+        with:
+          go-version-file: go.mod
+      - name: Build the independent bootstrap input
+        if: steps.existing.outputs.reuse != 'true' && startsWith(github.ref_name, 'mdm-bootstrap-')
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/mdm-artifact"
+          bash mdm/build-bootstrap-binary.sh "$RUNNER_TEMP/mdm-inputs"
       - name: Verify published CLI inputs and combine architectures
-        if: steps.existing.outputs.reuse != 'true'
+        if: steps.existing.outputs.reuse != 'true' && !startsWith(github.ref_name, 'mdm-bootstrap-')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -111,18 +141,21 @@ jobs:
         run: |
           set -euo pipefail
           inputs="$RUNNER_TEMP/mdm-inputs"
-          package="$RUNNER_TEMP/mdm-artifact/Doomer-MDM-$GITHUB_REF_NAME.pkg"
-          bootstrap="$RUNNER_TEMP/mdm-artifact/Doomer-MDM-Bootstrap-$GITHUB_REF_NAME.pkg"
-          mdm/sign-release-pkg.sh "$inputs/doomer" "$package" "$bootstrap"
+          if [[ "$GITHUB_REF_NAME" == mdm-bootstrap-* ]]; then
+            version="${GITHUB_REF_NAME#mdm-bootstrap-}"
+            DOOMER_MDM_BOOTSTRAP_VERSION="$version" mdm/sign-release-pkg.sh bootstrap "$inputs/doomer" \
+              "$RUNNER_TEMP/mdm-artifact/Doomer-MDM-Bootstrap-$version.pkg"
+          else
+            mdm/sign-release-pkg.sh runtime "$inputs/doomer" "$RUNNER_TEMP/mdm-artifact/Doomer-MDM-$GITHUB_REF_NAME.pkg"
+          fi
       - name: Record installer provenance
-        if: steps.existing.outputs.reuse != 'true'
+        if: steps.existing.outputs.reuse != 'true' && !startsWith(github.ref_name, 'mdm-bootstrap-')
         run: |
           set -euo pipefail
           inputs="$RUNNER_TEMP/mdm-inputs"
           package="$RUNNER_TEMP/mdm-artifact/Doomer-MDM-$GITHUB_REF_NAME.pkg"
-          bootstrap="$RUNNER_TEMP/mdm-artifact/Doomer-MDM-Bootstrap-$GITHUB_REF_NAME.pkg"
           python3 scripts/prepare-mdm-release.py "$GITHUB_REF_NAME" "$(git rev-parse HEAD)" "$inputs" \
-            --record-package "$package" --bootstrap-package "$bootstrap"
+            --record-package "$package" --runtime-only
       - name: Retain immutable installer for Depot
         if: steps.existing.outputs.reuse != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -173,11 +206,61 @@ jobs:
         run: |
           set -euo pipefail
           artifacts="$RUNNER_TEMP/mdm-artifact"
-          bootstrap="$artifacts/Doomer-MDM-Bootstrap-$GITHUB_REF_NAME.pkg"
-          pkg="$artifacts/Doomer-MDM-$GITHUB_REF_NAME.pkg"
-          expanded="$RUNNER_TEMP/expanded-bootstrap"
-          /usr/sbin/pkgutil --expand-full "$bootstrap" "$expanded"
-          identity="$(cat "$expanded/component.pkg/Payload/Library/DoomerMDM/installer-identity")"
+          if [[ "$GITHUB_REF_NAME" == mdm-bootstrap-* ]]; then
+            version="${GITHUB_REF_NAME#mdm-bootstrap-}"
+            pkg="$artifacts/Doomer-MDM-Bootstrap-$version.pkg"
+            expanded="$RUNNER_TEMP/expanded-bootstrap"
+            /usr/sbin/pkgutil --expand-full "$pkg" "$expanded"
+            identity="$(cat "$expanded/component.pkg/Payload/Library/DoomerMDM/installer-identity")"
+          else
+            pkg="$artifacts/Doomer-MDM-$GITHUB_REF_NAME.pkg"
+            # The signing job already compared this certificate to the signing keychain.
+            identity="$(LC_ALL=C /usr/sbin/pkgutil --check-signature "$pkg" | sed -n 's/^[[:space:]]*1\. //p')"
+          fi
           /usr/bin/sw_vers
-          DOOMER_TEST_MDM_RUNTIME="$pkg" DOOMER_TEST_MDM_BOOTSTRAP="$bootstrap" \
-            DOOMER_TEST_MDM_SIGNER="$identity" go test -v ./cmd -run '^TestMDMRealPackageSignature$'
+          DOOMER_TEST_MDM_RUNTIME="$pkg" DOOMER_TEST_MDM_SIGNER="$identity" go test -v ./cmd -run '^TestMDMRealPackageSignature$'
+
+  publish-bootstrap:
+    needs: verify-package-signature
+    if: github.event_name == 'push' && startsWith(github.ref_name, 'mdm-bootstrap-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: mdm-${{ github.ref_name }}
+          path: ${{ runner.temp }}/mdm-artifact
+      - name: Publish the verified bootstrap package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/mdm-artifact"
+          version="${GITHUB_REF_NAME#mdm-bootstrap-}"
+          pkg="Doomer-MDM-Bootstrap-$version.pkg"
+          sha256sum "$pkg" > checksums.txt
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --latest=false \
+              --title "Doomer MDM Bootstrap $version"
+          fi
+          draft="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+          names="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          if [[ -n "$names" ]] && grep -Fvx -e "$pkg" -e checksums.txt <<< "$names"; then
+            echo "Unexpected bootstrap release assets." >&2
+            exit 1
+          fi
+          published="$(mktemp -d)"
+          for asset in "$pkg" checksums.txt; do
+            if ! grep -Fxq -- "$asset" <<< "$names"; then
+              # Published releases are immutable. A draft can resume an incomplete upload.
+              test "$draft" = true
+              gh release upload "$GITHUB_REF_NAME" "$asset" --repo "$GITHUB_REPOSITORY"
+            fi
+            gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$published"
+            cmp "$asset" "$published/$asset"
+          done
+          if [[ "$draft" == true ]]; then
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+          fi

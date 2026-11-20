@@ -74,14 +74,27 @@ func newMDMCommand() *cobra.Command {
 	root.AddCommand(hook, &cobra.Command{Use: "enroll", Short: "Enroll the managed macOS user", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
 		return runMDM(c, "", false)
 	}})
+	root.AddCommand(newMDMAgentConfigCommand(), newMDMUpdateCommand())
+	return root
+}
+
+// NewMDMBootstrapCommand exposes only the commands used by the installer and its updater.
+func NewMDMBootstrapCommand() *cobra.Command {
+	root := &cobra.Command{Use: "doomer-mdm-bootstrap", SilenceUsage: true, SilenceErrors: true}
+	mdm := &cobra.Command{Use: "mdm"}
+	mdm.AddCommand(newMDMAgentConfigCommand(), newMDMUpdateCommand())
+	root.AddCommand(mdm)
+	return root
+}
+
+func newMDMAgentConfigCommand() *cobra.Command {
 	var configAgent, output string
 	config := &cobra.Command{Use: "agent-config", Short: "Generate managed coding-agent settings", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
 		return writeMDMAgentConfig(c.OutOrStdout(), configAgent, output)
 	}}
 	config.Flags().StringVar(&configAgent, "agent", "", "coding agent")
 	config.Flags().StringVar(&output, "merge-codex", "", "merge into the system Codex hook file")
-	root.AddCommand(config, newMDMUpdateCommand())
-	return root
+	return config
 }
 
 func parseMDMProfile(data []byte) (mdmProfile, error) {

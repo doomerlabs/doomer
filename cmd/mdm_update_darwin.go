@@ -22,7 +22,8 @@ func runSystemMDMUpdate(ctx context.Context, out io.Writer, scheduled bool, chan
 	if err != nil {
 		return err
 	}
-	if executable != filepath.Join(mdmSystemDir, "bootstrap-doomer") &&
+	if executable != filepath.Join(mdmSystemDir, "bootstrap-updater") &&
+		executable != filepath.Join(mdmSystemDir, "bootstrap-doomer") &&
 		executable != filepath.Join(mdmSystemDir, "doomer") {
 		return errors.New("run the updater installed by the Doomer MDM bootstrap")
 	}

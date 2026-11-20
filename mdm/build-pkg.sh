@@ -35,7 +35,7 @@ else
   hook_dir="$stage/root/usr/local/libexec/doomer-mdm"
   mkdir -p "$runtime/incoming" "$hook_dir" "$stage/scripts" \
     "$stage/root/Library/LaunchAgents" "$stage/root/Library/LaunchDaemons"
-  staged_binary="$runtime/bootstrap-doomer"
+  staged_binary="$runtime/bootstrap-updater"
   install -m 0755 "$doomer_binary" "$staged_binary"
   install -m 0755 "$source_dir/mdm/hook-launcher.sh" "$hook_dir/doomer"
   install -m 0755 "$source_dir/mdm/hook-launcher.sh" "$runtime/run-doomer"
@@ -60,7 +60,7 @@ SCRIPT
     install -m 0644 "$source_dir/mdm/doomer-mdm.rules" "$stage/root/private/etc/codex/rules/"
     cat >> "$postinstall" <<'SCRIPT'
 /usr/bin/install -d -m 0755 /etc/codex
-/Library/DoomerMDM/bootstrap-doomer mdm agent-config --agent codex --merge-codex /etc/codex/hooks.json
+/Library/DoomerMDM/bootstrap-updater mdm agent-config --agent codex --merge-codex /etc/codex/hooks.json
 SCRIPT
   fi
   cat >> "$postinstall" <<'SCRIPT'
@@ -73,11 +73,19 @@ SCRIPT
   script_args=(--scripts "$stage/scripts")
 fi
 
-version="$("$staged_binary" --version | awk '{print $2}')"
-[[ "$version" =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}(\.[1-9][0-9]*)?(-beta\.[0-9]+)?$ ]] || {
-  echo "The Doomer binary must report a release version." >&2
-  exit 1
-}
+if [[ "$kind" == bootstrap ]]; then
+  version="${DOOMER_MDM_BOOTSTRAP_VERSION:-}"
+  [[ "$version" =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}\.[1-9][0-9]*$ ]] || {
+    echo "Set DOOMER_MDM_BOOTSTRAP_VERSION to the bootstrap's CalVer." >&2
+    exit 1
+  }
+else
+  version="$("$staged_binary" --version | awk '{print $2}')"
+  [[ "$version" =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}(\.[1-9][0-9]*)?(-beta\.[0-9]+)?$ ]] || {
+    echo "The Doomer binary must report a release version." >&2
+    exit 1
+  }
+fi
 /usr/bin/pkgbuild --root "$stage/root" ${script_args[@]+"${script_args[@]}"} \
   --ownership recommended --identifier "$identifier" --version "$version" \
   --install-location "$location" "$stage/component.pkg"

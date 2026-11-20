@@ -164,7 +164,7 @@ class PublicationTests(unittest.TestCase):
             older = '2026.11.2.1-beta.1'
             newer = '2026.11.2.1-beta.2'
 
-            def fixture(version):
+            def fixture(version, runtime_only=False):
                 cli = root / version / 'cli'
                 mdm = cli.parent / 'mdm'
                 cli.mkdir(parents=True)
@@ -173,14 +173,16 @@ class PublicationTests(unittest.TestCase):
                 package = mdm / f'Doomer-MDM-{version}.pkg'
                 bootstrap = mdm / f'Doomer-MDM-Bootstrap-{version}.pkg'
                 package.write_bytes(b'xar!signed-runtime')
-                bootstrap.write_bytes(b'xar!signed-bootstrap')
+                if not runtime_only:
+                    bootstrap.write_bytes(b'xar!signed-bootstrap')
+                packaging = ['--runtime-only'] if runtime_only else ['--bootstrap-package', str(bootstrap)]
                 prepare = Path(__file__).with_name('prepare-mdm-release.py')
                 subprocess.run([sys.executable, str(prepare), version, 'a' * 40, str(cli),
-                                '--record-package', str(package), '--bootstrap-package', str(bootstrap)], check=True)
+                                '--record-package', str(package), *packaging], check=True)
                 return cli, mdm
 
             old_cli, old_mdm = fixture(older)
-            new_cli, new_mdm = fixture(newer)
+            new_cli, new_mdm = fixture(newer, runtime_only=True)
             publisher.publish(store, bucket, old_cli, older, lambda *_: None)
 
             def verify_before_promotion(url, data):
@@ -203,6 +205,7 @@ class PublicationTests(unittest.TestCase):
             self.assertEqual(json.loads(store.data[feed])['version'], newer)
             self.assertEqual(json.loads(store.data[feed])['managed_package'], old_pointer)
             publisher.publish_mdm(store, bucket, new_cli, new_mdm, newer, lambda *_: None)
+            self.assertNotIn(f'cli/releases/{newer}/Doomer-MDM-Bootstrap-{newer}.pkg', store.data)
             writes = list(store.writes)
             publisher.publish_mdm(store, bucket, old_cli, old_mdm, older, lambda *_: None)
             publisher.publish(store, bucket, new_cli, newer, lambda *_: None)

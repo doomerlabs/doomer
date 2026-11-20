@@ -120,24 +120,14 @@ func (u mdmUpdater) update(ctx context.Context, manualChannel string) (string, e
 		return "", errors.New("invalid managed package pointer")
 	}
 	active := filepath.Join(u.dir, "doomer")
-	currentPath := active
-	info, err := os.Lstat(active)
-	switch {
-	case errors.Is(err, os.ErrNotExist):
-		currentPath = filepath.Join(u.dir, "bootstrap-doomer")
-	case err != nil:
-		return "", err
-	case info.Mode().IsRegular() && info.Mode().Perm()&0111 == 0:
-		currentPath = filepath.Join(u.dir, "bootstrap-doomer")
-	}
-	current, err := u.runtimeVersion(ctx, currentPath)
+	current, err := u.currentVersion(ctx, active)
 	if err != nil {
 		return "", fmt.Errorf("read current managed Doomer version: %w", err)
 	}
 	if current == target {
 		return "Managed Doomer is already current at " + current + ".", nil
 	}
-	if !mdmVersionLess(current, target) {
+	if current != "" && !mdmVersionLess(current, target) {
 		return fmt.Sprintf("Managed Doomer is at %s. The %s package %s would downgrade it.", current, channel, target), nil
 	}
 
@@ -205,7 +195,7 @@ func mdmProfileChannel(data []byte) (string, error) {
 }
 
 func mdmMissingPackage(channel string) string {
-	return "The " + channel + " channel has no managed Doomer package. The current runtime was kept."
+	return "The " + channel + " channel has no managed Doomer package."
 }
 
 func (u mdmUpdater) install(ctx context.Context, url, checksum, target, active, profileChannel string) error {
@@ -270,6 +260,24 @@ func (u mdmUpdater) install(ctx context.Context, url, checksum, target, active, 
 		return fmt.Errorf("activate managed runtime: %w", err)
 	}
 	return nil
+}
+
+func (u mdmUpdater) currentVersion(ctx context.Context, active string) (string, error) {
+	info, err := os.Lstat(active)
+	switch {
+	case err == nil && (!info.Mode().IsRegular() || info.Mode().Perm()&0111 != 0):
+		return u.runtimeVersion(ctx, active)
+	case err != nil && !errors.Is(err, os.ErrNotExist):
+		return "", err
+	}
+	// Older bootstraps exposed a bundled CLI. Retain its downgrade protection
+	// until a download-only bootstrap replaces the launcher.
+	if _, err := os.Lstat(filepath.Join(u.dir, "bootstrap-updater")); err == nil {
+		return "", nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	return u.runtimeVersion(ctx, filepath.Join(u.dir, "bootstrap-doomer"))
 }
 
 func (u mdmUpdater) runtimeVersion(ctx context.Context, path string) (string, error) {
