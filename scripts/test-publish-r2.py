@@ -155,6 +155,60 @@ class PublicationTests(unittest.TestCase):
                 publisher.publish_mdm(store, publisher.RELEASE_BUCKET, cli, mdm, version, lambda *args: None)
             self.assertEqual(store.data[key], package)
 
+    def test_managed_pointer_advances_only_after_public_verification(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = Store()
+            bucket = publisher.RELEASE_BUCKET
+            feed = 'cli/beta.json'
+            older = '2026.11.2.1-beta.1'
+            newer = '2026.11.2.1-beta.2'
+
+            def fixture(version):
+                cli = root / version / 'cli'
+                mdm = cli.parent / 'mdm'
+                cli.mkdir(parents=True)
+                mdm.mkdir()
+                self.fixture(cli, version)
+                package = mdm / f'Doomer-MDM-{version}.pkg'
+                bootstrap = mdm / f'Doomer-MDM-Bootstrap-{version}.pkg'
+                package.write_bytes(b'xar!signed-runtime')
+                bootstrap.write_bytes(b'xar!signed-bootstrap')
+                prepare = Path(__file__).with_name('prepare-mdm-release.py')
+                subprocess.run([sys.executable, str(prepare), version, 'a' * 40, str(cli),
+                                '--record-package', str(package), '--bootstrap-package', str(bootstrap)], check=True)
+                return cli, mdm
+
+            old_cli, old_mdm = fixture(older)
+            new_cli, new_mdm = fixture(newer)
+            publisher.publish(store, bucket, old_cli, older, lambda *_: None)
+
+            def verify_before_promotion(url, data):
+                self.assertNotIn('managed_package', json.loads(store.data[feed]))
+                key = publisher.OBJECT_PREFIX + url.removeprefix(publisher.BASE_URL + '/')
+                self.assertEqual(store.data[key], data)
+                if url.endswith('/mdm-release.json'):
+                    raise RuntimeError('checksum manifest is not public')
+
+            with self.assertRaisesRegex(RuntimeError, 'manifest is not public'):
+                publisher.publish_mdm(store, bucket, old_cli, old_mdm, older, verify_before_promotion)
+            self.assertNotIn('managed_package', json.loads(store.data[feed]))
+            publisher.publish_mdm(store, bucket, old_cli, old_mdm, older, lambda *_: None)
+            old_pointer = json.loads(store.data[feed])['managed_package']
+            self.assertEqual(old_pointer, {
+                'version': older, 'manifest_sha256': publisher.digest((old_mdm / 'mdm-release.json').read_bytes()),
+            })
+
+            publisher.publish(store, bucket, new_cli, newer, lambda *_: None)
+            self.assertEqual(json.loads(store.data[feed])['version'], newer)
+            self.assertEqual(json.loads(store.data[feed])['managed_package'], old_pointer)
+            publisher.publish_mdm(store, bucket, new_cli, new_mdm, newer, lambda *_: None)
+            writes = list(store.writes)
+            publisher.publish_mdm(store, bucket, old_cli, old_mdm, older, lambda *_: None)
+            publisher.publish(store, bucket, new_cli, newer, lambda *_: None)
+            self.assertEqual(store.writes, writes)
+            self.assertEqual(json.loads(store.data[feed])['managed_package']['version'], newer)
+
     def test_mac_archives_must_match_manifest_before_packaging(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -8,6 +8,7 @@ on:
     paths:
       - '.github/workflows/mdm-release.yml'
       - 'mdm/**'
+      - 'cmd/mdm*.go'
 
 permissions:
   actions: read
@@ -41,9 +42,21 @@ jobs:
               BINARY="$inputs/doomer-$arch" VERSION=2099.1.1.1-beta.1
           done
           bash mdm/combine-binaries.sh "$inputs"
-          mdm/build-pkg.sh "$inputs/doomer" codex,claude "$inputs/doomer.pkg"
-          /usr/sbin/pkgutil --expand "$inputs/doomer.pkg" "$inputs/expanded"
-          test -s "$inputs/expanded/Distribution"
+          for kind in bootstrap runtime; do
+            mdm/build-pkg.sh "$kind" "$inputs/doomer" codex,claude "$inputs/$kind.pkg"
+            /usr/sbin/pkgutil --expand "$inputs/$kind.pkg" "$inputs/expanded-$kind"
+            test -s "$inputs/expanded-$kind/Distribution"
+            sudo /usr/sbin/installer -pkg "$inputs/$kind.pkg" -target /
+          done
+          /bin/launchctl print system/com.doomerlabs.doomer.mdm.update >/dev/null
+          /usr/local/libexec/doomer-mdm/doomer --version | grep -F 2099.1.1.1-beta.1
+          /Library/DoomerMDM/incoming/doomer --version | grep -F 2099.1.1.1-beta.1
+          test ! -e /Library/DoomerMDM/doomer
+          if sudo /Library/DoomerMDM/run-doomer mdm update > "$inputs/guard" 2>&1; then
+            echo "Updater accepted a non-MDM-enrolled macOS runner" >&2
+            exit 1
+          fi
+          grep -F 'require active macOS MDM enrollment' "$inputs/guard"
 
   sign:
     if: github.event_name == 'push' && github.ref_type == 'tag'
@@ -96,14 +109,17 @@ jobs:
           set -euo pipefail
           inputs="$RUNNER_TEMP/mdm-inputs"
           package="$RUNNER_TEMP/mdm-artifact/Doomer-MDM-$GITHUB_REF_NAME.pkg"
-          mdm/sign-release-pkg.sh "$inputs/doomer" "$package"
+          bootstrap="$RUNNER_TEMP/mdm-artifact/Doomer-MDM-Bootstrap-$GITHUB_REF_NAME.pkg"
+          mdm/sign-release-pkg.sh "$inputs/doomer" "$package" "$bootstrap"
       - name: Record installer provenance
         if: steps.existing.outputs.reuse != 'true'
         run: |
           set -euo pipefail
           inputs="$RUNNER_TEMP/mdm-inputs"
           package="$RUNNER_TEMP/mdm-artifact/Doomer-MDM-$GITHUB_REF_NAME.pkg"
-          python3 scripts/prepare-mdm-release.py "$GITHUB_REF_NAME" "$(git rev-parse HEAD)" "$inputs" --record-package "$package"
+          bootstrap="$RUNNER_TEMP/mdm-artifact/Doomer-MDM-Bootstrap-$GITHUB_REF_NAME.pkg"
+          python3 scripts/prepare-mdm-release.py "$GITHUB_REF_NAME" "$(git rev-parse HEAD)" "$inputs" \
+            --record-package "$package" --bootstrap-package "$bootstrap"
       - name: Retain immutable installer for Depot
         if: steps.existing.outputs.reuse != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -452,7 +452,7 @@ func validateRelease(workflow *yaml.Node) {
 
 	mdm := requiredValue(jobs, "publish-mdm-r2")
 	mdmPublish := "Publish signed MDM installer"
-	requireExactSet(value(mdm, "needs"), "publish-mdm-r2 dependencies", "publish-github")
+	requireExactSet(value(mdm, "needs"), "publish-mdm-r2 dependencies", "publish-github", "publish-r2")
 	requirePermissions(mdm, "publish-mdm-r2 job", map[string]string{"actions": "read", "contents": "read"})
 	requireJobEnvironment(mdm, "publish-mdm-r2")
 	fetchMDM := findStep(mdm, "Fetch signed MDM release artifact")
@@ -460,7 +460,7 @@ func validateRelease(workflow *yaml.Node) {
 		!nodeContains(fetchMDM, "scripts/fetch-mdm-release.sh") ||
 		!nodeContains(findStep(mdm, mdmPublish), "--mdm-dir") ||
 		nodeContains(mdm, "DOOMER_RELEASE_SIGNING_KEY") {
-		fail("MDM publication must fetch the signed installer with read-only Actions authority and publish only the package")
+		fail("MDM publication must fetch the signed installer with read-only Actions authority and publish only the managed artifacts and pointer")
 	}
 	validatePublicationOrder(mdm, "publish-mdm-r2", mdmPublish)
 	requireNoPublicationCredentials(findStep(mdm, "Verify exact MDM source bundle"), "MDM pre-publication verification step")

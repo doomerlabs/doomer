@@ -112,7 +112,7 @@ func newRootCommand(injected *application.App) *cobra.Command {
 			return err
 		}
 		noticeContext := adversarylabs.WithNoticeCollector(command.Context(), dir, apiURL, command.ErrOrStderr())
-		if actual, err := filepath.EvalSymlinks(mustExecutable()); err == nil && actual == mdmExecutable {
+		if actual, err := filepath.EvalSymlinks(mustExecutable()); err == nil && isMDMRuntimePath(actual) {
 			noticeContext = adversarylabs.WithManagedInstallNoticeOutput(noticeContext)
 		}
 		top := command
