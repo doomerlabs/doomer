@@ -88,7 +88,7 @@ def version_key(version):
     return parts + (0,) * (4 - len(parts)) + (int(beta) if beta else 0,)
 
 
-def promote(client, bucket, pointer):
+def promote(client, bucket, pointer, managed_package=None):
     key = OBJECT_PREFIX + ('beta.json' if '-beta.' in pointer['version'] else 'stable.json')
     for _ in range(5):
         old = None
@@ -104,18 +104,30 @@ def promote(client, bucket, pointer):
             old = json.loads(previous)
             condition = {'IfMatch': current['ETag']}
             if old['version'] == pointer['version']:
-                old_core = {k: v for k, v in old.items() if k != 'releases'}
+                old_core = {k: v for k, v in old.items() if k not in ('releases', 'managed_package')}
                 if old_core != pointer:
                     raise ValueError('Existing channel points to different release content')
-        # Retain every verified publication, including concurrent older releases.
-        # This is discovery metadata, not an installation authority.
-        effective = dict(old if old and version_key(old['version']) > version_key(pointer['version']) else pointer)
-        history = {entry['version']: entry for entry in (old or {}).get('releases', [])}
-        for entry in [old, pointer]:
-            if entry and re.fullmatch(r'[a-f0-9]{40}', entry.get('commit', '')):
-                history[entry['version']] = {'version': entry['version'], 'commit': entry['commit']}
-        if history:
-            effective['releases'] = sorted(history.values(), key=lambda r: version_key(r['version']), reverse=True)
+        if managed_package is None:
+            # Retain every verified CLI publication, including older releases.
+            # This is discovery metadata, not an installation authority.
+            effective = dict(old if old and version_key(old['version']) > version_key(pointer['version']) else pointer)
+            history = {entry['version']: entry for entry in (old or {}).get('releases', [])}
+            for entry in [old, pointer]:
+                if entry and re.fullmatch(r'[a-f0-9]{40}', entry.get('commit', '')):
+                    history[entry['version']] = {'version': entry['version'], 'commit': entry['commit']}
+            if history:
+                effective['releases'] = sorted(history.values(), key=lambda r: version_key(r['version']), reverse=True)
+            if old and 'managed_package' in old:
+                effective['managed_package'] = old['managed_package']
+        else:
+            if not old or version_key(old['version']) < version_key(pointer['version']):
+                raise ValueError('Publish CLI downloads before promoting the managed package')
+            effective = dict(old)
+            current = old.get('managed_package')
+            if not current or version_key(current['version']) < version_key(managed_package['version']):
+                effective['managed_package'] = managed_package
+            elif current['version'] == managed_package['version'] and current != managed_package:
+                raise ValueError('Existing channel points to a different managed package manifest')
         data = (json.dumps(effective, sort_keys=True, indent=2) + '\n').encode()
         if data == previous:
             return
@@ -131,23 +143,33 @@ def promote(client, bucket, pointer):
 
 def mdm_bundle(directory, version, manifest):
     package_name = f'Doomer-MDM-{version}.pkg'
+    bootstrap_name = f'Doomer-MDM-Bootstrap-{version}.pkg'
     metadata_name = 'mdm-release.json'
-    if {p.name for p in directory.iterdir()} != {package_name, metadata_name}:
+    members = {p.name for p in directory.iterdir()}
+    names = [package_name, metadata_name]
+    if bootstrap_name in members:
+        names.append(bootstrap_name)
+    if members != set(names):
         raise ValueError('Unexpected MDM artifact membership')
-    package_path = directory / package_name
-    metadata_path = directory / metadata_name
-    for path, limit in ((package_path, 64 * 1024 * 1024), (metadata_path, 4096)):
+    files = {}
+    for name in names:
+        path = directory / name
+        limit = 4096 if name == metadata_name else 64 * 1024 * 1024
         if path.is_symlink() or not path.is_file() or path.stat().st_size > limit:
-            raise ValueError('Invalid MDM artifact file: ' + path.name)
-    package = package_path.read_bytes()
-    metadata = metadata_path.read_bytes()
-    if not package.startswith(b'xar!') or json.loads(metadata) != {
+            raise ValueError('Invalid MDM artifact file: ' + name)
+        files[name] = path.read_bytes()
+        if name.endswith('.pkg') and not files[name].startswith(b'xar!'):
+            raise ValueError('Invalid MDM package: ' + name)
+    expected = {
         'schemaVersion': 1,
         'releaseManifestSHA256': digest(manifest),
-        'packageSHA256': digest(package),
-    }:
+        'packageSHA256': digest(files[package_name]),
+    }
+    if bootstrap_name in files:
+        expected.update(schemaVersion=2, bootstrapSHA256=digest(files[bootstrap_name]))
+    if json.loads(files[metadata_name]) != expected:
         raise ValueError('MDM package or source release checksum mismatch')
-    return {package_name: package, metadata_name: metadata}
+    return files
 
 
 def publish_files(client, bucket, version, files, verify_public):
@@ -165,9 +187,13 @@ def publish(client, bucket, directory, version, verify_public):
 
 
 def publish_mdm(client, bucket, directory, mdm_directory, version, verify_public):
-    release_files, _ = release_bundle(directory, version)
+    release_files, pointer = release_bundle(directory, version)
     files = mdm_bundle(mdm_directory, version, release_files['release-manifest.json'])
     publish_files(client, bucket, version, files, verify_public)
+    manifest = files['mdm-release.json']
+    # Legacy packages install into live hook paths and cannot be auto-updated.
+    if json.loads(manifest)['schemaVersion'] == 2:
+        promote(client, bucket, pointer, {'version': version, 'manifest_sha256': digest(manifest)})
     print('Published MDM installer for ' + version + ' to ' + BASE_URL)
 
 
@@ -219,7 +245,7 @@ def main():
     import boto3
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dir', type=Path, default=Path('dist'))
-    parser.add_argument('--mdm-dir', type=Path, help='Publish only the MDM installer and provenance from this signing artifact directory')
+    parser.add_argument('--mdm-dir', type=Path, help='Publish the signed MDM artifacts and promote the managed package in its channel')
     parser.add_argument('--version', default=os.environ.get('GITHUB_REF_NAME'))
     args = parser.parse_args()
     bucket = validate_bucket(os.environ['R2_BUCKET'])

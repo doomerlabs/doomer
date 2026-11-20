@@ -19,6 +19,7 @@ def main():
     parser.add_argument('commit')
     parser.add_argument('inputs', type=Path)
     parser.add_argument('--record-package', type=Path)
+    parser.add_argument('--bootstrap-package', type=Path)
     args = parser.parse_args()
     if not re.fullmatch(r'20\d{2}\.\d{1,2}\.\d{1,2}(?:\.[1-9]\d*)?(?:-beta\.\d+)?', args.version):
         parser.error('invalid tag')
@@ -28,15 +29,23 @@ def main():
     if metadata['schemaVersion'] != 1 or metadata['version'] != args.version or metadata['commit'] != args.commit:
         parser.error('release manifest does not match the tag checkout')
 
+    if args.bootstrap_package and not args.record_package:
+        parser.error('--bootstrap-package requires --record-package')
+
     if args.record_package:
         package = args.record_package
         if package.name != f'Doomer-MDM-{args.version}.pkg':
             parser.error('unexpected package name')
-        (package.parent / 'mdm-release.json').write_text(json.dumps({
+        provenance = {
             'schemaVersion': 1,
             'releaseManifestSHA256': sha256(manifest),
             'packageSHA256': sha256(package.read_bytes()),
-        }) + '\n')
+        }
+        if args.bootstrap_package:
+            if args.bootstrap_package.name != f'Doomer-MDM-Bootstrap-{args.version}.pkg':
+                parser.error('unexpected bootstrap package name')
+            provenance.update(schemaVersion=2, bootstrapSHA256=sha256(args.bootstrap_package.read_bytes()))
+        (package.parent / 'mdm-release.json').write_text(json.dumps(provenance) + '\n')
         return
 
     for arch in ('arm64', 'amd64'):

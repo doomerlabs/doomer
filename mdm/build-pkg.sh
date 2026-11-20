@@ -1,10 +1,9 @@
 #!/bin/bash
 set -euo pipefail
-# Payload directories must be traversable by the managed user after installation.
 umask 022
 
-if [[ $# != 3 ]]; then
-  echo "Usage: $0 DOOMER_MAC_BINARY codex|claude|codex,claude OUTPUT.pkg" >&2
+if [[ $# != 4 ]]; then
+  echo "Usage: $0 bootstrap|runtime DOOMER_MAC_BINARY codex|claude|codex,claude OUTPUT.pkg" >&2
   exit 2
 fi
 if [[ "$(uname -s)" != Darwin ]]; then
@@ -12,49 +11,79 @@ if [[ "$(uname -s)" != Darwin ]]; then
   exit 2
 fi
 
-doomer_binary=$1
-agents=$2
-output=$3
+kind=$1
+doomer_binary=$2
+agents=$3
+output=$4
+case "$kind" in bootstrap|runtime) ;; *) exit 2 ;; esac
 case "$agents" in codex|claude|codex,claude|claude,codex) ;; *) exit 2 ;; esac
 source_dir="$(cd "$(dirname "$0")/.." && pwd)"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
-runtime="$stage/root/usr/local/libexec/doomer-mdm"
-mkdir -p "$runtime" "$stage/scripts" "$stage/root/Library/LaunchAgents"
-install -m 0755 "$doomer_binary" "$runtime/doomer"
-install -m 0644 "$source_dir/mdm/com.doomerlabs.doomer.mdm.enroll.plist" "$stage/root/Library/LaunchAgents/"
+mkdir -p "$stage/root"
+identifier="com.doomerlabs.doomer.mdm.$kind"
+location=/
+script_args=()
 
-if [[ ",$agents," == *,claude,* ]]; then
-  claude_dir="$stage/root/Library/Application Support/ClaudeCode/managed-settings.d"
-  mkdir -p "$claude_dir"
-  "$runtime/doomer" mdm agent-config --agent claude > "$claude_dir/50-doomer.json"
-fi
-if [[ ",$agents," == *,codex,* ]]; then
-  mkdir -p "$stage/root/private/etc/codex/rules"
-  install -m 0644 "$source_dir/mdm/doomer-mdm.rules" "$stage/root/private/etc/codex/rules/"
-  cat > "$stage/scripts/postinstall" <<'SCRIPT'
+if [[ "$kind" == runtime ]]; then
+  # The updater alone promotes this payload after Installer returns success.
+  location=/Library/DoomerMDM/incoming
+  install -m 0755 "$doomer_binary" "$stage/root/doomer"
+else
+  runtime="$stage/root/Library/DoomerMDM"
+  hook_dir="$stage/root/usr/local/libexec/doomer-mdm"
+  mkdir -p "$runtime/incoming" "$hook_dir" "$stage/scripts" \
+    "$stage/root/Library/LaunchAgents" "$stage/root/Library/LaunchDaemons"
+  install -m 0755 "$doomer_binary" "$runtime/bootstrap-doomer"
+  install -m 0755 "$source_dir/mdm/hook-launcher.sh" "$hook_dir/doomer"
+  install -m 0755 "$source_dir/mdm/hook-launcher.sh" "$runtime/run-doomer"
+  printf '%s\n' "${DOOMER_PKG_SIGN_IDENTITY:-}" > "$runtime/installer-identity"
+  install -m 0644 "$source_dir/mdm/com.doomerlabs.doomer.mdm.enroll.plist" "$stage/root/Library/LaunchAgents/"
+  install -m 0644 "$source_dir/mdm/com.doomerlabs.doomer.mdm.update.plist" "$stage/root/Library/LaunchDaemons/"
+
+  postinstall="$stage/scripts/postinstall"
+  cat > "$postinstall" <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail
-/usr/bin/install -d -m 0755 /etc/codex
-runtime=/usr/local/libexec/doomer-mdm
-"$runtime/doomer" mdm agent-config --agent codex --merge-codex /etc/codex/hooks.json
+# An offline target loads the daemon when that volume first boots.
+[[ "$3" == / ]] || exit 0
 SCRIPT
-  chmod 0755 "$stage/scripts/postinstall"
+  if [[ ",$agents," == *,claude,* ]]; then
+    claude_dir="$stage/root/Library/Application Support/ClaudeCode/managed-settings.d"
+    mkdir -p "$claude_dir"
+    "$runtime/bootstrap-doomer" mdm agent-config --agent claude > "$claude_dir/50-doomer.json"
+  fi
+  if [[ ",$agents," == *,codex,* ]]; then
+    mkdir -p "$stage/root/private/etc/codex/rules"
+    install -m 0644 "$source_dir/mdm/doomer-mdm.rules" "$stage/root/private/etc/codex/rules/"
+    cat >> "$postinstall" <<'SCRIPT'
+/usr/bin/install -d -m 0755 /etc/codex
+/Library/DoomerMDM/bootstrap-doomer mdm agent-config --agent codex --merge-codex /etc/codex/hooks.json
+SCRIPT
+  fi
+  cat >> "$postinstall" <<'SCRIPT'
+label=com.doomerlabs.doomer.mdm.update
+if ! /bin/launchctl print "system/$label" >/dev/null 2>&1; then
+  /bin/launchctl bootstrap system "/Library/LaunchDaemons/$label.plist"
+fi
+SCRIPT
+  chmod 0755 "$postinstall"
+  script_args=(--scripts "$stage/scripts")
 fi
 
-version="$("$runtime/doomer" --version | awk '{print $2}')"
+version="$("$doomer_binary" --version | awk '{print $2}')"
 [[ "$version" =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}(\.[1-9][0-9]*)?(-beta\.[0-9]+)?$ ]] || {
   echo "The Doomer binary must report a release version." >&2
   exit 1
 }
-/usr/bin/pkgbuild --root "$stage/root" --scripts "$stage/scripts" \
-  --identifier com.doomerlabs.doomer.mdm --version "$version" \
-  --install-location / "$stage/component.pkg"
+/usr/bin/pkgbuild --root "$stage/root" ${script_args[@]+"${script_args[@]}"} \
+  --ownership recommended --identifier "$identifier" --version "$version" \
+  --install-location "$location" "$stage/component.pkg"
 
 /usr/bin/productbuild --synthesize --product "$source_dir/mdm/requirements.plist" \
   --package "$stage/component.pkg" "$stage/Distribution"
 product_args=(--distribution "$stage/Distribution" --package-path "$stage"
-  --identifier com.doomerlabs.doomer.mdm --version "$version")
+  --identifier "$identifier" --version "$version")
 if [[ -n "${DOOMER_PKG_SIGN_IDENTITY:-}" ]]; then
   product_args+=(--sign "$DOOMER_PKG_SIGN_IDENTITY" --timestamp)
   if [[ -n "${DOOMER_PKG_SIGN_KEYCHAIN:-}" ]]; then

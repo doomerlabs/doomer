@@ -107,12 +107,21 @@ published assets.
 
 ### Managed macOS installer
 
-Each stable or beta tag also produces a Developer ID Installer–signed
-`Doomer-MDM-VERSION.pkg` for Apple Silicon and Intel Macs. The native
+Each stable or beta tag produces two Developer ID Installer–signed universal
+packages for Apple Silicon and Intel. The native
 [GitHub signing workflow](../.github/workflows/mdm-release.yml) verifies the
-published GitHub CLI manifest and its two macOS archives, then combines those
-exact binaries. The package contains both agent integrations. The managed
-profile still selects which agents can enroll and run hooks.
+published GitHub CLI manifest and both macOS archives, then combines those
+exact binaries.
+
+- `Doomer-MDM-Bootstrap-VERSION.pkg` is the package IT uploads once to its MDM.
+  It contains both agent integrations, a fallback CLI, and the system updater.
+  It pins the exact Developer ID Installer identity from the Doomer release
+  signing keychain. Renewal under the same identity requires no change to the
+  bootstrap. A signing identity change requires an updated bootstrap.
+- `Doomer-MDM-VERSION.pkg` stages the versioned runtime when invoked by the
+  system updater. The updater checks the channel, verifies the checksum and
+  Apple Installer signature, and activates the new runtime after Installer
+  returns success.
 
 Before tagging, provision the GitHub `mdm-release` environment in
 `doomerlabs/doomer` with `MDM_INSTALLER_P12_BASE64` and
@@ -121,25 +130,31 @@ deployments to release tags. The macOS job uses a temporary keychain.
 Depot reads the signed build artifact with its read-only GitHub Actions
 token and uses the existing R2 secrets for publication.
 
-The package and its provenance file are available at
-`https://downloads.doomer.ai/cli/releases/VERSION/Doomer-MDM-VERSION.pkg` and
-`https://downloads.doomer.ai/cli/releases/VERSION/mdm-release.json`. Depot's
-`publish-mdm-r2` job verifies the signing run's tag and commit, checks the
-package against its provenance and source CLI manifest, then verifies both
-public downloads. The separate `publish-r2` job advances the CLI channel as
-soon as the CLI downloads pass verification.
+Both packages and `mdm-release.json` are available under
+`https://downloads.doomer.ai/cli/releases/VERSION/`. The versioned manifest
+records `packageSHA256`, `bootstrapSHA256`, and the source release manifest
+checksum. Depot's `publish-mdm-r2` job verifies the signing run's tag and
+commit, then checks and verifies the public downloads before adding the
+`managed_package` version and manifest SHA-256 to `cli/beta.json` or
+`cli/stable.json`. The CLI head advances independently and retains the
+most recent verified managed package until another is ready. Legacy managed
+packages are available at their original versioned URLs.
 
-Depot waits up to 100 minutes for the signer. This covers its 85-minute job
-timeout plus 15 minutes for runner scheduling. The Depot package job has
-a 120-minute limit to leave time for setup and publication.
+Before Depot promotes a release, the GitHub workflow runs the updater's
+signature check against both newly signed packages on macOS 15, 26, and 27.
+Pull requests run the same verifier against a previously published signed
+package pinned by SHA-256. Depot waits up to 120 minutes for signing, native
+verification, and runner scheduling. The package publication job has a
+140-minute limit to leave time for setup and publication.
 
 If the native signing job fails, rerun it and retry only `publish-mdm-r2` on
 the same tag. The signing workflow reuses its retained artifact on a rerun.
 To recover after it expires, use the exact retained or already published
-package and provenance with
+packages and provenance with
 `publish-r2.py --dir CLI_BUNDLE --version VERSION --mdm-dir MDM_BUNDLE`.
 Timestamped signatures can change on rebuild, so already published package
-bytes are immutable.
+bytes are immutable. Use the [pilot deployment guide](https://doomer.ai/docs/installation/managed-deployments#verify-automatic-updates-across-two-releases)
+to verify the signed artifacts end to end.
 
 ### Cloudflare download-client compatibility
 

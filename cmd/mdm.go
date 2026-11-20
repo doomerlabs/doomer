@@ -27,6 +27,11 @@ import (
 const mdmExecutable = "/usr/local/libexec/doomer-mdm/doomer"
 const mdmPreferences = "/Library/Managed Preferences/com.doomerlabs.doomer.mdm.plist"
 
+func isMDMRuntimePath(path string) bool {
+	return path == mdmExecutable || path == filepath.Join(mdmSystemDir, "doomer") ||
+		path == filepath.Join(mdmSystemDir, "bootstrap-doomer")
+}
+
 var (
 	mdmEnrollmentKey = regexp.MustCompile(`^doomer_mdm_[A-Za-z0-9_-]{43}$`)
 	mdmToken         = regexp.MustCompile(`^adv_cli_[A-Za-z0-9_-]{43}$`)
@@ -75,7 +80,7 @@ func newMDMCommand() *cobra.Command {
 	}}
 	config.Flags().StringVar(&configAgent, "agent", "", "coding agent")
 	config.Flags().StringVar(&output, "merge-codex", "", "merge into the system Codex hook file")
-	root.AddCommand(config)
+	root.AddCommand(config, newMDMUpdateCommand())
 	return root
 }
 

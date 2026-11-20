@@ -59,7 +59,7 @@ func identifyCLIInstallation(path string) (cliInstallation, error) {
 		return cliInstallation{}, err
 	}
 	result := cliInstallation{Manager: "direct", Executable: actual}
-	if sameInstallationPath(path, actual, mdmExecutable) {
+	if isMDMRuntimePath(actual) || sameInstallationPath(path, actual, mdmExecutable) {
 		result.Manager = "mdm"
 		return result, nil
 	}
