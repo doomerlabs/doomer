@@ -347,7 +347,7 @@ func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
 				t.Fatal("Codex retried an incomplete handoff indefinitely")
 			}
 			assertSafeHandoffMessage(t, codex)
-		} else if codex["decision"] != "block" || !strings.Contains(codex["reason"].(string), "Read the watch results before finishing") {
+		} else if codex["decision"] != "block" || codex["reason"] != "Doomer still has review work for you. Check Doomer before finishing." {
 			t.Fatal("Codex lost initial handoff")
 		}
 		alreadyFetched := response
