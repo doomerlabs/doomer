@@ -205,11 +205,12 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 			}
 			report := makeFeedbackReport(result)
 			feedback := codexStopFeedback(result, input.StopActive)
+			unansweredWithoutContinuation := report.Unanswered > 0 && feedback["decision"] != "block"
 			if result.RepeatedStopHandoff && len(result.HypothesisRequests) > 0 && len(feedback) == 0 {
 				if _, err := livewatch.Call(ctx, id.Key(), "cancel-assessment"); err != nil {
 					return empty, err
 				}
-			} else if input.StopActive && (!report.Complete || report.NoticesPending) && len(result.HypothesisRequests) == 0 {
+			} else if unansweredWithoutContinuation || (input.StopActive && (!report.Complete || report.NoticesPending) && len(result.HypothesisRequests) == 0) {
 				// End the normal lifecycle without inventing feedback or retrying a denied action.
 				if _, err := livewatch.Call(ctx, id.Key(), "cancel"); err != nil {
 					return empty, err

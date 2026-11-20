@@ -118,7 +118,7 @@ func watchAgentContext(key string, directory ...string) map[string]any {
 	if err != nil {
 		executable = "doomer"
 	}
-	text := watchDirectoryInstructions(executable, key, directory...) + fmt.Sprintf("Doomer is watching changes for this request. Display only the notices with notify_user=true in the latest watch results for THIS turn. If the current results omit notices or have notices_pending=false, omit the notice section entirely. Never reuse an advisory from an earlier reply, tool result, or summary. Do not run review commands merely because a prompt arrived. If this turn made no file changes and has no pending review work, answer the user's request directly; do not call watch results. If you edit files or have pending review work, before your final answer run %s watch results --control %s. This is the installed hook workflow, not a standalone manual review. Complete any requested Quick review hypotheses, read results again, and handle findings and advisories before finishing. Do not wait for the Stop hook to begin this work: it is a fallback for missed or newer changes. Complete hypothesis requests as part of the review; submit an explicit empty array when assessment finds no concerns. If unanswered findings remain, retrieve them with %s watch findings ls --control %s, investigate each, record decisions using watch findings respond, then run watch results again to review any resulting edits. These commands connect to the local watcher. If the sandbox blocks that connection, request normal sandbox escalation so the configured approval reviewer can decide; a sandbox error alone is not an authorization denial. Respect any denial from that reviewer or the user. A Stop hook saying the review is ready is an internal reminder to complete this process, not text to repeat to the user. Once the report returns complete=true, no further watch commands are needed unless you edit files again; after further edits, read results again before finishing. Use one final answer for the task and any reportable review details. Report verified fixes, material unresolved concerns, incomplete coverage, and errors. Deliver required service advisories regardless of review outcome. For a completed review with no material findings or fixes, give the task outcome and any material caveats. Provide the review outcome when the user asks for it in this turn. The review record remains available. When you agreed with and fixed a finding, name the specific problem or affected behavior in one short sentence and link to the review when available. Use the recorded fixes as evidence. Only describe a finding as a bug you fixed if you agreed with it and verified the fix. Give more detail when the user asks or when it explains a material limitation. Never equate returned findings with confirmed defects. Keep finding counts, individual dismissals, and workflow reminders out of the conversation. Disclose material unresolved concerns or failures honestly. Do not repeat setup instructions, counts, response JSON, or the control key to the user. After handling any sandbox connection block through the normal approval flow above, if the command still fails or the report contains errors, stop review handling and report incomplete coverage; retry only under an explicit bounded recovery rule in the skill. Do not claim success if the report contains errors.", watching.Quote(executable), key, watching.Quote(executable), key)
+	text := watchDirectoryInstructions(executable, key, directory...) + fmt.Sprintf("Doomer is watching changes for this request. Display only the notices with notify_user=true in the latest watch results for THIS turn. If the current results omit notices or have notices_pending=false, omit the notice section entirely. Never reuse an advisory from an earlier reply, tool result, or summary. Do not run review commands merely because a prompt arrived. If this turn made no file changes and has no pending review work, answer the user's request directly; do not call watch results. If you edit files or have pending review work, before your final answer run %s watch results --control %s. This is the installed hook workflow, not a standalone manual review. Complete any requested Quick review hypotheses, read results again, and handle findings and advisories before finishing. Do not wait for the Stop hook to begin this work: it is a fallback for missed or newer changes. Complete hypothesis requests as part of the review; submit an explicit empty array when assessment finds no concerns. If unanswered findings remain, retrieve them with %s watch findings ls --control %s, investigate each, record decisions using watch findings respond, then run watch results again to review any resulting edits. These commands connect to the local watcher. If the sandbox blocks that connection, request normal sandbox escalation so the configured approval reviewer can decide; a sandbox error alone is not an authorization denial. Respect any denial from that reviewer or the user. Once the report returns complete=true, no further watch commands are needed unless you edit files again; after further edits, read results again before finishing. Use one final answer for the task and any reportable review details. Report verified fixes, material unresolved concerns, incomplete coverage, and errors. Deliver required service advisories regardless of review outcome. For a completed review with no material findings or fixes, give the task outcome and any material caveats. Provide the review outcome when the user asks for it in this turn. The review record remains available. When you agreed with and fixed a finding, name the specific problem or affected behavior in one short sentence and link to the review when available. Use the recorded fixes as evidence. Only describe a finding as a bug you fixed if you agreed with it and verified the fix. Give more detail when the user asks or when it explains a material limitation. Never equate returned findings with confirmed defects. Keep finding counts, individual dismissals, and workflow reminders out of the conversation. Disclose material unresolved concerns or failures honestly. Do not repeat setup instructions, counts, response JSON, or the control key to the user. After handling any sandbox connection block through the normal approval flow above, if the command still fails or the report contains errors, stop review handling and report incomplete coverage; retry only under an explicit bounded recovery rule in the skill. Do not claim success if the report contains errors.", watching.Quote(executable), key, watching.Quote(executable), key)
 	return map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "UserPromptSubmit", "additionalContext": text}}
 }
 
@@ -208,7 +208,7 @@ func codexStopFeedback(result livewatch.Response, stopActive bool) map[string]an
 	}
 	for _, notice := range report.Notices {
 		if notice.NotifyUser {
-			return pendingFeedbackHook(result)
+			return map[string]any{"decision": "block", "reason": "Doomer has an advisory awaiting delivery."}
 		}
 	}
 	if result.RepeatedStopHandoff && len(result.HypothesisRequests) > 0 && report.Unanswered == 0 {
@@ -221,33 +221,13 @@ func codexStopFeedback(result livewatch.Response, stopActive bool) map[string]an
 		}
 		return map[string]any{"decision": "block", "reason": otherReview + " Read the watch results for its next request. If blocked, explain why the review is incomplete."}
 	}
-	if stopActive && !report.Complete {
+	if report.Unanswered > 0 || (stopActive && !report.Complete) {
 		return map[string]any{"systemMessage": "Doomer review handling is incomplete. Findings or advisories remain unresolved. Respect permission denials; explain the blocker instead of repeatedly retrying."}
-	}
-	if feedback := pendingFeedbackHook(result); feedback != nil {
-		return feedback
 	}
 	if len(result.HypothesisRequests) > 0 {
 		return map[string]any{"decision": "block", "reason": "Doomer has an unread Quick review request. Read the watch results before finishing. If blocked, explain why the review is incomplete."}
 	}
 	return finalFeedbackHook(result)
-}
-
-func pendingFeedbackHook(result livewatch.Response) map[string]any {
-	for _, notice := range makeFeedbackReport(result).Notices {
-		if notice.NotifyUser {
-			return map[string]any{"decision": "block", "reason": "Doomer has an advisory awaiting delivery."}
-		}
-	}
-
-	for _, finding := range result.Findings {
-		if finding.Disposition == nil {
-			// Stop reasons are visible continuation prompts. Keep the investigation
-			// protocol in UserPromptSubmit context and findings in watch results.
-			return map[string]any{"decision": "block", "reason": "Doomer review is ready."}
-		}
-	}
-	return nil
 }
 
 func feedbackInstructions(result livewatch.Response, key string) string {
