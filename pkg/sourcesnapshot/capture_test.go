@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -217,6 +218,7 @@ func TestTreeHashSharedProtocolVector(t *testing.T) {
 }
 
 func TestWorkspaceCapturesLargeRepositoryWithoutChangingEmbeddedLimits(t *testing.T) {
+	t.Setenv(ReviewFileLimitEnv, strconv.Itoa(MaxWorkspaceFileBytes))
 	dir, _ := sourceRepo(t)
 	for _, name := range []string{"one.bin", "two.bin", "three.bin"} {
 		sourceFile(t, dir, name, strings.Repeat(name[:1], 6<<20))
@@ -253,7 +255,12 @@ func TestTreeSizePreflightRejectsOversizedBlobBeforeLoadingContent(t *testing.T)
 	git(t, dir, "add", ".")
 	git(t, dir, "commit", "-m", "oversized blob")
 	blobs := map[string][]byte{}
-	_, err := (gitReader{ctx: context.Background(), dir: dir}).readTree("HEAD", blobs)
+	reader := gitReader{ctx: context.Background(), dir: dir}
+	entries, err := reader.treeEntries(git(t, dir, "rev-parse", "HEAD"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = reader.readTreeEntries(entries, blobs, nil, MaxFileBytes)
 	if err == nil || !strings.Contains(err.Error(), "baseline file exceeds") {
 		t.Fatalf("expected preflight rejection: %v", err)
 	}
@@ -261,14 +268,15 @@ func TestTreeSizePreflightRejectsOversizedBlobBeforeLoadingContent(t *testing.T)
 		t.Fatal("loaded content before rejecting oversized tree")
 	}
 }
-func TestTreeSizePreflightAggregateAndFraming(t *testing.T) {
-	for _, data := range []string{"a blob 6\nb blob 6\n", "a blob 11\nb blob 0\n", "a tree 1\nb blob 1\n", "b blob 1\na blob 1\n", "a blob 1\n"} {
-		if err := validateTreeSizes([]byte(data), []string{"a", "b"}, 10, 10); err == nil {
-			t.Fatalf("accepted invalid or oversized tree %q", data)
+func TestTreeSizePreflightFraming(t *testing.T) {
+	for _, data := range []string{"a tree 1\nb blob 1\n", "b blob 1\na blob 1\n", "a blob 1\n", "a blob -1\nb blob 4\n"} {
+		if _, err := parseTreeSizes([]byte(data), []string{"a", "b"}); err == nil {
+			t.Fatalf("accepted invalid sizes %q", data)
 		}
 	}
-	if err := validateTreeSizes([]byte("a blob 6\nb blob 4\n"), []string{"a", "b"}, 10, 10); err != nil {
-		t.Fatal(err)
+	sizes, err := parseTreeSizes([]byte("a blob 6\nb blob 4\n"), []string{"a", "b"})
+	if err != nil || sizes[0] != 6 || sizes[1] != 4 {
+		t.Fatalf("incorrect sizes %v: %v", sizes, err)
 	}
 }
 
