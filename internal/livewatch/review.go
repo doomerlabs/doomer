@@ -119,7 +119,7 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 	}
 	latest := diff
 	if cfg.RequireHypotheses {
-		latest, err = editScope(ctx, manifest, cfg.editBaseline)
+		latest, err = editScope(ctx, manifest, cfg.editBaseline, capture.Skipped)
 		if err != nil {
 			return fail(err)
 		}

@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,7 +14,7 @@ import (
 
 func newReviewCommand(app *application.App, apiURL, profile *string) *cobra.Command {
 	var path, base, format string
-	var lookCloser, fullReview, showDiff bool
+	var lookCloser, fullReview, showDiff, showSkipped bool
 	var waitMode string
 	var lookCloserThreshold int
 	var timeout, pollInterval time.Duration
@@ -25,7 +27,11 @@ Git remote and your account's access. With no unique match it uses account-level
 configuration. --path selects another worktree or a directory in it.
 
 The snapshot includes tracked files and non-ignored untracked files, including
-staged and unstaged edits. It excludes Git metadata and ignored untracked files.
+staged and unstaged edits. It excludes Git metadata, files ignored by Git,
+binary files and paths matching the root .doomerignore (Git ignore syntax).
+Files larger than 1 MiB are skipped by default. Set DOOMER_REVIEW_MAX_FILE_BYTES
+to override the size limit, up to 20971520 bytes (20 MiB).
+--show-skipped lists excluded paths and their reasons on stderr.
 The default baseline is the merge base with origin's default branch (falling
 back to main/master, then HEAD). --base selects an explicit local commit or ref.
 No commits are created and no local changes are staged or modified.
@@ -42,8 +48,9 @@ for that stage. --wait=all (or bare --wait) waits for every enabled stage.
 With Look Closer disabled, the default is not to wait for the deep review.
 
 The default path reuses uploaded content, with a 20 MiB per-file and 1 GiB total
-source limit. All review modes support 20,000 files per tree. Symlinks, submodules, sparse checkouts, unresolved merges,
-and Git LFS pointers are unsupported and cause an error instead of being skipped.`,
+source limit. All review modes support 20,000 eligible files per tree.
+Symlinks are skipped. Submodules, sparse checkouts, unresolved merges and
+eligible Git LFS pointers cause an error.`,
 		Example: `  doomer review
   doomer review --deep-review=false
   doomer review --look-closer=false --wait=deep
@@ -86,8 +93,22 @@ and Git LFS pointers are unsupported and cause an error instead of being skipped
 			if timeout <= 0 || pollInterval <= 0 {
 				return fmt.Errorf("--timeout and --poll-interval must be positive")
 			}
-			snapshot, err := sourcesnapshot.CaptureWorktree(cmd.Context(), sourcesnapshot.CaptureOptions{Path: path, Base: base, Workspace: true})
-			if err != nil {
+			snapshot, err := sourcesnapshot.CaptureWorktree(cmd.Context(), sourcesnapshot.CaptureOptions{
+				Path: path, Base: base, Workspace: true, ShowSkipped: showSkipped,
+			})
+			if err != nil && !errors.Is(err, sourcesnapshot.ErrNoChanges) {
+				return err
+			}
+			if showSkipped {
+				if err := sourcesnapshot.WriteSkippedPaths(cmd.ErrOrStderr(), snapshot.Skipped); err != nil {
+					return err
+				}
+			}
+			if errors.Is(err, sourcesnapshot.ErrNoChanges) {
+				if format == "json" {
+					return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]string{"status": "unchanged", "message": "No eligible changes to review."})
+				}
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), "No eligible changes to review.")
 				return err
 			}
 			return runWorkspaceReview(cmd, deps.Clock, *apiURL, *profile, auth.Token, path, snapshot, format, lookCloser, fullReview, showDiff, lookCloserThreshold, waitFor, timeout, pollInterval)
@@ -99,6 +120,7 @@ and Git LFS pointers are unsupported and cause an error instead of being skipped
 	command.Flags().BoolVar(&lookCloser, "look-closer", true, "run Look Closer")
 	command.Flags().IntVar(&lookCloserThreshold, "look-closer-threshold", 80, "minimum score for a Look Closer lead (0–100; lower returns more leads)")
 	command.Flags().BoolVar(&fullReview, "deep-review", true, "also run the deep review on the server")
+	command.Flags().BoolVar(&showSkipped, "show-skipped", false, "list paths excluded from review and their reasons on stderr")
 	command.Flags().BoolVar(&showDiff, "show-diff", false, "print the exact review diff before uploading")
 	command.Flags().StringVar(&waitMode, "wait", "look-closer", "wait for none, look-closer, deep, or all (bare --wait means all)")
 	command.Flags().Lookup("wait").NoOptDefVal = "all"

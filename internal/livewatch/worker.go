@@ -284,7 +284,12 @@ func capture(ctx context.Context, path string, baseline ...map[string]initialFil
 	opts := sourcesnapshot.CaptureOptions{Workspace: true, Path: path}
 	if len(baseline) > 0 {
 		initial := sourcesnapshot.Manifest{Target: []sourcesnapshot.Entry{}, Blobs: map[string][]byte{}}
+		opts.InitialExcluded = map[string]string{}
 		for path, f := range baseline[0] {
+			if f.excluded != "" {
+				opts.InitialExcluded[path] = f.excluded
+				continue
+			}
 			if f.deleted {
 				continue
 			}
@@ -366,7 +371,7 @@ func (w *worker) schedule(ctx context.Context) {
 				manifest, err := sourcesnapshot.DecodeWorkspace(snapshot.Bytes)
 				var diff string
 				if err == nil {
-					diff, err = editScope(jobCtx, manifest, baseline)
+					diff, err = editScope(jobCtx, manifest, baseline, snapshot.Skipped)
 				}
 				if err != nil || strings.TrimSpace(diff) == "" {
 					result := Result{Repository: path, Status: "unchanged"}

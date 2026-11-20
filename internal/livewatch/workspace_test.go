@@ -69,7 +69,7 @@ func TestPlainWorkspaceKeepsNestedRepositoriesSeparate(t *testing.T) {
 	}
 }
 
-func TestInitialDirectoryBaselineRejectsOversizedFile(t *testing.T) {
+func TestInitialDirectoryBaselineSkipsOversizedFile(t *testing.T) {
 	for _, kind := range []string{"plain", "unborn"} {
 		t.Run(kind, func(t *testing.T) {
 			dir := t.TempDir()
@@ -91,8 +91,8 @@ func TestInitialDirectoryBaselineRejectsOversizedFile(t *testing.T) {
 				t.Fatal(closeErr)
 			}
 			baseline, err := initialEditFiles(context.Background(), dir)
-			if err == nil || !strings.Contains(err.Error(), "no larger than") || baseline != nil {
-				t.Fatalf("oversized baseline was not rejected: %v (files=%d)", err, len(baseline))
+			if err != nil || len(baseline) != 1 || baseline["oversized.bin"].excluded != sourcesnapshot.SkipSize {
+				t.Fatalf("oversized file was not excluded from the baseline: %v (files=%d)", err, len(baseline))
 			}
 		})
 	}

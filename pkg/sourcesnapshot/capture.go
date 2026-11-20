@@ -28,6 +28,9 @@ type CaptureOptions struct {
 	Base      string
 	// Initial supplies the pre-edit tree for workspaces without a commit.
 	Initial *Manifest
+	// InitialExcluded records ineligible paths in the live edit baseline.
+	InitialExcluded map[string]string
+	ShowSkipped     bool
 }
 
 type SourceMetadata struct {
@@ -46,6 +49,7 @@ type GitIdentity struct {
 }
 
 type Capture struct {
+	Skipped        map[string]string `json:",omitempty"`
 	GitIdentity    *GitIdentity
 	Bytes          []byte
 	Digest         string
@@ -80,6 +84,10 @@ func (b *boundedBuffer) Bytes() []byte { return b.data.Bytes() }
 // run only uses Git's local read commands. Disable optional index writes and
 // ignore inherited repository overrides so --path always selects the source.
 func (g gitReader) run(input []byte, args ...string) ([]byte, error) {
+	return g.runGit(input, false, args...)
+}
+
+func (g gitReader) runGit(input []byte, allowNoMatches bool, args ...string) ([]byte, error) {
 	all := append([]string{"-C", g.dir, "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"}, args...)
 	if g.gitDir != "" {
 		all = append([]string{"--git-dir=" + g.gitDir, "--work-tree=" + g.dir}, all...)
@@ -98,6 +106,10 @@ func (g gitReader) run(input []byte, args ...string) ([]byte, error) {
 	if err := cmd.Run(); err != nil {
 		if g.ctx.Err() != nil {
 			return nil, g.ctx.Err()
+		}
+		var exit *exec.ExitError
+		if allowNoMatches && errors.As(err, &exit) && exit.ExitCode() == 1 && !output.overflow {
+			return output.Bytes(), nil
 		}
 		if output.overflow {
 			return nil, fmt.Errorf("snapshot exceeds upload limits")
@@ -183,17 +195,7 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 	for _, entry := range headEntries {
 		headTree[entry.path] = entry
 	}
-	m := Manifest{Version: 1, Scope: "worktree", BaseRef: base, HeadRef: head, Blobs: map[string][]byte{}}
-	m.Base = []Entry{}
-	if base != "" {
-		m.Base, err = g.readTree(base, m.Blobs)
-	}
-	if head == "" && opts.Initial != nil {
-		m.Base = append(m.Base, opts.Initial.Target...)
-		for _, e := range m.Base {
-			m.Blobs[e.Hash] = opts.Initial.Blobs[e.Hash]
-		}
-	}
+	maxFile, err := reviewFileLimit(opts.Workspace)
 	if err != nil {
 		return result, err
 	}
@@ -208,6 +210,66 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 		return result, err
 	}
 	defer root.Close()
+	var baseline []gitTreeEntry
+	switch {
+	case base == "":
+	case base == head:
+		baseline = headEntries
+	default:
+		baseline, err = g.treeEntries(base)
+		if err != nil {
+			return result, err
+		}
+	}
+	m := Manifest{Version: 1, Scope: "worktree", BaseRef: base, HeadRef: head, Blobs: map[string][]byte{}, Base: []Entry{}}
+	var excluded map[string]string
+	var policy []byte
+	if opts.Workspace {
+		policy, err = readIgnorePolicy(root)
+		if err != nil {
+			return result, err
+		}
+		paths := append(treePaths(baseline), names...)
+		if opts.Initial != nil {
+			for _, entry := range opts.Initial.Target {
+				paths = append(paths, entry.Path)
+			}
+		}
+		excluded, err = g.ignoredPaths(policy, paths)
+		if err != nil {
+			return result, err
+		}
+		if opts.Initial != nil {
+			initialNames := make([]string, 0, len(opts.Initial.Target))
+			for _, entry := range opts.Initial.Target {
+				if excluded[entry.Path] == "" {
+					initialNames = append(initialNames, entry.Path)
+				}
+			}
+			if err := g.excludeGitIgnoredInitial(root, initialNames, excluded); err != nil {
+				return result, err
+			}
+		}
+		for name, reason := range opts.InitialExcluded {
+			if reason != SkipDoomerIgnore && excluded[name] == "" {
+				excluded[name] = reason
+			}
+		}
+		result.Skipped = excluded
+	}
+	if base != "" {
+		m.Base, err = g.readTreeEntries(baseline, m.Blobs, excluded, maxFile)
+		if err != nil {
+			return result, err
+		}
+	} else if opts.Initial != nil {
+		for _, e := range opts.Initial.Target {
+			if excluded[e.Path] == "" {
+				m.Base = append(m.Base, e)
+				m.Blobs[e.Hash] = opts.Initial.Blobs[e.Hash]
+			}
+		}
+	}
 	m.Target = []Entry{}
 	total := 0
 	for _, data := range m.Blobs {
@@ -221,7 +283,14 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 		if runtime.GOOS == "windows" && before.symlinks[name] {
 			continue
 		}
-		data, mode, err := readWorktreeFile(root, name, limits.file)
+		if excluded[name] != "" {
+			continue
+		}
+		data, mode, err := readWorktreeFile(root, name, maxFile)
+		if opts.Workspace && errors.Is(err, errSourceTooLarge) {
+			excluded[name] = SkipSize
+			continue
+		}
 		if errors.Is(err, errSourceSymlink) {
 			continue
 		}
@@ -239,6 +308,10 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 				mode = entry.mode
 			}
 		}
+		if opts.Workspace && binarySource(data) {
+			excluded[name] = SkipBinary
+			continue
+		}
 		hash := Digest(data)
 		if _, exists := m.Blobs[hash]; !exists {
 			total += len(data)
@@ -251,6 +324,21 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 		if expected, exists := headTree[name]; !exists || expected.mode != mode || expected.oid != gitBlobHash(data, len(head)) {
 			dirty = true
 		}
+	}
+	if opts.Workspace {
+		pruneExcluded(&m, excluded)
+		if opts.ShowSkipped {
+			gitIgnored, err := g.ignoredUntracked()
+			if err != nil {
+				return result, err
+			}
+			for _, name := range gitIgnored {
+				result.Skipped[name] = SkipGitIgnore
+			}
+		}
+	}
+	for name := range excluded {
+		delete(headTree, name)
 	}
 	if len(m.Target) != len(headTree) {
 		dirty = true
@@ -265,6 +353,15 @@ func CaptureWorktree(ctx context.Context, opts CaptureOptions) (Capture, error) 
 	}
 	if head != endHead || !bytes.Equal(before.index, after.index) || !equalNames(names, after.names) {
 		return result, fmt.Errorf("worktree changed while capturing; try again after edits finish")
+	}
+	if opts.Workspace {
+		currentPolicy, err := readIgnorePolicy(root)
+		if err != nil {
+			return result, err
+		}
+		if !bytes.Equal(policy, currentPolicy) {
+			return result, fmt.Errorf("%s changed while capturing; try again after edits finish", ignoreFileName)
+		}
 	}
 	if err := m.validate(opts.Workspace); err != nil {
 		return result, fmt.Errorf("cannot review snapshot: %w (choose --base to review committed changes)", err)
@@ -385,7 +482,7 @@ func (g gitReader) worktreeFiles() (worktreeInventory, error) {
 		}
 		names[string(name)] = true
 	}
-	if len(names) > MaxFiles {
+	if !g.workspace && len(names) > MaxFiles {
 		return result, fmt.Errorf("snapshot exceeds the %d file limit", MaxFiles)
 	}
 	result.names = make([]string, 0, len(names))
@@ -399,28 +496,41 @@ func (g gitReader) worktreeFiles() (worktreeInventory, error) {
 	return result, nil
 }
 
-var errSourceSymlink = errors.New("source symlink")
+var (
+	errSourceSymlink    = errors.New("source symlink")
+	errSourceNonRegular = errors.New("not a regular file")
+	errSourceTooLarge   = errors.New("file exceeds size limit")
+)
 
-func readWorktreeFile(root *os.Root, name string, maxFileBytes int) ([]byte, string, error) {
-	path := filepath.FromSlash(name)
+func worktreePathInfo(root *os.Root, path string) (os.FileInfo, error) {
 	// Skip symlinks at every component, including links to repository files.
+	var info os.FileInfo
 	parent := ""
 	for _, component := range strings.Split(path, string(filepath.Separator)) {
 		parent = filepath.Join(parent, component)
-		info, err := root.Lstat(parent)
+		var err error
+		info, err = root.Lstat(parent)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return nil, "", errSourceSymlink
+			return nil, errSourceSymlink
 		}
 	}
-	before, err := root.Lstat(path)
+	return info, nil
+}
+
+func readWorktreeFile(root *os.Root, name string, maxFileBytes int) ([]byte, string, error) {
+	path := filepath.FromSlash(name)
+	before, err := worktreePathInfo(root, path)
 	if err != nil {
 		return nil, "", err
 	}
-	if !before.Mode().IsRegular() || before.Size() > int64(maxFileBytes) {
-		return nil, "", fmt.Errorf("requires a regular file no larger than %d MiB", maxFileBytes>>20)
+	if !before.Mode().IsRegular() {
+		return nil, "", errSourceNonRegular
+	}
+	if before.Size() > int64(maxFileBytes) {
+		return nil, "", fmt.Errorf("%w of %d bytes", errSourceTooLarge, maxFileBytes)
 	}
 	file, err := root.Open(path)
 	if err != nil {
@@ -475,78 +585,78 @@ func (g gitReader) treeEntries(commit string) ([]gitTreeEntry, error) {
 		}
 		objects = append(objects, gitTreeEntry{path: name, oid: fields[2], mode: fields[0]})
 	}
-	if len(objects) > MaxFiles {
+	if !g.workspace && len(objects) > MaxFiles {
 		return nil, fmt.Errorf("Git tree exceeds the %d file limit", MaxFiles)
 	}
 	return objects, nil
 }
 
-// Read all unique Git blobs through one batch process, rather than spawning a
-// Git process per file. Bound both the subprocess output and decoded content.
-func (g gitReader) readTree(commit string, blobs map[string][]byte) ([]Entry, error) {
-	objects, err := g.treeEntries(commit)
-	if err != nil {
-		return nil, err
-	}
+// Read unique Git blobs in bounded batches and keep only eligible content.
+func (g gitReader) readTreeEntries(objects []gitTreeEntry, blobs map[string][]byte, excluded map[string]string, fileLimit int) ([]Entry, error) {
+	eligible := make([]gitTreeEntry, 0, len(objects))
 	unique := map[string]bool{}
 	var ids []string
 	for _, object := range objects {
+		if excluded[object.path] != "" {
+			continue
+		}
+		eligible = append(eligible, object)
 		if !unique[object.oid] {
 			unique[object.oid] = true
 			ids = append(ids, object.oid)
 		}
 	}
 	hashes := map[string]string{}
+	reasons := map[string]string{}
 	if len(ids) > 0 {
 		input := []byte(strings.Join(ids, "\n") + "\n")
-		// Reject oversized trees before buffering blob contents. Git object sizes
-		// are immutable; validate the content framing again below as well.
-		sizes, err := g.run(input, "cat-file", "--batch-check")
+		raw, err := g.run(input, "cat-file", "--batch-check")
 		if err != nil {
 			return nil, err
 		}
-		if err := validateTreeSizes(sizes, ids, limitsForWorkspace(g.workspace).file, limitsForWorkspace(g.workspace).content); err != nil {
-			return nil, err
-		}
-		data, err := g.run(input, "cat-file", "--batch")
+		sizes, err := parseTreeSizes(raw, ids)
 		if err != nil {
 			return nil, err
 		}
-		reader := bufio.NewReader(bytes.NewReader(data))
-		total := 0
-		for _, id := range ids {
-			header, err := reader.ReadString('\n')
-			if err != nil {
-				return nil, fmt.Errorf("incomplete baseline object")
-			}
-			fields := strings.Fields(header)
-			if len(fields) != 3 || fields[0] != id || fields[1] != "blob" {
-				return nil, fmt.Errorf("invalid baseline object")
-			}
-			size, err := strconv.Atoi(fields[2])
-			if err != nil || size < 0 || size > limitsForWorkspace(g.workspace).file {
-				return nil, fmt.Errorf("baseline file exceeds %d MiB", limitsForWorkspace(g.workspace).file>>20)
-			}
-			content := make([]byte, size)
-			if _, err := io.ReadFull(reader, content); err != nil {
-				return nil, err
-			}
-			if newline, err := reader.ReadByte(); err != nil || newline != '\n' {
-				return nil, fmt.Errorf("invalid baseline object framing")
-			}
-			hash := Digest(content)
-			hashes[id] = hash
-			if _, exists := blobs[hash]; !exists {
-				blobs[hash] = content
+		limits := limitsForWorkspace(g.workspace)
+		var batch []string
+		batchBytes, total := 0, 0
+		if excluded == nil {
+			for _, size := range sizes {
+				if size > fileLimit {
+					return nil, fmt.Errorf("baseline file exceeds %d bytes", fileLimit)
+				}
 				total += size
+				if total > limits.content {
+					return nil, fmt.Errorf("baseline content exceeds %d MiB", limits.content>>20)
+				}
 			}
-			if total > limitsForWorkspace(g.workspace).content {
-				return nil, fmt.Errorf("baseline content exceeds %d MiB", limitsForWorkspace(g.workspace).content>>20)
+			total = 0
+		}
+		for i, id := range ids {
+			size := sizes[i]
+			if size > fileLimit {
+				reasons[id] = SkipSize
+				continue
 			}
+			if batchBytes+size > min(limits.content, 32<<20) {
+				if err := g.readBlobBatch(batch, fileLimit, blobs, hashes, reasons, excluded != nil, &total); err != nil {
+					return nil, err
+				}
+				batch, batchBytes = batch[:0], 0
+			}
+			batch, batchBytes = append(batch, id), batchBytes+size
+		}
+		if err := g.readBlobBatch(batch, fileLimit, blobs, hashes, reasons, excluded != nil, &total); err != nil {
+			return nil, err
 		}
 	}
-	entries := make([]Entry, 0, len(objects))
-	for _, object := range objects {
+	entries := make([]Entry, 0, len(eligible))
+	for _, object := range eligible {
+		if reason := reasons[object.oid]; reason != "" {
+			excluded[object.path] = reason
+			continue
+		}
 		entries = append(entries, Entry{Path: object.path, Hash: hashes[object.oid], Mode: object.mode})
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
@@ -596,25 +706,69 @@ func repositoryIdentity(remote string) string {
 	return identity
 }
 
-func validateTreeSizes(data []byte, ids []string, fileLimit, contentLimit int) error {
+func parseTreeSizes(data []byte, ids []string) ([]int, error) {
 	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
 	if len(lines) != len(ids) {
-		return fmt.Errorf("incomplete baseline object sizes")
+		return nil, fmt.Errorf("incomplete baseline object sizes")
 	}
-	total := 0
+	sizes := make([]int, 0, len(ids))
 	for i, line := range lines {
 		fields := strings.Fields(line)
 		if len(fields) != 3 || fields[0] != ids[i] || fields[1] != "blob" {
-			return fmt.Errorf("invalid baseline object size")
+			return nil, fmt.Errorf("invalid baseline object size")
+		}
+		size, err := strconv.Atoi(fields[2])
+		if err != nil || size < 0 {
+			return nil, fmt.Errorf("invalid baseline object size")
+		}
+		sizes = append(sizes, size)
+	}
+	return sizes, nil
+}
+
+func (g gitReader) readBlobBatch(ids []string, fileLimit int, blobs map[string][]byte, hashes, reasons map[string]string, filterBinary bool, total *int) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	data, err := g.run([]byte(strings.Join(ids, "\n")+"\n"), "cat-file", "--batch")
+	if err != nil {
+		return err
+	}
+	reader := bufio.NewReader(bytes.NewReader(data))
+	for _, id := range ids {
+		header, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("incomplete baseline object")
+		}
+		fields := strings.Fields(header)
+		if len(fields) != 3 || fields[0] != id || fields[1] != "blob" {
+			return fmt.Errorf("invalid baseline object")
 		}
 		size, err := strconv.Atoi(fields[2])
 		if err != nil || size < 0 || size > fileLimit {
-			return fmt.Errorf("baseline file exceeds %d MiB", fileLimit>>20)
+			return fmt.Errorf("invalid baseline object size")
 		}
-		if size > contentLimit-total {
-			return fmt.Errorf("baseline content exceeds %d MiB", contentLimit>>20)
+		content := make([]byte, size)
+		if _, err := io.ReadFull(reader, content); err != nil {
+			return err
 		}
-		total += size
+		if newline, err := reader.ReadByte(); err != nil || newline != '\n' {
+			return fmt.Errorf("invalid baseline object framing")
+		}
+		if filterBinary && binarySource(content) {
+			reasons[id] = SkipBinary
+			continue
+		}
+		hash := Digest(content)
+		hashes[id] = hash
+		if _, exists := blobs[hash]; !exists {
+			blobs[hash] = content
+			*total += size
+		}
+		limit := limitsForWorkspace(g.workspace).content
+		if *total > limit {
+			return fmt.Errorf("baseline content exceeds %d MiB", limit>>20)
+		}
 	}
 	return nil
 }
