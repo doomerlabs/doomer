@@ -11,11 +11,70 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
+	"github.com/fsnotify/fsnotify"
 )
+
+func TestHookWatcherPollsSparinglyAndExpiresWithoutControl(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		scans := 0
+		events := make(chan fsnotify.Event)
+		w := &worker{
+			cfg:      Config{Agent: "codex", RequireHypotheses: true, IdleTimeout: time.Minute, ControlTimeout: 2 * time.Minute},
+			watcher:  &fsnotify.Watcher{Events: events},
+			allowed:  func(context.Context, string) bool { scans++; return true },
+			controls: make(chan control),
+		}
+		done := make(chan error, 1)
+		go func() { done <- w.run(context.Background()) }()
+
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		if scans != 0 {
+			t.Fatalf("idle hook watcher scanned within two seconds: %d", scans)
+		}
+		time.Sleep(29 * time.Second)
+		synctest.Wait()
+		if scans != 1 {
+			t.Fatalf("expected a fallback scan at 30 seconds, got %d", scans)
+		}
+		// Renew the idle deadline at 31 seconds.
+		sent := make(chan struct{})
+		close(sent)
+		reply := make(chan Response, 1)
+		w.controls <- control{results: true, reply: reply, sent: sent}
+		<-reply
+
+		time.Sleep(58 * time.Second)
+		synctest.Wait()
+		select {
+		case err := <-done:
+			t.Fatalf("watcher expired before its renewed deadline: %v", err)
+		default:
+		}
+		before := scans
+		events <- fsnotify.Event{Op: fsnotify.Write}
+		time.Sleep(800 * time.Millisecond)
+		synctest.Wait()
+		if scans != before+1 {
+			t.Fatalf("expected an event-driven scan before the next fallback, got %d", scans-before)
+		}
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatal(err)
+			}
+		default:
+			t.Fatal("filesystem activity kept an abandoned watcher alive")
+		}
+	})
+}
 
 type fakeClient struct {
 	mu      sync.Mutex
