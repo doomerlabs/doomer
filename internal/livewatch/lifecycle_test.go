@@ -39,6 +39,61 @@ func TestLifecycleUsesSameIdentityAndMonotonicOffsets(t *testing.T) {
 	}
 }
 
+type expiredReviewLifecycle struct {
+	lifecycleFixture
+	expireAtSubmission bool
+}
+
+func (f *expiredReviewLifecycle) StartWorkspace(_ context.Context, _ string, in adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {
+	if f.expireAtSubmission {
+		return adversarylabs.WorkspaceReview{}, adversarylabs.ErrAgentAssessmentExpired
+	}
+	return adversarylabs.WorkspaceReview{ID: in.ReviewID, Status: "queued"}, nil
+}
+
+func (f *expiredReviewLifecycle) GetWorkspace(context.Context, string, string) (adversarylabs.WorkspaceReview, error) {
+	return adversarylabs.WorkspaceReview{}, adversarylabs.ErrAgentAssessmentExpired
+}
+
+func TestExpiredReviewReportsFailedLifecycleWithoutRetryingAnAcceptedReview(t *testing.T) {
+	repo := makeRepository(t, t.TempDir(), "repo")
+	baseline, err := initialEditFiles(t.Context(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("changed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := capture(t.Context(), repo, baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stage := range []string{"submission", "result_delivery"} {
+		t.Run(stage, func(t *testing.T) {
+			client := &expiredReviewLifecycle{expireAtSubmission: stage == "submission"}
+			cfg := Config{ID: "watch", RequireHypotheses: true, editBaseline: baseline}
+			cfg.hypotheses = func(context.Context, string, string, int) ([]adversarylabs.WorkspaceHypothesis, error) {
+				return []adversarylabs.WorkspaceHypothesis{}, nil
+			}
+			cfg.lifecycle = newReviewLifecycle(client, cfg, repo, snapshot, 1, time.Now())
+			got := review(t.Context(), client, cfg, repo, snapshot, 1)
+			if got.Status != "unavailable" || got.assessmentExpired != client.expireAtSubmission || got.Error != adversarylabs.ErrAgentAssessmentExpired.Error() {
+				t.Fatalf("unexpected expiry outcome: %+v", got)
+			}
+			failures := map[string]bool{}
+			for _, entry := range client.events {
+				event := entry["event"].(map[string]any)
+				if event["state"] == "failed" && event["error_code"] == "agent_response_timeout" {
+					failures[event["stage"].(string)] = true
+				}
+			}
+			if !failures[stage] || !failures["result_delivery"] {
+				t.Fatalf("missing terminal lifecycle events: %v", failures)
+			}
+		})
+	}
+}
+
 func TestMetadataOnlyChangeDoesNotRegisterOrUploadReview(t *testing.T) {
 	repo := makeRepository(t, t.TempDir(), "repo")
 	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("existing branch edit\n"), 0600); err != nil {

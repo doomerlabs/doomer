@@ -3,11 +3,14 @@ package adversarylabs
 import (
 	"context"
 	"encoding/json"
-	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 )
 
 func TestWorkspaceUploadUsesOnlyValidatedBlobRoutes(t *testing.T) {
@@ -151,6 +154,57 @@ func TestWorkspaceAutoDeepFallsBackOnlyForOldEvidenceServers(t *testing.T) {
 				}
 			} else if err == nil {
 				t.Fatal("unrelated failure was swallowed")
+			}
+		})
+	}
+}
+
+func TestWorkspaceReplaysOnlyTheOriginalPayloadAfterResponseLoss(t *testing.T) {
+	for _, name := range []string{"compatibility rejection on replay", "client timeout", "caller canceled"} {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var bodies []string
+			client := NewClientWithBaseURL(ConfigStore{}, "https://example.test")
+			client.HTTP.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				raw, err := io.ReadAll(req.Body)
+				if err != nil {
+					return nil, err
+				}
+				bodies = append(bodies, string(raw))
+				if len(bodies) == 1 {
+					switch name {
+					case "caller canceled":
+						cancel()
+						return nil, io.EOF
+					case "client timeout":
+						return nil, context.DeadlineExceeded
+					default:
+						return nil, io.EOF
+					}
+				}
+				if name == "compatibility rejection on replay" {
+					return &http.Response{StatusCode: http.StatusBadRequest, Body: io.NopCloser(strings.NewReader(`{"error":"invalid_evidence_context"}`))}, nil
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"id":"accepted-review"}`))}, nil
+			})
+			got, err := client.StartWorkspace(ctx, "token", WorkspaceSubmission{ReviewID: "same-request", EvidenceContext: true})
+			if name == "caller canceled" {
+				if err == nil || len(bodies) != 1 {
+					t.Fatalf("canceled submission retried: %d calls, %v", len(bodies), err)
+				}
+				return
+			}
+			if len(bodies) != 2 || bodies[0] != bodies[1] {
+				t.Fatalf("expected one replay with the original payload, got %v", bodies)
+			}
+			if name == "compatibility rejection on replay" {
+				var response *ResponseError
+				if !errors.As(err, &response) || response.Code != "invalid_evidence_context" {
+					t.Fatalf("expected the replay's rejection, got %v", err)
+				}
+			} else if err != nil || got.ID != "accepted-review" {
+				t.Fatalf("expected existing review after client timeout, got %+v, %v", got, err)
 			}
 		})
 	}
