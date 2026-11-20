@@ -28,13 +28,15 @@ script_args=()
 if [[ "$kind" == runtime ]]; then
   # The updater alone promotes this payload after Installer returns success.
   location=/Library/DoomerMDM/incoming
-  install -m 0755 "$doomer_binary" "$stage/root/doomer"
+  staged_binary="$stage/root/doomer"
+  install -m 0755 "$doomer_binary" "$staged_binary"
 else
   runtime="$stage/root/Library/DoomerMDM"
   hook_dir="$stage/root/usr/local/libexec/doomer-mdm"
   mkdir -p "$runtime/incoming" "$hook_dir" "$stage/scripts" \
     "$stage/root/Library/LaunchAgents" "$stage/root/Library/LaunchDaemons"
-  install -m 0755 "$doomer_binary" "$runtime/bootstrap-doomer"
+  staged_binary="$runtime/bootstrap-doomer"
+  install -m 0755 "$doomer_binary" "$staged_binary"
   install -m 0755 "$source_dir/mdm/hook-launcher.sh" "$hook_dir/doomer"
   install -m 0755 "$source_dir/mdm/hook-launcher.sh" "$runtime/run-doomer"
   printf '%s\n' "${DOOMER_PKG_SIGN_IDENTITY:-}" > "$runtime/installer-identity"
@@ -51,7 +53,7 @@ SCRIPT
   if [[ ",$agents," == *,claude,* ]]; then
     claude_dir="$stage/root/Library/Application Support/ClaudeCode/managed-settings.d"
     mkdir -p "$claude_dir"
-    "$runtime/bootstrap-doomer" mdm agent-config --agent claude > "$claude_dir/50-doomer.json"
+    "$staged_binary" mdm agent-config --agent claude > "$claude_dir/50-doomer.json"
   fi
   if [[ ",$agents," == *,codex,* ]]; then
     mkdir -p "$stage/root/private/etc/codex/rules"
@@ -71,7 +73,7 @@ SCRIPT
   script_args=(--scripts "$stage/scripts")
 fi
 
-version="$("$doomer_binary" --version | awk '{print $2}')"
+version="$("$staged_binary" --version | awk '{print $2}')"
 [[ "$version" =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}(\.[1-9][0-9]*)?(-beta\.[0-9]+)?$ ]] || {
   echo "The Doomer binary must report a release version." >&2
   exit 1
