@@ -44,7 +44,8 @@ jobs:
               BINARY="$inputs/doomer-$arch" VERSION=2099.1.1.1-beta.1
           done
           bootstrap_inputs="$inputs/bootstrap"
-          bash mdm/build-bootstrap-binary.sh "$bootstrap_inputs"
+          # Exercise the documented script from outside the checkout.
+          (cd "$inputs" && bash "$GITHUB_WORKSPACE/mdm/build-bootstrap-binary.sh" bootstrap)
           bash mdm/combine-binaries.sh "$inputs"
           # Release archives are extracted as data before the builder stages them.
           chmod 0644 "$inputs/doomer"
