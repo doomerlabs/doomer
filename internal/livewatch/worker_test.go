@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -21,12 +22,12 @@ import (
 
 func TestHookWatcherPollsSparinglyAndExpiresWithoutControl(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		scans := 0
+		var scans atomic.Int32
 		events := make(chan fsnotify.Event)
 		w := &worker{
 			cfg:      Config{Agent: "codex", RequireHypotheses: true, IdleTimeout: time.Minute, ControlTimeout: 2 * time.Minute},
 			watcher:  &fsnotify.Watcher{Events: events},
-			allowed:  func(context.Context, string) bool { scans++; return true },
+			allowed:  func(context.Context, string) bool { scans.Add(1); return true },
 			controls: make(chan control),
 		}
 		done := make(chan error, 1)
@@ -34,13 +35,13 @@ func TestHookWatcherPollsSparinglyAndExpiresWithoutControl(t *testing.T) {
 
 		time.Sleep(2 * time.Second)
 		synctest.Wait()
-		if scans != 0 {
-			t.Fatalf("idle hook watcher scanned within two seconds: %d", scans)
+		if got := scans.Load(); got != 0 {
+			t.Fatalf("idle hook watcher scanned within two seconds: %d", got)
 		}
 		time.Sleep(29 * time.Second)
 		synctest.Wait()
-		if scans != 1 {
-			t.Fatalf("expected a fallback scan at 30 seconds, got %d", scans)
+		if got := scans.Load(); got != 1 {
+			t.Fatalf("expected a fallback scan at 30 seconds, got %d", got)
 		}
 		// Renew the idle deadline at 31 seconds.
 		sent := make(chan struct{})
@@ -56,12 +57,12 @@ func TestHookWatcherPollsSparinglyAndExpiresWithoutControl(t *testing.T) {
 			t.Fatalf("watcher expired before its renewed deadline: %v", err)
 		default:
 		}
-		before := scans
+		before := scans.Load()
 		events <- fsnotify.Event{Op: fsnotify.Write}
 		time.Sleep(800 * time.Millisecond)
 		synctest.Wait()
-		if scans != before+1 {
-			t.Fatalf("expected an event-driven scan before the next fallback, got %d", scans-before)
+		if got := scans.Load() - before; got != 1 {
+			t.Fatalf("expected an event-driven scan before the next fallback, got %d", got)
 		}
 		time.Sleep(2 * time.Second)
 		synctest.Wait()
