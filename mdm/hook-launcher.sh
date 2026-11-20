@@ -1,6 +1,10 @@
 #!/bin/sh
-# Both the system daemon and the existing hook path use the active runtime.
+# The system daemon and agent hooks share the active runtime.
 if [ -x /Library/DoomerMDM/doomer ]; then
   exec /Library/DoomerMDM/doomer "$@"
 fi
-exec /Library/DoomerMDM/bootstrap-doomer "$@"
+case "${1-}:${2-}" in
+  mdm:update) exec /Library/DoomerMDM/bootstrap-updater "$@" ;;
+  mdm:hook|mdm:enroll) printf '%s\n' '{}' ;;
+  *) echo 'Managed Doomer is waiting for its first verified runtime.' >&2; exit 1 ;;
+esac

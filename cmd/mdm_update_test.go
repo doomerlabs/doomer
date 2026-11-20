@@ -25,6 +25,7 @@ type mdmUpdateFixture struct {
 	updater                              mdmUpdater
 	active, stage                        string
 	channel, signer, manifest, feed, pkg string
+	target                               string
 	install                              func() error
 	requests, installs                   int
 }
@@ -45,18 +46,16 @@ func newMDMUpdateFixture(t *testing.T, current string) *mdmUpdateFixture {
 	if current != "" {
 		mdmTestWrite(t, f.active, current)
 	}
-	f.manifest = fmt.Sprintf(`{"schemaVersion":2,"packageSHA256":"%x"}`, sha256.Sum256([]byte(mdmTestPackage)))
-	f.feed = fmt.Sprintf(`{"schema_version":1,"version":"2026.11.21.1-beta.1","managed_package":{"version":"%s","manifest_sha256":"%x"}}`, mdmTestVersion, sha256.Sum256([]byte(f.manifest)))
-	f.install = func() error { return os.WriteFile(f.stage, []byte(mdmTestVersion), 0755) }
+	f.setTarget(mdmTestVersion)
 	client := &http.Client{Transport: managedTransport(func(r *http.Request) (*http.Response, error) {
 		f.requests++
 		status, body := http.StatusOK, ""
 		switch strings.TrimPrefix(r.URL.Path, "/cli") {
 		case "/beta.json", "/stable.json":
 			body = f.feed
-		case "/releases/" + mdmTestVersion + "/mdm-release.json":
+		case "/releases/" + f.target + "/mdm-release.json":
 			body = f.manifest
-		case "/releases/" + mdmTestVersion + "/Doomer-MDM-" + mdmTestVersion + ".pkg":
+		case "/releases/" + f.target + "/Doomer-MDM-" + f.target + ".pkg":
 			body = f.pkg
 		default:
 			status = http.StatusNotFound
@@ -85,6 +84,44 @@ func newMDMUpdateFixture(t *testing.T, current string) *mdmUpdateFixture {
 	return f
 }
 
+func (f *mdmUpdateFixture) setTarget(version string) {
+	f.target = version
+	f.manifest = fmt.Sprintf(`{"schemaVersion":2,"packageSHA256":"%x"}`, sha256.Sum256([]byte(mdmTestPackage)))
+	f.feed = fmt.Sprintf(`{"schema_version":1,"version":"2026.11.21.1-beta.1","managed_package":{"version":"%s","manifest_sha256":"%x"}}`, version, sha256.Sum256([]byte(f.manifest)))
+	f.install = func() error { return os.WriteFile(f.stage, []byte(version), 0755) }
+}
+
+func (f *mdmUpdateFixture) useDownloadOnlyBootstrap(t *testing.T) {
+	t.Helper()
+	if err := os.Remove(filepath.Join(f.updater.dir, "bootstrap-doomer")); err != nil {
+		t.Fatal(err)
+	}
+	mdmTestWrite(t, filepath.Join(f.updater.dir, "bootstrap-updater"), "updater")
+}
+
+func TestMDMDownloadOnlyBootstrapAcrossRuntimeReleases(t *testing.T) {
+	const next = "2026.11.20.1-beta.3"
+	f := newMDMUpdateFixture(t, "")
+	f.useDownloadOnlyBootstrap(t)
+	for _, version := range []string{mdmTestVersion, next} {
+		f.setTarget(version)
+		if _, err := f.updater.update(t.Context(), ""); err != nil {
+			t.Fatal(err)
+		}
+		f.assertActive(t, version)
+	}
+	fresh := newMDMUpdateFixture(t, "")
+	fresh.useDownloadOnlyBootstrap(t)
+	fresh.setTarget(next)
+	if _, err := fresh.updater.update(t.Context(), ""); err != nil {
+		t.Fatal(err)
+	}
+	fresh.assertActive(t, next)
+	if fresh.installs != 1 {
+		t.Fatalf("fresh Mac installed %d packages, want only the newest runtime", fresh.installs)
+	}
+}
+
 func mdmTestWrite(t *testing.T, path, value string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(value), 0755); err != nil {
@@ -100,6 +137,51 @@ func (f *mdmUpdateFixture) assertActive(t *testing.T, want string) {
 	}
 	if string(got) != want || err != nil {
 		t.Fatalf("active runtime = %q, %v, want %q", got, err, want)
+	}
+}
+
+func TestMDMDownloadOnlyBootstrapRetriesBeforeFirstRuntime(t *testing.T) {
+	for _, mode := range []string{"offline", "manual", "wrong signer"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newMDMUpdateFixture(t, "")
+			f.useDownloadOnlyBootstrap(t)
+			switch mode {
+			case "offline":
+				client := f.updater.client
+				f.updater.client = &http.Client{Transport: managedTransport(func(*http.Request) (*http.Response, error) {
+					return nil, errors.New("offline")
+				})}
+				_, err := f.updater.update(t.Context(), "")
+				var retry mdmRetryError
+				if !errors.As(err, &retry) {
+					t.Fatalf("offline check returned %v, want a retryable error", err)
+				}
+				f.updater.client = client
+			case "manual":
+				f.channel = "manual"
+				if _, err := f.updater.update(t.Context(), ""); err != nil || f.requests != 0 {
+					t.Fatalf("manual check = %v, requests = %d", err, f.requests)
+				}
+			case "wrong signer":
+				f.signer = "Developer ID Installer: Somebody Else (123456789B)"
+				if _, err := f.updater.update(t.Context(), ""); err == nil {
+					t.Fatal("accepted the wrong signer")
+				}
+				f.signer = mdmTestSigner
+			}
+			f.assertActive(t, "")
+			if f.installs != 0 {
+				t.Fatal("Installer ran before a verified update was allowed")
+			}
+			manual := ""
+			if mode == "manual" {
+				manual = "beta"
+			}
+			if _, err := f.updater.update(t.Context(), manual); err != nil {
+				t.Fatal(err)
+			}
+			f.assertActive(t, mdmTestVersion)
+		})
 	}
 }
 

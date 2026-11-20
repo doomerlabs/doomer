@@ -4,7 +4,8 @@ set -euo pipefail
 # The workflow verifies and combines the binaries before exposing signing secrets.
 : "${MDM_INSTALLER_P12_BASE64:?Missing installer signing certificate}"
 : "${MDM_INSTALLER_P12_PASSWORD:?Missing installer signing certificate password}"
-[[ $# == 3 ]] || { echo "Usage: $0 UNIVERSAL_DOOMER RUNTIME.pkg BOOTSTRAP.pkg" >&2; exit 2; }
+[[ $# == 3 ]] || { echo "Usage: $0 bootstrap|runtime UNIVERSAL_BINARY OUTPUT.pkg" >&2; exit 2; }
+case "$1" in bootstrap|runtime) ;; *) exit 2 ;; esac
 
 umask 077
 work="$(mktemp -d)"
@@ -38,15 +39,11 @@ export LC_ALL=C
   echo "Expected one valid Developer ID Installer identity." >&2
   exit 1
 }
-/usr/bin/lipo "$1" -verify_arch arm64 x86_64
-for kind in runtime bootstrap; do
-  package=$2
-  [[ "$kind" != bootstrap ]] || package=$3
-  DOOMER_PKG_SIGN_IDENTITY="$identity" DOOMER_PKG_SIGN_KEYCHAIN="$keychain" \
-    "$(dirname "$0")/build-pkg.sh" "$kind" "$1" codex,claude "$package"
-  signature="$(/usr/sbin/pkgutil --check-signature "$package")"
-  printf '%s\n' "$signature"
-  grep -Eq '^[[:space:]]*Status: (signed by a certificate trusted by .+|signed by a developer certificate issued by Apple for distribution)[[:space:]]*$' <<< "$signature"
-  leaf="$(sed -n 's/^[[:space:]]*1\. //p' <<< "$signature")"
-  [[ "$leaf" == "$identity" ]]
-done
+/usr/bin/lipo "$2" -verify_arch arm64 x86_64
+DOOMER_PKG_SIGN_IDENTITY="$identity" DOOMER_PKG_SIGN_KEYCHAIN="$keychain" \
+  "$(dirname "$0")/build-pkg.sh" "$1" "$2" codex,claude "$3"
+signature="$(/usr/sbin/pkgutil --check-signature "$3")"
+printf '%s\n' "$signature"
+grep -Eq '^[[:space:]]*Status: (signed by a certificate trusted by .+|signed by a developer certificate issued by Apple for distribution)[[:space:]]*$' <<< "$signature"
+leaf="$(sed -n 's/^[[:space:]]*1\. //p' <<< "$signature")"
+[[ "$leaf" == "$identity" ]]

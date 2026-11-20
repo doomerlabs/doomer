@@ -517,6 +517,14 @@ func validateMDMSigning(path string, workflow *yaml.Node) {
 			fail("Native verification must run the updater verifier on signed packages without signing secrets")
 		}
 	}
+	bootstrap := requiredValue(workflow, "jobs", "publish-bootstrap")
+	requireExactSet(value(bootstrap, "needs"), "MDM bootstrap publication dependencies", "verify-package-signature")
+	requirePermissions(bootstrap, "MDM bootstrap publication", map[string]string{"contents": "write"})
+	if !nodeContains(value(bootstrap, "if"), "startsWith(github.ref_name, 'mdm-bootstrap-')") ||
+		!nodeContains(findStep(bootstrap, "Publish the verified bootstrap package"), "--latest=false") ||
+		nodeContains(bootstrap, "secrets.") {
+		fail("The independent bootstrap must publish only after native verification without changing the latest CLI release")
+	}
 
 }
 
