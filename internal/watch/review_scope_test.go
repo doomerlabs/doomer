@@ -175,26 +175,43 @@ func TestFailedQuickAssessmentTracksDeeperCompletionAndProtectsNewerFeed(t *test
 	}
 }
 
-type rejectedScopeClient struct{ fakeClient }
-
-func (c *rejectedScopeClient) StartWorkspace(context.Context, string, adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {
-	c.starts++
-	return adversarylabs.WorkspaceReview{}, adversarylabs.ErrMissingReviewScope
+type rejectedSubmissionClient struct {
+	fakeClient
+	err error
 }
-func TestServerRejectedScopeStopsRetryingAndPreservesFailureCode(t *testing.T) {
-	repo := repository(t)
-	os.WriteFile(filepath.Join(repo, "file.txt"), []byte("changed\n"), 0600)
-	client := &rejectedScopeClient{}
-	runner := Runner{Root: t.TempDir(), Client: client, Output: io.Discard}
-	requestTestAgentReview(t, &runner, repo)
-	err := runner.Run(context.Background(), repo, true)
-	if !errors.Is(err, errReviewTerminal) || client.starts != 1 {
-		t.Fatalf("scope rejection was retryable: %v", err)
-	}
-	var feed Feed
-	Read(FeedPath(runner.Root, repo), &feed)
-	if feed.FailureCode != "missing_review_scope" {
-		t.Fatalf("wrong error: %+v", feed)
+
+func (c *rejectedSubmissionClient) StartWorkspace(context.Context, string, adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {
+	c.starts++
+	return adversarylabs.WorkspaceReview{}, c.err
+}
+func TestTerminalSubmissionRejectionPreservesFailureCodeAndMessage(t *testing.T) {
+	for _, tc := range []struct {
+		err           error
+		code, message string
+	}{
+		{adversarylabs.ErrMissingReviewScope, "missing_review_scope", "could not identify the edited code"},
+		{adversarylabs.ErrAgentAssessmentExpired, "agent_response_timeout", "timed out waiting for the agent assessment"},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			repo := repository(t)
+			if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("changed\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			client := &rejectedSubmissionClient{err: tc.err}
+			runner := Runner{Root: t.TempDir(), Client: client, Output: io.Discard}
+			requestTestAgentReview(t, &runner, repo)
+			err := runner.Run(t.Context(), repo, true)
+			if !errors.Is(err, errReviewTerminal) || !errors.Is(err, tc.err) || client.starts != 1 {
+				t.Fatalf("rejection was retryable: %v", err)
+			}
+			var feed Feed
+			if err := Read(FeedPath(runner.Root, repo), &feed); err != nil {
+				t.Fatal(err)
+			}
+			if feed.FailureCode != tc.code || !strings.Contains(reviewProgressMessage(feed), tc.message) {
+				t.Fatalf("unexpected terminal feed: %+v", feed)
+			}
+		})
 	}
 }
 

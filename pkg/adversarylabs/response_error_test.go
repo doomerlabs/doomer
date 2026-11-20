@@ -33,6 +33,26 @@ func TestMissingReviewScopeIsTypedAndRedacted(t *testing.T) {
 	}
 }
 
+func TestAgentAssessmentExpiryRequiresConflictAndTimeoutCode(t *testing.T) {
+	const requestID = "0d4d9f89-6aa5-4bb5-99f9-83f637a757fb"
+	for _, tc := range []struct {
+		status     int
+		code, want string
+		expired    bool
+	}{
+		{http.StatusConflict, "agent_response_timeout", "Doomer timed out waiting for the agent assessment", true},
+		{http.StatusBadRequest, "agent_response_timeout", "request failed: 400 Bad Request", false},
+		{http.StatusConflict, "review_identity_conflict", "request failed: 409 Conflict: review_identity_conflict", false},
+	} {
+		resp := &http.Response{StatusCode: tc.status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"error":"` + tc.code + `"}`))}
+		resp.Header.Set("X-Request-ID", requestID)
+		err := responseError(resp, "")
+		if errors.Is(err, ErrAgentAssessmentExpired) != tc.expired || err.Error() != tc.want+" [request_id="+requestID+"]" {
+			t.Errorf("%d %s: unexpected error %v", tc.status, tc.code, err)
+		}
+	}
+}
+
 func TestResponseErrorGivesRecoveryWithoutTrustingServerInstructions(t *testing.T) {
 	for _, tc := range []struct {
 		status int

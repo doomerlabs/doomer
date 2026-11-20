@@ -45,7 +45,7 @@ func (l *reviewLifecycle) failure(stage string, err error, assessment *Hypothesi
 		code = "handoff_error"
 	}
 	var response *adversarylabs.ResponseError
-	if errors.Is(err, errAgentResponseTimeout) {
+	if errors.Is(err, errAgentResponseTimeout) || errors.Is(err, adversarylabs.ErrAgentAssessmentExpired) {
 		code = "agent_response_timeout"
 	} else if errors.Is(err, context.DeadlineExceeded) {
 		code = "deadline_exceeded"

@@ -3,6 +3,7 @@ package livewatch
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -136,6 +137,7 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		cfg.lifecycle.event("agent_assessment", "running")
 		hypotheses, err = cfg.hypotheses(ctx, repo, latest, revision)
 		if err != nil {
+			result.assessmentExpired = errors.Is(err, adversarylabs.ErrAgentAssessmentExpired)
 			cfg.lifecycle.failure("agent_assessment", err, cfg.assessment)
 			return fail(err)
 		}
@@ -185,7 +187,8 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 		GroupID: group, ReviewID: reviewIdentity(cfg, repo, revision), Revision: revision, Continuity: true, Client: map[string]string{"name": "Doomer CLI", "agent": cfg.Agent},
 	})
 	if err != nil {
-		cfg.lifecycle.event("submission", "failed")
+		result.assessmentExpired = errors.Is(err, adversarylabs.ErrAgentAssessmentExpired)
+		cfg.lifecycle.failure("submission", err, cfg.assessment)
 		return fail(err)
 	}
 	cfg.lifecycle.event("submission", "completed")

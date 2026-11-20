@@ -580,6 +580,73 @@ func TestTurnEndStopsObservingLaterEdits(t *testing.T) {
 	}
 }
 
+type expiredAssessmentClient struct {
+	fakeClient
+	editPath string
+	expired  bool
+}
+
+func (c *expiredAssessmentClient) StartWorkspace(ctx context.Context, token string, input adversarylabs.WorkspaceSubmission) (adversarylabs.WorkspaceReview, error) {
+	if !c.expired {
+		c.expired = true
+		if err := os.WriteFile(c.editPath, []byte("latest edit\n"), 0600); err != nil {
+			return adversarylabs.WorkspaceReview{}, err
+		}
+		return adversarylabs.WorkspaceReview{}, adversarylabs.ErrAgentAssessmentExpired
+	}
+	return c.fakeClient.StartWorkspace(ctx, token, input)
+}
+
+func TestExpiredAssessmentRetriesLatestEditOnce(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("Unix IPC")
+	}
+	repo := makeRepository(t, t.TempDir(), "repo")
+	file := filepath.Join(repo, "file.txt")
+	cfg := Config{ID: Key(t.TempDir()), ControlKey: Key(t.TempDir()), Directory: repo, Agent: "codex", RequireHypotheses: true}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	client := &expiredAssessmentClient{editPath: file}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = Serve(ctx, cfg, client, func(context.Context, string) bool { return true })
+	}()
+	defer func() { cancel(); <-done }()
+	for {
+		if _, ok := Available(ctx, cfg.ControlKey); ok {
+			break
+		}
+		select {
+		case <-done:
+			t.Fatal("watcher exited during startup")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if err := os.WriteFile(file, []byte("first edit\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	assess := func() HypothesisRequest {
+		t.Helper()
+		report, err := Call(ctx, cfg.ControlKey, "checkpoint")
+		if err != nil || len(report.HypothesisRequests) != 1 {
+			t.Fatalf("wanted one assessment: %+v %v", report, err)
+		}
+		task := report.HypothesisRequests[0]
+		if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: task.ID, Hypotheses: []adversarylabs.WorkspaceHypothesis{}}); err != nil {
+			t.Fatal(err)
+		}
+		return task
+	}
+	initial, retry := assess(), assess()
+	if retry.ReviewID == initial.ReviewID || retry.ID == initial.ID || !strings.Contains(retry.Diff, "+latest edit") {
+		t.Fatalf("retry did not request a fresh assessment of the latest edit: %+v", retry)
+	}
+	report, err := Call(ctx, cfg.ControlKey, "checkpoint")
+	if err != nil || len(report.HypothesisRequests) != 0 || len(report.Results) != 1 || report.Results[0].ID != retry.ReviewID || report.Results[0].Status != "ready" {
+		t.Fatalf("replacement did not finish without a duplicate review: %+v %v", report, err)
+	}
+}
+
 func TestTerminalReportKeepsNewFindingsAvailable(t *testing.T) {
 	repo := makeRepository(t, t.TempDir(), "repo")
 	cfg, done := startWorker(t, repo, &terminalFindingClient{}, 0, func(context.Context, string) bool { return true }, Key(t.TempDir()))
