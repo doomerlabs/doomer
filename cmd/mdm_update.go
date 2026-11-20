@@ -120,19 +120,25 @@ func (u mdmUpdater) update(ctx context.Context, manualChannel string) (string, e
 		return "", errors.New("invalid managed package pointer")
 	}
 	active := filepath.Join(u.dir, "doomer")
-	if _, err := os.Lstat(active); err == nil {
-		current, err := u.runtimeVersion(ctx, active)
-		if err != nil {
-			return "", fmt.Errorf("read active managed Doomer version: %w", err)
-		}
-		if current == target {
-			return "Managed Doomer is already current at " + current + ".", nil
-		}
-		if !mdmVersionLess(current, target) {
-			return fmt.Sprintf("Managed Doomer is at %s. The %s package %s would downgrade it.", current, channel, target), nil
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
+	currentPath := active
+	info, err := os.Lstat(active)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		currentPath = filepath.Join(u.dir, "bootstrap-doomer")
+	case err != nil:
 		return "", err
+	case info.Mode().IsRegular() && info.Mode().Perm()&0111 == 0:
+		currentPath = filepath.Join(u.dir, "bootstrap-doomer")
+	}
+	current, err := u.runtimeVersion(ctx, currentPath)
+	if err != nil {
+		return "", fmt.Errorf("read current managed Doomer version: %w", err)
+	}
+	if current == target {
+		return "Managed Doomer is already current at " + current + ".", nil
+	}
+	if !mdmVersionLess(current, target) {
+		return fmt.Sprintf("Managed Doomer is at %s. The %s package %s would downgrade it.", current, channel, target), nil
 	}
 
 	releaseURL := u.origin + "/releases/" + target + "/"
@@ -289,7 +295,8 @@ func mdmTrustedSigner(output []byte, identity string) bool {
 	for _, line := range strings.Split(string(output), "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "Status:") {
-			trusted = strings.HasPrefix(line, "Status: signed by a certificate trusted by ")
+			trusted = strings.HasPrefix(line, "Status: signed by a certificate trusted by ") ||
+				line == "Status: signed by a developer certificate issued by Apple for distribution"
 		}
 		if strings.HasPrefix(line, "1. ") {
 			return trusted && line == "1. "+identity

@@ -46,7 +46,7 @@ for kind in runtime bootstrap; do
     "$(dirname "$0")/build-pkg.sh" "$kind" "$1" codex,claude "$package"
   signature="$(/usr/sbin/pkgutil --check-signature "$package")"
   printf '%s\n' "$signature"
-  grep -Eq '^[[:space:]]*Status: signed by a certificate trusted by ' <<< "$signature"
+  grep -Eq '^[[:space:]]*Status: (signed by a certificate trusted by .+|signed by a developer certificate issued by Apple for distribution)[[:space:]]*$' <<< "$signature"
   leaf="$(sed -n 's/^[[:space:]]*1\. //p' <<< "$signature")"
   [[ "$leaf" == "$identity" ]]
 done

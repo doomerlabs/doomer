@@ -508,6 +508,16 @@ func validateMDMSigning(path string, workflow *yaml.Node) {
 	if tag < 0 || inputs <= tag || sign <= inputs || nodeContains(workflow, "secrets.R2_") {
 		fail("MDM signing must verify the tag and source archives before signing, without R2 authority")
 	}
+
+	signatures := requiredValue(workflow, "jobs", "verify-package-signature")
+	requireExactSet(value(signatures, "needs"), "MDM signature verification dependencies", "sign")
+	requireExactSet(requiredValue(signatures, "strategy", "matrix", "os"), "MDM signature verification macOS versions", "macos-15", "macos-26", "xcode-27")
+	for _, step := range []string{"Verify a published signed package", "Verify the signed release packages"} {
+		if !nodeContains(findStep(signatures, step), "TestMDMRealPackageSignature") || nodeContains(signatures, "secrets.") {
+			fail("Native verification must run the updater verifier on signed packages without signing secrets")
+		}
+	}
+
 }
 
 func validateAgentRecordings(workflow *yaml.Node) {

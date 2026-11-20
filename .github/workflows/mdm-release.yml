@@ -128,3 +128,53 @@ jobs:
           path: ${{ runner.temp }}/mdm-artifact/
           if-no-files-found: error
           retention-days: 90
+
+  verify-package-signature:
+    needs: sign
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || needs.sign.result == 'success') }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26, xcode-27]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version-file: go.mod
+      - name: Verify a published signed package
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          version=2026.11.19.1-beta.4
+          package="$RUNNER_TEMP/Doomer-MDM-$version.pkg"
+          curl --fail --silent --show-error --max-time 60 \
+            "https://downloads.doomer.ai/cli/releases/$version/Doomer-MDM-$version.pkg" \
+            -o "$package"
+          printf '%s  %s\n' a7c6d6f36a10a7a568b4ec28b0fb4a4d4c598f8d1abf9dd3915f17e1621daf89 "$package" \
+            | /usr/bin/shasum -a 256 -c -
+          /usr/bin/sw_vers
+          DOOMER_TEST_MDM_RUNTIME="$package" \
+            DOOMER_TEST_MDM_SIGNER='Developer ID Installer: Marc Campbell (SVB2S5YXF4)' \
+            go test -v ./cmd -run '^TestMDMRealPackageSignature$'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: github.event_name == 'push'
+        with:
+          name: mdm-${{ github.ref_name }}
+          path: ${{ runner.temp }}/mdm-artifact
+      - name: Verify the signed release packages
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          artifacts="$RUNNER_TEMP/mdm-artifact"
+          bootstrap="$artifacts/Doomer-MDM-Bootstrap-$GITHUB_REF_NAME.pkg"
+          pkg="$artifacts/Doomer-MDM-$GITHUB_REF_NAME.pkg"
+          expanded="$RUNNER_TEMP/expanded-bootstrap"
+          /usr/sbin/pkgutil --expand-full "$bootstrap" "$expanded"
+          identity="$(cat "$expanded/component.pkg/Payload/Library/DoomerMDM/installer-identity")"
+          /usr/bin/sw_vers
+          DOOMER_TEST_MDM_RUNTIME="$pkg" DOOMER_TEST_MDM_BOOTSTRAP="$bootstrap" \
+            DOOMER_TEST_MDM_SIGNER="$identity" go test -v ./cmd -run '^TestMDMRealPackageSignature$'

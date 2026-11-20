@@ -40,7 +40,8 @@ func newMDMUpdateFixture(t *testing.T, current string) *mdmUpdateFixture {
 		t.Fatal(err)
 	}
 	mdmTestWrite(t, filepath.Join(root, "installer-identity"), mdmTestSigner)
-	mdmTestWrite(t, filepath.Join(root, "bootstrap-doomer"), mdmTestOldVersion)
+	bootstrap := filepath.Join(root, "bootstrap-doomer")
+	mdmTestWrite(t, bootstrap, mdmTestOldVersion)
 	if current != "" {
 		mdmTestWrite(t, f.active, current)
 	}
@@ -73,7 +74,7 @@ func newMDMUpdateFixture(t *testing.T, current string) *mdmUpdateFixture {
 			case mdmInstaller:
 				f.installs++
 				return nil, f.install()
-			case f.active, f.stage:
+			case f.active, f.stage, bootstrap:
 				version, err := os.ReadFile(path)
 				return []byte(fmt.Sprintf(`{"version":%q}`, version)), err
 			default:
@@ -127,6 +128,40 @@ func TestMDMUpdateActivation(t *testing.T) {
 				f.assertActive(t, mdmTestVersion)
 			}
 		})
+	}
+}
+
+func TestMDMUpdateChecksVersionOfBundledRuntime(t *testing.T) {
+	for _, tc := range []struct{ bundled, wantStatus string }{
+		{mdmTestVersion, "already current"},
+		{"2026.11.20.1-beta.3", "would downgrade"},
+	} {
+		t.Run(tc.wantStatus, func(t *testing.T) {
+			f := newMDMUpdateFixture(t, "")
+			bootstrap := filepath.Join(f.updater.dir, "bootstrap-doomer")
+			mdmTestWrite(t, bootstrap, tc.bundled)
+			status, err := f.updater.update(t.Context(), "")
+			if err != nil || !strings.Contains(status, tc.wantStatus) || f.requests != 1 || f.installs != 0 {
+				t.Fatalf("update = %q, %v, requests = %d, installs = %d", status, err, f.requests, f.installs)
+			}
+			f.assertActive(t, "")
+		})
+	}
+}
+
+func TestMDMTrustedSignerAcceptsMacOSDistributionStatus(t *testing.T) {
+	for _, status := range []string{
+		"signed by a certificate trusted by macOS",
+		"signed by a developer certificate issued by Apple for distribution",
+		"signed by an untrusted certificate",
+	} {
+		output := []byte("Status: " + status + "\n   1. " + mdmTestSigner + "\n")
+		if got := mdmTrustedSigner(output, mdmTestSigner); got != !strings.Contains(status, "untrusted") {
+			t.Errorf("unexpected trust decision (%v) for %q", got, status)
+		}
+		if mdmTrustedSigner(output, "Developer ID Installer: Somebody Else (123456789B)") {
+			t.Errorf("accepted the wrong identity for %q", status)
+		}
 	}
 }
 

@@ -140,9 +140,12 @@ commit, then checks and verifies the public downloads before adding the
 most recent verified managed package until another is ready. Legacy managed
 packages are available at their original versioned URLs.
 
-Depot waits up to 100 minutes for the signer. This covers its 85-minute job
-timeout plus 15 minutes for runner scheduling. The Depot package job has a
-120-minute limit to leave time for setup and publication.
+Before Depot promotes a release, the GitHub workflow runs the updater's
+signature check against both newly signed packages on macOS 15, 26, and 27.
+Pull requests run the same verifier against a previously published signed
+package pinned by SHA-256. Depot waits up to 120 minutes for signing, native
+verification, and runner scheduling. The package publication job has a
+140-minute limit to leave time for setup and publication.
 
 If the native signing job fails, rerun it and retry only `publish-mdm-r2` on
 the same tag. The signing workflow reuses its retained artifact on a rerun.

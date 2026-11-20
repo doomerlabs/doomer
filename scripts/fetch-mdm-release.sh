@@ -8,8 +8,8 @@ tag="$GITHUB_REF_NAME"
 [[ "$tag" =~ ^20[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}(\.[1-9][0-9]*)?(-beta\.[0-9]+)?$ ]] || exit 2
 commit="$(git rev-parse HEAD)"
 
-# Allow the 85-minute signing job plus 15 minutes for runner scheduling.
-deadline=$((SECONDS + 100 * 60))
+# Allow time for signing, the native verifier matrix, and runner scheduling.
+deadline=$((SECONDS + 120 * 60))
 while ((SECONDS < deadline)); do
   runs="$(gh api --method GET --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/mdm-release.yml/runs" \
     -f event=push -f "head_sha=$commit" -f per_page=100 \
