@@ -42,12 +42,15 @@ jobs:
               BINARY="$inputs/doomer-$arch" VERSION=2099.1.1.1-beta.1
           done
           bash mdm/combine-binaries.sh "$inputs"
+          # Release archives are extracted as data before the builder stages them.
+          chmod 0644 "$inputs/doomer"
           for kind in bootstrap runtime; do
             mdm/build-pkg.sh "$kind" "$inputs/doomer" codex,claude "$inputs/$kind.pkg"
-            /usr/sbin/pkgutil --expand "$inputs/$kind.pkg" "$inputs/expanded-$kind"
+            /usr/sbin/pkgutil --expand-full "$inputs/$kind.pkg" "$inputs/expanded-$kind"
             test -s "$inputs/expanded-$kind/Distribution"
             sudo /usr/sbin/installer -pkg "$inputs/$kind.pkg" -target /
           done
+          test -f "$inputs/expanded-bootstrap/component.pkg/Payload/Library/DoomerMDM/installer-identity"
           /bin/launchctl print system/com.doomerlabs.doomer.mdm.update >/dev/null
           /usr/local/libexec/doomer-mdm/doomer --version | grep -F 2099.1.1.1-beta.1
           /Library/DoomerMDM/incoming/doomer --version | grep -F 2099.1.1.1-beta.1
