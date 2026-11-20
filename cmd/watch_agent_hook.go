@@ -151,7 +151,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	switch input.Event {
 	case "PermissionDenied":
 		if agent == "claude" && input.Tool == "Bash" {
-			reportClaudeAssessmentDenial(c.Context(), id.Key(), input)
+			reportClaudeReviewDenial(c.Context(), id.Key(), input)
 		}
 		return empty, nil
 	case "Stop", "Interrupt", "SessionEnd":

@@ -48,6 +48,8 @@ type control struct {
 	checkpoint       bool
 	finish           bool
 	results          bool
+	listFindings     bool
+	findingDenied    bool
 	noticeID         string
 	noticeRevision   int
 	noticeFromReply  bool
@@ -62,19 +64,21 @@ type worker struct {
 	hypotheses      map[string]*hypothesisWait
 	hypothesisReady chan *hypothesisWait
 
-	cfg           Config
-	client        Client
-	allowed       func(context.Context, string) bool
-	directories   []string
-	repos         map[string]*repository
-	noticeAcks    map[string]bool
-	findings      map[string]Finding
-	watcher       *fsnotify.Watcher
-	controls      chan control
-	completed     chan completion
-	slots         chan struct{}
-	jobs          sync.WaitGroup
-	closeListener func() error
+	cfg                Config
+	client             Client
+	allowed            func(context.Context, string) bool
+	directories        []string
+	repos              map[string]*repository
+	noticeAcks         map[string]bool
+	findings           map[string]Finding
+	findingToolDenied  bool
+	findingStopOffered bool
+	watcher            *fsnotify.Watcher
+	controls           chan control
+	completed          chan completion
+	slots              chan struct{}
+	jobs               sync.WaitGroup
+	closeListener      func() error
 }
 
 // Serve runs until its caller stops it and closes its optional control listener.
@@ -153,11 +157,15 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 					if req.Operation == "assessment-denied" && req.AssessmentID == "" {
 						return
 					}
-					if req.Operation != "assessment-denied" && req.Operation != "hypotheses" && req.Operation != "add" && req.Operation != "stop" && req.Operation != "cancel" && req.Operation != "cancel-assessment" && req.Operation != "checkpoint" && req.Operation != "feedback" && req.Operation != "finish" && req.Operation != "results" && req.Operation != "notice-ack" && req.Operation != "notice-reply" {
+					switch req.Operation {
+					case "assessment-denied", "hypotheses", "add", "stop", "cancel", "cancel-assessment", "checkpoint", "feedback", "finish", "results", "findings", "finding-denied", "notice-ack", "notice-reply":
+					default:
 						return
 					}
 					command := control{hypotheses: req.Hypotheses, addDirectory: req.Directory, results: req.Operation == "results", cancel: req.Operation == "cancel", checkpoint: req.Operation == "checkpoint" || req.Operation == "finish", finish: req.Operation == "finish", feedback: req.Feedback, noticeID: req.NoticeID, noticeRevision: req.NoticeRevision, noticeFromReply: req.Operation == "notice-reply", reply: make(chan Response, 1), sent: make(chan struct{})}
 					command.cancelAssessment = req.Operation == "cancel-assessment"
+					command.listFindings = req.Operation == "findings"
+					command.findingDenied = req.Operation == "finding-denied"
 					if req.Operation == "assessment-denied" {
 						command.assessmentID, command.assessmentDenial = req.AssessmentID, req.AssessmentDenial
 					}
@@ -445,7 +453,7 @@ func (w *worker) schedule(ctx context.Context) {
 }
 
 func (w *worker) response(timeout bool) Response {
-	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory}
+	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory, FindingToolDenied: w.findingToolDenied}
 	for _, pending := range w.hypotheses {
 		if !pending.isExpired() {
 			response.HypothesisRequests = append(response.HypothesisRequests, pending.request)
@@ -618,6 +626,9 @@ func (w *worker) run(ctx context.Context) error {
 		if command.finish && len(response.HypothesisRequests) > 0 {
 			response.RepeatedStopHandoff = w.repeatStopHandoff()
 		}
+		if w.cfg.Agent == "claude" {
+			w.prepareClaudeFindingHandoff(command, &response)
+		}
 		command.reply <- response
 		select {
 		case <-command.sent:
@@ -690,6 +701,11 @@ func (w *worker) run(ctx context.Context) error {
 		case task := <-w.hypothesisReady:
 			w.hypotheses[task.request.ID] = task
 		case command := <-w.controls:
+			if command.findingDenied {
+				w.findingToolDenied = true
+				finish(command, Response{})
+				continue
+			}
 			if command.assessmentID != "" {
 				w.recordAssessmentDenial(ctx, command.assessmentID, command.assessmentDenial)
 				finish(command, Response{})
@@ -748,7 +764,7 @@ func (w *worker) run(ctx context.Context) error {
 				finish(command, response)
 				continue
 			}
-			if command.results {
+			if command.results || command.listFindings {
 				finish(command, w.response(false))
 				continue
 			}
@@ -886,6 +902,35 @@ func (w *worker) run(ctx context.Context) error {
 				if err := scan(); err != nil {
 					return err
 				}
+			}
+		}
+	}
+}
+
+func (w *worker) prepareClaudeFindingHandoff(command control, response *Response) {
+	if w.findingToolDenied {
+		return
+	}
+	if command.finish {
+		if w.findingStopOffered || len(response.HypothesisRequests) > 0 {
+			return
+		}
+		for _, finding := range response.Findings {
+			if finding.delivered && finding.Disposition == nil {
+				response.FindingStopFollowup = true
+				w.findingStopOffered = true
+				break
+			}
+		}
+		return
+	}
+	if command.checkpoint || command.listFindings {
+		for _, finding := range response.Findings {
+			if finding.Disposition == nil {
+				response.FindingHandoff = true
+				key := finding.ReviewID + "/" + finding.Lead.ID
+				finding.delivered = true
+				w.findings[key] = finding
 			}
 		}
 	}

@@ -82,6 +82,7 @@ type Finding struct {
 	URL         string                      `json:"url,omitempty"`
 	Lead        adversarylabs.WorkspaceLead `json:"lead"`
 	Disposition *Feedback                   `json:"disposition,omitempty"`
+	delivered   bool
 }
 
 type Response struct {
@@ -89,6 +90,9 @@ type Response struct {
 	OtherReviewPending  bool                `json:"other_review_pending,omitempty"`
 	HypothesisRequests  []HypothesisRequest `json:"hypothesis_requests,omitempty"`
 	RepeatedStopHandoff bool                `json:"repeated_stop_handoff,omitempty"`
+	FindingHandoff      bool                `json:"finding_handoff,omitempty"`
+	FindingStopFollowup bool                `json:"finding_stop_followup,omitempty"`
+	FindingToolDenied   bool                `json:"finding_tool_denied,omitempty"`
 
 	Consent   *ConsentEvidence             `json:"consent,omitempty"`
 	Ready     bool                         `json:"ready"`

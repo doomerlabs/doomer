@@ -239,7 +239,7 @@ func TestClaudeStopSignalsWithoutDumpingReviewDetails(t *testing.T) {
 	// A denied response remains pending, but cannot trap Claude in a Stop loop.
 	blocked := claudeStopFeedback(result, key, true)
 	message, _ := blocked["systemMessage"].(string)
-	if len(blocked) != 1 || message != "Doomer is waiting for Claude to record its review decisions." {
+	if len(blocked) != 1 || message != "Doomer review is incomplete. Claude has not recorded all review decisions." {
 		t.Fatal(blocked)
 	}
 	if result.Findings[0].Disposition != nil || !result.Notices[0].NotifyUser {
@@ -253,12 +253,38 @@ func TestClaudeStopSignalsWithoutDumpingReviewDetails(t *testing.T) {
 	}
 	result.Findings[0].Disposition = nil
 	result.Notices[0].NotifyUser = false
-	if out := claudeStopFeedback(result, key, true); len(out) != 1 || out["systemMessage"] != "Doomer is waiting for Claude to record its review decisions." {
+	if out := claudeStopFeedback(result, key, true); len(out) != 1 || out["systemMessage"] != "Doomer review is incomplete. Claude has not recorded all review decisions." {
 		t.Fatal(out)
 	}
 	result.Findings[0].Disposition = &livewatch.Feedback{Status: "deferred", Reason: "Needs user input"}
 	if out := claudeStopFeedback(result, key, true); len(out) != 0 {
 		t.Fatal(out)
+	}
+}
+
+func TestClaudeActiveStopContinuesOnceForDeliveredFindings(t *testing.T) {
+	key := strings.Repeat("a", 64)
+	result := livewatch.Response{
+		Findings:            []livewatch.Finding{{ReviewID: "review", Lead: adversarylabs.WorkspaceLead{ID: "lead", Concern: "finding body"}}},
+		FindingStopFollowup: true,
+	}
+	out := claudeStopFeedback(result, key, true)
+	context, _ := out["hookSpecificOutput"].(map[string]any)
+	message, _ := context["additionalContext"].(string)
+	if !strings.Contains(message, "watch findings ls --control "+key) ||
+		!strings.Contains(message, "watch findings respond") || strings.Contains(message, "finding body") {
+		t.Fatalf("expected a short continuation for decisions: %v", out)
+	}
+	result.FindingStopFollowup = false
+	out = claudeStopFeedback(result, key, true)
+	if out["systemMessage"] == nil || out["hookSpecificOutput"] != nil {
+		t.Fatalf("another Stop should report incomplete feedback and end: %v", out)
+	}
+	result.FindingToolDenied = true
+	out = claudeStopFeedback(result, key, true)
+	message, _ = out["systemMessage"].(string)
+	if !strings.Contains(message, "denied") || out["hookSpecificOutput"] != nil {
+		t.Fatalf("denial should end the turn: %v", out)
 	}
 }
 

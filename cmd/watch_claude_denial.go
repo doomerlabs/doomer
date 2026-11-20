@@ -11,13 +11,19 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-func reportClaudeAssessmentDenial(ctx context.Context, key string, input watching.HookInput) {
+func reportClaudeReviewDenial(ctx context.Context, key string, input watching.HookInput) {
 	var tool struct{ Command string }
 	if json.Unmarshal(input.Input, &tool) != nil {
 		return
 	}
 	executable, err := turnExecutable()
 	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if deniedFindingCommand(tool.Command, executable, key) {
+		_, _ = livewatch.Call(ctx, key, "finding-denied")
 		return
 	}
 	id := deniedAssessmentRequest(tool.Command, executable, key)
@@ -33,9 +39,17 @@ func reportClaudeAssessmentDenial(ctx context.Context, key string, input watchin
 	case strings.HasPrefix(input.Reason, "Auto mode could not evaluate this action"):
 		denial = livewatch.AssessmentNoClassifierVerdict
 	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
 	_ = livewatch.RecordAssessmentDenial(ctx, key, id, denial)
+}
+
+func deniedFindingCommand(command, executable, key string) bool {
+	file, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	if err != nil || len(file.Stmts) != 1 {
+		return false
+	}
+	call := file.Stmts[0]
+	return assessmentShellCall(call, executable, "watch", "findings", "ls", "--control", key) ||
+		assessmentShellCall(call, executable, "watch", "findings", "respond", "--control", key)
 }
 
 // Only attribute denials with a literal request ID in the submitted JSON. The

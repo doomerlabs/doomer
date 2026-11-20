@@ -39,6 +39,24 @@ func TestDeniedAssessmentRequest(t *testing.T) {
 	}
 }
 
+func TestDeniedFindingCommand(t *testing.T) {
+	const exe, key = "/opt/doomer", "watch-key"
+	for _, tc := range []struct {
+		command string
+		want    bool
+	}{
+		{"'/opt/doomer' watch findings ls --control watch-key", true},
+		{"'/opt/doomer' watch findings respond --control watch-key <<'JSON'\n[]\nJSON", true},
+		{"'/opt/doomer' watch findings ls --control other", false},
+		{"'/other/doomer' watch findings ls --control watch-key", false},
+		{"echo '/opt/doomer watch findings ls --control watch-key'", false},
+	} {
+		if got := deniedFindingCommand(tc.command, exe, key); got != tc.want {
+			t.Errorf("recognized denial for %q = %v, want %v", tc.command, got, tc.want)
+		}
+	}
+}
+
 type assessmentDenialClient struct {
 	stopHandoffClient
 	denials     chan map[string]any
