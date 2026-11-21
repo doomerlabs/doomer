@@ -174,14 +174,14 @@ func review(ctx context.Context, client Client, cfg Config, repo string, capture
 	look := true
 	group := Key(cfg.ID + "\x00" + repo)
 	var handoff map[string]any
-	var agentDiff string
+	agentDiff := latest
 	if cfg.RequireHypotheses {
 		handoff = map[string]any{"request_id": Key(cfg.ID + "\x00" + repo + "\x00" + fmt.Sprint(revision) + "\x00" + latest), "snapshot_id": capture.TargetTreeHash, "diff_hash": Key(latest), "watch_revision": revision, "status": "assessed", "hypothesis_count": len(hypotheses)}
 		if cfg.assessment != nil {
 			handoff["assessments"] = cfg.assessment.Assessments
 		}
-		if cfg.assessment == nil || !cfg.assessment.triageReference {
-			agentDiff = latest
+		if cfg.assessment != nil && cfg.assessment.triageReference {
+			agentDiff = ""
 		}
 	}
 	current, err := client.StartWorkspace(ctx, cfg.Token, adversarylabs.WorkspaceSubmission{AgentHandoff: handoff,
