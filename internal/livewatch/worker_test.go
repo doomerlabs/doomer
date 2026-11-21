@@ -511,6 +511,9 @@ func TestDirtyWatchReviewsAfterNewFileChange(t *testing.T) {
 	if client.uploads == 0 || len(client.inputs) != 1 || !strings.Contains(client.inputs[0].Diff, "changed after startup") {
 		t.Fatalf("wrong post-start submission: uploads=%d reviews=%+v", client.uploads, client.inputs)
 	}
+	if input := client.inputs[0]; input.ReviewScope != "diff" || input.AgentDiff != input.Diff {
+		t.Fatalf("explicit diff review changed its inline diff payload: %+v", input)
+	}
 }
 
 func TestAgentHypothesesGateSubmissionAndBindSnapshot(t *testing.T) {

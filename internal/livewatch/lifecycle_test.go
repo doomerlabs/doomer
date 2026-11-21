@@ -174,3 +174,35 @@ func TestTriageFailureCodesAndCancellationPrecedence(t *testing.T) {
 		}
 	}
 }
+
+func TestQuickReviewSubmitsAssessmentWithCapturedDiffHash(t *testing.T) {
+	repo := makeRepository(t, t.TempDir(), "repo")
+	baseline, err := initialEditFiles(t.Context(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("changed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := capture(t.Context(), repo, baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var assessedDiff string
+	client := &fakeClient{}
+	cfg := Config{ID: "watch", RequireHypotheses: true, editBaseline: baseline, assessment: &HypothesisResponse{triageReference: true}}
+	cfg.hypotheses = func(_ context.Context, _ string, diff string, _ int) ([]adversarylabs.WorkspaceHypothesis, error) {
+		assessedDiff = diff
+		return []adversarylabs.WorkspaceHypothesis{}, nil
+	}
+	result := review(t.Context(), client, cfg, repo, snapshot, 1)
+	if result.Status != "ready" || len(client.inputs) != 1 || assessedDiff == "" {
+		t.Fatalf("unexpected review outcome: %+v", result)
+	}
+	input := client.inputs[0]
+	if input.AgentDiff != "" || input.Diff == "" || input.ReviewScope != "latest_edit" ||
+		input.AgentHandoff["diff_hash"] != Key(assessedDiff) || input.AgentHandoff["snapshot_id"] != snapshot.TargetTreeHash ||
+		input.ReviewID != reviewIdentity(cfg, repo, 1) {
+		t.Fatalf("the submission did not refer to the assessed patch: %+v", input)
+	}
+}

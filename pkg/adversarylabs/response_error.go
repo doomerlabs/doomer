@@ -33,9 +33,33 @@ var ErrAgentAssessmentExpired = errors.New("Doomer timed out waiting for the age
 var requestIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 var validationFieldPattern = regexp.MustCompile(`^(body|repository|repository_id|pull_request|review_node_id|head_sha|comments(\[[0-9]{1,2}\](\.(adversary|package_name|package_version|finding_id|rule_id|path|body))?)?)$`)
 
-// responseError accepts only bounded, known diagnostics. An upstream proxy or
-// server can echo credentials and request bodies even in JSON error messages,
-// so arbitrary messages, headers, and raw response bodies must never be logged.
+// These are server-authored validation messages that are safe to relay. An
+// unexpected message can contain private request content, so use local wording
+// for known failures when talking to a server that omits or changes the message.
+var workspaceValidationMessages = map[string]string{
+	"missing_review_scope":     "The latest-edit diff has no changed lines in the submitted workspace diff.",
+	"invalid_hypotheses":       "The agent hypotheses are invalid. Include up to five hypotheses with a changed path, line, concern, and check.",
+	"invalid_triage_utf8":      "The uploaded triage diff is not valid UTF-8.",
+	"invalid_workspace_review": "The workspace review request is missing required fields or contains invalid JSON.",
+	"invalid_review_scope":     "The workspace review scope is invalid.",
+	"invalid_agent_diff":       "The inline latest-edit diff is invalid or exceeds the upload limit.",
+	"invalid_agent_assessment": "A complete agent assessment is required to submit a triaged review.",
+	"missing_agent_hypotheses": "The agent assessment must include a list of hypotheses, even if it is empty.",
+	"hypothesis_outside_diff":  "An agent hypothesis points outside the latest-edit diff.",
+	"invalid_agent_handoff":    "The agent assessment has invalid review details or a mismatched hypothesis count.",
+	"area_assessment_required": "The agent must submit one assessment for each area selected during triage.",
+	"invalid_area_assessment":  "An area assessment is missing evidence, has an invalid status, or names an unexpected or duplicate area.",
+	"area_hypothesis_required": "The assessment identifies a concern but includes no hypothesis to score.",
+	"invalid_triage_request":   "The triage request is missing required fields or contains invalid JSON.",
+	"invalid_triage_part":      "A part of the triage diff is invalid.",
+	"invalid_triage_manifest":  "The list of uploaded triage parts is invalid.",
+	"triage_checksum_mismatch": "A triage upload checksum did not match. Upload the patch again.",
+	"triage_too_many_hunks":    "The latest-edit diff exceeds the 256-hunk Quick Review limit. Split the change into smaller reviews.",
+	"triage_patch_missing":     "The patch saved by triage is unavailable. Start a new Quick Review.",
+	"triage_snapshot_mismatch": "The assessment does not match the review and patch that completed triage. Start a new Quick Review.",
+}
+
+// Limit diagnostics to known errors because upstream responses can echo credentials and source.
 func responseError(resp *http.Response, token string) error {
 	var cause error
 	safeCode := ""
@@ -79,6 +103,15 @@ func responseError(resp *http.Response, token string) error {
 			safeCode = body.Error
 			message += ": " + body.Error
 		}
+		if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusConflict || resp.StatusCode == http.StatusRequestEntityTooLarge {
+			if wording, ok := workspaceValidationMessages[body.Error]; ok {
+				safeCode = body.Error
+				message = wording
+			}
+			if body.Error == "triage_diff_too_large" && body.Message == "The latest-edit diff exceeds the 8 MiB Quick Review limit. Split the change into smaller reviews." {
+				message = body.Message
+			}
+		}
 		if body.Error == "reviews_disabled" {
 			message += ": hosted reviews are not enabled for this project"
 		}
@@ -118,9 +151,6 @@ func responseError(resp *http.Response, token string) error {
 	}
 	if requestIDPattern.MatchString(requestID) {
 		message += " [request_id=" + requestID + "]"
-	}
-	if cause == ErrMissingReviewScope {
-		message = cause.Error() + ": " + message
 	}
 	if safeCode == "client_update_required" {
 		for _, n := range ValidNotices(body.NoticeEnvelope, time.Now()) {

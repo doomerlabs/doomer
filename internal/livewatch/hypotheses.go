@@ -29,12 +29,13 @@ type AreaAssessment struct {
 	Evidence string `json:"evidence"`
 }
 type HypothesisResponse struct {
-	Assessments []AreaAssessment                    `json:"assessments,omitempty"`
-	Status      string                              `json:"status,omitempty"`
-	Reason      string                              `json:"reason,omitempty"`
-	RequestID   string                              `json:"request_id"`
-	Hypotheses  []adversarylabs.WorkspaceHypothesis `json:"hypotheses"`
-	denial      AssessmentDenial
+	Assessments     []AreaAssessment                    `json:"assessments,omitempty"`
+	Status          string                              `json:"status,omitempty"`
+	Reason          string                              `json:"reason,omitempty"`
+	RequestID       string                              `json:"request_id"`
+	Hypotheses      []adversarylabs.WorkspaceHypothesis `json:"hypotheses"`
+	triageReference bool
+	denial          AssessmentDenial
 }
 
 type AssessmentDenial string

@@ -28,7 +28,7 @@ func TestResponseErrorExplainsUploadChecksumMismatchWithoutEchoingUnknownErrors(
 func TestMissingReviewScopeIsTypedAndRedacted(t *testing.T) {
 	response := &http.Response{StatusCode: http.StatusBadRequest, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"error":"missing_review_scope","message":"PRIVATE_SOURCE"}`))}
 	err := responseError(response, "secret")
-	if !strings.HasPrefix(err.Error(), "missing_review_scope: request failed: 400") || !errors.Is(err, ErrMissingReviewScope) || strings.Contains(err.Error(), "PRIVATE_SOURCE") {
+	if err.Error() != "The latest-edit diff has no changed lines in the submitted workspace diff." || !errors.Is(err, ErrMissingReviewScope) || strings.Contains(err.Error(), "PRIVATE_SOURCE") {
 		t.Fatalf("scope error: %v", err)
 	}
 }
@@ -86,5 +86,28 @@ func TestResponseRecoveryRespectsCompatibilityAndAnonymousAccess(t *testing.T) {
 		if !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "login --device") || strings.Contains(err.Error(), "npx") {
 			t.Fatalf("contradictory recovery: %v", err)
 		}
+	}
+}
+
+func TestQuickReviewSubmissionErrorsExplainTheFailure(t *testing.T) {
+	for _, tc := range []struct {
+		code   string
+		status int
+		want   string
+	}{
+		{"invalid_agent_diff", http.StatusBadRequest, "The inline latest-edit diff is invalid or exceeds the upload limit."},
+		{"triage_patch_missing", http.StatusConflict, "The patch saved by triage is unavailable. Start a new Quick Review."},
+		{"triage_snapshot_mismatch", http.StatusConflict, "The assessment does not match the review and patch that completed triage. Start a new Quick Review."},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			for _, serverMessage := range []string{tc.want, "PRIVATE_SOURCE"} {
+				response := &http.Response{StatusCode: tc.status, Header: make(http.Header),
+					Body: io.NopCloser(strings.NewReader(`{"error":"` + tc.code + `","message":"` + serverMessage + `"}`))}
+				err := responseError(response, "secret")
+				if err.Error() != tc.want {
+					t.Fatalf("unexpected message: %v", err)
+				}
+			}
+		})
 	}
 }
