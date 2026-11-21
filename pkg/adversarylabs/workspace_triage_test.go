@@ -54,12 +54,12 @@ func TestMultipartTriagePreservesBytesAndRequiresFinalAcknowledgement(t *testing
 				if body.Action != "complete" || parts != len(body.Parts) || assembled.String() != diff {
 					t.Error("incomplete assembly")
 				}
-				_ = json.NewEncoder(w).Encode(map[string]any{"complete": complete, "diff_hash": body.DiffHash, "areas": []any{}})
+				_ = json.NewEncoder(w).Encode(map[string]any{"complete": complete, "diff_hash": body.DiffHash, "diff_reference": true, "areas": []any{}})
 			}))
 			defer server.Close()
-			_, err := (Client{BaseURL: server.URL}).TriageWorkspace(t.Context(), "test", "review-id", diff)
-			if (err == nil) != complete {
-				t.Fatalf("complete=%v error=%v", complete, err)
+			result, err := (Client{BaseURL: server.URL}).PrepareWorkspaceTriage(t.Context(), "test", "review-id", diff)
+			if (err == nil) != complete || result.DiffReference != complete {
+				t.Fatalf("complete=%v result=%+v error=%v", complete, result, err)
 			}
 		})
 	}
@@ -116,5 +116,29 @@ func TestLocalTriageBudgetHasStructuredCode(t *testing.T) {
 	var response *ResponseError
 	if !errors.As(err, &response) || response.Code != "triage_diff_too_large" {
 		t.Fatalf("missing code: %v", err)
+	}
+}
+
+func TestInlineTriageRequiresMatchingHashWhenServerSupportsReferences(t *testing.T) {
+	const diff = "patch"
+	for _, tc := range []struct {
+		name      string
+		response  WorkspaceTriage
+		wantError bool
+	}{
+		{name: "legacy"},
+		{name: "matching", response: WorkspaceTriage{Complete: true, DiffHash: sourcesnapshot.Digest([]byte(diff)), DiffReference: true}},
+		{name: "mismatch", response: WorkspaceTriage{Complete: true, DiffHash: "another patch", DiffReference: true}, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_ = json.NewEncoder(w).Encode(tc.response)
+			}))
+			defer server.Close()
+			result, err := (Client{BaseURL: server.URL}).PrepareWorkspaceTriage(t.Context(), "test", "review-id", diff)
+			if (err != nil) != tc.wantError || result.DiffReference != (tc.response.DiffReference && !tc.wantError) {
+				t.Fatalf("unexpected triage result: %+v, %v", result, err)
+			}
+		})
 	}
 }

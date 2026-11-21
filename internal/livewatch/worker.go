@@ -404,13 +404,13 @@ func (w *worker) schedule(ctx context.Context) {
 			assessment := &HypothesisResponse{}
 			cfg.assessment = assessment
 			cfg.hypotheses = func(ctx context.Context, repo, diff string, revision int) ([]adversarylabs.WorkspaceHypothesis, error) {
-				var areas []adversarylabs.WorkspaceReviewArea
+				var triageResult adversarylabs.WorkspaceTriage
 				if triage, ok := w.client.(interface {
-					TriageWorkspace(context.Context, string, string, string) ([]adversarylabs.WorkspaceReviewArea, error)
+					PrepareWorkspaceTriage(context.Context, string, string, string) (adversarylabs.WorkspaceTriage, error)
 				}); ok {
 					cfg.lifecycle.event("risk_selection", "running")
 					var err error
-					areas, err = triage.TriageWorkspace(ctx, cfg.Token, reviewIdentity(cfg, repo, revision), diff)
+					triageResult, err = triage.PrepareWorkspaceTriage(ctx, cfg.Token, reviewIdentity(cfg, repo, revision), diff)
 					if err != nil {
 						cfg.lifecycle.failure("risk_selection", err, nil)
 						return nil, err
@@ -419,7 +419,7 @@ func (w *worker) schedule(ctx context.Context) {
 				}
 				id := Key(cfg.ID + "\x00" + repo + "\x00" + fmt.Sprint(revision) + "\x00" + diff)
 				assessment.RequestID = id
-				task := &hypothesisWait{request: HypothesisRequest{ID: id, ReviewID: reviewIdentity(cfg, repo, revision), Revision: revision, Snapshot: snapshot.TargetTreeHash, DiffHash: Key(diff), Repository: repo, Diff: diff, Areas: areas}, reply: make(chan HypothesisResponse, 1), delivered: make(chan struct{}), expired: make(chan struct{})}
+				task := &hypothesisWait{request: HypothesisRequest{ID: id, ReviewID: reviewIdentity(cfg, repo, revision), Revision: revision, Snapshot: snapshot.TargetTreeHash, DiffHash: Key(diff), Repository: repo, Diff: diff, Areas: triageResult.Areas}, reply: make(chan HypothesisResponse, 1), delivered: make(chan struct{}), expired: make(chan struct{})}
 				if len(task.request.Diff) > 1<<20 {
 					task.request.Diff = task.request.Diff[:1<<20]
 					task.request.Partial = true
@@ -433,6 +433,7 @@ func (w *worker) schedule(ctx context.Context) {
 				if err != nil {
 					return nil, err
 				}
+				result.triageReference = triageResult.DiffReference
 				*assessment = result
 				if result.Status == assessmentStatusDenied {
 					return nil, errAssessmentDenied
