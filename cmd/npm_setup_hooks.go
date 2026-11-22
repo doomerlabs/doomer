@@ -336,25 +336,50 @@ func (s npmSettings) installHooks(o npmSetupOptions, state npmSetupState) error 
 }
 
 func installNPMHookFile(file, agent, owner, command string) error {
+	_, err := configureNPMHookFile(file, agent, owner, command, nil, nil)
+	return err
+}
+
+func configureNPMHookFile(file, agent, owner, command string, inspect func(npmJSONObject, npmJSONObject) (string, bool, error), report doctorSettingsChange) (bool, error) {
 	unlock, err := npmSetupLock(file)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer unlock()
-	config, before, err := npmReadSettings(file)
+	read := npmReadSettings
+	if inspect != nil {
+		read = readDoctorAutoHookSettings
+	}
+	config, before, err := read(file)
 	if err != nil {
-		return err
+		return false, err
 	}
 	hooks, err := npmValidateHooks(config)
-	if err != nil || !mergeNPMHooks(hooks, agent, owner, command) {
-		return err
+	if err != nil {
+		return false, err
+	}
+	if inspect != nil {
+		checkedCommand, missing, err := inspect(config, hooks)
+		if err != nil || !missing {
+			return false, err
+		}
+		command = checkedCommand
+	}
+	if !mergeNPMHooks(hooks, agent, owner, command) {
+		return false, nil
 	}
 	config["hooks"] = hooks
 	if before != nil {
 		backup := fmt.Sprintf("%s.before-doomer-node-%d", file, time.Now().UnixMilli())
 		if err := writeNPMFile(backup, before, 0600); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return watching.Write(file, config)
+	if err := watching.Write(file, config); err != nil {
+		return false, err
+	}
+	if report != nil {
+		report(before, config)
+	}
+	return true, nil
 }

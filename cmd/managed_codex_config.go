@@ -230,6 +230,34 @@ func installCodexReviewPolicy(consent managedConsentEvidence) error {
 	if err != nil {
 		return err
 	}
+	return updateCodexConfig(path, func(data []byte) ([]byte, error) {
+		return codexReviewPolicyConfig(path, data, consent)
+	})
+}
+
+func codexReviewPolicyConfig(path string, data []byte, consent managedConsentEvidence) ([]byte, error) {
+	policy, err := codexExtraPolicy(data)
+	if err != nil {
+		return nil, err
+	}
+	merged := mergeCodexExtraPolicy(policy, consent)
+	out, err := patchCodexExtraPolicy(data, merged)
+	if err != nil {
+		return nil, err
+	}
+	if repair, err := codexReviewerTemplateRepair(path, data); err != nil {
+		return nil, err
+	} else if repair != "" {
+		out, err = patchCodexAutoReviewString(out, "experimental_policy_template", repair)
+		if err != nil {
+			return nil, err
+		}
+		out = markCodexReviewerTemplate(out, repair)
+	}
+	return out, nil
+}
+
+func updateCodexConfig(path string, update func([]byte) ([]byte, error)) error {
 	lock, err := publock.Acquire(filepath.Dir(path), "doomer-codex-policy")
 	if err != nil {
 		return err
@@ -239,29 +267,12 @@ func installCodexReviewPolicy(consent managedConsentEvidence) error {
 	if err != nil {
 		return err
 	}
-	policy, err := codexExtraPolicy(data)
+	out, err := update(data)
 	if err != nil {
 		return err
-	}
-	merged := mergeCodexExtraPolicy(policy, consent)
-	out, err := patchCodexExtraPolicy(data, merged)
-	if err != nil {
-		return err
-	}
-	if repair, err := codexReviewerTemplateRepair(path, data); err != nil {
-		return err
-	} else if repair != "" {
-		out, err = patchCodexAutoReviewString(out, "experimental_policy_template", repair)
-		if err != nil {
-			return err
-		}
-		out = markCodexReviewerTemplate(out, repair)
 	}
 	if bytes.Equal(out, data) {
 		return nil
-	}
-	if got, err := codexExtraPolicy(out); err != nil || got != merged {
-		return fmt.Errorf("Codex policy validation failed")
 	}
 	mode := os.FileMode(0600)
 	if info, err := os.Lstat(path); err == nil {

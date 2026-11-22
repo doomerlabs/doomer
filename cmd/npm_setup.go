@@ -354,7 +354,7 @@ func runNPMSetup(c *cobra.Command, o npmSetupOptions) error {
 	}
 
 	if slices.Contains(selected, "claude") {
-		if err := settings.claudePermission(c, o, p); err != nil {
+		if err := settings.claudePermission(c, o, p, nil); err != nil {
 			return err
 		}
 	}
