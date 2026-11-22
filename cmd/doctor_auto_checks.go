@@ -131,7 +131,15 @@ func restoreDoctorSkill(ctx context.Context, manager string, target doctorAutoTa
 	if !slices.Contains(hookFiles, target.file) || !slices.Contains(paths, source) || !slices.Contains(paths, destination) || !doctorReadableSkill(source) {
 		return "", nil
 	}
-	if _, err := os.Lstat(destination); !errors.Is(err, os.ErrNotExist) {
+	checkDestination := func() (string, error) {
+		if doctorReadableSkill(destination) {
+			return "setup_skill_ready", nil
+		}
+		return "setup_skill_restore_failed", fmt.Errorf("move the unreadable Doomer skill at %s out of the way and run Doctor again", destination)
+	}
+	if _, err := os.Lstat(destination); err == nil {
+		return checkDestination()
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
 	dir := filepath.Dir(destination)
@@ -147,7 +155,7 @@ func restoreDoctorSkill(ctx context.Context, manager string, target doctorAutoTa
 	}
 	if err := os.Symlink(source, destination); err != nil {
 		if errors.Is(err, os.ErrExist) {
-			return "", nil
+			return checkDestination()
 		}
 		return "", err
 	}

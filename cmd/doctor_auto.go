@@ -34,7 +34,7 @@ func runDoctorAutoFix(c *cobra.Command, repo, agent, manager, browserOrigin, bro
 	var checks []string
 	var changes doctorRepairChanges
 	if c.Flags().Changed("browser-session") {
-		if !doctorAutoBrowserCode.MatchString(browserSession) {
+		if !doctorAutoSessionCode.MatchString(browserSession) && !doctorAutoBrowserCode.MatchString(browserSession) {
 			return fmt.Errorf("copy a fresh auto-fix command from Doomer Doctor")
 		}
 		var err error
@@ -319,7 +319,8 @@ func loadDoctorAutoTarget(repo, manager, agent string) (doctorAutoTarget, error)
 	target = doctorAutoTarget{agent: agent, file: file, owner: owner, executable: executable, command: command, origin: service.Scheme + "://" + service.Host}
 	if owner == "--owner=doomer-node-dev" {
 		wrapper := filepath.Join(home, ".doomer-developer", "doomer_hook_scope.py")
-		if doctorAutoPlainPath.MatchString(wrapper) && doctorAutoPlainPath.MatchString(executable) && doctorAutoPlainPath.MatchString(manager) {
+		info, wrapperErr := os.Stat(wrapper)
+		if wrapperErr == nil && info.Mode().IsRegular() && doctorAutoPlainPath.MatchString(wrapper) && doctorAutoPlainPath.MatchString(executable) && doctorAutoPlainPath.MatchString(manager) {
 			target.scopedCommand = fmt.Sprintf("/usr/bin/python3 %s development %s watch agent --agent=%s %s --manager-home=%s", wrapper, executable, agent, owner, manager)
 		}
 	}
@@ -386,13 +387,17 @@ func (target doctorAutoTarget) inspectHooks(config, hooks npmJSONObject) (string
 	}
 	command := target.command
 	if target.scopedCommand != "" {
+		command = target.scopedCommand
+		// Keep valid direct hooks from older development installations. With
+		// no surviving hooks, use the installed development scope wrapper.
+	existing:
 		for _, event := range npmHookEvents {
 			groups, _ := npmObjects(hooks[event])
 			for _, group := range groups {
 				handlers, _ := npmObjects(group["hooks"])
-				if slices.ContainsFunc(handlers, func(handler npmJSONObject) bool { return handler["command"] == target.scopedCommand }) {
-					command = target.scopedCommand
-					break
+				if slices.ContainsFunc(handlers, func(handler npmJSONObject) bool { return handler["command"] == target.command }) {
+					command = target.command
+					break existing
 				}
 			}
 		}

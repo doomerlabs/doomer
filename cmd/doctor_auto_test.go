@@ -80,7 +80,7 @@ func TestDoctorAutoFixRepairsHooksAndSkillIndependently(t *testing.T) {
 	if err := os.WriteFile(stateFile, state, 0600); err != nil {
 		t.Fatal(err)
 	}
-	const browserCode = "quiet_river_otter"
+	const browserCode = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	args := []string{"doctor", "--auto-fix", "--repo", newWatchTestRepo(t), "--manager-home", manager,
 		"--browser-origin", server.URL, "--allow-unconfigured-browser-origin", "--browser-session", browserCode}
 	expectChecking := func() {
@@ -231,6 +231,41 @@ func TestDoctorAutoFixRepairsHooksAndSkillIndependently(t *testing.T) {
 	if err != nil || installer.get("claudeReviewPermission", &savedPermission) != nil || savedPermission.Decision != "allow" {
 		t.Fatalf("reviewer choice not recorded: %v", err)
 	}
+	if err := os.Remove(profileSkill); err != nil {
+		t.Fatal(err)
+	}
+	for _, obstruction := range []string{"dangling link", "local file"} {
+		missingTarget := filepath.Join(home, "missing-skill")
+		if obstruction == "dangling link" {
+			if err := os.Symlink(missingTarget, profileSkill); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := os.WriteFile(profileSkill, []byte("local file"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := execute(t, "", args...); err == nil || !strings.Contains(err.Error(), "move the unreadable Doomer skill") ||
+			!strings.Contains(out, "Doctor could not restore the Doomer skill link") || strings.Contains(out, "made no local changes") {
+			t.Fatalf("expected actionable skill obstruction: %s %v", out, err)
+		}
+		expectChecking()
+		if start := <-requests; !slices.Contains(start.Diagnosis, "setup_skill_unavailable") {
+			t.Fatalf("unexpected skill diagnosis: %+v", start)
+		}
+		<-requests // The hook plan remains unchanged.
+		if changes := expectBrowserResult("auto_fix_unchanged", token, "setup_skill_restore_failed"); len(changes) != 0 {
+			t.Fatalf("expected no applied changes: %+v", changes)
+		}
+		if obstruction == "dangling link" {
+			if got, err := os.Readlink(profileSkill); err != nil || got != missingTarget {
+				t.Fatalf("dangling link was changed: %s %v", got, err)
+			}
+		} else if got, err := os.ReadFile(profileSkill); err != nil || string(got) != "local file" {
+			t.Fatalf("local file was changed: %s %v", got, err)
+		}
+		if err := os.Remove(profileSkill); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if out, err := execute(t, "", append(slices.Clone(args), "--agent", "codex")...); err == nil || !strings.Contains(err.Error(), "select an agent") {
 		t.Fatalf("expected unsupported personal setup: %s %v", out, err)
 	}
@@ -267,70 +302,88 @@ func TestDoctorAutoFixRestoresMissingScopedDevelopmentHook(t *testing.T) {
 		" watch agent --agent=claude " + owner + " --manager-home=" + filepath.Join(home, "dev-manager")
 	productionCommand := "'" + filepath.Join(home, ".local", "bin", "doomer") +
 		"' --profile 'default' --api-url 'https://doomer.ai/api' agent-hook --agent claude --managed-task-adapter --state 'production.json'"
-	file := filepath.Join(t.TempDir(), "settings.json")
-	target := doctorAutoTarget{agent: "claude", file: file, owner: owner, command: directCommand, scopedCommand: scopedCommand}
 	group := func(command string) npmJSONObject {
 		return npmJSONObject{"hooks": []any{npmJSONObject{"type": "command", "command": command}}}
 	}
-	before := npmJSONObject{
-		"permissions": npmJSONObject{"deny": []any{"Bash(curl *)"}},
-		"hooks": npmJSONObject{
+	for _, tc := range []struct {
+		name, wantCommand string
+		hooks             npmJSONObject
+	}{
+		{"some scoped hooks missing", scopedCommand, npmJSONObject{
 			"Stop":             []any{group(productionCommand), group(scopedCommand)},
 			"UserPromptSubmit": []any{group(productionCommand), group(scopedCommand)},
 			"PreToolUse":       []any{group(productionCommand)},
 			"PermissionDenied": []any{npmJSONObject{
 				"matcher": "Bash", "hooks": []any{npmJSONObject{"type": "command", "command": scopedCommand}},
 			}},
-		},
-	}
-	original, err := json.Marshal(before)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(file, original, 0600); err != nil {
-		t.Fatal(err)
-	}
-	applied, err := configureNPMHookFile(file, target.agent, owner, directCommand, target.inspectHooks, nil)
-	if err != nil || !applied {
-		t.Fatalf("expected the missing development hook to be restored: %v", err)
-	}
-	after, _, err := readDoctorAutoHookSettings(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	hooks, err := npmValidateHooks(after)
-	if err != nil {
-		t.Fatal(err)
-	}
-	command, missing, err := target.inspectHooks(after, hooks)
-	if err != nil || missing || command != scopedCommand {
-		t.Fatalf("expected verified scoped hooks: missing=%v, err=%v", missing, err)
-	}
-	originalHooks := before["hooks"].(npmJSONObject)
-	for event, originalGroups := range originalHooks {
-		want, _ := json.Marshal(originalGroups)
-		got, _ := json.Marshal(hooks[event])
-		if string(got) != string(want) {
-			t.Fatalf("existing %s hooks were modified", event)
-		}
-	}
-	restored, _ := npmObjects(hooks["SessionEnd"])
-	handlers, _ := npmObjects(restored[0]["hooks"])
-	if len(restored) != 1 || len(handlers) != 1 || handlers[0]["command"] != scopedCommand {
-		t.Fatal("the restored hook did not preserve development routing")
-	}
-	if got := after["permissions"].(npmJSONObject)["deny"].([]any); !slices.Equal(got, []any{"Bash(curl *)"}) {
-		t.Fatal("repair changed agent permissions")
-	}
-	backups, err := filepath.Glob(file + ".before-doomer-node-*")
-	if err != nil || len(backups) != 1 {
-		t.Fatalf("expected one settings backup: %v %v", backups, err)
-	}
-	if data, err := os.ReadFile(backups[0]); err != nil || string(data) != string(original) {
-		t.Fatalf("backup was not preserved: %v", err)
-	}
-	if applied, err := configureNPMHookFile(file, target.agent, owner, directCommand, target.inspectHooks, nil); err != nil || applied {
-		t.Fatalf("expected subsequent auto-fix to be a no-op: %v", err)
+		}},
+		{"all missing in shared profile", scopedCommand, npmJSONObject{
+			"Stop":       []any{group(productionCommand)},
+			"PreToolUse": []any{group(productionCommand)},
+		}},
+		{"all missing in isolated profile", scopedCommand, npmJSONObject{}},
+		{"existing direct routing", directCommand, npmJSONObject{
+			"Stop": []any{group(directCommand)},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			file := filepath.Join(t.TempDir(), "settings.json")
+			target := doctorAutoTarget{agent: "claude", file: file, owner: owner, command: directCommand, scopedCommand: scopedCommand}
+			before := npmJSONObject{
+				"permissions": npmJSONObject{"deny": []any{"Bash(curl *)"}},
+				"hooks":       tc.hooks,
+			}
+			original, err := json.Marshal(before)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(file, original, 0600); err != nil {
+				t.Fatal(err)
+			}
+			applied, err := configureNPMHookFile(file, target.agent, owner, directCommand, target.inspectHooks, nil)
+			if err != nil || !applied {
+				t.Fatalf("expected the missing development hook to be restored: %v", err)
+			}
+			after, _, err := readDoctorAutoHookSettings(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			hooks, err := npmValidateHooks(after)
+			if err != nil {
+				t.Fatal(err)
+			}
+			command, missing, err := target.inspectHooks(after, hooks)
+			if err != nil || missing || command != tc.wantCommand {
+				t.Fatalf("expected verified scoped hooks: missing=%v, err=%v", missing, err)
+			}
+			originalHooks := before["hooks"].(npmJSONObject)
+			for event, originalGroups := range originalHooks {
+				currentGroups := hooks[event].([]any)
+				preservedCount := len(originalGroups.([]any))
+				if len(currentGroups) < preservedCount {
+					t.Fatalf("existing %s hooks were removed", event)
+				}
+				want, _ := json.Marshal(originalGroups)
+				got, _ := json.Marshal(currentGroups[:preservedCount])
+				if string(got) != string(want) {
+					t.Fatalf("existing %s hooks were modified", event)
+				}
+			}
+
+			if got := after["permissions"].(npmJSONObject)["deny"].([]any); !slices.Equal(got, []any{"Bash(curl *)"}) {
+				t.Fatal("repair changed agent permissions")
+			}
+			backups, err := filepath.Glob(file + ".before-doomer-node-*")
+			if err != nil || len(backups) != 1 {
+				t.Fatalf("expected one settings backup: %v %v", backups, err)
+			}
+			if data, err := os.ReadFile(backups[0]); err != nil || string(data) != string(original) {
+				t.Fatalf("backup was not preserved: %v", err)
+			}
+			if applied, err := configureNPMHookFile(file, target.agent, owner, directCommand, target.inspectHooks, nil); err != nil || applied {
+				t.Fatalf("expected subsequent auto-fix to be a no-op: %v", err)
+			}
+		})
 	}
 }
 
