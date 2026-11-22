@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"regexp"
 	"time"
+
+	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
 
 var browserSessionCode = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
@@ -20,6 +22,13 @@ func doctorBrowserEndpoint(origin, code string) (string, error) {
 		u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Path != "" || u.Opaque != "" ||
 		(u.Scheme != "https" && (u.Scheme != "http" || !isDoctorLoopback(u.Hostname()))) {
 		return "", fmt.Errorf("copy a fresh Doctor command from the troubleshooting page")
+	}
+	public, _ := url.Parse(adversarylabs.DefaultAPIURL)
+	if u.Scheme != public.Scheme || u.Host != public.Host {
+		configured, err := url.Parse(adversarylabs.ResolveAPIURL(""))
+		if err != nil || u.Scheme != configured.Scheme || u.Host != configured.Host {
+			return "", fmt.Errorf("use the Doctor page for the Doomer service configured on this machine")
+		}
 	}
 	u.Path = "/api/docs/doctor-session"
 	return u.String(), nil
