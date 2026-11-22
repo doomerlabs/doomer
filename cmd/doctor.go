@@ -20,7 +20,9 @@ import (
 func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command {
 	var repo, output, name, email, description, reportPath string
 	var browserSession, browserOrigin string
-	var allowUnconfiguredBrowserOrigin bool
+	var allowUnconfiguredBrowserOrigin, browserHooks bool
+	var autoFix, allowClaudeReviewCommands bool
+	var autoAgent, autoManagerHome string
 	var noUpload, upload, asJSON, testSession bool
 	var tags []string
 	var setupErr error
@@ -30,12 +32,42 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 		Args: cobra.NoArgs,
 		// Collect diagnostics even when normal CLI configuration is broken.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if upload && !noUpload && !testSession && !cmd.Flags().Changed("browser-session") && !cmd.Flags().Changed("browser-origin") && !allowUnconfiguredBrowserOrigin {
+			if upload && !autoFix && !noUpload && !testSession && !cmd.Flags().Changed("browser-session") && !cmd.Flags().Changed("browser-origin") && !allowUnconfiguredBrowserOrigin {
 				setupErr = cmd.Root().PersistentPreRunE(cmd, args)
 			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if autoFix {
+				for _, flag := range []string{"browser-hooks", "api-url", "profile", "upload", "no-upload", "report", "output", "json", "email", "description", "name", "tag", "test-session"} {
+					if cmd.Flags().Changed(flag) || cmd.InheritedFlags().Changed(flag) {
+						return fmt.Errorf("--auto-fix cannot be combined with --%s", flag)
+					}
+				}
+				if allowUnconfiguredBrowserOrigin && !cmd.Flags().Changed("browser-origin") {
+					return fmt.Errorf("--allow-unconfigured-browser-origin requires --browser-origin")
+				}
+				origin := ""
+				if cmd.Flags().Changed("browser-origin") {
+					origin = browserOrigin
+					if origin == "" {
+						return fmt.Errorf("--browser-origin cannot be empty")
+					}
+				}
+				if allowClaudeReviewCommands && autoAgent != "claude" {
+					return fmt.Errorf("--allow-claude-review-commands requires --agent claude")
+				}
+				return runDoctorAutoFix(cmd, repo, autoAgent, autoManagerHome, origin, browserSession, allowUnconfiguredBrowserOrigin, allowClaudeReviewCommands)
+			}
+			if cmd.Flags().Changed("allow-claude-review-commands") {
+				return fmt.Errorf("--allow-claude-review-commands requires --auto-fix")
+			}
+			if cmd.Flags().Changed("agent") || cmd.Flags().Changed("manager-home") {
+				return fmt.Errorf("--agent and --manager-home require --auto-fix")
+			}
+			if browserHooks && !cmd.Flags().Changed("browser-session") {
+				return fmt.Errorf("--browser-hooks requires --browser-session")
+			}
 			if allowUnconfiguredBrowserOrigin && (!cmd.Flags().Changed("browser-session") || !cmd.Flags().Changed("browser-origin")) {
 				return fmt.Errorf("--allow-unconfigured-browser-origin requires --browser-session and --browser-origin")
 			}
@@ -59,6 +91,8 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 				if collectionErr != nil {
 					fmt.Fprintln(cmd.ErrOrStderr(), collectionErr)
 					checks = append(checks, "collection_failed")
+				} else if browserHooks {
+					checks = browserHookChecks(report)
 				} else {
 					for _, value := range report["checks"].([]any) {
 						check := value.(map[string]any)
@@ -195,7 +229,12 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 		},
 	}
 	command.Flags().BoolVar(&testSession, "test-session", false, "print the prompt for a live hook and watcher test in the affected chat")
+	command.Flags().BoolVar(&autoFix, "auto-fix", false, "open a Doctor session and apply supported local repairs")
+	command.Flags().BoolVar(&allowClaudeReviewCommands, "allow-claude-review-commands", false, "allow scoped Doomer review commands in the selected personal Claude profile")
+	command.Flags().StringVar(&autoAgent, "agent", "", "agent to repair with --auto-fix (codex or claude)")
+	command.Flags().StringVar(&autoManagerHome, "manager-home", "", "personal installer state directory for --auto-fix")
 	command.Flags().StringVar(&browserSession, "browser-session", "", "send status codes to a waiting troubleshooting page")
+	command.Flags().BoolVar(&browserHooks, "browser-hooks", false, "send hook installation status codes to the waiting troubleshooting page")
 	command.Flags().StringVar(&browserOrigin, "browser-origin", "https://doomer.ai", "origin from the waiting troubleshooting page")
 	command.Flags().BoolVar(&allowUnconfiguredBrowserOrigin, "allow-unconfigured-browser-origin", false, "send browser diagnostic status codes to an explicitly specified dev origin")
 	command.Flags().StringVar(&repo, "repo", ".", "affected Git checkout")

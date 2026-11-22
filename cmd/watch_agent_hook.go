@@ -36,15 +36,17 @@ type agentHookState struct {
 	Managed *struct {
 		Agents []string `json:"agents"`
 	} `json:"managed"`
-	CodexPolicies []struct {
-		ConfigPath  string `json:"configPath"`
-		ExtraPolicy string `json:"extraPolicy"`
-	} `json:"codexPolicies"`
+	CodexPolicies  []nodeCodexPolicy  `json:"codexPolicies"`
 	Version        int                `json:"version"`
 	API            string             `json:"api"`
 	Identities     map[string]string  `json:"identities"`
 	CredentialDirs map[string]string  `json:"credentialDirs"`
 	Grants         []agentUploadGrant `json:"grants"`
+}
+
+type nodeCodexPolicy struct {
+	ConfigPath  string `json:"configPath"`
+	ExtraPolicy string `json:"extraPolicy"`
 }
 
 type agentUploadGrant struct {

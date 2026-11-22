@@ -43,7 +43,7 @@ func npmClaudeRules(paths []string) ([]string, []string, error) {
 	return rules, []string{auto}, nil
 }
 
-func (s npmSettings) claudePermission(c *cobra.Command, o npmSetupOptions, p npmSetupPrompt) error {
+func (s npmSettings) claudePermission(c *cobra.Command, o npmSetupOptions, p npmSetupPrompt, changes *doctorRepairChanges) error {
 	state, err := readNPMSetupState(o.home)
 	if err != nil {
 		return err
@@ -99,15 +99,51 @@ func (s npmSettings) claudePermission(c *cobra.Command, o npmSetupOptions, p npm
 		!slices.Equal(current.OwnedRules, previous.OwnedRules) || !slices.Equal(current.OwnedAutoRules, previous.OwnedAutoRules) {
 		return fmt.Errorf("Claude reviewer permission changed during setup; retry to use the latest choice")
 	}
-	config, _, err := npmReadSettings(file)
+	read := npmReadSettings
+	if o.mode == "doctor" {
+		if current.Decision == "decline" || current.File != "" && current.File != file {
+			return fmt.Errorf("this Claude profile has an existing reviewer permission choice")
+		}
+		if _, err := os.Lstat(filepath.Join(o.home, "uninstalling.json")); !os.IsNotExist(err) {
+			return fmt.Errorf("personal Doomer installer is unavailable")
+		}
+		var executable string
+		var files []string
+		if state.get("executable", &executable) != nil || executable != o.executable ||
+			state.get("hookFiles", &files) != nil || !slices.Contains(files, file) {
+			return fmt.Errorf("the installer configuration changed during diagnosis")
+		}
+		read = readDoctorAutoHookSettings
+	}
+	config, before, err := read(file)
 	if err != nil {
 		return err
+	}
+	if o.mode == "doctor" {
+		for _, key := range []string{"permissions", "autoMode"} {
+			if block, ok := config[key].(npmJSONObject); ok {
+				for _, restriction := range []string{"deny", "ask", "soft_deny", "hard_deny"} {
+					if rules, present := block[restriction]; present {
+						if entries, valid := rules.([]any); !valid || len(entries) > 0 {
+							return fmt.Errorf("Claude %s already has %s rules; keep that policy in effect", key, restriction)
+						}
+					}
+				}
+			}
+		}
 	}
 	var rules, auto []string
 	if decision == "allow" {
 		resolved, err := filepath.EvalSymlinks(o.executable)
 		if err != nil {
 			return err
+		}
+		if o.mode == "doctor" {
+			current, currentErr := os.Stat(mustExecutable())
+			installed, installedErr := os.Stat(resolved)
+			if currentErr != nil || installedErr != nil || !os.SameFile(current, installed) {
+				return fmt.Errorf("the installed executable changed during diagnosis")
+			}
 		}
 		rules, auto, err = npmClaudeRules(appendUnique([]string{o.executable}, resolved))
 		if err != nil {
@@ -117,16 +153,32 @@ func (s npmSettings) claudePermission(c *cobra.Command, o npmSetupOptions, p npm
 	if file != previous.File {
 		previous.OwnedRules, previous.OwnedAutoRules = nil, nil
 	}
-	owned, changed, err := npmMergeClaudeAllow(config, "permissions", nil, previous.OwnedRules, rules)
+	priorRules, priorAuto := previous.OwnedRules, previous.OwnedAutoRules
+	if o.mode == "doctor" {
+		// Doctor only adds missing rules. Keep older installer-owned entries
+		// intact and tracked for later installer maintenance.
+		priorRules, priorAuto = nil, nil
+	}
+	owned, changed, err := npmMergeClaudeAllow(config, "permissions", nil, priorRules, rules)
 	if err != nil {
 		return err
 	}
-	ownedAuto, autoChanged, err := npmMergeClaudeAllow(config, "autoMode", []string{"$defaults"}, previous.OwnedAutoRules, auto)
+	ownedAuto, autoChanged, err := npmMergeClaudeAllow(config, "autoMode", []string{"$defaults"}, priorAuto, auto)
 	if err != nil {
 		return err
+	}
+	if o.mode == "doctor" {
+		owned = appendUnique(slices.Clone(previous.OwnedRules), owned...)
+		ownedAuto = appendUnique(slices.Clone(previous.OwnedAutoRules), ownedAuto...)
 	}
 	next := npmClaudePermission{decision, file, owned, ownedAuto}
 	if changed || autoChanged {
+		if o.mode == "doctor" && before != nil {
+			backup := fmt.Sprintf("%s.before-doomer-node-%d", file, time.Now().UnixNano())
+			if err := writeNPMFile(backup, before, 0600); err != nil {
+				return err
+			}
+		}
 		ledger := next
 		ledger.OwnedRules = appendUnique(slices.Clone(previous.OwnedRules), owned...)
 		ledger.OwnedAutoRules = appendUnique(slices.Clone(previous.OwnedAutoRules), ownedAuto...)
@@ -136,6 +188,11 @@ func (s npmSettings) claudePermission(c *cobra.Command, o npmSetupOptions, p npm
 		}
 		if err := watching.Write(file, config); err != nil {
 			return err
+		}
+		if changes != nil {
+			changes.settings(file, func(config npmJSONObject) npmJSONObject {
+				return doctorPermissionDiffSettings(config, rules, auto)
+			})(before, config)
 		}
 	}
 	state.set("claudeReviewPermission", next)

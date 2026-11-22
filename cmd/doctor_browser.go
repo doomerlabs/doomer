@@ -57,6 +57,25 @@ func isDoctorLoopback(host string) bool {
 	return host == "localhost" || ip != nil && ip.IsLoopback()
 }
 
+func browserHookChecks(report map[string]any) []string {
+	checks := []string{"hook_configuration_checked"}
+	configs, _ := report["hook_configs"].([]any)
+	for _, config := range configs {
+		entry, _ := config.(map[string]any)
+		agent, _ := entry["active_profile_agent"].(string)
+		if agent != "codex" && agent != "claude" {
+			continue
+		}
+		switch entry["installation"] {
+		case "installed":
+			checks = append(checks, agent+"_hooks_installed")
+		case "missing":
+			checks = append(checks, agent+"_hooks_missing")
+		}
+	}
+	return checks
+}
+
 func sendDoctorBrowserResult(ctx context.Context, endpoint, code string, checks []string) error {
 	payload, err := json.Marshal(map[string]any{
 		"action": "submit",
