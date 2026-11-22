@@ -291,6 +291,16 @@ func (c collector) hooks() []any {
 	if root := os.Getenv("CLAUDE_CONFIG_DIR"); root != "" {
 		result = append(result, c.hook(root, "settings.json"))
 	}
+	for _, agent := range []string{"codex", "claude"} {
+		path := watch.HookFile(c.home, agent)
+		for _, config := range result {
+			entry := config.(map[string]any)
+			if entry["path"] == path {
+				entry["active_profile_agent"] = agent
+				break
+			}
+		}
+	}
 	return result
 }
 

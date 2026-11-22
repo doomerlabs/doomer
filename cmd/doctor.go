@@ -13,7 +13,6 @@ import (
 	"github.com/doomerlabs/doomer/internal/application"
 	"github.com/doomerlabs/doomer/internal/doctor"
 	"github.com/doomerlabs/doomer/internal/version"
-	"github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/spf13/cobra"
 )
@@ -125,19 +124,20 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 					fmt.Fprintln(cmd.OutOrStdout(), next)
 				}
 			}
-			if home, err := os.UserHomeDir(); err == nil {
-				configs, _ := report["hook_configs"].([]any)
-				for _, agent := range []string{"codex", "claude"} {
-					path := watch.HookFile(home, agent)
-					for _, entry := range configs {
-						item, ok := entry.(map[string]any)
-						if ok && item["path"] == path {
-							fmt.Fprintf(cmd.OutOrStdout(), "%s hooks: %v; activation: %v (%s)\n", agent, item["installation"], item["activation"], path)
-							if item["installation"] != "installed" && !isMDMRuntimePath(mustExecutable()) {
-								fmt.Fprintf(cmd.OutOrStdout(), "Install hooks: doomer hooks install --agent %s\n", agent)
-							}
-							break
-						}
+			executable, _ := filepath.EvalSymlinks(mustExecutable())
+			configs, _ := report["hook_configs"].([]any)
+			for _, entry := range configs {
+				item, _ := entry.(map[string]any)
+				agent, _ := item["active_profile_agent"].(string)
+				if agent == "" {
+					continue
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "%s hooks: %v; activation: %v (%s)\n", agent, item["installation"], item["activation"], item["path"])
+				if item["installation"] != "installed" {
+					if isMDMRuntimePath(executable) {
+						fmt.Fprintf(cmd.OutOrStdout(), "Check the %s hook configuration with your administrator.\n", agent)
+					} else {
+						fmt.Fprintf(cmd.OutOrStdout(), "Install hooks: doomer hooks install --agent %s\n", agent)
 					}
 				}
 			}
