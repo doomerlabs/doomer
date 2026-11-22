@@ -97,6 +97,35 @@ func Serve(ctx context.Context, cfg Config, client Client, allowed func(context.
 	return serve(ctx, listener, cfg, client, allowed)
 }
 
+// CheckStartup runs the same filesystem setup and baseline scan as Serve.
+// It closes the watcher before a control listener or review loop can run.
+func CheckStartup(ctx context.Context, cfg Config, allowed func(context.Context, string) bool) error {
+	w := &worker{directories: []string{cfg.Directory}, cfg: cfg, allowed: allowed, repos: map[string]*repository{}}
+	if err := w.initialize(ctx); err != nil {
+		return err
+	}
+	defer w.watcher.Close()
+	if w.repos[cfg.Directory] == nil {
+		return fmt.Errorf("watcher did not establish a baseline for this checkout")
+	}
+	return nil
+}
+
+func (w *worker) initialize(ctx context.Context) error {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+	w.watcher = watcher
+	startup, stop := context.WithTimeout(ctx, 20*time.Second)
+	defer stop()
+	if err := w.scan(startup, true, false); err != nil {
+		watcher.Close()
+		return err
+	}
+	return nil
+}
+
 func serve(ctx context.Context, listener net.Listener, cfg Config, client Client, allowed func(context.Context, string) bool) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -109,18 +138,10 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 		w.closeListener = listener.Close
 	}
 	defer func() { cancel(); w.jobs.Wait(); w.background.Wait() }()
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
+	if err := w.initialize(ctx); err != nil {
 		return err
 	}
-	w.watcher = watcher
-	defer watcher.Close()
-	startup, stopStartup := context.WithTimeout(ctx, 20*time.Second)
-	err = w.scan(startup, true, false)
-	stopStartup()
-	if err != nil {
-		return err
-	}
+	defer w.watcher.Close()
 	if listener != nil {
 		go func() { <-ctx.Done(); listener.Close() }()
 		go func() {

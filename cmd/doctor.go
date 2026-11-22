@@ -19,7 +19,7 @@ import (
 
 func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command {
 	var repo, output, name, email, description, reportPath string
-	var noUpload, upload, asJSON bool
+	var noUpload, upload, asJSON, testSession bool
 	var tags []string
 	var setupErr error
 	command := &cobra.Command{
@@ -28,12 +28,21 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 		Args: cobra.NoArgs,
 		// Collect diagnostics even when normal CLI configuration is broken.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if upload && !noUpload {
+			if upload && !noUpload && !testSession {
 				setupErr = cmd.Root().PersistentPreRunE(cmd, args)
 			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if testSession {
+				for _, flag := range []string{"upload", "report", "output", "json", "email", "description", "name", "tag", "repo"} {
+					if cmd.Flags().Changed(flag) {
+						return fmt.Errorf("--test-session cannot be combined with --%s", flag)
+					}
+				}
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), "Paste this entire prompt in the affected Codex or Claude Code chat:\n\n"+doctor.SessionPrompt)
+				return err
+			}
 			if upload && noUpload {
 				return fmt.Errorf("--upload and --no-upload cannot be combined")
 			}
@@ -147,6 +156,7 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 			return uploadDoctorReport(ctx, cmd, app, *api, *profile, setupErr, data)
 		},
 	}
+	command.Flags().BoolVar(&testSession, "test-session", false, "print the prompt for a live hook and watcher test in the affected chat")
 	command.Flags().StringVar(&repo, "repo", ".", "affected Git checkout")
 	command.Flags().StringVar(&output, "output", "", "new local report file (default: private temporary directory)")
 	command.Flags().BoolVar(&noUpload, "no-upload", false, "save the report locally without uploading (default)")

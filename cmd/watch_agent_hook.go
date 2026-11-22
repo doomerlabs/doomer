@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/doomerlabs/doomer/internal/doctor"
 	"github.com/doomerlabs/doomer/internal/livewatch"
 	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
@@ -143,6 +144,9 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	if agent == "codex" && input.Event == "UserPromptSubmit" && strings.HasPrefix(strings.TrimSpace(input.Prompt), "This is an app-generated request for a suggested next user message. The user did not write this message.") {
 		return empty, nil
 	}
+	if input.Event == "UserPromptSubmit" && doctor.IsSessionPrompt(input.Prompt) {
+		return runAgentSessionProbe(c, home, agent, input.CWD), nil
+	}
 	turn := input.Turn
 	if turn == "" {
 		turn = input.PromptID
@@ -261,14 +265,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	if err != nil {
 		return empty, err
 	}
-	arguments := []string{"watch", "--config-stdin"}
-	for _, name := range []string{"api-url", "profile"} {
-		if c.Flags().Changed(name) || c.InheritedFlags().Changed(name) {
-			value, _ := c.Flags().GetString(name)
-			arguments = append(arguments, "--"+name, value)
-		}
-	}
-	child := exec.Command(exe, arguments...)
+	child := exec.Command(exe, agentWatchArguments(c)...)
 	exited, err := startBackgroundWatch(child, data)
 	if err != nil {
 		return empty, err

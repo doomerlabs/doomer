@@ -65,11 +65,13 @@ func (c collector) checks(report object, checkoutFound bool, session string) []a
 	switch status := text(review, "AssessmentStatus"); {
 	case status == "ready":
 		ref := cmp.Or(display(text(review, "ReviewID")), "ID unavailable")
-		delivery := "Chat delivery is unverified."
+		delivery := ""
 		if review["handoff_recorded"] == true {
-			delivery = "Doomer recorded a handoff to the agent. Visibility in the chat is unverified."
+			delivery = " Doomer recorded a handoff to the agent."
 		}
-		add("review_completed", "Most recent recorded Quick review completed ("+ref+"). "+delivery, "If the result did not appear, look up that review ID.")
+		add("review_completed", "Review completed, chat delivery unverified ("+ref+")."+delivery, "If the result did not appear, look up that review ID.")
+	case text(review, "FailureCode") == "agent_response_timeout" || text(review, "FailureCode") == "timeout":
+		add("assessment_timed_out", "Assessment timed out", "Open the review ID from the local report and check its last confirmed step.")
 	case strings.HasPrefix(status, "fail") || text(review, "FailureCode") != "":
 		add("review_failed", "Most recent recorded Quick review failed ("+display(cmp.Or(text(review, "FailureCode"), status))+").", "Use the review ID from the local report when troubleshooting.")
 	case status != "":
