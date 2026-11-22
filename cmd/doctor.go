@@ -20,6 +20,7 @@ import (
 func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command {
 	var repo, output, name, email, description, reportPath string
 	var browserSession, browserOrigin string
+	var allowUnconfiguredBrowserOrigin bool
 	var noUpload, upload, asJSON, testSession bool
 	var tags []string
 	var setupErr error
@@ -29,22 +30,25 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 		Args: cobra.NoArgs,
 		// Collect diagnostics even when normal CLI configuration is broken.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if upload && !noUpload && !testSession && !cmd.Flags().Changed("browser-session") && !cmd.Flags().Changed("browser-origin") {
+			if upload && !noUpload && !testSession && !cmd.Flags().Changed("browser-session") && !cmd.Flags().Changed("browser-origin") && !allowUnconfiguredBrowserOrigin {
 				setupErr = cmd.Root().PersistentPreRunE(cmd, args)
 			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if allowUnconfiguredBrowserOrigin && (!cmd.Flags().Changed("browser-session") || !cmd.Flags().Changed("browser-origin")) {
+				return fmt.Errorf("--allow-unconfigured-browser-origin requires --browser-session and --browser-origin")
+			}
 			if cmd.Flags().Changed("browser-session") || cmd.Flags().Changed("browser-origin") {
 				if cmd.Flags().Changed("api-url") || cmd.InheritedFlags().Changed("api-url") {
-					return fmt.Errorf("--browser-session uses the locally configured Doomer service; omit --api-url")
+					return fmt.Errorf("use --browser-origin with --browser-session instead of --api-url")
 				}
 				for _, flag := range []string{"upload", "no-upload", "report", "output", "json", "email", "description", "name", "tag", "test-session"} {
 					if cmd.Flags().Changed(flag) {
 						return fmt.Errorf("--browser-session cannot be combined with --%s", flag)
 					}
 				}
-				endpoint, err := doctorBrowserEndpoint(browserOrigin, repo)
+				endpoint, err := doctorBrowserEndpoint(browserOrigin, repo, allowUnconfiguredBrowserOrigin)
 				if err != nil {
 					return err
 				}
@@ -192,7 +196,8 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 	}
 	command.Flags().BoolVar(&testSession, "test-session", false, "print the prompt for a live hook and watcher test in the affected chat")
 	command.Flags().StringVar(&browserSession, "browser-session", "", "send status codes to a waiting troubleshooting page")
-	command.Flags().StringVar(&browserOrigin, "browser-origin", "", "origin from the waiting troubleshooting page")
+	command.Flags().StringVar(&browserOrigin, "browser-origin", "https://doomer.ai", "origin from the waiting troubleshooting page")
+	command.Flags().BoolVar(&allowUnconfiguredBrowserOrigin, "allow-unconfigured-browser-origin", false, "send browser diagnostic status codes to an explicitly specified dev origin")
 	command.Flags().StringVar(&repo, "repo", ".", "affected Git checkout")
 	command.Flags().StringVar(&output, "output", "", "new local report file (default: private temporary directory)")
 	command.Flags().BoolVar(&noUpload, "no-upload", false, "save the report locally without uploading (default)")
