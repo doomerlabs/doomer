@@ -2,6 +2,7 @@ package livewatch
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -97,9 +98,14 @@ func Serve(ctx context.Context, cfg Config, client Client, allowed func(context.
 	return serve(ctx, listener, cfg, client, allowed)
 }
 
-// CheckStartup runs the same filesystem setup and baseline scan as Serve.
-// It closes the watcher before a control listener or review loop can run.
+// CheckStartup opens the same local control socket and initializes the same
+// filesystem watcher as Serve. It closes both without handling review work.
 func CheckStartup(ctx context.Context, cfg Config, allowed func(context.Context, string) bool) error {
+	listener, err := listen(Key(rand.Text()))
+	if err != nil {
+		return err
+	}
+	defer listener.Close()
 	w := &worker{directories: []string{cfg.Directory}, cfg: cfg, allowed: allowed, repos: map[string]*repository{}}
 	if err := w.initialize(ctx); err != nil {
 		return err
