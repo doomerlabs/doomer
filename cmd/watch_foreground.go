@@ -197,7 +197,10 @@ func newForegroundWatchCommand() *cobra.Command {
 		}
 		scope := ""
 		if config.ProbeOnly {
-			scope = config.Directory
+			scope, err = livewatch.Root(c.Context(), config.Directory)
+			if err != nil {
+				return probeResult("checkout_unavailable")
+			}
 		}
 		if _, err := agentHookConsent(state, config.API, config.Agent, scope); err != nil {
 			if config.ProbeOnly {
@@ -225,12 +228,12 @@ func newForegroundWatchCommand() *cobra.Command {
 			return err == nil && (path == "" || watching.Allowed(consent, path))
 		}
 		if config.ProbeOnly {
-			if !allowed(c.Context(), config.Directory) {
+			if !allowed(c.Context(), scope) {
 				return probeResult("upload_approval_missing")
 			}
 			ctx, cancel := context.WithTimeout(c.Context(), 20*time.Second)
 			defer cancel()
-			if err := livewatch.CheckStartup(ctx, config.Config, allowed); err != nil {
+			if err := livewatch.CheckStartup(ctx, config.Config, scope, allowed); err != nil {
 				return probeResult("watcher_startup_unverified")
 			}
 			return probeResult("watcher_ready")

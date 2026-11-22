@@ -32,6 +32,13 @@ func TestAgentSessionProbeUsesInstalledHookPathWithoutNetwork(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "probe-fixture.txt"), []byte("Already untracked source"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	subdirectory := filepath.Join(repo, "subdirectory")
+	if err := os.Mkdir(subdirectory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subdirectory, ".doomer.env"), []byte("DOOMER_API_URL=http://127.0.0.1:1/api\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -91,6 +98,7 @@ func TestAgentSessionProbeUsesInstalledHookPathWithoutNetwork(t *testing.T) {
 			if err := os.WriteFile(statePath, []byte(state), 0600); err != nil {
 				t.Fatal(err)
 			}
+			probe(t, agent, subdirectory, "upload_approval_missing")
 			probe(t, agent, repo, "watcher_ready")
 		})
 	}

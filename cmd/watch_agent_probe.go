@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/doomerlabs/doomer/internal/doctor"
@@ -17,14 +18,17 @@ import (
 func runAgentSessionProbe(c *cobra.Command, home, agent, directory string) map[string]any {
 	ctx, cancel := context.WithTimeout(c.Context(), 25*time.Second)
 	defer cancel()
-	path, err := livewatch.Root(ctx, directory)
 	result := doctor.SessionCheck("checkout_unavailable")
-	if directory != "" && err == nil {
-		result = probeWatchStartup(ctx, c, home, agent, path)
+	var checkout string
+	if directory, err := filepath.EvalSymlinks(directory); err == nil && filepath.IsAbs(directory) {
+		if path, err := livewatch.Root(ctx, directory); err == nil {
+			checkout = path
+			result = probeWatchStartup(ctx, c, home, agent, directory)
+		}
 	}
 	details := result.String() + "\nRetry with the same prompt after making a fix."
-	if path != "" {
-		details += "\nCheckout: " + watching.Quote(doctor.RedactDescription(path))
+	if checkout != "" {
+		details += "\nCheckout: " + watching.Quote(doctor.RedactDescription(checkout))
 	}
 	return map[string]any{
 		"systemMessage": result.Label,
@@ -35,14 +39,14 @@ func runAgentSessionProbe(c *cobra.Command, home, agent, directory string) map[s
 	}
 }
 
-func probeWatchStartup(ctx context.Context, c *cobra.Command, home, agent, path string) doctor.SessionResult {
+func probeWatchStartup(ctx context.Context, c *cobra.Command, home, agent, directory string) doctor.SessionResult {
 	result := doctor.SessionCheck("")
 	exe, err := turnExecutable()
 	if err != nil {
 		return result
 	}
 	data, err := json.Marshal(watchConfiguration{
-		Config:      livewatch.Config{ID: rand.Text(), Directory: path, Agent: agent},
+		Config:      livewatch.Config{ID: rand.Text(), Directory: directory, Agent: agent},
 		ManagerHome: home,
 		ProbeOnly:   true,
 	})

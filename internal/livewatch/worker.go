@@ -100,7 +100,7 @@ func Serve(ctx context.Context, cfg Config, client Client, allowed func(context.
 
 // CheckStartup opens the same local control socket and initializes the same
 // filesystem watcher as Serve. It closes both without handling review work.
-func CheckStartup(ctx context.Context, cfg Config, allowed func(context.Context, string) bool) error {
+func CheckStartup(ctx context.Context, cfg Config, checkout string, allowed func(context.Context, string) bool) error {
 	listener, err := listen(Key(rand.Text()))
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func CheckStartup(ctx context.Context, cfg Config, allowed func(context.Context,
 		return err
 	}
 	defer w.watcher.Close()
-	if w.repos[cfg.Directory] == nil {
+	if w.repos[checkout] == nil {
 		return fmt.Errorf("watcher did not establish a baseline for this checkout")
 	}
 	return nil
