@@ -19,6 +19,7 @@ import (
 
 func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command {
 	var repo, output, name, email, description, reportPath string
+	var browserSession, browserOrigin string
 	var noUpload, upload, asJSON, testSession bool
 	var tags []string
 	var setupErr error
@@ -28,12 +29,42 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 		Args: cobra.NoArgs,
 		// Collect diagnostics even when normal CLI configuration is broken.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if upload && !noUpload && !testSession {
+			if upload && !noUpload && !testSession && !cmd.Flags().Changed("browser-session") && !cmd.Flags().Changed("browser-origin") {
 				setupErr = cmd.Root().PersistentPreRunE(cmd, args)
 			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if cmd.Flags().Changed("browser-session") || cmd.Flags().Changed("browser-origin") {
+				for _, flag := range []string{"upload", "no-upload", "report", "output", "json", "email", "description", "name", "tag", "test-session"} {
+					if cmd.Flags().Changed(flag) {
+						return fmt.Errorf("--browser-session cannot be combined with --%s", flag)
+					}
+				}
+				endpoint, err := doctorBrowserEndpoint(browserOrigin, browserSession)
+				if err != nil {
+					return err
+				}
+				ctx, cancel := context.WithTimeout(cmd.Context(), 2*time.Minute)
+				defer cancel()
+				report, collectionErr := doctor.Collect(ctx, repo, version.Version)
+				checks := []string{}
+				if collectionErr != nil {
+					fmt.Fprintln(cmd.ErrOrStderr(), collectionErr)
+					checks = append(checks, "collection_failed")
+				} else {
+					for _, value := range report["checks"].([]any) {
+						check := value.(map[string]any)
+						checks = append(checks, check["code"].(string))
+						fmt.Fprintln(cmd.OutOrStdout(), check["message"])
+					}
+				}
+				if err := sendDoctorBrowserResult(cmd.Context(), endpoint, browserSession, checks); err != nil {
+					return err
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "Result sent to Doomer Doctor.")
+				return nil
+			}
 			if testSession {
 				for _, flag := range []string{"upload", "report", "output", "json", "email", "description", "name", "tag", "repo"} {
 					if cmd.Flags().Changed(flag) {
@@ -157,6 +188,8 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 		},
 	}
 	command.Flags().BoolVar(&testSession, "test-session", false, "print the prompt for a live hook and watcher test in the affected chat")
+	command.Flags().StringVar(&browserSession, "browser-session", "", "send status codes to a waiting troubleshooting page")
+	command.Flags().StringVar(&browserOrigin, "browser-origin", "", "origin from the waiting troubleshooting page")
 	command.Flags().StringVar(&repo, "repo", ".", "affected Git checkout")
 	command.Flags().StringVar(&output, "output", "", "new local report file (default: private temporary directory)")
 	command.Flags().BoolVar(&noUpload, "no-upload", false, "save the report locally without uploading (default)")
