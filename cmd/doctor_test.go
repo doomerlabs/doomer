@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -69,7 +70,7 @@ func TestDoctorUploadsAndRetainsLocalReportOnFailure(t *testing.T) {
 	}))
 	defer server.Close()
 	output := filepath.Join(t.TempDir(), "report.json")
-	out, err := execute(t, "", "--api-url", server.URL, "doctor", "--repo", repo, "--output", output)
+	out, err := execute(t, "", "--api-url", server.URL, "doctor", "--upload", "--repo", repo, "--output", output)
 	if err == nil || !received || !strings.Contains(out, "Report saved") {
 		t.Fatalf("%s: %v (received %v)", out, err, received)
 	}
@@ -77,7 +78,7 @@ func TestDoctorUploadsAndRetainsLocalReportOnFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	succeed = true
-	out, err = execute(t, "", "--api-url", server.URL, "doctor", "--repo", repo, "--output", filepath.Join(t.TempDir(), "success.json"))
+	out, err = execute(t, "", "--api-url", server.URL, "doctor", "--upload", "--repo", repo, "--output", filepath.Join(t.TempDir(), "success.json"))
 	if err != nil || !strings.Contains(out, "Uploaded private support report support-report-123") {
 		t.Fatalf("%s: %v", out, err)
 	}
@@ -110,5 +111,33 @@ func TestDoctorShowsActiveClaudeProfileHooks(t *testing.T) {
 	}
 	if !strings.Contains(out, "claude hooks: missing; activation: unverified") || !strings.Contains(out, "doomer hooks install --agent claude") {
 		t.Fatal(out)
+	}
+}
+
+func TestDoctorIsLocalByDefaultAndCanSendExactPreview(t *testing.T) {
+	isolate(t)
+	var payload []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var err error
+		payload, err = io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		_, _ = w.Write([]byte(`{"id":"preview-id"}`))
+	}))
+	defer server.Close()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "report.json")
+	out, err := execute(t, "", "--api-url", server.URL, "doctor", "--repo", dir, "--output", path, "--description", "Review missing", "--email", "me@example.com")
+	if err != nil || payload != nil || !strings.Contains(out, "Could not identify a Git checkout") {
+		t.Fatalf("%s: %v", out, err)
+	}
+	preview, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err = execute(t, "", "--api-url", server.URL, "doctor", "--upload", "--report", path)
+	if err != nil || !bytes.Equal(preview, payload) || !strings.Contains(out, "preview-id") {
+		t.Fatalf("%s: %v; payload changed: %v", out, err, !bytes.Equal(preview, payload))
 	}
 }

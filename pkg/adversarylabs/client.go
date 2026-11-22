@@ -173,11 +173,15 @@ func (c Client) Revoke(ctx context.Context, token string) error {
 }
 
 func (c Client) postJSON(ctx context.Context, path string, payload any, token string, out any) error {
-	if _, err := validateBaseURL(c.BaseURL); err != nil {
-		return err
-	}
 	data, err := json.Marshal(payload)
 	if err != nil {
+		return err
+	}
+	return c.postJSONBytes(ctx, path, data, token, out)
+}
+
+func (c Client) postJSONBytes(ctx context.Context, path string, data []byte, token string, out any) error {
+	if _, err := validateBaseURL(c.BaseURL); err != nil {
 		return err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+path, bytes.NewReader(data))
