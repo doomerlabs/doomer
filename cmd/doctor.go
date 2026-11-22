@@ -44,7 +44,7 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 						return fmt.Errorf("--browser-session cannot be combined with --%s", flag)
 					}
 				}
-				endpoint, err := doctorBrowserEndpoint(browserOrigin, browserSession, repo)
+				endpoint, err := doctorBrowserEndpoint(browserOrigin, repo)
 				if err != nil {
 					return err
 				}

@@ -9,18 +9,15 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"regexp"
 	"time"
 
 	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
 
-var browserSessionCode = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
-
-func doctorBrowserEndpoint(origin, code, repo string) (string, error) {
+func doctorBrowserEndpoint(origin, repo string) (string, error) {
 	u, err := url.Parse(origin)
-	if err != nil || !browserSessionCode.MatchString(code) || u.Hostname() == "" ||
+	if err != nil || u.Hostname() == "" ||
 		u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Path != "" || u.Opaque != "" ||
 		(u.Scheme != "https" && (u.Scheme != "http" || !isDoctorLoopback(u.Hostname()))) {
 		return "", fmt.Errorf("copy a fresh Doctor command from the troubleshooting page")
