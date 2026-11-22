@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/doomerlabs/doomer/internal/doctor"
 	"github.com/doomerlabs/doomer/internal/livewatch"
 	"github.com/doomerlabs/doomer/internal/paths"
 	watching "github.com/doomerlabs/doomer/internal/watch"
@@ -26,6 +27,7 @@ import (
 type watchConfiguration struct {
 	livewatch.Config
 	ManagerHome string `json:"manager_home"`
+	ProbeOnly   bool   `json:"probe_only,omitempty"`
 }
 
 func watchToken(c *cobra.Command, api string, state agentHookState, env watchEnvironment) (string, error) {
@@ -164,8 +166,14 @@ func newForegroundWatchCommand() *cobra.Command {
 		if !filepath.IsAbs(config.Directory) || !filepath.IsAbs(config.ManagerHome) || config.ID == "" {
 			return fmt.Errorf("invalid watch configuration")
 		}
+		probeResult := func(code string) error {
+			return json.NewEncoder(c.OutOrStdout()).Encode(doctor.SessionCheck(code))
+		}
 		var state agentHookState
 		if err := watching.Read(filepath.Join(config.ManagerHome, "state.json"), &state); err != nil {
+			if config.ProbeOnly {
+				return probeResult("upload_approval_missing")
+			}
 			return fmt.Errorf("read upload approval: %w", err)
 		}
 		var environment watchEnvironment
@@ -187,11 +195,24 @@ func newForegroundWatchCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if _, err := agentHookConsent(state, config.API, config.Agent, ""); err != nil {
+		scope := ""
+		if config.ProbeOnly {
+			scope, err = livewatch.Root(c.Context(), config.Directory)
+			if err != nil {
+				return probeResult("checkout_unavailable")
+			}
+		}
+		if _, err := agentHookConsent(state, config.API, config.Agent, scope); err != nil {
+			if config.ProbeOnly {
+				return probeResult("upload_approval_missing")
+			}
 			return err
 		}
 		config.Token, err = watchToken(c, config.API, state, environment)
 		if err != nil {
+			if config.ProbeOnly {
+				return probeResult("watcher_credentials_unavailable")
+			}
 			return err
 		}
 
@@ -205,6 +226,17 @@ func newForegroundWatchCommand() *cobra.Command {
 			}
 			consent, err := agentHookConsent(state, config.API, config.Agent, path)
 			return err == nil && (path == "" || watching.Allowed(consent, path))
+		}
+		if config.ProbeOnly {
+			if !allowed(c.Context(), scope) {
+				return probeResult("upload_approval_missing")
+			}
+			ctx, cancel := context.WithTimeout(c.Context(), 20*time.Second)
+			defer cancel()
+			if err := livewatch.CheckStartup(ctx, config.Config, scope, allowed); err != nil {
+				return probeResult("watcher_startup_unverified")
+			}
+			return probeResult("watcher_ready")
 		}
 		if !allowed(c.Context(), "") {
 			return fmt.Errorf("upload approval is required; run npx @doomerlabs/doomer onboard")

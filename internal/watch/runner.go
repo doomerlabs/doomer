@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/doomerlabs/doomer/internal/version"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 	"github.com/doomerlabs/doomer/pkg/sourcesnapshot"
 )
@@ -476,6 +477,14 @@ func (r Runner) reviewForRequest(ctx context.Context, path string, capture sourc
 			if current.Early.Status == "unavailable" {
 				r.logf("%s: look closer review unavailable after %.1f seconds — %s", filepath.Base(path), time.Since(submitStarted).Seconds(), link)
 			} else {
+				receipt := map[string]string{
+					"review_id": feed.ReviewID, "completed_at": feed.Updated.UTC().Format(time.RFC3339Nano),
+					"agent": requestState.Agent, "profile": r.Config.Profile, "api_url": r.Config.API,
+					"cli_version": version.Version,
+				}
+				if err := Write(filepath.Join(r.Root, "last-success", Key(path)+".json"), receipt); err != nil {
+					r.debugf("could not save last successful Quick review metadata: %v", err)
+				}
 				totalStarted := reviewStarted
 				if !requestState.RequestedAt.IsZero() && requestState.RequestedAt.Before(reviewStarted) {
 					totalStarted = requestState.RequestedAt

@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -31,13 +30,12 @@ type collector struct{ repo, home string }
 
 // Collect reads metadata for the affected checkout and preserves IDs needed for support.
 func Collect(ctx context.Context, directory, version string) (map[string]any, error) {
-	root, err := command(ctx, directory, "git", "rev-parse", "--show-toplevel")
-	if err != nil {
-		return nil, fmt.Errorf("run doctor from a Git checkout or pass --repo: %w", err)
+	root, gitErr := command(ctx, directory, "git", "rev-parse", "--show-toplevel")
+	if gitErr == nil {
+		root, gitErr = filepath.EvalSymlinks(strings.TrimSpace(root))
 	}
-	root, err = filepath.EvalSymlinks(strings.TrimSpace(root))
-	if err != nil {
-		return nil, err
+	if gitErr != nil {
+		root, _ = filepath.Abs(directory)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -45,41 +43,45 @@ func Collect(ctx context.Context, directory, version string) (map[string]any, er
 	}
 	c := collector{repo: root, home: home}
 	repo := object{}
-	for key, args := range map[string][]string{
-		"branch": {"symbolic-ref", "--short", "-q", "HEAD"}, "head": {"rev-parse", "HEAD"},
-		"git_directory": {"rev-parse", "--absolute-git-dir"}, "common_directory": {"rev-parse", "--git-common-dir"},
-	} {
-		value, _ := command(ctx, root, "git", args...)
-		repo[key] = strings.TrimSpace(value)
-	}
-	origin, _ := command(ctx, root, "git", "remote", "get-url", "origin")
-	repo["origin"] = originIdentity(strings.TrimSpace(origin))
-	status, _ := command(ctx, root, "git", "status", "--porcelain=v1", "-z", "--untracked-files=normal")
-	counts := map[string]int{}
-	parts := strings.Split(status, "\x00")
-	for i := 0; i < len(parts); i++ {
-		if len(parts[i]) < 3 {
-			continue
+	if gitErr == nil {
+		for key, args := range map[string][]string{
+			"branch": {"symbolic-ref", "--short", "-q", "HEAD"}, "head": {"rev-parse", "HEAD"},
+			"git_directory": {"rev-parse", "--absolute-git-dir"}, "common_directory": {"rev-parse", "--git-common-dir"},
+		} {
+			value, _ := command(ctx, root, "git", args...)
+			repo[key] = strings.TrimSpace(value)
 		}
-		code := parts[i][:2]
-		counts[code]++
-		if strings.ContainsAny(code, "RC") {
-			i++
+		origin, _ := command(ctx, root, "git", "remote", "get-url", "origin")
+		repo["origin"] = originIdentity(strings.TrimSpace(origin))
+		status, _ := command(ctx, root, "git", "status", "--porcelain=v1", "-z", "--untracked-files=normal")
+		counts := map[string]int{}
+		parts := strings.Split(status, "\x00")
+		for i := 0; i < len(parts); i++ {
+			if len(parts[i]) < 3 {
+				continue
+			}
+			code := parts[i][:2]
+			counts[code]++
+			if strings.ContainsAny(code, "RC") {
+				i++
+			}
 		}
-	}
-	repo["status_counts"] = counts
-	worktrees, _ := command(ctx, root, "git", "worktree", "list", "--porcelain")
-	count := 0
-	for _, line := range strings.Split(worktrees, "\n") {
-		if strings.HasPrefix(line, "worktree ") {
-			count++
+		repo["status_counts"] = counts
+		worktrees, _ := command(ctx, root, "git", "worktree", "list", "--porcelain")
+		count := 0
+		for _, line := range strings.Split(worktrees, "\n") {
+			if strings.HasPrefix(line, "worktree ") {
+				count++
+			}
 		}
+		repo["worktree_count"] = count
 	}
-	repo["worktree_count"] = count
 	release, _ := command(ctx, root, "uname", "-r")
 	report := object{"schema": 1, "collected_at_utc": time.Now().UTC().Format(time.RFC3339Nano),
 		"cli_version": version, "platform": object{"system": runtime.GOOS, "machine": runtime.GOARCH, "release": strings.TrimSpace(release)},
 		"repository": repo, "binaries": c.binaries(ctx, version), "skills": c.skills(), "hook_configs": c.hooks(), "watch_roots": c.watchRoots()}
+	report["checks"] = c.checks(report, gitErr == nil, os.Getenv("CODEX_THREAD_ID"))
+
 	return c.clean(report, 0).(map[string]any), ctx.Err()
 }
 
@@ -128,8 +130,12 @@ func (c collector) clean(value any, depth int) any {
 	}
 	switch v := value.(type) {
 	case string:
-		v = strings.ReplaceAll(v, c.repo, "$REPO")
-		v = strings.ReplaceAll(v, c.home, "$HOME")
+		if c.repo != "" && c.repo != string(filepath.Separator) {
+			v = strings.ReplaceAll(v, c.repo, "$REPO")
+		}
+		if c.home != "" {
+			v = strings.ReplaceAll(v, c.home, "$HOME")
+		}
 		v = homeUsers.ReplaceAllString(v, "/<home-user>")
 		v = urls.ReplaceAllStringFunc(v, func(raw string) string {
 			u, err := url.Parse(raw)
@@ -284,6 +290,16 @@ func (c collector) hooks() []any {
 	}
 	if root := os.Getenv("CLAUDE_CONFIG_DIR"); root != "" {
 		result = append(result, c.hook(root, "settings.json"))
+	}
+	for _, agent := range []string{"codex", "claude"} {
+		path := watch.HookFile(c.home, agent)
+		for _, config := range result {
+			entry := config.(map[string]any)
+			if entry["path"] == path {
+				entry["active_profile_agent"] = agent
+				break
+			}
+		}
 	}
 	return result
 }

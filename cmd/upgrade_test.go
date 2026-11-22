@@ -159,30 +159,14 @@ func TestUpgradeDoesNotAdoptUnrecognizedVersionedInstall(t *testing.T) {
 }
 
 func TestSupportUploadRequiresExplicitUploadFlag(t *testing.T) {
-	api, profile := "", ""
-	support := newSupportCommand(nil, &api, &profile)
-	bundle, _, err := support.Find([]string{"bundle"})
-	if err != nil {
-		t.Fatal(err)
+	isolate(t)
+	output := filepath.Join(t.TempDir(), "support.json")
+	out, err := execute(t, "", "--api-url", "invalid", "support", "bundle", "--repo", doctorRepo(t), "--output", output)
+	if err != nil || !strings.Contains(out, "Report saved") {
+		t.Fatalf("bundle without upload must work despite invalid upload configuration: %s %v", out, err)
 	}
-	if err = bundle.Flags().Set("no-upload", "false"); err != nil {
-		t.Fatal(err)
-	}
-	if err = bundle.PreRunE(bundle, nil); err != nil {
-		t.Fatal(err)
-	}
-	noUpload, _ := bundle.Flags().GetBool("no-upload")
-	if !noUpload {
-		t.Fatal("upload enabled without --upload")
-	}
-	if err = bundle.Flags().Set("upload", "true"); err != nil {
-		t.Fatal(err)
-	}
-	if err = bundle.PreRunE(bundle, nil); err != nil {
-		t.Fatal(err)
-	}
-	noUpload, _ = bundle.Flags().GetBool("no-upload")
-	if noUpload {
-		t.Fatal("explicit upload was ignored")
+	out, err = execute(t, "", "--api-url", "invalid", "support", "bundle", "--upload", "--report", output)
+	if err == nil || !strings.Contains(err.Error(), "upload configuration is invalid") {
+		t.Fatalf("explicit upload must validate the service: %s %v", out, err)
 	}
 }

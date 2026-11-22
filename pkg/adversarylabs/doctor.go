@@ -12,7 +12,7 @@ type DoctorReportResponse struct {
 
 func (c Client) UploadDoctorReport(ctx context.Context, token string, report json.RawMessage) (DoctorReportResponse, error) {
 	var result DoctorReportResponse
-	err := c.postJSON(ctx, "/v1/doctor/reports", report, token, &result)
+	err := c.postJSONBytes(ctx, "/v1/doctor/reports", report, token, &result)
 	if err == nil && result.ID == "" {
 		err = fmt.Errorf("server returned no support report ID")
 	}
