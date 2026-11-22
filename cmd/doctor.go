@@ -36,12 +36,15 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if cmd.Flags().Changed("browser-session") || cmd.Flags().Changed("browser-origin") {
+				if cmd.Flags().Changed("api-url") || cmd.InheritedFlags().Changed("api-url") {
+					return fmt.Errorf("--browser-session uses the locally configured Doomer service; omit --api-url")
+				}
 				for _, flag := range []string{"upload", "no-upload", "report", "output", "json", "email", "description", "name", "tag", "test-session"} {
 					if cmd.Flags().Changed(flag) {
 						return fmt.Errorf("--browser-session cannot be combined with --%s", flag)
 					}
 				}
-				endpoint, err := doctorBrowserEndpoint(browserOrigin, browserSession)
+				endpoint, err := doctorBrowserEndpoint(browserOrigin, browserSession, repo)
 				if err != nil {
 					return err
 				}

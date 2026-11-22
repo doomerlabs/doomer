@@ -8,15 +8,17 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"time"
 
+	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
 )
 
 var browserSessionCode = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 
-func doctorBrowserEndpoint(origin, code string) (string, error) {
+func doctorBrowserEndpoint(origin, code, repo string) (string, error) {
 	u, err := url.Parse(origin)
 	if err != nil || !browserSessionCode.MatchString(code) || u.Hostname() == "" ||
 		u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Path != "" || u.Opaque != "" ||
@@ -25,13 +27,32 @@ func doctorBrowserEndpoint(origin, code string) (string, error) {
 	}
 	public, _ := url.Parse(adversarylabs.DefaultAPIURL)
 	if u.Scheme != public.Scheme || u.Host != public.Host {
-		configured, err := url.Parse(adversarylabs.ResolveAPIURL(""))
+		api, err := configuredDoctorBrowserAPI(repo)
+		if err != nil {
+			return "", err
+		}
+		configured, err := url.Parse(api)
 		if err != nil || u.Scheme != configured.Scheme || u.Host != configured.Host {
 			return "", fmt.Errorf("use the Doctor page for the Doomer service configured on this machine")
 		}
 	}
 	u.Path = "/api/docs/doctor-session"
 	return u.String(), nil
+}
+
+func configuredDoctorBrowserAPI(repo string) (string, error) {
+	var state agentHookState
+	if home, err := defaultManagerHome(); err == nil {
+		_ = watching.Read(filepath.Join(home, "state.json"), &state)
+	}
+	if state.Managed != nil {
+		return agentHookAPI(state.API, "", "")
+	}
+	env, err := directoryWatchEnvironment(repo)
+	if err != nil {
+		return "", err
+	}
+	return agentHookAPI("", env.get("DOOMER_API_URL"), state.API)
 }
 
 func isDoctorLoopback(host string) bool {
