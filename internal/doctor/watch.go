@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/doomerlabs/doomer/internal/watch"
 )
 
 func diagnostic(data object) object {
@@ -98,7 +100,20 @@ func (c collector) watchRoots() []any {
 				feed := readObject(root, filepath.Join("reviews", key))
 				review := fields(feed, "ReviewID", "URL", "AssessmentStatus", "FailureCode", "Updated", "Anonymous", "Fingerprint", "BaseRef", "TargetTreeHash")
 				review["Owner"] = fields(nested(feed, "Owner"), "session", "turn")
+				if session := text(nested(feed, "Owner"), "session"); session != "" && text(feed, "ReviewID") != "" {
+					turn := readObject(root, filepath.Join("turns", watch.Key(session)+".json"))
+					delivered, _ := turn["Delivered"].([]any)
+					if len(delivered) != 0 && text(nested(turn, "Owner"), "session") == session {
+						for _, entry := range delivered {
+							if id, ok := entry.(string); ok && id == text(feed, "ReviewID") {
+								review["handoff_recorded"] = true
+								break
+							}
+						}
+					}
+				}
 				item["review"] = review
+				item["last_success"] = fields(readObject(root, filepath.Join("last-success", key)), "review_id", "completed_at", "agent", "profile", "api_url", "cli_version")
 				item["recent_hook_events"] = c.events(root)
 				result = append(result, item)
 			}

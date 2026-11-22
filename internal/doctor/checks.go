@@ -27,7 +27,7 @@ func (c collector) checks(report object, checkoutFound bool, session string) []a
 		add("checkout_unavailable", "Could not identify a Git checkout.", "Run Doctor from the affected checkout to inspect its review activity.")
 		return items
 	}
-	var event, review object
+	var event, review, previousSuccess object
 	activation := "pending"
 	detail := "No current Codex hook receipt was verified for this session."
 	for _, value := range report["watch_roots"].([]any) {
@@ -45,6 +45,10 @@ func (c collector) checks(report object, checkoutFound bool, session string) []a
 				event = hook
 			}
 		}
+		success := nested(root, "last_success")
+		if when(success, "completed_at").After(when(previousSuccess, "completed_at")) {
+			previousSuccess = success
+		}
 		candidate := nested(root, "review")
 		if when(candidate, "Updated").After(when(review, "Updated")) {
 			review = candidate
@@ -61,13 +65,20 @@ func (c collector) checks(report object, checkoutFound bool, session string) []a
 	switch status := text(review, "AssessmentStatus"); {
 	case status == "ready":
 		ref := cmp.Or(display(text(review, "ReviewID")), "ID unavailable")
-		add("review_completed", "Most recent recorded Quick review completed ("+ref+"). Chat delivery is unverified.", "If the result did not appear, look up that review ID.")
+		delivery := "Chat delivery is unverified."
+		if review["handoff_recorded"] == true {
+			delivery = "Doomer recorded a handoff to the agent. Visibility in the chat is unverified."
+		}
+		add("review_completed", "Most recent recorded Quick review completed ("+ref+"). "+delivery, "If the result did not appear, look up that review ID.")
 	case strings.HasPrefix(status, "fail") || text(review, "FailureCode") != "":
 		add("review_failed", "Most recent recorded Quick review failed ("+display(cmp.Or(text(review, "FailureCode"), status))+").", "Use the review ID from the local report when troubleshooting.")
 	case status != "":
 		add("review_status_recorded", "Most recent recorded review status: "+display(status)+".", "")
 	default:
 		add("review_evidence_missing", "No Quick review status was recorded for this checkout.", "Verify the hook and watcher in the affected session before trying a small coding change.")
+	}
+	if version := text(previousSuccess, "cli_version"); version != "" && version != text(report, "cli_version") {
+		add("cli_changed_since_success", "Last recorded successful Quick review used Doomer "+display(version)+". This Doctor is running "+display(text(report, "cli_version"))+".", "Check which executable the affected agent profile launches.")
 	}
 	return items
 }
