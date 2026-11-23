@@ -145,6 +145,9 @@ func TestLauncherKeepsLocalCommands(t *testing.T) {
 		{"preflight", "--agent", "codex", "--repo", repo},
 		{"watch", "hook", "--dispatch"},
 		{"watch", "hook", "--dispatch=true"},
+		{"watch", "--config-stdin"},
+		{"watch", "agent", "--owner=doomer-node", "--agent=codex", "--manager-home", home},
+		{"watch", "agent-hook", "--owner=doomer-node-dev", "--agent=codex", "--manager-home", home},
 	} {
 		var out bytes.Buffer
 		handled, err := DispatchCLI(context.Background(), args, nil, &out, &out)

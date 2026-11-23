@@ -156,7 +156,7 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	id := hookIdentity{Namespace: home, Agent: agent, Session: input.Session, Turn: turn}
 	switch input.Event {
 	case "PreToolUse":
-		if agent == "codex" && turn != "" {
+		if agent == "codex" {
 			registerAgentEditRepositories(c.Context(), id.Key(), input)
 		}
 		return empty, nil

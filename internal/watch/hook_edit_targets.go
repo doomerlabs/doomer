@@ -97,25 +97,37 @@ func hookShellDirectory(cwd, command string) (string, string) {
 		return cwd, command
 	}
 	stmt := file.Stmts[0]
+	var following []*syntax.Stmt
 	for {
 		branch, ok := stmt.Cmd.(*syntax.BinaryCmd)
-		if !ok || branch.Op != syntax.AndStmt || stmt.Negated || stmt.Background || len(stmt.Redirs) != 0 {
+		if !ok {
+			break
+		}
+		if branch.Op != syntax.AndStmt || stmt.Negated || stmt.Background || len(stmt.Redirs) != 0 {
 			return cwd, command
 		}
+		following = append(following, branch.Y)
 		stmt = branch.X
+	}
+
+	directory, offset := cwd, 0
+	for i := len(following) - 1; i >= 0; i-- {
 		call, ok := stmt.Cmd.(*syntax.CallExpr)
-		if !ok {
-			continue
+		if !ok || len(call.Args) == 0 || shellLiteral(call.Args[0].Parts) != "cd" {
+			break
 		}
-		if stmt.Negated || stmt.Background || len(stmt.Redirs) != 0 || len(call.Assigns) != 0 || len(call.Args) != 2 || shellLiteral(call.Args[0].Parts) != "cd" {
+		if stmt.Negated || stmt.Background || len(stmt.Redirs) != 0 || len(call.Assigns) != 0 || len(call.Args) != 2 {
 			return cwd, command
 		}
 		dir, literal := shellWritePath(call.Args[1])
 		if !literal || !(filepath.IsAbs(dir) || strings.HasPrefix(dir, "./") || strings.HasPrefix(dir, "../")) {
 			return cwd, command
 		}
-		return hookTargetPath(cwd, dir), command[branch.Y.Pos().Offset():]
+		directory = hookTargetPath(directory, dir)
+		stmt = following[i]
+		offset = int(stmt.Pos().Offset())
 	}
+	return directory, command[offset:]
 }
 
 func hookTargetPath(cwd, path string) string {

@@ -71,6 +71,20 @@ func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr i
 	if findErr == nil {
 		command.FParseErrWhitelist.UnknownFlags = true
 		if err := command.ParseFlags(rest); err == nil {
+			if command.Name() == "watch" && command.Parent() == root {
+				internalWorker, _ := command.Flags().GetBool("config-stdin")
+				if internalWorker {
+					return false, nil
+				}
+			}
+			if command.Name() == "agent" && command.Parent() != nil && command.Parent().Name() == "watch" {
+				owner, _ := command.Flags().GetString("owner")
+				// npm installs this handler against the same CLI that reports
+				// runtime-info. A checkout pin cannot replace that handler.
+				if owner == "doomer-node" || owner == "doomer-node-dev" {
+					return false, nil
+				}
+			}
 			if command.Name() == "hook" && command.Parent() != nil && command.Parent().Name() == "watch" {
 				dispatch, _ := command.Flags().GetBool("dispatch")
 				if dispatch {
