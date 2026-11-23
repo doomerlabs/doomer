@@ -25,6 +25,86 @@ func (stopHandoffClient) UploadWorkspaceTree(context.Context, string, string, []
 	return "fixture-repository", "fixture-tree", nil
 }
 
+func TestCodexPreToolUseUsesExistingSessionWatcherWithoutTurnID(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("local worker IPC requires Linux or macOS")
+	}
+	home, source, sibling := t.TempDir(), newWatchTestRepo(t), newWatchTestRepo(t)
+	denied := newWatchTestRepo(t)
+	id := hookIdentity{Namespace: home, Agent: "codex", Session: "session-without-a-turn-id"}
+	cfg := livewatch.Config{ID: id.Key(), ControlKey: id.Key(), Directory: source, Agent: id.Agent, RequireHypotheses: true}
+	ctx, cancel := context.WithTimeout(t.Context(), 7*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- livewatch.Serve(ctx, cfg, stopHandoffClient{}, func(_ context.Context, repo string) bool { return repo != denied })
+	}()
+	for {
+		if _, live := livewatch.Available(ctx, id.Key()); live {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("worker exited during startup: %v", err)
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+
+	preEdit := func(destination string) map[string]any {
+		t.Helper()
+		toolInput, err := json.Marshal(map[string]string{"command": "printf hello > " + watching.Quote(destination)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload, err := json.Marshal(watching.HookInput{Session: id.Session, CWD: source, Event: "PreToolUse", Tool: "Bash", Input: toolInput})
+		if err != nil {
+			t.Fatal(err)
+		}
+		command := NewRootCommand()
+		command.SetContext(ctx)
+		command.SetIn(bytes.NewReader(payload))
+		output, err := runAgentWatchHook(command, home, id.Agent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return output
+	}
+
+	warning := preEdit(filepath.Join(denied, "sample.txt"))
+	if len(warning) != 1 || !strings.Contains(fmt.Sprint(warning["systemMessage"]), "upload permission is required") {
+		t.Fatalf("expected a nonblocking coverage warning, got %v", warning)
+	}
+	destination := filepath.Join(sibling, "sample.txt")
+	if output := preEdit(destination); len(output) != 0 {
+		t.Fatalf("approved edit returned a warning: %v", output)
+	}
+	if err := os.WriteFile(destination, []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		result, err := livewatch.Call(ctx, id.Key(), "results")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.ReviewPending {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("the session watcher did not observe the sibling edit")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	if _, err := livewatch.Call(ctx, id.Key(), "cancel"); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCodexStopIgnoresWorkspaceEditsWithoutCheckpoint(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("local worker IPC requires Linux or macOS")

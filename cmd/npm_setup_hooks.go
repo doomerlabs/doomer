@@ -208,6 +208,10 @@ func npmEventTimeout(agent, event string) int {
 		return 45
 	case "Stop":
 		return 60
+	case "PreToolUse":
+		if agent == "codex" {
+			return 25
+		}
 	case "SessionEnd":
 		if agent == "claude" {
 			return 15
@@ -273,7 +277,7 @@ func mergeNPMHooks(hooks npmJSONObject, agent, owner, command string) bool {
 		}
 		if timeout > 0 {
 			handler := npmJSONObject{"type": "command", "command": command, "timeout": timeout}
-			if agent == "codex" {
+			if agent == "codex" && event != "PreToolUse" {
 				label := "Doomer"
 				if dev {
 					label += " development"

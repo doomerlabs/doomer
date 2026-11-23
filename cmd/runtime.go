@@ -71,6 +71,20 @@ func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr i
 	if findErr == nil {
 		command.FParseErrWhitelist.UnknownFlags = true
 		if err := command.ParseFlags(rest); err == nil {
+			if command.Name() == "watch" && command.Parent() == root {
+				internalWorker, _ := command.Flags().GetBool("config-stdin")
+				if internalWorker {
+					return false, nil
+				}
+			}
+			if command.Name() == "agent" && command.Parent() != nil && command.Parent().Name() == "watch" {
+				owner, _ := command.Flags().GetString("owner")
+				// npm installs this handler against the same CLI that reports
+				// runtime-info. A checkout pin cannot replace that handler.
+				if owner == "doomer-node" || owner == "doomer-node-dev" {
+					return false, nil
+				}
+			}
 			if command.Name() == "hook" && command.Parent() != nil && command.Parent().Name() == "watch" {
 				dispatch, _ := command.Flags().GetBool("dispatch")
 				if dispatch {
@@ -111,7 +125,7 @@ func DispatchCLI(ctx context.Context, args []string, in io.Reader, out, stderr i
 
 func newRuntimeInfoCommand() *cobra.Command {
 	return &cobra.Command{Use: "runtime-info", Hidden: true, Args: cobra.NoArgs, PersistentPreRunE: func(*cobra.Command, []string) error { return nil }, RunE: func(c *cobra.Command, _ []string) error {
-		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"protocol": 1, "capabilities": map[string]bool{"watchAgentHook": true, "hookNotices": true, "watchAdd": true, "cliUpgrade": true}, "managed_upgrade": 1, "watch_supervisor": 1, "managed_protocol": managed.Protocol, "instruction_sha256": managedInstructionDigest()})
+		return json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"protocol": 1, "capabilities": map[string]bool{"watchAgentHook": true, "hookNotices": true, "watchAdd": true, "watchCodexEditTargets": true, "cliUpgrade": true}, "managed_upgrade": 1, "watch_supervisor": 1, "managed_protocol": managed.Protocol, "instruction_sha256": managedInstructionDigest()})
 	}}
 }
 
