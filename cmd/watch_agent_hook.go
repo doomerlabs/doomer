@@ -157,7 +157,10 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	switch input.Event {
 	case "PreToolUse":
 		if agent == "codex" {
-			registerAgentEditRepositories(c.Context(), id.Key(), input)
+			failures := registerAgentEditRepositories(c.Context(), id.Key(), input)
+			if len(failures) > 0 {
+				return map[string]any{"systemMessage": "Doomer Quick review could not cover these edit targets. " + strings.Join(failures, ", ")}, nil
+			}
 		}
 		return empty, nil
 	case "PermissionDenied":
@@ -305,24 +308,28 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 
 // Register before the tool runs so the watcher can distinguish this edit from
 // existing changes. A missing watcher or missing consent never blocks editing.
-func registerAgentEditRepositories(ctx context.Context, key string, input watching.HookInput) {
+func registerAgentEditRepositories(ctx context.Context, key string, input watching.HookInput) []string {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	repos := watching.HookEditRepositories(ctx, input)
 	if len(repos) == 0 {
-		return
+		return nil
 	}
 	current, ok := livewatch.Available(ctx, key)
 	if !ok {
-		return
+		return nil
 	}
+	var failures []string
 	for _, repo := range repos {
 		relative, err := filepath.Rel(current.Directory, repo)
 		if err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 			continue
 		}
-		_, _ = livewatch.AddDirectory(ctx, key, repo)
+		if _, err := livewatch.AddDirectory(ctx, key, repo); err != nil {
+			failures = append(failures, fmt.Sprintf("%q (%v)", repo, err))
+		}
 	}
+	return failures
 }
 
 func turnHookResult(result livewatch.Response) map[string]any {
