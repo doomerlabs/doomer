@@ -1,4 +1,4 @@
--- Counts successful full-archive responses, not unique installations.
+-- Counts successful full CLI artifact responses, not unique installations.
 -- Weighted sums preserve estimated totals if Analytics Engine samples events.
 SELECT
   toStartOfDay(timestamp) AS day,

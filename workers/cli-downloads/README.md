@@ -9,11 +9,11 @@ It has no R2 binding or upload credential and cannot modify release objects.
 
 - `blob1`: version (also the sampling index)
 - `blob2`: OS
-- `blob3`: architecture
+- `blob3`: architecture (`universal` for MDM installers)
 - `blob4`: `download` for successful full responses; `range` for partial/range requests
 - `double1`: 1
 
-Only matching archive GETs returning 200 or 206 produce events. Manifest,
+Only matching CLI archive and versioned MDM installer GETs returning 200 or 206 produce events. Manifest,
 checksum, HEAD, failed requests, and requests carrying
 `X-Doomer-Release-Verification: 1` are excluded. The release publisher sets that
 header. It is an exclusion convention, not authentication; a caller can opt out
