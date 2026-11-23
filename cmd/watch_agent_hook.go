@@ -155,6 +155,11 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	}
 	id := hookIdentity{Namespace: home, Agent: agent, Session: input.Session, Turn: turn}
 	switch input.Event {
+	case "PreToolUse":
+		if agent == "codex" && turn != "" {
+			registerAgentEditRepositories(c.Context(), id.Key(), input)
+		}
+		return empty, nil
 	case "PermissionDenied":
 		if agent == "claude" && input.Tool == "Bash" {
 			reportClaudeReviewDenial(c.Context(), id.Key(), input)
@@ -295,6 +300,28 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 			return empty, fmt.Errorf("watcher did not become ready")
 		case <-ticker.C:
 		}
+	}
+}
+
+// Register before the tool runs so the watcher can distinguish this edit from
+// existing changes. A missing watcher or missing consent never blocks editing.
+func registerAgentEditRepositories(ctx context.Context, key string, input watching.HookInput) {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	repos := watching.HookEditRepositories(ctx, input)
+	if len(repos) == 0 {
+		return
+	}
+	current, ok := livewatch.Available(ctx, key)
+	if !ok {
+		return
+	}
+	for _, repo := range repos {
+		relative, err := filepath.Rel(current.Directory, repo)
+		if err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			continue
+		}
+		_, _ = livewatch.AddDirectory(ctx, key, repo)
 	}
 }
 
