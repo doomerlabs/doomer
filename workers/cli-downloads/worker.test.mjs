@@ -24,6 +24,18 @@ test('excludes metadata, Mac assets, mismatched versions, failed requests and ve
   assert.deepEqual(await run({ method: 'HEAD' }), []);
   assert.deepEqual(await run({ headers: { 'X-Doomer-Release-Verification': '1' } }), []);
 });
+test('counts managed installer downloads by release without counting publisher checks or ranges', async () => {
+  const version = '2026.11.22.1-beta.2';
+  const url = `/cli/releases/${version}/Doomer-MDM-${version}.pkg`;
+  assert.deepEqual(await run({ url }), [{ indexes: [version], blobs: [version, 'darwin', 'universal', 'download'], doubles: [1] }]);
+  assert.deepEqual(await run({ url, headers: { 'X-Doomer-Release-Verification': '1' } }), []);
+  assert.equal((await run({ url, status: 206 }))[0].blobs[3], 'range');
+  assert.deepEqual(await run({ url: url.replace(`MDM-${version}`, 'MDM-2026.11.22.1') }), []);
+  assert.deepEqual(await run({ url: `/cli/releases/${version}/mdm-release.json` }), []);
+  const bootstrap = '/cli/releases/2026.11.22.1/Doomer-MDM-Bootstrap-2026.11.22.1.pkg';
+  assert.equal((await run({ url: bootstrap }))[0].blobs[3], 'download');
+});
+
 test('accepts stable daily sequence archives', () => {
   assert.deepEqual(archive('/cli/releases/2026.11.2.1/doomer_2026.11.2.1_linux_arm64.tar.gz'), { version: '2026.11.2.1', os: 'linux', arch: 'arm64' });
 });

@@ -1,7 +1,7 @@
 // The route runs before the existing R2 custom domain; fetch preserves its CDN.
 export function archive(path) {
-  const match = /^\/cli\/releases\/(20\d{2}\.\d{1,2}\.\d{1,2}(?:\.[1-9][0-9]*)?(?:-beta\.\d+)?)\/doomer_\1_(darwin|linux)_(amd64|arm64)\.tar\.gz$/.exec(path);
-  return match && { version: match[1], os: match[2], arch: match[3] };
+  const match = /^\/cli\/releases\/(20\d{2}\.\d{1,2}\.\d{1,2}(?:\.[1-9][0-9]*)?(?:-beta\.\d+)?)\/(?:doomer_\1_(darwin|linux)_(amd64|arm64)\.tar\.gz|Doomer-MDM-(?:Bootstrap-)?\1\.pkg)$/.exec(path);
+  return match && { version: match[1], os: match[2] ?? 'darwin', arch: match[3] ?? 'universal' };
 }
 
 export async function handle(request, env, origin = fetch) {
