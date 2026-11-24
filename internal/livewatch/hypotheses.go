@@ -115,8 +115,8 @@ func (w *worker) recordHypotheses(response HypothesisResponse) error {
 	if response.Status != "assessed" && (strings.TrimSpace(response.Reason) == "" || len(response.Hypotheses) > 0) {
 		return fmt.Errorf("unassessed snapshots require a reason and no hypotheses")
 	}
-	if response.Hypotheses == nil || len(response.Hypotheses) > 5 {
-		return fmt.Errorf("hypotheses must be an explicit array of at most five items")
+	if response.Hypotheses == nil {
+		return fmt.Errorf("hypotheses must be an explicit array")
 	}
 	if response.Status == "assessed" && len(pending.request.Areas) > 0 {
 		seen := map[string]bool{}

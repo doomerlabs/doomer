@@ -135,7 +135,7 @@ func TestHookOwnedDeliveryAndResponseCollection(t *testing.T) {
 	Write(filepath.Join(root, "heartbeat.json"), time.Now())
 	edit.Event = "PostToolUse"
 	out := run(edit)
-	if !strings.Contains(out, "Generate up to five") {
+	if !strings.Contains(out, "Generate concrete hypotheses/questions") || strings.Contains(out, "up to five") {
 		t.Fatal(out)
 	}
 	var requestState State

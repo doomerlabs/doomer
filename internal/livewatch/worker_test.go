@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -566,7 +567,11 @@ func TestAgentHypothesesGateSubmissionAndBindSnapshot(t *testing.T) {
 	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: tasks[0].ID}); err == nil {
 		t.Fatal("accepted missing array")
 	}
-	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: tasks[0].ID, Hypotheses: []adversarylabs.WorkspaceHypothesis{}}); err != nil {
+	hypotheses := make([]adversarylabs.WorkspaceHypothesis, 6)
+	for i := range hypotheses {
+		hypotheses[i] = adversarylabs.WorkspaceHypothesis{Path: "file.txt", Line: 1, Hypothesis: fmt.Sprintf("Could case %d lose content?", i), Check: "Compare before and after."}
+	}
+	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: tasks[0].ID, Hypotheses: hypotheses}); err != nil {
 		t.Fatal(err)
 	}
 	result, err := Call(ctx, cfg.ControlKey, "checkpoint")
@@ -597,6 +602,9 @@ func TestAgentHypothesesGateSubmissionAndBindSnapshot(t *testing.T) {
 	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
+	if len(client.inputs) == 2 && !reflect.DeepEqual(client.inputs[0].Hypotheses, hypotheses) {
+		t.Fatalf("submission did not forward all hypotheses: %+v", client.inputs[0].Hypotheses)
+	}
 	if len(client.inputs) != 2 || !client.inputs[0].AgentAssessmentComplete || !client.inputs[1].AgentAssessmentComplete {
 		t.Fatalf("expected two explicitly assessed review submissions, got %+v", client.inputs)
 	}

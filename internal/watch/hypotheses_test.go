@@ -67,7 +67,9 @@ func TestHypothesisHelperOnlyEmitsAndTrustedHookRecords(t *testing.T) {
 	}
 	Read(StatePath(root, dir), &state)
 	var output strings.Builder
-	if err = EmitHypotheses(context.Background(), root, state.QuestionRequest, cfg, strings.NewReader(`[]`), &output); err != nil {
+	const item = `{"path":"file.txt","line":1,"hypothesis":"Could this lose content?","check":"Compare before and after."}`
+	input := "[" + strings.Repeat(item+",", 5) + item + "]"
+	if err = EmitHypotheses(context.Background(), root, state.QuestionRequest, cfg, strings.NewReader(input), &output); err != nil {
 		t.Fatal(err)
 	}
 	var saved State
@@ -83,8 +85,8 @@ func TestHypothesisHelperOnlyEmitsAndTrustedHookRecords(t *testing.T) {
 		t.Fatal("trusted hook did not record output")
 	}
 	Read(StatePath(root, dir), &saved)
-	if !saved.HypothesesSubmitted {
-		t.Fatal("hook did not save submission")
+	if !saved.HypothesesSubmitted || len(saved.Hypotheses) != 6 {
+		t.Fatal("hook did not save all six hypotheses")
 	}
 }
 
