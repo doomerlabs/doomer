@@ -90,7 +90,7 @@ func hookWithRepositories(ctx context.Context, root string, cfg Config, in io.Re
 		_ = json.NewEncoder(out).Encode(response)
 	}()
 	var input HookInput
-	if json.NewDecoder(io.LimitReader(in, 1<<20)).Decode(&input) != nil || input.Session == "" {
+	if json.NewDecoder(io.LimitReader(in, MaxHookInputBytes)).Decode(&input) != nil || input.Session == "" {
 		return
 	}
 	agent := "other"

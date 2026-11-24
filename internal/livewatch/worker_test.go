@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -538,6 +539,10 @@ func TestAgentHypothesesGateSubmissionAndBindSnapshot(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("after\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	longPath := strings.Repeat("&", 200)
+	if err := os.WriteFile(filepath.Join(repo, longPath), []byte("added\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	var tasks []HypothesisRequest
 	deadline := time.Now().Add(8 * time.Second)
 	for time.Now().Before(deadline) {
@@ -566,7 +571,15 @@ func TestAgentHypothesesGateSubmissionAndBindSnapshot(t *testing.T) {
 	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: tasks[0].ID}); err == nil {
 		t.Fatal("accepted missing array")
 	}
-	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: tasks[0].ID, Hypotheses: []adversarylabs.WorkspaceHypothesis{}}); err != nil {
+	hypotheses := make([]adversarylabs.WorkspaceHypothesis, 50)
+	for i := range hypotheses {
+		hypotheses[i] = adversarylabs.WorkspaceHypothesis{
+			Path: longPath, Line: 1,
+			Hypothesis: fmt.Sprintf("Case %02d %s", i, strings.Repeat("<", 390)),
+			Check:      strings.Repeat("&", 400),
+		}
+	}
+	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: tasks[0].ID, Hypotheses: hypotheses}); err != nil {
 		t.Fatal(err)
 	}
 	result, err := Call(ctx, cfg.ControlKey, "checkpoint")
@@ -597,6 +610,9 @@ func TestAgentHypothesesGateSubmissionAndBindSnapshot(t *testing.T) {
 	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
+	if len(client.inputs) == 2 && !reflect.DeepEqual(client.inputs[0].Hypotheses, hypotheses) {
+		t.Fatalf("submission did not forward all hypotheses: %+v", client.inputs[0].Hypotheses)
+	}
 	if len(client.inputs) != 2 || !client.inputs[0].AgentAssessmentComplete || !client.inputs[1].AgentAssessmentComplete {
 		t.Fatalf("expected two explicitly assessed review submissions, got %+v", client.inputs)
 	}

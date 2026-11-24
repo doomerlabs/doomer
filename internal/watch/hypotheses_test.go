@@ -3,6 +3,7 @@ package watch
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -67,7 +68,9 @@ func TestHypothesisHelperOnlyEmitsAndTrustedHookRecords(t *testing.T) {
 	}
 	Read(StatePath(root, dir), &state)
 	var output strings.Builder
-	if err = EmitHypotheses(context.Background(), root, state.QuestionRequest, cfg, strings.NewReader(`[]`), &output); err != nil {
+	item := fmt.Sprintf(`{"path":"file.txt","line":1,"hypothesis":%q,"check":%q}`, strings.Repeat("🧪", 400), strings.Repeat("界", 400))
+	input := "[" + strings.Repeat(item+",", 49) + item + "]"
+	if err = EmitHypotheses(context.Background(), root, state.QuestionRequest, cfg, strings.NewReader(input), &output); err != nil {
 		t.Fatal(err)
 	}
 	var saved State
@@ -83,8 +86,8 @@ func TestHypothesisHelperOnlyEmitsAndTrustedHookRecords(t *testing.T) {
 		t.Fatal("trusted hook did not record output")
 	}
 	Read(StatePath(root, dir), &saved)
-	if !saved.HypothesesSubmitted {
-		t.Fatal("hook did not save submission")
+	if !saved.HypothesesSubmitted || len(saved.Hypotheses) != 50 {
+		t.Fatal("hook did not save all 50 hypotheses")
 	}
 }
 
@@ -193,5 +196,16 @@ func TestReplacedHypothesisRequestCannotUseNewDeadline(t *testing.T) {
 	}
 	if err := SubmitHypotheses(context.Background(), root, state.QuestionRequest, cfg, strings.NewReader(`[]`)); err != nil {
 		t.Fatal("replacement request failed", err)
+	}
+}
+
+func TestHypothesisInputLimitCountsTheWholeSubmission(t *testing.T) {
+	atLimit := "[]" + strings.Repeat(" ", maxHypothesisJSONBytes-2)
+	items, err := decodeHypotheses(strings.NewReader(atLimit))
+	if err != nil || items == nil || len(items) != 0 {
+		t.Fatalf("valid array at byte limit: %v", err)
+	}
+	if _, err := decodeHypotheses(strings.NewReader(atLimit + " ")); err == nil || !strings.Contains(err.Error(), "local input size limit") {
+		t.Fatalf("expected size error for oversized input, got %v", err)
 	}
 }

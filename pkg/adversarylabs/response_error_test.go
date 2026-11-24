@@ -1,6 +1,7 @@
 package adversarylabs
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -95,6 +96,8 @@ func TestQuickReviewSubmissionErrorsExplainTheFailure(t *testing.T) {
 		status int
 		want   string
 	}{
+		{"invalid_hypotheses", http.StatusBadRequest, "The agent hypotheses are invalid. Each hypothesis needs a changed path, line, concern, and check."},
+		{"too_many_hypotheses", http.StatusRequestEntityTooLarge, "The submission exceeds the server candidate budget."},
 		{"invalid_agent_diff", http.StatusBadRequest, "The inline latest-edit diff is invalid or exceeds the upload limit."},
 		{"triage_patch_missing", http.StatusConflict, "The patch saved by triage is unavailable. Start a new Quick Review."},
 		{"triage_snapshot_mismatch", http.StatusConflict, "The assessment does not match the review and patch that completed triage. Start a new Quick Review."},
@@ -109,5 +112,16 @@ func TestQuickReviewSubmissionErrorsExplainTheFailure(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRecognizesTheKnownLegacyHypothesisValidationMessage(t *testing.T) {
+	body, err := json.Marshal(map[string]string{"error": "invalid_hypotheses", "message": legacyInvalidHypothesesMessage})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := &http.Response{StatusCode: http.StatusBadRequest, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(string(body)))}
+	if err := responseError(response, "secret"); err.Error() != legacyInvalidHypothesesMessage {
+		t.Fatalf("legacy hypothesis rejection lost its count guidance: %v", err)
 	}
 }

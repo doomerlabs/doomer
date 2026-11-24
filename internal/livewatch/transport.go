@@ -9,6 +9,9 @@ import (
 	"time"
 )
 
+// MaxRequestBytes bounds allocation when reading local control requests.
+const MaxRequestBytes = 2 << 20
+
 func Call(ctx context.Context, key string, operation string) (Response, error) {
 	return call(ctx, key, request{Key: key, Operation: operation})
 }
