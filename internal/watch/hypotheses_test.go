@@ -3,6 +3,7 @@ package watch
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -67,8 +68,8 @@ func TestHypothesisHelperOnlyEmitsAndTrustedHookRecords(t *testing.T) {
 	}
 	Read(StatePath(root, dir), &state)
 	var output strings.Builder
-	const item = `{"path":"file.txt","line":1,"hypothesis":"Could this lose content?","check":"Compare before and after."}`
-	input := "[" + strings.Repeat(item+",", 5) + item + "]"
+	item := fmt.Sprintf(`{"path":"file.txt","line":1,"hypothesis":%q,"check":%q}`, strings.Repeat("🧪", 400), strings.Repeat("界", 400))
+	input := "[" + strings.Repeat(item+",", 49) + item + "]"
 	if err = EmitHypotheses(context.Background(), root, state.QuestionRequest, cfg, strings.NewReader(input), &output); err != nil {
 		t.Fatal(err)
 	}
@@ -85,8 +86,8 @@ func TestHypothesisHelperOnlyEmitsAndTrustedHookRecords(t *testing.T) {
 		t.Fatal("trusted hook did not record output")
 	}
 	Read(StatePath(root, dir), &saved)
-	if !saved.HypothesesSubmitted || len(saved.Hypotheses) != 6 {
-		t.Fatal("hook did not save all six hypotheses")
+	if !saved.HypothesesSubmitted || len(saved.Hypotheses) != 50 {
+		t.Fatal("hook did not save all 50 hypotheses")
 	}
 }
 

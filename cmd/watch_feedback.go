@@ -554,13 +554,14 @@ func submitLiveHypotheses(c *cobra.Command, key string) error {
 		return fmt.Errorf("valid control key required")
 	}
 	var response livewatch.HypothesisResponse
-	decoder := json.NewDecoder(io.LimitReader(c.InOrStdin(), 256<<10))
+	bounded := &io.LimitedReader{R: c.InOrStdin(), N: livewatch.MaxRequestBytes + 1}
+	decoder := json.NewDecoder(bounded)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&response); err != nil {
 		return err
 	}
 	var extra any
-	if decoder.Decode(&extra) != io.EOF {
+	if decoder.Decode(&extra) != io.EOF || bounded.N == 0 {
 		return fmt.Errorf("expected one JSON object")
 	}
 	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)

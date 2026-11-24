@@ -163,7 +163,7 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 					}
 					_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 					var req request
-					if json.NewDecoder(io.LimitReader(conn, 256<<10)).Decode(&req) != nil || req.Key != cfg.ControlKey {
+					if json.NewDecoder(io.LimitReader(conn, MaxRequestBytes)).Decode(&req) != nil || req.Key != cfg.ControlKey {
 						return
 					}
 					if (req.Operation == "notice-ack" || req.Operation == "notice-reply") && (req.NoticeID == "" || req.NoticeRevision < 1) {

@@ -18,6 +18,8 @@ import (
 const (
 	hypothesisGrace         = 20 * time.Second
 	hypothesisResponseGrace = time.Minute
+	maxHypothesisJSONBytes  = 2 << 20
+	MaxHookInputBytes       = 4 << 20
 )
 
 type hypothesisRequest struct {
@@ -84,19 +86,9 @@ func SubmitHypotheses(ctx context.Context, root, id string, cfg Config, input io
 	if Read(hypothesisFile(root, id), &request) != nil || !Allowed(cfg, request.Path) {
 		return errors.New("question request unavailable")
 	}
-	var hypotheses []adversarylabs.WorkspaceHypothesis
-	decoder := json.NewDecoder(io.LimitReader(input, 32<<10))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&hypotheses) != nil {
-		return errors.New("invalid review hypotheses")
-	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		return errors.New("invalid review hypotheses")
-	}
-	for _, h := range hypotheses {
-		if !sourcesnapshot.ValidPath(h.Path) || h.Line < 1 || strings.TrimSpace(h.Hypothesis) == "" || strings.TrimSpace(h.Check) == "" || len([]rune(h.Hypothesis)) > 400 || len([]rune(h.Check)) > 400 {
-			return errors.New("invalid review hypothesis")
-		}
+	hypotheses, err := decodeHypotheses(input)
+	if err != nil {
+		return err
 	}
 	fingerprint, err := reviewSnapshotDigest(ctx, root, request.Path)
 	if err != nil || fingerprint != request.Fingerprint {
@@ -149,25 +141,31 @@ func EmitHypotheses(ctx context.Context, root, id string, cfg Config, input io.R
 	if err != nil || fingerprint != request.Fingerprint {
 		return errors.New("edit changed; question request expired")
 	}
-	var items []adversarylabs.WorkspaceHypothesis
-	decoder := json.NewDecoder(io.LimitReader(input, 32<<10))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&items) != nil {
-		return errors.New("invalid review hypotheses")
-	}
-	if decoder.Decode(new(any)) != io.EOF {
-		return errors.New("invalid review hypotheses")
-	}
-	for _, h := range items {
-		if !sourcesnapshot.ValidPath(h.Path) || h.Line < 1 || strings.TrimSpace(h.Hypothesis) == "" || strings.TrimSpace(h.Check) == "" || len([]rune(h.Hypothesis)) > 400 || len([]rune(h.Check)) > 400 {
-			return errors.New("invalid review hypothesis")
-		}
+	items, err := decodeHypotheses(input)
+	if err != nil {
+		return err
 	}
 	return json.NewEncoder(out).Encode(map[string]any{"pending_hook": true, "doomer_hypotheses": hypothesisEnvelope{Request: id, Items: items}})
 }
 
+func decodeHypotheses(input io.Reader) ([]adversarylabs.WorkspaceHypothesis, error) {
+	var items []adversarylabs.WorkspaceHypothesis
+	bounded := &io.LimitedReader{R: input, N: maxHypothesisJSONBytes + 1}
+	decoder := json.NewDecoder(bounded)
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&items) != nil || decoder.Decode(new(any)) != io.EOF || bounded.N == 0 {
+		return nil, errors.New("invalid or oversized review hypotheses")
+	}
+	for _, h := range items {
+		if !sourcesnapshot.ValidPath(h.Path) || h.Line < 1 || strings.TrimSpace(h.Hypothesis) == "" || strings.TrimSpace(h.Check) == "" || len([]rune(h.Hypothesis)) > 400 || len([]rune(h.Check)) > 400 {
+			return nil, errors.New("invalid review hypothesis")
+		}
+	}
+	return items, nil
+}
+
 func recordHypothesesOutput(ctx context.Context, root string, cfg Config, owner Owner, raw json.RawMessage) string {
-	if len(raw) > 256<<10 {
+	if len(raw) > MaxHookInputBytes {
 		return ""
 	}
 	var value any
@@ -218,7 +216,7 @@ func findHypothesesOutput(value any, depth int) *hypothesisEnvelope {
 			}
 		}
 	case string:
-		if len(v) > 128<<10 {
+		if len(v) > maxHypothesisJSONBytes+(16<<10) {
 			return nil
 		}
 		var decoded any

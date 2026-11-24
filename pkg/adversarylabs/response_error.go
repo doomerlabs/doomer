@@ -38,7 +38,8 @@ var validationFieldPattern = regexp.MustCompile(`^(body|repository|repository_id
 // for known failures when talking to a server that omits or changes the message.
 var workspaceValidationMessages = map[string]string{
 	"missing_review_scope":     "The latest-edit diff has no changed lines in the submitted workspace diff.",
-	"invalid_hypotheses":       "The agent hypotheses are invalid. Each hypothesis needs a changed path, line, concern, and check.",
+	"invalid_hypotheses":       "The server rejected the agent hypotheses. Check each path, line, concern, and check. Older servers accept at most five hypotheses.",
+	"too_many_hypotheses":      "The submission exceeds the server candidate budget.",
 	"invalid_triage_utf8":      "The uploaded triage diff is not valid UTF-8.",
 	"invalid_workspace_review": "The workspace review request is missing required fields or contains invalid JSON.",
 	"invalid_review_scope":     "The workspace review scope is invalid.",

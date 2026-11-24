@@ -539,6 +539,10 @@ func TestAgentHypothesesGateSubmissionAndBindSnapshot(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("after\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	longPath := strings.Repeat("&", 200)
+	if err := os.WriteFile(filepath.Join(repo, longPath), []byte("added\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	var tasks []HypothesisRequest
 	deadline := time.Now().Add(8 * time.Second)
 	for time.Now().Before(deadline) {
@@ -567,9 +571,13 @@ func TestAgentHypothesesGateSubmissionAndBindSnapshot(t *testing.T) {
 	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: tasks[0].ID}); err == nil {
 		t.Fatal("accepted missing array")
 	}
-	hypotheses := make([]adversarylabs.WorkspaceHypothesis, 6)
+	hypotheses := make([]adversarylabs.WorkspaceHypothesis, 50)
 	for i := range hypotheses {
-		hypotheses[i] = adversarylabs.WorkspaceHypothesis{Path: "file.txt", Line: 1, Hypothesis: fmt.Sprintf("Could case %d lose content?", i), Check: "Compare before and after."}
+		hypotheses[i] = adversarylabs.WorkspaceHypothesis{
+			Path: longPath, Line: 1,
+			Hypothesis: fmt.Sprintf("Case %02d %s", i, strings.Repeat("<", 390)),
+			Check:      strings.Repeat("&", 400),
+		}
 	}
 	if _, err := SubmitHypotheses(ctx, cfg.ControlKey, HypothesisResponse{RequestID: tasks[0].ID, Hypotheses: hypotheses}); err != nil {
 		t.Fatal(err)

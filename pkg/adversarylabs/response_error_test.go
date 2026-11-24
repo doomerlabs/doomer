@@ -95,6 +95,8 @@ func TestQuickReviewSubmissionErrorsExplainTheFailure(t *testing.T) {
 		status int
 		want   string
 	}{
+		{"invalid_hypotheses", http.StatusBadRequest, "The server rejected the agent hypotheses. Check each path, line, concern, and check. Older servers accept at most five hypotheses."},
+		{"too_many_hypotheses", http.StatusRequestEntityTooLarge, "The submission exceeds the server candidate budget."},
 		{"invalid_agent_diff", http.StatusBadRequest, "The inline latest-edit diff is invalid or exceeds the upload limit."},
 		{"triage_patch_missing", http.StatusConflict, "The patch saved by triage is unavailable. Start a new Quick Review."},
 		{"triage_snapshot_mismatch", http.StatusConflict, "The assessment does not match the review and patch that completed triage. Start a new Quick Review."},

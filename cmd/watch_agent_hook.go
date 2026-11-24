@@ -130,8 +130,8 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	if !filepath.IsAbs(home) || (agent != "codex" && agent != "claude") {
 		return empty, fmt.Errorf("invalid installed hook configuration")
 	}
-	raw, err := io.ReadAll(io.LimitReader(c.InOrStdin(), (1<<20)+1))
-	if err != nil || len(raw) > 1<<20 {
+	raw, err := io.ReadAll(io.LimitReader(c.InOrStdin(), watching.MaxHookInputBytes+1))
+	if err != nil || len(raw) > watching.MaxHookInputBytes {
 		return empty, fmt.Errorf("invalid hook input")
 	}
 	var input watching.HookInput
