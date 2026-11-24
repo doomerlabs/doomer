@@ -170,6 +170,98 @@ func TestCodexStopIgnoresWorkspaceEditsWithoutCheckpoint(t *testing.T) {
 	}
 }
 
+func TestCodexStopDeliversOptionalUpdateWithoutContinuation(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("local worker IPC requires Linux or macOS")
+	}
+	notice := adversarylabs.ClientNotice{
+		ID: "cli-update-beta", Revision: 1, Kind: "update", Channel: "beta", Severity: "available",
+		Message: "A new beta release is available.", RecommendedVersion: "2099.1.1.1-beta.2", NotifyUser: true,
+	}
+	markdown := adversarylabs.AdvisoryMarkdown(notice)
+	for _, test := range []struct {
+		name, reply        string
+		pending, delivered bool
+	}{
+		{name: "no update", reply: "Task complete."},
+		{name: "omitted", reply: "Task complete.", pending: true},
+		{name: "reformatted", reply: strings.Replace(markdown, "```bash", "```sh", 1), pending: true, delivered: true},
+		{name: "verbatim", reply: markdown, pending: true, delivered: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			home := t.TempDir()
+			id := hookIdentity{Namespace: home, Agent: "codex", Session: "fixture", Turn: "fixture-turn"}
+			cfg := livewatch.Config{ID: id.Key(), ControlKey: id.Key(), Directory: newWatchTestRepo(t), Agent: id.Agent}
+			recorded := false
+			if test.pending {
+				cfg.Notices = func() []adversarylabs.ClientNotice { return []adversarylabs.ClientNotice{notice} }
+				cfg.AcknowledgeNotice = func(noticeID string, revision int) error {
+					if noticeID != notice.ID || revision != notice.Revision {
+						return fmt.Errorf("unexpected delivery receipt: %s:%d", noticeID, revision)
+					}
+					recorded = true
+					return nil
+				}
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			done := make(chan error, 1)
+			go func() {
+				done <- livewatch.Serve(ctx, cfg, stopHandoffClient{}, func(context.Context, string) bool { return true })
+			}()
+			for {
+				if _, live := livewatch.Available(ctx, id.Key()); live {
+					break
+				}
+				select {
+				case err := <-done:
+					t.Fatalf("worker exited during startup: %v", err)
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				case <-time.After(10 * time.Millisecond):
+				}
+			}
+			stop := func() map[string]any {
+				t.Helper()
+				input, err := json.Marshal(watching.HookInput{Event: "Stop", Session: id.Session, Turn: id.Turn, Message: test.reply})
+				if err != nil {
+					t.Fatal(err)
+				}
+				cmd := NewRootCommand()
+				cmd.SetContext(ctx)
+				cmd.SetIn(bytes.NewReader(input))
+				out, err := runAgentWatchHook(cmd, home, id.Agent)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return out
+			}
+			out := stop()
+			if test.pending && !test.delivered {
+				if len(out) != 1 || out["systemMessage"] != adversarylabs.AdvisoryTerminal(notice) {
+					t.Fatalf("expected one nonblocking advisory, got %v", out)
+				}
+			} else if len(out) != 0 {
+				t.Fatalf("unexpected Stop output: %v", out)
+			}
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-ctx.Done():
+				t.Fatal("watcher stayed alive after Stop")
+			}
+			if recorded != test.delivered {
+				t.Fatalf("delivery receipt = %t, want %t", recorded, test.delivered)
+			}
+			if out := stop(); len(out) != 0 {
+				t.Fatalf("later Stop repeated feedback: %v", out)
+			}
+		})
+	}
+}
+
 func TestStopHandlesUnansweredAssessmentsByAgent(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("local worker IPC requires Linux or macOS")
