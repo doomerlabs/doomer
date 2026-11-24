@@ -220,11 +220,31 @@ func claudeStopContext(text string) map[string]any {
 
 func codexStopFeedback(result livewatch.Response, stopActive bool) map[string]any {
 	report := makeFeedbackReport(result)
+	feedback := codexStopReviewFeedback(result, report, stopActive)
+	if feedback["decision"] == "block" {
+		return feedback
+	}
+	var messages []string
+	if message, ok := feedback["systemMessage"].(string); ok {
+		messages = append(messages, message)
+	}
+	for _, notice := range report.Notices {
+		if !notice.Blocking {
+			messages = append(messages, adversarylabs.AdvisoryTerminal(notice))
+		}
+	}
+	if len(messages) > 0 {
+		feedback["systemMessage"] = strings.Join(messages, "\n\n")
+	}
+	return feedback
+}
+
+func codexStopReviewFeedback(result livewatch.Response, report watchFeedbackReport, stopActive bool) map[string]any {
 	if len(report.Errors) > 0 {
 		return finalFeedbackHook(result)
 	}
 	for _, notice := range report.Notices {
-		if notice.NotifyUser {
+		if notice.Blocking {
 			return map[string]any{"decision": "block", "reason": "Doomer has an advisory awaiting delivery."}
 		}
 	}
@@ -490,7 +510,21 @@ func noticeAppearsInReply(notice adversarylabs.ClientNotice, reply string) bool 
 		return false
 	}
 	normalize := func(s string) string { return strings.Join(strings.Fields(s), " ") }
-	return strings.Contains(normalize(reply), normalize(adversarylabs.AdvisoryMarkdown(notice)))
+	reply = normalize(reply)
+	markdown := adversarylabs.AdvisoryMarkdown(notice)
+	if strings.Contains(reply, normalize(markdown)) {
+		return true
+	}
+	// A different shell fence leaves the visible updater command intact.
+	const bashFence = "\n```bash\n"
+	if notice.Kind == "update" && strings.Contains(markdown, bashFence) {
+		for _, fence := range []string{"```sh", "```shell", "```"} {
+			if strings.Contains(reply, normalize(strings.Replace(markdown, bashFence, "\n"+fence+"\n", 1))) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func newWatchNoticeAckCommand() *cobra.Command {
