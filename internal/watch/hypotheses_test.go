@@ -198,3 +198,14 @@ func TestReplacedHypothesisRequestCannotUseNewDeadline(t *testing.T) {
 		t.Fatal("replacement request failed", err)
 	}
 }
+
+func TestHypothesisInputLimitCountsTheWholeSubmission(t *testing.T) {
+	atLimit := "[]" + strings.Repeat(" ", maxHypothesisJSONBytes-2)
+	items, err := decodeHypotheses(strings.NewReader(atLimit))
+	if err != nil || items == nil || len(items) != 0 {
+		t.Fatalf("valid array at byte limit: %v", err)
+	}
+	if _, err := decodeHypotheses(strings.NewReader(atLimit + " ")); err == nil || !strings.Contains(err.Error(), "local input size limit") {
+		t.Fatalf("expected size error for oversized input, got %v", err)
+	}
+}

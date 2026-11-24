@@ -36,9 +36,11 @@ var validationFieldPattern = regexp.MustCompile(`^(body|repository|repository_id
 // These are server-authored validation messages that are safe to relay. An
 // unexpected message can contain private request content, so use local wording
 // for known failures when talking to a server that omits or changes the message.
+const legacyInvalidHypothesesMessage = "The agent hypotheses are invalid. Include up to five hypotheses with a changed path, line, concern, and check."
+
 var workspaceValidationMessages = map[string]string{
 	"missing_review_scope":     "The latest-edit diff has no changed lines in the submitted workspace diff.",
-	"invalid_hypotheses":       "The server rejected the agent hypotheses. Check each path, line, concern, and check. Older servers accept at most five hypotheses.",
+	"invalid_hypotheses":       "The agent hypotheses are invalid. Each hypothesis needs a changed path, line, concern, and check.",
 	"too_many_hypotheses":      "The submission exceeds the server candidate budget.",
 	"invalid_triage_utf8":      "The uploaded triage diff is not valid UTF-8.",
 	"invalid_workspace_review": "The workspace review request is missing required fields or contains invalid JSON.",
@@ -108,6 +110,9 @@ func responseError(resp *http.Response, token string) error {
 			if wording, ok := workspaceValidationMessages[body.Error]; ok {
 				safeCode = body.Error
 				message = wording
+			}
+			if body.Error == "invalid_hypotheses" && body.Message == legacyInvalidHypothesesMessage {
+				message = legacyInvalidHypothesesMessage
 			}
 			if body.Error == "triage_diff_too_large" && body.Message == "The latest-edit diff exceeds the 8 MiB Quick Review limit. Split the change into smaller reviews." {
 				message = body.Message

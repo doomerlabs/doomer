@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -553,20 +554,26 @@ func submitLiveHypotheses(c *cobra.Command, key string) error {
 	if !watchControlKey.MatchString(key) {
 		return fmt.Errorf("valid control key required")
 	}
+	raw, err := io.ReadAll(io.LimitReader(c.InOrStdin(), livewatch.MaxRequestBytes+1))
+	if err != nil {
+		return err
+	}
+	if len(raw) > livewatch.MaxRequestBytes {
+		return fmt.Errorf("Quick review assessment exceeds the local input size limit")
+	}
 	var response livewatch.HypothesisResponse
-	bounded := &io.LimitedReader{R: c.InOrStdin(), N: livewatch.MaxRequestBytes + 1}
-	decoder := json.NewDecoder(bounded)
+	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&response); err != nil {
 		return err
 	}
 	var extra any
-	if decoder.Decode(&extra) != io.EOF || bounded.N == 0 {
+	if decoder.Decode(&extra) != io.EOF {
 		return fmt.Errorf("expected one JSON object")
 	}
 	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
 	defer cancel()
-	_, err := livewatch.SubmitHypotheses(ctx, key, response)
+	_, err = livewatch.SubmitHypotheses(ctx, key, response)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -149,12 +150,18 @@ func EmitHypotheses(ctx context.Context, root, id string, cfg Config, input io.R
 }
 
 func decodeHypotheses(input io.Reader) ([]adversarylabs.WorkspaceHypothesis, error) {
+	raw, err := io.ReadAll(io.LimitReader(input, maxHypothesisJSONBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > maxHypothesisJSONBytes {
+		return nil, errors.New("review hypotheses exceed the local input size limit")
+	}
 	var items []adversarylabs.WorkspaceHypothesis
-	bounded := &io.LimitedReader{R: input, N: maxHypothesisJSONBytes + 1}
-	decoder := json.NewDecoder(bounded)
+	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&items) != nil || decoder.Decode(new(any)) != io.EOF || bounded.N == 0 {
-		return nil, errors.New("invalid or oversized review hypotheses")
+	if decoder.Decode(&items) != nil || decoder.Decode(new(any)) != io.EOF {
+		return nil, errors.New("invalid review hypotheses")
 	}
 	for _, h := range items {
 		if !sourcesnapshot.ValidPath(h.Path) || h.Line < 1 || strings.TrimSpace(h.Hypothesis) == "" || strings.TrimSpace(h.Check) == "" || len([]rune(h.Hypothesis)) > 400 || len([]rune(h.Check)) > 400 {
