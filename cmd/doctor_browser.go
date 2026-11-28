@@ -63,7 +63,11 @@ func browserHookChecks(report map[string]any) []string {
 	for _, config := range configs {
 		entry, _ := config.(map[string]any)
 		agent, _ := entry["active_profile_agent"].(string)
-		if agent != "codex" && agent != "claude" {
+		if agent != "codex" && agent != "claude" && agent != "copilot" {
+			continue
+		}
+		if agent == "copilot" && entry["duplicate_installation"] == true {
+			checks = append(checks, "hooks_conflict")
 			continue
 		}
 		switch entry["installation"] {

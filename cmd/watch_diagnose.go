@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	watching "github.com/doomerlabs/doomer/internal/watch"
 	"github.com/spf13/cobra"
@@ -28,8 +29,8 @@ func newWatchDiagnoseCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if agent != "claude" && agent != "codex" {
-				return fmt.Errorf("agent must be claude or codex")
+			if !slices.Contains(npmAgents, agent) {
+				return fmt.Errorf("agent must be claude, codex or copilot")
 			}
 			if home == "" {
 				home, err = defaultManagerHome()
@@ -102,7 +103,7 @@ func newWatchDiagnoseCommand() *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&home, "manager-home", "", "Node manager state directory")
-	c.Flags().StringVar(&agent, "agent", "claude", "Agent to diagnose: claude or codex")
+	c.Flags().StringVar(&agent, "agent", "claude", "Agent to diagnose: claude, codex or copilot")
 	c.PersistentPreRunE = func(*cobra.Command, []string) error { return nil }
 	c.PersistentPostRun = func(*cobra.Command, []string) {}
 	return c

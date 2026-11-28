@@ -112,7 +112,7 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 						return fmt.Errorf("--test-session cannot be combined with --%s", flag)
 					}
 				}
-				_, err := fmt.Fprintln(cmd.OutOrStdout(), "Paste this entire prompt in the affected Codex or Claude Code chat:\n\n"+doctor.SessionPrompt)
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), "Paste this entire prompt in the affected Codex, Claude Code, or GitHub Copilot CLI chat:\n\n"+doctor.SessionPrompt)
 				return err
 			}
 			if upload && noUpload {
@@ -214,6 +214,17 @@ func newDoctorCommand(app *application.App, api, profile *string) *cobra.Command
 					continue
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "%s hooks: %v; activation: %v (%s)\n", agent, item["installation"], item["activation"], item["path"])
+				if agent == "copilot" {
+					if item["duplicate_installation"] == true {
+						fmt.Fprintf(cmd.OutOrStdout(), "Doomer hooks are also configured in the Copilot profile (%s). Keep one set for this session.\n", item["other_hook_path"])
+					} else if item["installation"] == "missing" {
+						fmt.Fprintln(cmd.OutOrStdout(), "If Copilot is already selected, repair with npx @doomerlabs/doomer@beta doctor --fix. Otherwise, run npx @doomerlabs/doomer@beta onboard --agent copilot.")
+					} else if item["installation"] != "installed" {
+						fmt.Fprintln(cmd.OutOrStdout(), "Check or repair Copilot setup with npx @doomerlabs/doomer@beta doctor --fix.")
+					}
+					fmt.Fprintln(cmd.OutOrStdout(), "Copilot shell and path approvals are managed by Copilot and remain separate from hook setup.")
+					continue
+				}
 				if item["installation"] != "installed" {
 					if isMDMRuntimePath(executable) {
 						fmt.Fprintf(cmd.OutOrStdout(), "Check the %s hook configuration with your administrator.\n", agent)

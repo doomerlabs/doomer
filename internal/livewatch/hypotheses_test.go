@@ -43,6 +43,20 @@ func TestEverySelectedAreaRequiresEvidence(t *testing.T) {
 	}
 }
 
+func TestNoSelectedAreasRejectsInventedAssessment(t *testing.T) {
+	pending := &hypothesisWait{reply: make(chan HypothesisResponse, 1)}
+	w := &worker{hypotheses: map[string]*hypothesisWait{"request": pending}}
+	response := HypothesisResponse{RequestID: "request", Status: "assessed", Hypotheses: []adversarylabs.WorkspaceHypothesis{},
+		Assessments: []AreaAssessment{{AreaID: "invented", Status: "no_issue", Evidence: "Checked the edit."}}}
+	if w.recordHypotheses(response) == nil {
+		t.Fatal("accepted an assessment when triage selected no areas")
+	}
+	response.Assessments = []AreaAssessment{}
+	if err := w.recordHypotheses(response); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAgentResponseTimeoutStartsAfterRetrieval(t *testing.T) {
 	p := &hypothesisWait{delivered: make(chan struct{}), expired: make(chan struct{}), reply: make(chan HypothesisResponse, 1)}
 	ctx, cancel := context.WithCancel(context.Background())

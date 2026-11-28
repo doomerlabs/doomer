@@ -44,6 +44,10 @@ func npmAgentSettings(o npmSetupOptions, selected []string) (npmSettings, error)
 	if err != nil {
 		return npmSettings{}, err
 	}
+	copilot, err := filepath.Abs(copilotHome(home))
+	if err != nil {
+		return npmSettings{}, err
+	}
 
 	owner := "--owner=doomer-node"
 	if os.Getenv("DOOMER_DEV_INSTALL") == "1" {
@@ -52,14 +56,18 @@ func npmAgentSettings(o npmSetupOptions, selected []string) (npmSettings, error)
 	s := npmSettings{
 		agents: selected, owner: owner,
 		files: map[string][]string{
-			"claude": {filepath.Join(claude, "settings.json")},
-			"codex":  {filepath.Join(codex, "hooks.json")},
+			"claude":  {filepath.Join(claude, "settings.json")},
+			"codex":   {filepath.Join(codex, "hooks.json")},
+			"copilot": {filepath.Join(copilot, "hooks", copilotHookFilename)},
 		},
 		skillDirs: []string{
 			filepath.Join(home, ".agents", "skills", "doomer"),
 			filepath.Join(claude, "skills", "doomer"),
 			filepath.Join(codex, "skills", "doomer"),
 		},
+	}
+	if slices.Contains(selected, "copilot") {
+		s.skillDirs = append(s.skillDirs, filepath.Join(copilot, "skills", "doomer"))
 	}
 	if !slices.Contains(selected, "codex") {
 		return s, nil
@@ -101,12 +109,32 @@ func npmAgentSettings(o npmSetupOptions, selected []string) (npmSettings, error)
 }
 
 func (s npmSettings) skillPresent() bool {
-	has := func(i int) bool { return npmSkillExists(filepath.Join(s.skillDirs[i], "SKILL.md")) }
+	has := func(i int) bool {
+		return i < len(s.skillDirs) && npmSkillExists(filepath.Join(s.skillDirs[i], "SKILL.md"))
+	}
 	if len(s.agents) == 0 {
 		return has(0)
 	}
 	return (!slices.Contains(s.agents, "claude") || has(1)) &&
-		(!slices.Contains(s.agents, "codex") || has(0) || has(2))
+		(!slices.Contains(s.agents, "codex") || has(0) || has(2)) &&
+		(!slices.Contains(s.agents, "copilot") || has(0) || has(3))
+}
+
+func (s npmSettings) useRecordedCopilotProfiles(state npmSetupState) error {
+	var recorded []string
+	if err := state.get("hookFiles", &recorded); err != nil {
+		return err
+	}
+	var profiles []string
+	for _, file := range recorded {
+		if filepath.IsAbs(file) && filepath.Base(file) == copilotHookFilename && filepath.Base(filepath.Dir(file)) == "hooks" {
+			profiles = appendUnique(profiles, file)
+		}
+	}
+	if len(profiles) > 0 {
+		s.files["copilot"] = profiles
+	}
+	return nil
 }
 
 // Use Number to avoid rounding integer values in unrelated configuration.
@@ -177,7 +205,7 @@ func (s npmSettings) validate() error {
 			if err != nil {
 				return err
 			}
-			if _, err := npmValidateHooks(config); err != nil {
+			if _, err := npmValidateAgentHooks(config, agent); err != nil {
 				return fmt.Errorf("%s: %w", file, err)
 			}
 		}
@@ -358,7 +386,7 @@ func configureNPMHookFile(file, agent, owner, command string, inspect func(npmJS
 	if err != nil {
 		return false, err
 	}
-	hooks, err := npmValidateHooks(config)
+	hooks, err := npmValidateAgentHooks(config, agent)
 	if err != nil {
 		return false, err
 	}
@@ -369,7 +397,17 @@ func configureNPMHookFile(file, agent, owner, command string, inspect func(npmJS
 		}
 		command = checkedCommand
 	}
-	if !mergeNPMHooks(hooks, agent, owner, command) {
+	changed := false
+	if agent == "copilot" {
+		changed = mergeCopilotHooks(hooks, owner, command)
+		if _, present := config["version"]; !present {
+			config["version"] = 1
+			changed = true
+		}
+	} else {
+		changed = mergeNPMHooks(hooks, agent, owner, command)
+	}
+	if !changed {
 		return false, nil
 	}
 	config["hooks"] = hooks

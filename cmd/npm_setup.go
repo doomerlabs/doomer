@@ -27,7 +27,7 @@ import (
 type npmSetupOptions struct {
 	home, executable, version, source, digest, packageVersion, node, npm, skillSource          string
 	agents, claudeDecision, codexDecision, proposal, mode, defaultSkillSource, skillsNPMOption string
-	noHooks, approveUploads, interactive                                                       bool
+	noHooks, approveUploads, interactive, copilotProjectHooks                                  bool
 }
 
 type npmSetupState map[string]json.RawMessage
@@ -146,6 +146,7 @@ func newNPMSetupCommand() *cobra.Command {
 	f.StringVar(&o.codexDecision, "reviewer-policy", "", "scoped Codex policy decision")
 	f.StringVar(&o.proposal, "reviewer-policy-proposal", "", "reviewed Codex proposal digest")
 	f.BoolVar(&o.noHooks, "no-hooks", false, "CLI-only installation")
+	f.BoolVar(&o.copilotProjectHooks, "copilot-project-hooks", false, "install Copilot hooks only in the current Git checkout")
 	f.BoolVar(&o.approveUploads, "approve-uploads", false, "approve Doomer uploads")
 	f.BoolVar(&o.interactive, "interactive", false, "bootstrap has an interactive terminal")
 	return c
@@ -155,6 +156,8 @@ type npmSetupPrompt struct {
 	input  *bufio.Reader
 	output io.Writer
 }
+
+var npmAgents = []string{"claude", "codex", "copilot"}
 
 func setupAgents(c *cobra.Command, o npmSetupOptions, saved []string, p npmSetupPrompt) ([]string, error) {
 	if o.mode == "update" {
@@ -170,20 +173,20 @@ func setupAgents(c *cobra.Command, o npmSetupOptions, saved []string, p npmSetup
 			if agent == "" {
 				continue
 			}
-			if agent != "claude" && agent != "codex" {
-				return nil, fmt.Errorf("supported agents are claude and codex")
+			if !slices.Contains(npmAgents, agent) {
+				return nil, fmt.Errorf("supported agents are claude, codex and copilot")
 			}
 			if !slices.Contains(selected, agent) {
 				selected = append(selected, agent)
 			}
 		}
 		if len(selected) == 0 {
-			return nil, fmt.Errorf("supported agents are claude and codex; use --no-hooks for CLI-only setup")
+			return nil, fmt.Errorf("supported agents are claude, codex and copilot; use --no-hooks for CLI-only setup")
 		}
 		return selected, nil
 	}
 	if len(saved) == 0 {
-		for _, agent := range []string{"claude", "codex"} {
+		for _, agent := range npmAgents {
 			if _, err := exec.LookPath(agent); err == nil {
 				saved = append(saved, agent)
 			}
@@ -191,7 +194,7 @@ func setupAgents(c *cobra.Command, o npmSetupOptions, saved []string, p npmSetup
 	}
 	if !o.interactive {
 		if len(saved) == 0 {
-			return nil, fmt.Errorf("no supported agents detected; choose --agent claude,codex or --no-hooks")
+			return nil, fmt.Errorf("no supported agents detected; choose --agent claude,codex,copilot or --no-hooks")
 		}
 		return saved, nil
 	}
@@ -222,7 +225,7 @@ func runNPMSetup(c *cobra.Command, o npmSetupOptions) error {
 		return err
 	}
 	for _, agent := range saved {
-		if agent != "codex" && agent != "claude" {
+		if !slices.Contains(npmAgents, agent) {
 			return fmt.Errorf("invalid saved agent %q", agent)
 		}
 	}
@@ -235,6 +238,9 @@ func runNPMSetup(c *cobra.Command, o npmSetupOptions) error {
 	}
 	if err != nil {
 		return err
+	}
+	if o.copilotProjectHooks && (o.mode == "update" || !slices.Contains(selected, "copilot")) {
+		return fmt.Errorf("--copilot-project-hooks requires selecting copilot during install or onboard")
 	}
 	if o.claudeDecision != "" && !slices.Contains(selected, "claude") {
 		return fmt.Errorf("--claude-review-permission requires selecting claude")
@@ -321,6 +327,24 @@ func runNPMSetup(c *cobra.Command, o npmSetupOptions) error {
 	settings, err := npmAgentSettings(o, selected)
 	if err != nil {
 		return err
+	}
+	if o.copilotProjectHooks {
+		project, err := watching.Root(c.Context(), directory)
+		if err != nil {
+			return fmt.Errorf("Copilot project hooks require a Git checkout: %w", err)
+		}
+		settings.files["copilot"] = []string{filepath.Join(project, copilotProjectHookPath)}
+	} else if slices.Contains(selected, "copilot") && (o.mode == "update" || os.Getenv("COPILOT_HOME") == "") {
+		if err := settings.useRecordedCopilotProfiles(state); err != nil {
+			return err
+		}
+	}
+	if slices.Contains(selected, "copilot") {
+		for _, file := range settings.files["copilot"] {
+			if err := excludeCopilotProjectHook(file); err != nil {
+				return err
+			}
+		}
 	}
 	if err := settings.validate(); err != nil {
 		return err
@@ -585,6 +609,8 @@ func execNPMSkill(ctx context.Context, o npmSetupOptions, agents []string, sourc
 	for _, agent := range agents {
 		if agent == "claude" {
 			agent = "claude-code"
+		} else if agent == "copilot" {
+			agent = "github-copilot"
 		}
 		args = append(args, agent)
 	}

@@ -73,9 +73,10 @@ func (p npmSetupPrompt) choose(c *cobra.Command, label string, choices []npmChoi
 }
 
 func pickNPMSetupAgents(c *cobra.Command, selected []string, p npmSetupPrompt) ([]string, error) {
-	choices := []npmChoice{{"codex", ""}, {"claude", ""}, {"continue", "Continue"}}
+	choices := []npmChoice{{"codex", ""}, {"claude", ""}, {"copilot", ""}, {"continue", "Continue"}}
+	continueIndex := len(choices) - 1
 	refresh := func() {
-		for i, label := range []string{"Codex", "Claude Code"} {
+		for i, label := range []string{"Codex", "Claude Code", "GitHub Copilot CLI"} {
 			status := "[ ]"
 			if slices.Contains(selected, choices[i].value) {
 				status = "[✓]"
@@ -84,8 +85,8 @@ func pickNPMSetupAgents(c *cobra.Command, selected []string, p npmSetupPrompt) (
 		}
 	}
 	refresh()
-	_, err := p.choose(c, "Which agents should Doomer set up? (↑↓ move, Space toggles, Enter confirms)", choices, 2, func(i int) bool {
-		if i == 2 {
+	_, err := p.choose(c, "Which agents should Doomer set up? (↑↓ move, Space toggles, Enter confirms)", choices, continueIndex, func(i int) bool {
+		if i == continueIndex {
 			return false
 		}
 		agent := choices[i].value

@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/doomerlabs/doomer/pkg/adversarylabs"
@@ -86,7 +87,7 @@ type worker struct {
 // Serve runs until its caller stops it and closes its optional control listener.
 // The only persistent data it reads is the caller's saved authorization.
 func Serve(ctx context.Context, cfg Config, client Client, allowed func(context.Context, string) bool) error {
-	var listener net.Listener
+	var listener, hookListener net.Listener
 	if cfg.ControlKey != "" {
 		var err error
 		listener, err = listen(cfg.ControlKey)
@@ -95,7 +96,15 @@ func Serve(ctx context.Context, cfg Config, client Client, allowed func(context.
 		}
 		defer listener.Close()
 	}
-	return serve(ctx, listener, cfg, client, allowed)
+	if cfg.HookKey != "" {
+		var err error
+		hookListener, err = listen(cfg.HookKey)
+		if err != nil {
+			return err
+		}
+		defer hookListener.Close()
+	}
+	return serve(ctx, listener, hookListener, cfg, client, allowed)
 }
 
 // CheckStartup opens the same local control socket and initializes the same
@@ -132,7 +141,7 @@ func (w *worker) initialize(ctx context.Context) error {
 	return nil
 }
 
-func serve(ctx context.Context, listener net.Listener, cfg Config, client Client, allowed func(context.Context, string) bool) error {
+func serve(ctx context.Context, listener, hookListener net.Listener, cfg Config, client Client, allowed func(context.Context, string) bool) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	w := &worker{directories: []string{cfg.Directory}, cfg: cfg, client: client, allowed: allowed, repos: map[string]*repository{}, findings: map[string]Finding{}, noticeAcks: map[string]bool{}, controls: make(chan control), completed: make(chan completion, 64), slots: make(chan struct{}, 4)}
@@ -143,12 +152,20 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 	if listener != nil {
 		w.closeListener = listener.Close
 	}
+	if hookListener != nil {
+		closeControl := w.closeListener
+		w.closeListener = func() error { return errors.Join(closeControl(), hookListener.Close()) }
+	}
 	defer func() { cancel(); w.jobs.Wait(); w.background.Wait() }()
 	if err := w.initialize(ctx); err != nil {
 		return err
 	}
 	defer w.watcher.Close()
-	if listener != nil {
+	var copilotContextClaimed atomic.Bool
+	startListener := func(listener net.Listener, key string, hook bool) {
+		if listener == nil {
+			return
+		}
 		go func() { <-ctx.Done(); listener.Close() }()
 		go func() {
 			for {
@@ -163,8 +180,15 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 					}
 					_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 					var req request
-					if json.NewDecoder(io.LimitReader(conn, MaxRequestBytes)).Decode(&req) != nil || req.Key != cfg.ControlKey {
+					if json.NewDecoder(io.LimitReader(conn, MaxRequestBytes)).Decode(&req) != nil || req.Key != key {
 						return
+					}
+					if hook {
+						switch req.Operation {
+						case "status", "claim-copilot-context", "cancel", "add", "finish", "notice-reply":
+						default:
+							return
+						}
 					}
 					if (req.Operation == "notice-ack" || req.Operation == "notice-reply") && (req.NoticeID == "" || req.NoticeRevision < 1) {
 						_ = json.NewEncoder(conn).Encode(Response{Error: "advisory ID and revision are required"})
@@ -179,7 +203,15 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 						return
 					}
 					if req.Operation == "status" {
-						_ = json.NewEncoder(conn).Encode(Response{Ready: true, API: cfg.API, Directory: cfg.Directory})
+						response := Response{Ready: true, API: cfg.API, Directory: cfg.Directory}
+						if hook {
+							response.ControlKey = cfg.ControlKey
+						}
+						_ = json.NewEncoder(conn).Encode(response)
+						return
+					}
+					if req.Operation == "claim-copilot-context" && hook {
+						_ = json.NewEncoder(conn).Encode(Response{Ready: copilotContextClaimed.CompareAndSwap(false, true), ControlKey: cfg.ControlKey, Directory: cfg.Directory})
 						return
 					}
 					if req.Operation == "assessment-denied" && req.AssessmentID == "" {
@@ -212,6 +244,8 @@ func serve(ctx context.Context, listener net.Listener, cfg Config, client Client
 			}
 		}()
 	}
+	startListener(listener, cfg.ControlKey, false)
+	startListener(hookListener, cfg.HookKey, true)
 	if cfg.Stop != nil {
 		go func() {
 			select {
@@ -484,7 +518,7 @@ func (w *worker) schedule(ctx context.Context) {
 }
 
 func (w *worker) response(timeout bool) Response {
-	response := Response{Ready: true, API: w.cfg.API, Directory: w.cfg.Directory, FindingToolDenied: w.findingToolDenied}
+	response := Response{Agent: w.cfg.Agent, Ready: true, API: w.cfg.API, Directory: w.cfg.Directory, FindingToolDenied: w.findingToolDenied}
 	for _, pending := range w.hypotheses {
 		if !pending.isExpired() {
 			response.HypothesisRequests = append(response.HypothesisRequests, pending.request)
