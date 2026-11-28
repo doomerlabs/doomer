@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/doomerlabs/doomer/internal/livewatch"
 	watching "github.com/doomerlabs/doomer/internal/watch"
@@ -382,6 +383,9 @@ func TestPendingHypothesesKeepStopOpenAndRequestAgentAssessment(t *testing.T) {
 	if !found || !closed || !json.Valid([]byte(payload)) {
 		t.Fatal("assessment handoff must provide a standalone Doomer command with a quoted JSON heredoc")
 	}
+	if !strings.Contains(payload, `"assessments":[]`) || !strings.Contains(text, "If areas is missing or empty") {
+		t.Fatal("assessment template must show how to respond when triage selects no areas")
+	}
 	for _, active := range []bool{false, true} {
 		codex := codexStopFeedback(response, active)
 		if active {
@@ -441,6 +445,30 @@ func TestHypothesisHandoffIncludesVerifiedConsentBeforeCapturedDiff(t *testing.T
 	response.Consent = nil
 	if output := hypothesisInstructions(response, key); strings.Contains(output, "CLI-verified upload consent") {
 		t.Fatal("pending handoff claimed consent without verified scope")
+	}
+}
+
+func TestWatchDiffPagesPreserveLongCapturedLines(t *testing.T) {
+	patch := strings.Repeat("a", watchDiffPageBytes-1) + "🙂" + strings.Repeat("b", watchDiffPageBytes)
+	requests := []livewatch.HypothesisRequest{{ID: "current", Diff: patch}}
+	var output bytes.Buffer
+	if err := writeWatchDiffPage(&output, requests, "other", 0); err == nil {
+		t.Fatal("unknown request returned captured source")
+	}
+	var rebuilt strings.Builder
+	for rebuilt.Len() < len(patch) {
+		output.Reset()
+		if err := writeWatchDiffPage(&output, requests, "current", rebuilt.Len()); err != nil {
+			t.Fatal(err)
+		}
+		_, page, found := strings.Cut(output.String(), "\n")
+		if !found || page == "" || len(page) > watchDiffPageBytes || !utf8.ValidString(page) {
+			t.Fatal("captured page was missing, oversized, or split a UTF-8 rune")
+		}
+		rebuilt.WriteString(page)
+	}
+	if rebuilt.String() != patch {
+		t.Fatal("captured diff changed during paging")
 	}
 }
 

@@ -118,7 +118,10 @@ func (w *worker) recordHypotheses(response HypothesisResponse) error {
 	if response.Hypotheses == nil {
 		return fmt.Errorf("hypotheses must be an explicit array")
 	}
-	if response.Status == "assessed" && len(pending.request.Areas) > 0 {
+	if response.Status == "assessed" {
+		if len(response.Assessments) != len(pending.request.Areas) {
+			return fmt.Errorf("assessment requires %d entries matching the selected areas; received %d", len(pending.request.Areas), len(response.Assessments))
+		}
 		seen := map[string]bool{}
 		for _, a := range response.Assessments {
 			known := false
@@ -134,9 +137,6 @@ func (w *worker) recordHypotheses(response HypothesisResponse) error {
 			if a.Status == "concern" && len(response.Hypotheses) == 0 {
 				return fmt.Errorf("concern assessment requires a hypothesis")
 			}
-		}
-		if len(seen) != len(pending.request.Areas) {
-			return fmt.Errorf("assessment required for every selected area")
 		}
 	}
 	for _, h := range response.Hypotheses {

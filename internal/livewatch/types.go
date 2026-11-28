@@ -37,6 +37,7 @@ type Config struct {
 	Consent           func() *ConsentEvidence             `json:"-"`
 	ID                string                              `json:"id"`
 	ControlKey        string                              `json:"control_key,omitempty"`
+	HookKey           string                              `json:"hook_key,omitempty"`
 	Directory         string                              `json:"directory"`
 	API               string                              `json:"api"`
 	Token             string                              `json:"token"`
@@ -91,6 +92,7 @@ type Finding struct {
 }
 
 type Response struct {
+	Agent               string              `json:"agent,omitempty"`
 	ReviewPending       bool                `json:"review_pending,omitempty"`
 	OtherReviewPending  bool                `json:"other_review_pending,omitempty"`
 	HypothesisRequests  []HypothesisRequest `json:"hypothesis_requests,omitempty"`
@@ -99,14 +101,15 @@ type Response struct {
 	FindingStopFollowup bool                `json:"finding_stop_followup,omitempty"`
 	FindingToolDenied   bool                `json:"finding_tool_denied,omitempty"`
 
-	Consent   *ConsentEvidence             `json:"consent,omitempty"`
-	Ready     bool                         `json:"ready"`
-	API       string                       `json:"api,omitempty"`
-	Directory string                       `json:"directory,omitempty"`
-	Results   []Result                     `json:"results,omitempty"`
-	Findings  []Finding                    `json:"findings,omitempty"`
-	Notices   []adversarylabs.ClientNotice `json:"notices,omitempty"`
-	Error     string                       `json:"error,omitempty"`
+	Consent    *ConsentEvidence             `json:"consent,omitempty"`
+	Ready      bool                         `json:"ready"`
+	ControlKey string                       `json:"control_key,omitempty"`
+	API        string                       `json:"api,omitempty"`
+	Directory  string                       `json:"directory,omitempty"`
+	Results    []Result                     `json:"results,omitempty"`
+	Findings   []Finding                    `json:"findings,omitempty"`
+	Notices    []adversarylabs.ClientNotice `json:"notices,omitempty"`
+	Error      string                       `json:"error,omitempty"`
 }
 
 type request struct {

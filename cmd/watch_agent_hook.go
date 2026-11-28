@@ -102,16 +102,22 @@ func agentHookConsent(state agentHookState, api, agent, repo string) (watching.C
 }
 
 func newAgentWatchHookCommand() *cobra.Command {
-	var home, agent, owner string
+	var home, agent, owner, event string
 	c := &cobra.Command{Use: "agent", Aliases: []string{"agent-hook"}, Short: "Start and stop watch for an agent", Args: cobra.NoArgs}
 	// Hook execution must not load or create legacy watcher state as a side effect.
 	c.PersistentPreRunE = func(*cobra.Command, []string) error { return nil }
 	c.PersistentPostRun = func(*cobra.Command, []string) {}
 	c.RunE = func(c *cobra.Command, _ []string) error {
-		result, err := runAgentWatchHook(c, home, agent)
+		result, err := runAgentWatchHook(c, home, agent, event)
 		if err != nil {
 			var state agentHookState
-			if watching.Read(filepath.Join(home, "state.json"), &state) == nil && state.Managed != nil {
+			if agent == "copilot" {
+				message := "Doomer Quick review was not completed: " + err.Error()
+				c.PrintErrln(message)
+				if event == "postToolUse" {
+					result = map[string]any{"additionalContext": message}
+				}
+			} else if watching.Read(filepath.Join(home, "state.json"), &state) == nil && state.Managed != nil {
 				result = map[string]any{"managedDoomerError": err.Error()}
 			} else {
 				result = map[string]any{"systemMessage": "Doomer Quick review was not completed: " + err.Error()}
@@ -122,12 +128,13 @@ func newAgentWatchHookCommand() *cobra.Command {
 	c.Flags().StringVar(&home, "manager-home", "", "installer state directory")
 	c.Flags().StringVar(&agent, "agent", "", "coding agent identity")
 	c.Flags().StringVar(&owner, "owner", "", "installer ownership marker")
+	c.Flags().StringVar(&event, "event", "", "Copilot hook event")
 	return c
 }
 
-func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, error) {
+func runAgentWatchHook(c *cobra.Command, home, agent string, event ...string) (map[string]any, error) {
 	empty := map[string]any{}
-	if !filepath.IsAbs(home) || (agent != "codex" && agent != "claude") {
+	if !filepath.IsAbs(home) || !slices.Contains(npmAgents, agent) {
 		return empty, fmt.Errorf("invalid installed hook configuration")
 	}
 	raw, err := io.ReadAll(io.LimitReader(c.InOrStdin(), watching.MaxHookInputBytes+1))
@@ -135,7 +142,13 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 		return empty, fmt.Errorf("invalid hook input")
 	}
 	var input watching.HookInput
-	if json.Unmarshal(raw, &input) != nil {
+	var transcript string
+	if agent == "copilot" && len(event) == 1 {
+		input, transcript, err = decodeCopilotHook(raw, event[0])
+	} else {
+		err = json.Unmarshal(raw, &input)
+	}
+	if err != nil {
 		return empty, fmt.Errorf("invalid hook input")
 	}
 	if input.Session == "" {
@@ -146,7 +159,26 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	if agent == "codex" && input.Event == "UserPromptSubmit" && strings.HasPrefix(strings.TrimSpace(input.Prompt), "This is an app-generated request for a suggested next user message. The user did not write this message.") {
 		return empty, nil
 	}
+	// Copilot re-enters userPromptSubmitted with the Stop hook's reason. Its
+	// continuation must keep the original baseline and pending assessment.
+	if agent == "copilot" && input.Event == "UserPromptSubmit" && strings.HasPrefix(input.Prompt, copilotStopPrefix) {
+		return empty, nil
+	}
+	var copilotProbe string
+	if agent == "copilot" && input.CWD != "" {
+		copilotProbe = filepath.Join(home, "doctor-sessions", livewatch.Key(input.Session+"\x00"+filepath.Clean(input.CWD))+".json")
+		if input.Event == "UserPromptSubmit" || input.Event == "SessionEnd" {
+			_ = os.Remove(copilotProbe)
+		}
+	}
 	if input.Event == "UserPromptSubmit" && doctor.IsSessionPrompt(input.Prompt) {
+		if agent == "copilot" {
+			if copilotProbe == "" {
+				return empty, nil
+			}
+			// Copilot displays the Stop continuation, but discards prompt-hook output.
+			return empty, watching.Write(copilotProbe, true)
+		}
 		return runAgentSessionProbe(c, home, agent, input.CWD), nil
 	}
 	turn := input.Turn
@@ -156,10 +188,24 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 	id := hookIdentity{Namespace: home, Agent: agent, Session: input.Session, Turn: turn}
 	switch input.Event {
 	case "PreToolUse":
-		if agent == "codex" {
+		if agent == "codex" || agent == "copilot" {
 			failures := registerAgentEditRepositories(c.Context(), id.Key(), input)
 			if len(failures) > 0 {
-				return map[string]any{"systemMessage": "Doomer Quick review could not cover these edit targets. " + strings.Join(failures, ", ")}, nil
+				message := "Doomer Quick review could not cover these edit targets. " + strings.Join(failures, ", ")
+				if agent == "copilot" {
+					c.PrintErrln(message)
+					return empty, nil
+				}
+				return map[string]any{"systemMessage": message}, nil
+			}
+		}
+		return empty, nil
+	case "PostToolUse":
+		if agent == "copilot" {
+			ctx, cancel := context.WithTimeout(c.Context(), time.Second)
+			defer cancel()
+			if watcher, err := livewatch.Call(ctx, id.Key(), "claim-copilot-context"); err == nil && watcher.Ready {
+				return map[string]any{"additionalContext": copilotHandoff(watcher.ControlKey, watcher.Directory)}, nil
 			}
 		}
 		return empty, nil
@@ -177,7 +223,17 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 		}
 		ctx, cancel := context.WithTimeout(c.Context(), wait)
 		defer cancel()
-		if _, live := livewatch.Available(ctx, id.Key()); !live {
+		if agent == "copilot" && input.Event == "Stop" {
+			input.Message = copilotTurnReply(input.Session, transcript)
+			if receipt, err := os.Lstat(copilotProbe); err == nil && receipt.Mode().IsRegular() &&
+				os.Remove(copilotProbe) == nil && time.Since(receipt.ModTime()) < 10*time.Minute && !input.StopActive {
+				probe := runAgentSessionProbe(c, home, agent, input.CWD)
+				details := probe["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
+				return copilotContinue("Report this Doomer diagnostic to the user, then finish. " + details), nil
+			}
+		}
+		watcher, live := livewatch.Available(ctx, id.Key())
+		if !live {
 			return empty, nil
 		}
 		result, err := livewatch.Call(ctx, id.Key(), operation)
@@ -216,6 +272,16 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 					}
 				}
 				return claudeStopFeedback(result, id.Key(), input.StopActive), nil
+			}
+			if agent == "copilot" {
+				report := makeFeedbackReport(result)
+				if input.StopActive && (!report.Complete || report.NoticesPending) {
+					c.PrintErrln("Doomer Quick review has unresolved work or an undelivered advisory.")
+					if _, err := livewatch.Call(ctx, id.Key(), "cancel"); err != nil {
+						return empty, err
+					}
+				}
+				return copilotStopFeedback(result, watcher.ControlKey, input.StopActive), nil
 			}
 			report := makeFeedbackReport(result)
 			feedback := codexStopFeedback(result, input.StopActive)
@@ -268,6 +334,12 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 		prompt = prompt[:4000]
 	}
 	cfg := watchConfiguration{Config: livewatch.Config{RequireHypotheses: true, ID: rand.Text(), ControlKey: id.Key(), Directory: directory, Agent: agent, Request: &adversarylabs.WorkspaceUserRequest{Prompt: string(prompt), SessionID: input.Session, TurnID: requestTurn}}, ManagerHome: home}
+	if agent == "copilot" {
+		// Copilot only supplies a session ID to its hooks. Keep that routing
+		// socket private and give the agent a fresh control key each turn.
+		cfg.HookKey = cfg.ControlKey
+		cfg.ControlKey = livewatch.Key(rand.Text())
+	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return empty, err
@@ -287,6 +359,9 @@ func runAgentWatchHook(c *cobra.Command, home, agent string) (map[string]any, er
 		if result, live := livewatch.Available(ctx, id.Key()); live {
 			if result.Directory != directory {
 				return empty, fmt.Errorf("watcher identity collision")
+			}
+			if agent == "copilot" {
+				return empty, nil // Deliver context after the first tool, not in the prompt hook.
 			}
 			return watchAgentContextForAgent(id.Key(), agent, directory), nil
 		}

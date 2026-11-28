@@ -36,7 +36,7 @@ jobs:
         with:
           repository: doomerlabs/agent-e2e
           token: ${{ secrets.AGENT_E2E_READ_TOKEN }}
-          ref: d674a03fa24fe22618beac023c8d7e525708d7d3
+          ref: 493f1ce19a0eac586e70ba19bd1d827439fc9b07
           path: e2e-runner
           persist-credentials: false
       - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c
@@ -58,8 +58,8 @@ jobs:
           if os.environ.get('COMPONENT_BASE'): args += ['--base',os.environ['COMPONENT_BASE']]
           if os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch': args.append('--full-suite')
           args += ['--cli-source',os.environ['COMPONENT_SOURCE'],
-                   '--skills-ref','5f36142ee5da8ab480d5ef7912a944c80b2e292e',
-                   '--node-ref','197c1d4fb975ca7a0ccae998c6317ae9ac8edf91' ]
+                   '--skills-ref','f76d9d70b549d767fadf95a6207a082829a66c66',
+                   '--node-ref','e0663b2a5114e4c5c5ec170f883d488a46168a00' ]
           raise SystemExit(subprocess.call(args))
           PYTHON
       - name: Validate selected result evidence
