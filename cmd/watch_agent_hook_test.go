@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -593,15 +594,14 @@ func TestExcludeCopilotProjectHookReportsGitFailure(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, ".git", "index"), []byte("bad"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	output, gitErr := exec.Command("git", "-C", repo, "ls-files", "--", copilotProjectHookPath, copilotProjectHookPath+".before-doomer-node-*").CombinedOutput()
-	detail := strings.TrimSpace(string(output))
-	if gitErr == nil || detail == "" {
-		t.Fatalf("expected the corrupt fixture index to produce a Git diagnostic, got %v (%q)", gitErr, detail)
-	}
 	file := filepath.Join(repo, filepath.FromSlash(copilotProjectHookPath))
 	err := excludeCopilotProjectHook(file)
-	if err == nil || !strings.Contains(err.Error(), detail) {
-		t.Fatalf("expected Git's diagnostic %q, got %v", detail, err)
+	var gitErr *exec.ExitError
+	if !errors.As(err, &gitErr) {
+		t.Fatalf("expected the corrupt fixture index to produce a Git exit error, got %v", err)
+	}
+	if detail := strings.TrimSpace(string(gitErr.Stderr)); detail == "" || !strings.Contains(err.Error(), detail) {
+		t.Fatalf("expected Git's stderr %q in the setup error, got %v", detail, err)
 	}
 }
 
