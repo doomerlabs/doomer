@@ -562,6 +562,44 @@ func TestAgentHookApprovalIsolation(t *testing.T) {
 	}
 }
 
+func TestCopilotHookErrorsReturnAnObject(t *testing.T) {
+	for _, hook := range copilotHookEvents {
+		t.Run(hook.name, func(t *testing.T) {
+			c := newAgentWatchHookCommand()
+			var out, stderr bytes.Buffer
+			c.SetOut(&out)
+			c.SetErr(&stderr)
+			c.SetIn(strings.NewReader("invalid JSON"))
+			c.SetArgs([]string{"--manager-home", t.TempDir(), "--agent", "copilot", "--event", hook.name})
+			if err := c.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			var result map[string]any
+			if err := json.Unmarshal(out.Bytes(), &result); err != nil || result == nil {
+				t.Fatalf("expected a JSON object, got %q (%v)", out.String(), err)
+			}
+			if !strings.Contains(stderr.String(), "invalid hook input") {
+				t.Fatalf("missing hook error in stderr: %q", stderr.String())
+			}
+			if hook.name == "postToolUse" && result["additionalContext"] != strings.TrimSpace(stderr.String()) {
+				t.Fatalf("missing post-tool error context: %v", result)
+			}
+		})
+	}
+}
+
+func TestExcludeCopilotProjectHookReportsGitFailure(t *testing.T) {
+	repo := newWatchTestRepo(t)
+	if err := os.WriteFile(filepath.Join(repo, ".git", "index"), []byte("bad"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(repo, filepath.FromSlash(copilotProjectHookPath))
+	err := excludeCopilotProjectHook(file)
+	if err == nil || !strings.Contains(err.Error(), "index file smaller than expected") {
+		t.Fatalf("expected Git's corrupt index diagnostic, got %v", err)
+	}
+}
+
 func TestAgentHookRejectsUnapprovedServiceBeforeWriting(t *testing.T) {
 	wrapper := hookTestExecutable(t)
 	previous := turnExecutable

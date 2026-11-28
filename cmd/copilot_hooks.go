@@ -32,10 +32,20 @@ func excludeCopilotProjectHook(file string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	git := func(args ...string) ([]byte, error) {
-		return exec.CommandContext(ctx, "git", append([]string{"-C", repo}, args...)...).Output()
+		out, err := exec.CommandContext(ctx, "git", append([]string{"-C", repo}, args...)...).Output()
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if detail := strings.TrimSpace(string(exitErr.Stderr)); detail != "" {
+				err = fmt.Errorf("%w: %s", err, detail)
+			}
+		}
+		return out, err
 	}
 	root, err := watching.Root(ctx, repo)
-	if err != nil || root != repo {
+	if err != nil {
+		return fmt.Errorf("resolve the Copilot project hook checkout: %w", err)
+	}
+	if root != repo {
 		return fmt.Errorf("Copilot project hook must be at the Git checkout root: %s", file)
 	}
 	for _, path := range []string{github, filepath.Dir(file)} {
@@ -81,10 +91,10 @@ func excludeCopilotProjectHook(file string) error {
 		}
 	}
 	if _, err := git("check-ignore", "--quiet", "--", copilotProjectHookPath); err != nil {
-		return fmt.Errorf("Git does not ignore the local Copilot hook: %s", file)
+		return fmt.Errorf("Git does not ignore the local Copilot hook %s: %w", file, err)
 	}
 	if _, err := git("check-ignore", "--quiet", "--", copilotProjectHookPath+".before-doomer-node-copy"); err != nil {
-		return fmt.Errorf("Git does not ignore local Copilot hook backups: %s", file)
+		return fmt.Errorf("Git does not ignore local Copilot hook backups for %s: %w", file, err)
 	}
 	return nil
 }
